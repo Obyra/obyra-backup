@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+{% block title %}Escala Salarial UOCRA & Cuadrillas{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4><i class="fas fa-hard-hat me-2"></i>Escala Salarial UOCRA & Cuadrillas Tipo</h4>
+        <a href="{{ url_for('obras.listar') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" data-bs-toggle="tab" href="#tab-escala">
+                <i class="fas fa-money-bill-wave me-1"></i>Escala Salarial
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#tab-cuadrillas">
+                <i class="fas fa-users me-1"></i>Cuadrillas Tipo
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- TAB: Escala Salarial -->
+        <div class="tab-pane fade show active" id="tab-escala">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-money-bill-wave me-1"></i>Escala Salarial UOCRA Vigente</span>
+                    <button class="btn btn-sm btn-warning" onclick="habilitarEdicionEscala()">
+                        <i class="fas fa-edit me-1"></i>Editar
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="tabla-escala">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Categoría</th>
+                                    <th>Descripción</th>
+                                    <th class="text-end">Jornal (8hs)</th>
+                                    <th class="text-end">Tarifa/Hora</th>
+                                    <th class="text-end">Vigencia</th>
+                                </tr>
+                            </thead>
+                            <tbody id="escala-body">
+                                <tr><td colspan="5" class="text-center text-muted py-4">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer d-none" id="escala-footer">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <label class="form-label mb-0 small fw-bold">Vigencia desde:</label>
+                        </div>
+                        <div class="col-auto">
+                            <input type="date" id="escala-vigencia" class="form-control form-control-sm" style="width:160px;">
+                        </div>
+                        <div class="col text-end">
+                            <button class="btn btn-secondary btn-sm me-2" onclick="cargarEscala()">Cancelar</button>
+                            <button class="btn btn-success btn-sm" onclick="guardarEscala()">
+                                <i class="fas fa-save me-1"></i>Guardar Escala
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-info mt-3 small">
+                <i class="fas fa-info-circle me-1"></i>
+                La escala salarial define el jornal por categoría UOCRA. Cuando se actualiza,
+                se recalculan automáticamente los costos de las cuadrillas tipo.
+                <strong>Actualizá estos valores cada vez que salga una nueva escala UOCRA.</strong>
+            </div>
+        </div>
+
+        <!-- TAB: Cuadrillas Tipo -->
+        <div class="tab-pane fade" id="tab-cuadrillas">
+            <!-- Filtros -->
+            <div class="card mb-3">
+                <div class="card-body py-2">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <label class="form-label mb-0 small fw-bold">Tipo de obra:</label>
+                        </div>
+                        <div class="col-auto">
+                            <div class="btn-group btn-group-sm" id="filtro-tipo-obra">
+                                <button class="btn btn-outline-primary active" data-tipo="todos">Todos</button>
+                                <button class="btn btn-outline-success" data-tipo="economica">Económica</button>
+                                <button class="btn btn-outline-info" data-tipo="estandar">Estándar</button>
+                                <button class="btn btn-outline-warning" data-tipo="premium">Premium</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="cuadrillas-container">
+                <div class="text-center text-muted py-4">Cargando cuadrillas...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var escalaData = [];
+var cuadrillasData = [];
+var editandoEscala = false;
+
+// ============================================================
+// ESCALA SALARIAL
+// ============================================================
+
+function cargarEscala() {
+    editandoEscala = false;
+    document.getElementById('escala-footer').classList.add('d-none');
+    fetch('/obras/escala-salarial/api')
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) { alert(data.error); return; }
+        escalaData = data.items;
+        renderEscala();
+    });
+}
+
+function renderEscala() {
+    var body = document.getElementById('escala-body');
+    if (!escalaData.length) {
+        body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No hay escala cargada</td></tr>';
+        return;
+    }
+    var html = '';
+    escalaData.forEach(function(e) {
+        var cat = e.categoria.replace(/_/g, ' ');
+        cat = cat.charAt(0).toUpperCase() + cat.slice(1);
+        html += '<tr data-id="' + e.id + '" data-categoria="' + e.categoria + '">';
+        html += '<td><strong>' + cat + '</strong></td>';
+        html += '<td>' + (e.descripcion || '') + '</td>';
+        if (editandoEscala) {
+            html += '<td class="text-end"><input type="number" class="form-control form-control-sm text-end escala-jornal" value="' + e.jornal + '" min="0" step="1000" style="width:120px;display:inline-block;" onchange="recalcTarifaHora(this)"></td>';
+            html += '<td class="text-end escala-tarifa">' + formatARS(e.jornal / 8) + '/h</td>';
+        } else {
+            html += '<td class="text-end"><strong>' + formatARS(e.jornal) + '</strong></td>';
+            html += '<td class="text-end">' + formatARS(e.tarifa_hora) + '/h</td>';
+        }
+        html += '<td class="text-end small text-muted">' + (e.vigencia_desde || '-') + '</td>';
+        html += '</tr>';
+    });
+    body.innerHTML = html;
+}
+
+function habilitarEdicionEscala() {
+    editandoEscala = true;
+    document.getElementById('escala-footer').classList.remove('d-none');
+    var hoy = new Date().toISOString().split('T')[0];
+    document.getElementById('escala-vigencia').value = hoy;
+    renderEscala();
+}
+
+function recalcTarifaHora(input) {
+    var jornal = parseFloat(input.value) || 0;
+    var td = input.closest('tr').querySelector('.escala-tarifa');
+    td.textContent = formatARS(jornal / 8) + '/h';
+}
+
+function guardarEscala() {
+    var items = [];
+    document.querySelectorAll('#escala-body tr').forEach(function(tr) {
+        var cat = tr.dataset.categoria;
+        var input = tr.querySelector('.escala-jornal');
+        if (cat && input) {
+            items.push({
+                categoria: cat,
+                jornal: parseFloat(input.value) || 0,
+                descripcion: escalaData.find(function(e) { return e.categoria === cat; })?.descripcion || '',
+            });
+        }
+    });
+
+    var vigencia = document.getElementById('escala-vigencia').value;
+
+    fetch('/obras/escala-salarial/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items, vigencia_desde: vigencia })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Escala salarial actualizada');
+            cargarEscala();
+            cargarCuadrillas(); // Recarga cuadrillas con nuevos valores
+        } else {
+            alert(data.error || 'Error al guardar');
+        }
+    });
+}
+
+// ============================================================
+// CUADRILLAS TIPO
+// ============================================================
+
+function cargarCuadrillas() {
+    fetch('/obras/cuadrillas/api')
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) { alert(data.error); return; }
+        cuadrillasData = data.items;
+        renderCuadrillas();
+    });
+}
+
+function renderCuadrillas(filtroTipo) {
+    var container = document.getElementById('cuadrillas-container');
+    var items = cuadrillasData;
+    if (filtroTipo && filtroTipo !== 'todos') {
+        items = items.filter(function(c) { return c.tipo_obra === filtroTipo; });
+    }
+
+    if (!items.length) {
+        container.innerHTML = '<div class="text-center text-muted py-4">No hay cuadrillas para este filtro</div>';
+        return;
+    }
+
+    // Agrupar por etapa
+    var etapas = {};
+    items.forEach(function(c) {
+        if (!etapas[c.etapa_tipo]) etapas[c.etapa_tipo] = [];
+        etapas[c.etapa_tipo].push(c);
+    });
+
+    var html = '';
+    var tipoLabels = { economica: 'Económica', estandar: 'Estándar', premium: 'Premium' };
+    var tipoBadge = { economica: 'bg-success', estandar: 'bg-info', premium: 'bg-warning text-dark' };
+
+    for (var etapa in etapas) {
+        var etapaLabel = etapa.replace(/_/g, ' ');
+        etapaLabel = etapaLabel.charAt(0).toUpperCase() + etapaLabel.slice(1);
+
+        html += '<div class="card mb-3">';
+        html += '<div class="card-header bg-dark text-white"><i class="fas fa-layer-group me-1"></i><strong>' + etapaLabel + '</strong></div>';
+        html += '<div class="card-body p-0">';
+
+        etapas[etapa].forEach(function(c) {
+            var badge = tipoBadge[c.tipo_obra] || 'bg-secondary';
+            html += '<div class="border-bottom p-3" id="cuadrilla-' + c.id + '">';
+
+            // Header
+            html += '<div class="d-flex justify-content-between align-items-center mb-2">';
+            html += '<div>';
+            html += '<span class="badge ' + badge + ' me-2">' + (tipoLabels[c.tipo_obra] || c.tipo_obra) + '</span>';
+            html += '<strong>' + c.nombre + '</strong>';
+            html += '</div>';
+            html += '<div class="text-end">';
+            html += '<span class="badge bg-light text-dark me-2">' + c.cantidad_personas + ' pers.</span>';
+            html += '<span class="badge bg-light text-dark me-2">Rinde: ' + c.rendimiento_diario + ' ' + c.unidad_rendimiento + '/día</span>';
+            html += '<span class="badge bg-primary">' + formatARS(c.costo_diario) + '/día</span>';
+            html += '</div>';
+            html += '</div>';
+
+            // Miembros
+            html += '<div class="table-responsive">';
+            html += '<table class="table table-sm table-borderless mb-0" style="font-size:0.85rem;">';
+            html += '<thead><tr class="text-muted"><th>Rol</th><th class="text-center">Cant.</th><th>Categoría</th><th class="text-end">Jornal</th><th class="text-end">Subtotal/día</th></tr></thead>';
+            html += '<tbody>';
+            c.miembros.forEach(function(m) {
+                var subtotal = m.cantidad * m.jornal;
+                html += '<tr>';
+                html += '<td>' + m.rol + '</td>';
+                html += '<td class="text-center">' + m.cantidad + '</td>';
+                html += '<td class="text-muted">' + (m.descripcion_categoria || m.categoria || '-') + '</td>';
+                html += '<td class="text-end">' + formatARS(m.jornal) + '</td>';
+                html += '<td class="text-end"><strong>' + formatARS(subtotal) + '</strong></td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+
+            // Ejemplo de cálculo
+            html += '<div class="mt-2 small text-muted">';
+            html += '<i class="fas fa-calculator me-1"></i>';
+            html += 'Ej: 100 ' + c.unidad_rendimiento + ' → ' + Math.ceil(100 / c.rendimiento_diario) + ' días × ' + formatARS(c.costo_diario) + ' = <strong>' + formatARS(Math.ceil(100 / c.rendimiento_diario) * c.costo_diario) + '</strong>';
+            html += '</div>';
+
+            // Botón editar
+            html += '<div class="mt-2 text-end">';
+            html += '<button class="btn btn-outline-secondary btn-sm" onclick="editarCuadrilla(' + c.id + ')"><i class="fas fa-edit me-1"></i>Editar</button>';
+            html += '</div>';
+
+            html += '</div>';
+        });
+
+        html += '</div></div>';
+    }
+
+    container.innerHTML = html;
+}
+
+function editarCuadrilla(id) {
+    var c = cuadrillasData.find(function(x) { return x.id === id; });
+    if (!c) return;
+
+    var div = document.getElementById('cuadrilla-' + id);
+    var tipoLabels = { economica: 'Económica', estandar: 'Estándar', premium: 'Premium' };
+
+    var html = '<div class="bg-light p-3 rounded">';
+    html += '<h6 class="mb-3"><i class="fas fa-edit me-1"></i>Editando: ' + c.nombre + '</h6>';
+
+    // Nombre y rendimiento
+    html += '<div class="row mb-2">';
+    html += '<div class="col-md-4"><label class="form-label small fw-bold">Nombre</label>';
+    html += '<input type="text" class="form-control form-control-sm" id="edit-nombre-' + id + '" value="' + c.nombre + '"></div>';
+    html += '<div class="col-md-3"><label class="form-label small fw-bold">Rendimiento/día</label>';
+    html += '<div class="input-group input-group-sm"><input type="number" class="form-control" id="edit-rend-' + id + '" value="' + c.rendimiento_diario + '" step="0.5" min="0.1">';
+    html += '<span class="input-group-text">' + c.unidad_rendimiento + '/día</span></div></div>';
+    html += '<div class="col-md-2"><label class="form-label small fw-bold">Unidad</label>';
+    html += '<select class="form-select form-select-sm" id="edit-unidad-' + id + '">';
+    ['m2', 'm3', 'ml', 'gl', 'u', 'kg'].forEach(function(u) {
+        html += '<option value="' + u + '"' + (u === c.unidad_rendimiento ? ' selected' : '') + '>' + u + '</option>';
+    });
+    html += '</select></div>';
+    html += '</div>';
+
+    // Miembros
+    html += '<label class="form-label small fw-bold">Composición de la cuadrilla:</label>';
+    html += '<div id="edit-miembros-' + id + '">';
+    c.miembros.forEach(function(m, idx) {
+        html += renderMiembroEditable(id, idx, m);
+    });
+    html += '</div>';
+    html += '<button class="btn btn-outline-primary btn-sm mt-1" onclick="agregarMiembro(' + id + ')"><i class="fas fa-plus me-1"></i>Agregar rol</button>';
+
+    // Botones
+    html += '<div class="mt-3 text-end">';
+    html += '<button class="btn btn-secondary btn-sm me-2" onclick="cargarCuadrillas()">Cancelar</button>';
+    html += '<button class="btn btn-success btn-sm" onclick="guardarCuadrilla(' + id + ')"><i class="fas fa-save me-1"></i>Guardar</button>';
+    html += '</div></div>';
+
+    div.innerHTML = html;
+}
+
+function renderMiembroEditable(cuadrillaId, idx, m) {
+    var categorias = ['oficial_especializado', 'oficial', 'medio_oficial', 'ayudante', 'sereno', 'maquinista'];
+    var html = '<div class="row mb-1 miembro-row" data-idx="' + idx + '">';
+    html += '<div class="col-3"><input type="text" class="form-control form-control-sm" placeholder="Rol" value="' + (m.rol || '') + '" data-field="rol"></div>';
+    html += '<div class="col-2"><input type="number" class="form-control form-control-sm text-center" placeholder="Cant." value="' + (m.cantidad || 1) + '" step="0.5" min="0.5" data-field="cantidad"></div>';
+    html += '<div class="col-3"><select class="form-select form-select-sm" data-field="categoria">';
+    categorias.forEach(function(cat) {
+        var label = cat.replace(/_/g, ' ');
+        label = label.charAt(0).toUpperCase() + label.slice(1);
+        html += '<option value="' + cat + '"' + (cat === m.categoria ? ' selected' : '') + '>' + label + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="col-2"><input type="number" class="form-control form-control-sm text-end" placeholder="Override $" value="' + (m.jornal_override || '') + '" data-field="jornal_override"></div>';
+    html += '<div class="col-2 text-end"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.miembro-row\').remove()"><i class="fas fa-trash"></i></button></div>';
+    html += '</div>';
+    return html;
+}
+
+var miembroCounter = 100;
+function agregarMiembro(cuadrillaId) {
+    var container = document.getElementById('edit-miembros-' + cuadrillaId);
+    var div = document.createElement('div');
+    div.innerHTML = renderMiembroEditable(cuadrillaId, miembroCounter++, { rol: '', cantidad: 1, categoria: 'ayudante' });
+    container.appendChild(div.firstChild);
+}
+
+function guardarCuadrilla(id) {
+    var nombre = document.getElementById('edit-nombre-' + id).value;
+    var rendimiento = document.getElementById('edit-rend-' + id).value;
+    var unidad = document.getElementById('edit-unidad-' + id).value;
+
+    var miembros = [];
+    document.querySelectorAll('#edit-miembros-' + id + ' .miembro-row').forEach(function(row) {
+        var rol = row.querySelector('[data-field="rol"]').value;
+        var cantidad = row.querySelector('[data-field="cantidad"]').value;
+        var categoria = row.querySelector('[data-field="categoria"]').value;
+        var override = row.querySelector('[data-field="jornal_override"]').value;
+
+        if (rol) {
+            miembros.push({
+                rol: rol,
+                cantidad: parseFloat(cantidad) || 1,
+                categoria: categoria,
+                jornal_override: override ? parseFloat(override) : null,
+            });
+        }
+    });
+
+    fetch('/obras/cuadrillas/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            id: id,
+            nombre: nombre,
+            rendimiento_diario: parseFloat(rendimiento),
+            unidad_rendimiento: unidad,
+            miembros: miembros,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Cuadrilla guardada');
+            cargarCuadrillas();
+        } else {
+            alert(data.error || 'Error al guardar');
+        }
+    });
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+
+function formatARS(n) {
+    if (n == null || isNaN(n)) return '$0';
+    return '$' + Math.round(n).toLocaleString('es-AR');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    cargarEscala();
+    cargarCuadrillas();
+
+    // Filtros tipo obra
+    document.querySelectorAll('#filtro-tipo-obra button').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('#filtro-tipo-obra button').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            renderCuadrillas(btn.dataset.tipo);
+        });
+    });
+});
+</script>
+{% endblock %}

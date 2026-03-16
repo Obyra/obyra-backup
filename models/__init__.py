@@ -64,6 +64,9 @@ from models.budgets import (
     GeocodeCache,
     WizardStageVariant,
     WizardStageCoefficient,
+    EscalaSalarialUOCRA,
+    CuadrillaTipo,
+    MiembroCuadrilla,
 )
 
 # Client models
@@ -255,6 +258,9 @@ __all__ = [
     'GeocodeCache',
     'WizardStageVariant',
     'WizardStageCoefficient',
+    'EscalaSalarialUOCRA',
+    'CuadrillaTipo',
+    'MiembroCuadrilla',
     # Clients
     'Cliente',
     # Proveedores OC

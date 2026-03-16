@@ -602,6 +602,9 @@
                                     <h6 class="mb-0 text-muted">
                                         <i class="fas fa-hard-hat me-1"></i> Avance de Mano de Obra por Etapa
                                     </h6>
+                                    <a href="{{ url_for('obras.escala_salarial') }}" class="btn btn-outline-dark btn-sm">
+                                        <i class="fas fa-cog me-1"></i>Escala UOCRA & Cuadrillas
+                                    </a>
                                 </div>
                                 <div class="table-responsive" style="overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch;">
                                     <style>
@@ -627,88 +630,113 @@
                                             min-width: 200px;
                                         }
                                     </style>
-                                    <table class="table table-sm table-hover mb-0">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th>Descripción</th>
-                                                <th class="text-center">Planificado</th>
-                                                <th class="text-center">Ejecutado</th>
-                                                <th class="text-center">% Avance</th>
-                                                <th class="text-end">Costo Presup.</th>
-                                                <th class="text-center">Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% set mano_obra = items_presupuesto | selectattr('tipo', 'equalto', 'mano_obra') | list %}
-                                            {% if mano_obra %}
-                                                {% for item in mano_obra %}
-                                                {% set avance_etapa = avances_mano_obra.get(item.etapa_id, {'jornales_ejecutados': 0, 'horas_ejecutadas': 0}) if item.etapa_id else {'jornales_ejecutados': 0, 'horas_ejecutadas': 0} %}
-                                                {% set planificado = item.cantidad|float %}
-                                                {% set ejecutado = avance_etapa.jornales_ejecutados|float if item.unidad == 'jornal' else avance_etapa.horas_ejecutadas|float %}
-                                                {% set porcentaje = ((ejecutado / planificado) * 100)|round(1) if planificado > 0 else 0 %}
-                                                <tr>
-                                                    <td>
-                                                        <strong>{{ item.descripcion }}</strong>
-                                                        {% if item.etapa %}
-                                                        <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ item.etapa.nombre }}</small>
-                                                        {% endif %}
-                                                    </td>
-                                                    <td class="text-center">
-                                                        <span class="badge bg-secondary">{{ item.cantidad|entero }} {{ item.unidad }}</span>
-                                                    </td>
-                                                    <td class="text-center">
-                                                        {% if ejecutado > 0 %}
-                                                        <span class="badge bg-success">{{ ejecutado|entero }} {{ item.unidad }}</span>
-                                                        {% else %}
-                                                        <span class="badge bg-light text-muted">0 {{ item.unidad }}</span>
-                                                        {% endif %}
-                                                    </td>
-                                                    <td class="text-center">
-                                                        <div class="progress" style="height: 20px; min-width: 80px;">
-                                                            <div class="progress-bar {% if porcentaje >= 100 %}bg-success{% elif porcentaje >= 50 %}bg-info{% else %}bg-warning{% endif %}"
-                                                                 role="progressbar"
-                                                                 style="width: {{ [porcentaje, 100]|min }}%">
-                                                                {{ porcentaje }}%
+                                    {% set mano_obra = items_presupuesto | selectattr('tipo', 'equalto', 'mano_obra') | list %}
+                                    {% if mano_obra %}
+                                    {# Agrupar por etapa #}
+                                    {% set ns = namespace(etapas_vistas={}, etapas_orden=[]) %}
+                                    {% for item in mano_obra %}
+                                        {% set etapa_key = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin etapa') %}
+                                        {% if etapa_key not in ns.etapas_vistas %}
+                                            {% set _ = ns.etapas_vistas.update({etapa_key: []}) %}
+                                            {% set _ = ns.etapas_orden.append(etapa_key) %}
+                                        {% endif %}
+                                        {% set _ = ns.etapas_vistas[etapa_key].append(item) %}
+                                    {% endfor %}
+
+                                    {% for etapa_nombre in ns.etapas_orden %}
+                                    {% set etapa_items = ns.etapas_vistas[etapa_nombre] %}
+                                    <div class="card mb-3 border">
+                                        <div class="card-header bg-dark text-white py-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span><i class="fas fa-layer-group me-1"></i><strong>{{ etapa_nombre }}</strong></span>
+                                                {% set etapa_total = etapa_items | sum(attribute='total') %}
+                                                <span class="badge bg-light text-dark">Presup: $ {{ "{:,.0f}".format(etapa_total|float) }}</span>
+                                            </div>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <table class="table table-sm table-hover mb-0">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Cuadrilla / Rol</th>
+                                                        <th class="text-center">Jornales Plan.</th>
+                                                        <th class="text-center">Ejecutado</th>
+                                                        <th class="text-center">% Avance</th>
+                                                        <th class="text-end">Costo Presup.</th>
+                                                        <th class="text-center">Estado</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                {% for item in etapa_items %}
+                                                    {% set avance_etapa = avances_mano_obra.get(item.etapa_id, {'jornales_ejecutados': 0, 'horas_ejecutadas': 0}) if item.etapa_id else {'jornales_ejecutados': 0, 'horas_ejecutadas': 0} %}
+                                                    {% set planificado = item.cantidad|float %}
+                                                    {% set ejecutado = avance_etapa.jornales_ejecutados|float if item.unidad == 'jornal' else avance_etapa.horas_ejecutadas|float %}
+                                                    {% set porcentaje = ((ejecutado / planificado) * 100)|round(1) if planificado > 0 else 0 %}
+                                                    <tr>
+                                                        <td>
+                                                            <strong>{{ item.descripcion }}</strong>
+                                                            {% if cuadrillas_por_etapa is defined %}
+                                                                {% set cuad_info = cuadrillas_por_etapa.get(item.descripcion|lower|replace(' ', '_')|replace('cuadrilla_', ''), none) %}
+                                                                {% if cuad_info %}
+                                                                <br><small class="text-muted">
+                                                                    <i class="fas fa-users me-1"></i>{{ cuad_info.personas|round(0)|int }} pers. — {{ cuad_info.miembros }}
+                                                                    <br><i class="fas fa-tachometer-alt me-1"></i>Rinde {{ cuad_info.rendimiento }} {{ cuad_info.unidad }}/día
+                                                                    {% if cuad_info.rendimiento > 0 and planificado > 0 %}
+                                                                    → ~{{ (planificado / cuad_info.personas)|round(0)|int }} días
+                                                                    {% endif %}
+                                                                </small>
+                                                                {% endif %}
+                                                            {% endif %}
+                                                        </td>
+                                                        <td class="text-center">
+                                                            <span class="badge bg-secondary">{{ item.cantidad|entero }} {{ item.unidad }}</span>
+                                                        </td>
+                                                        <td class="text-center">
+                                                            {% if ejecutado > 0 %}
+                                                            <span class="badge bg-success">{{ ejecutado|entero }} {{ item.unidad }}</span>
+                                                            {% else %}
+                                                            <span class="badge bg-light text-muted">0 {{ item.unidad }}</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td class="text-center">
+                                                            <div class="progress" style="height: 20px; min-width: 80px;">
+                                                                <div class="progress-bar {% if porcentaje >= 100 %}bg-success{% elif porcentaje >= 50 %}bg-info{% else %}bg-warning{% endif %}"
+                                                                     role="progressbar" style="width: {{ [porcentaje, 100]|min }}%">
+                                                                    {{ porcentaje }}%
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </td>
-                                                    <td class="text-end">
-                                                        {% if presupuesto.currency == 'USD' %}
-                                                            <strong>US$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
-                                                        {% else %}
-                                                            <strong>$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
-                                                        {% endif %}
-                                                    </td>
-                                                    <td class="text-center">
-                                                        {% if porcentaje >= 100 %}
-                                                            <span class="badge bg-success"><i class="fas fa-check me-1"></i>Completo</span>
-                                                        {% elif porcentaje > 0 %}
-                                                            <span class="badge bg-info"><i class="fas fa-spinner me-1"></i>En curso</span>
-                                                        {% else %}
-                                                            <span class="badge bg-light text-muted">Pendiente</span>
-                                                        {% endif %}
-                                                    </td>
-                                                </tr>
+                                                        </td>
+                                                        <td class="text-end">
+                                                            <strong>$ {{ "{:,.0f}".format((item.cantidad * item.precio_unitario)|float) }}</strong>
+                                                        </td>
+                                                        <td class="text-center">
+                                                            {% if porcentaje >= 100 %}
+                                                                <span class="badge bg-success"><i class="fas fa-check me-1"></i>Completo</span>
+                                                            {% elif porcentaje > 0 %}
+                                                                <span class="badge bg-info"><i class="fas fa-spinner me-1"></i>En curso</span>
+                                                            {% else %}
+                                                                <span class="badge bg-light text-muted">Pendiente</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
                                                 {% endfor %}
-                                            {% else %}
-                                                <tr>
-                                                    <td colspan="6" class="text-center text-muted py-3">
-                                                        <i class="fas fa-info-circle me-2"></i>No hay mano de obra en el presupuesto
-                                                    </td>
-                                                </tr>
-                                            {% endif %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {% if mano_obra %}
-                                <!-- Resumen de avances -->
-                                <div class="mt-3 p-2 bg-light rounded">
-                                    <small class="text-muted">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+
+                                    <!-- Resumen -->
+                                    <div class="p-2 bg-light rounded small text-muted">
                                         <i class="fas fa-info-circle me-1"></i>
-                                        Los datos de "Ejecutado" se calculan automáticamente desde los avances reportados por los operarios en las tareas.
-                                    </small>
-                                </div>
-                                {% endif %}
+                                        Los datos de "Ejecutado" se calculan desde los avances reportados en las tareas.
+                                        La composición de cuadrilla se configura en
+                                        <a href="{{ url_for('obras.escala_salarial') }}">Escala UOCRA & Cuadrillas</a>.
+                                    </div>
+                                    {% else %}
+                                    <div class="text-center text-muted py-3">
+                                        <i class="fas fa-info-circle me-2"></i>No hay mano de obra en el presupuesto
+                                    </div>
+                                    {% endif %}
                             </div>
                         </div>
 

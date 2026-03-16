@@ -526,3 +526,117 @@ def _presupuesto_before_update(mapper, connection, target):
         )
         if cambios_vigencia:
             raise ValueError('La vigencia del presupuesto está bloqueada y no puede modificarse.')
+
+
+# ============================================================
+# ESCALA SALARIAL UOCRA
+# ============================================================
+
+class EscalaSalarialUOCRA(db.Model):
+    """Escala salarial UOCRA por categoría. Se actualiza cuando sale nueva escala."""
+    __tablename__ = 'escala_salarial_uocra'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    categoria = db.Column(db.String(50), nullable=False)  # oficial, medio_oficial, ayudante, oficial_especializado
+    descripcion = db.Column(db.String(100))                # "Oficial albañil", "Ayudante", etc.
+    jornal = db.Column(db.Numeric(12, 2), nullable=False)  # Valor del jornal (8hs)
+    tarifa_hora = db.Column(db.Numeric(12, 2))             # jornal / 8 (calculado)
+    vigencia_desde = db.Column(db.Date, nullable=False)    # Desde cuándo rige
+    vigencia_hasta = db.Column(db.Date)                    # Hasta cuándo (null = vigente)
+    activo = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organizacion = db.relationship('Organizacion')
+
+    __table_args__ = (
+        db.Index('ix_escala_org_cat', 'organizacion_id', 'categoria'),
+    )
+
+    def save(self):
+        """Auto-calcula tarifa_hora al guardar."""
+        if self.jornal:
+            self.tarifa_hora = Decimal(str(self.jornal)) / Decimal('8')
+
+
+# ============================================================
+# CUADRILLAS TIPO
+# ============================================================
+
+class CuadrillaTipo(db.Model):
+    """Template de cuadrilla reutilizable entre obras."""
+    __tablename__ = 'cuadrillas_tipo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    nombre = db.Column(db.String(100), nullable=False)           # "Cuadrilla estructura estándar"
+    etapa_tipo = db.Column(db.String(50), nullable=False)        # excavacion, fundaciones, estructura, etc.
+    tipo_obra = db.Column(db.String(20), default='estandar')     # economica, estandar, premium
+    rendimiento_diario = db.Column(db.Numeric(10, 3))            # Ej: 5.0 m3/día, 12.0 m2/día
+    unidad_rendimiento = db.Column(db.String(20), default='m2')  # m2, m3, ml, gl, u
+    activo = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    organizacion = db.relationship('Organizacion')
+    miembros = db.relationship('MiembroCuadrilla', back_populates='cuadrilla',
+                               cascade='all, delete-orphan', lazy='joined')
+
+    __table_args__ = (
+        db.Index('ix_cuadrilla_org_etapa', 'organizacion_id', 'etapa_tipo', 'tipo_obra'),
+    )
+
+    @property
+    def costo_diario(self):
+        """Costo diario total de la cuadrilla (suma de jornales de miembros)."""
+        total = Decimal('0')
+        for m in self.miembros:
+            jornal = m.jornal_override or (m.escala.jornal if m.escala else Decimal('0'))
+            total += jornal * Decimal(str(m.cantidad))
+        return total
+
+    @property
+    def cantidad_personas(self):
+        """Total de personas en la cuadrilla."""
+        return sum(float(m.cantidad) for m in self.miembros)
+
+    def calcular_jornales(self, cantidad_trabajo):
+        """Calcula jornales necesarios para una cantidad de trabajo.
+
+        Args:
+            cantidad_trabajo: m2, m3, ml, etc. según unidad_rendimiento
+        Returns:
+            dict con jornales, dias, costo_total
+        """
+        if not self.rendimiento_diario or self.rendimiento_diario <= 0:
+            return {'jornales': 0, 'dias': 0, 'costo_total': Decimal('0')}
+
+        dias = Decimal(str(cantidad_trabajo)) / self.rendimiento_diario
+        jornales = dias * Decimal(str(self.cantidad_personas))
+        costo = dias * self.costo_diario
+
+        return {
+            'jornales': float(jornales.quantize(Decimal('0.01'))),
+            'dias': float(dias.quantize(Decimal('0.01'))),
+            'costo_total': costo.quantize(Decimal('0.01')),
+            'costo_diario': float(self.costo_diario),
+            'personas': self.cantidad_personas,
+        }
+
+
+class MiembroCuadrilla(db.Model):
+    """Un rol/persona dentro de una cuadrilla tipo."""
+    __tablename__ = 'miembros_cuadrilla'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cuadrilla_id = db.Column(db.Integer, db.ForeignKey('cuadrillas_tipo.id'), nullable=False)
+    escala_id = db.Column(db.Integer, db.ForeignKey('escala_salarial_uocra.id'), nullable=True)
+    rol = db.Column(db.String(50), nullable=False)       # "Oficial", "Ayudante", "Encofrador"
+    cantidad = db.Column(db.Numeric(5, 2), default=1)    # 1, 2, 0.5 (compartido)
+    jornal_override = db.Column(db.Numeric(12, 2))       # Si se quiere pisar el valor de escala
+
+    # Relaciones
+    cuadrilla = db.relationship('CuadrillaTipo', back_populates='miembros')
+    escala = db.relationship('EscalaSalarialUOCRA', lazy='joined')
