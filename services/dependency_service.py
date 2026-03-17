@@ -131,7 +131,7 @@ def generar_dependencias_desde_niveles(obra_id):
 # ---------------------------------------------------------------------------
 # Cascadeo de fechas (algoritmo principal)
 # ---------------------------------------------------------------------------
-def propagar_fechas_obra(obra_id):
+def propagar_fechas_obra(obra_id, force_cascade=False):
     """Propaga fechas de etapas según dependencias y niveles.
 
     Algoritmo:
@@ -142,10 +142,14 @@ def propagar_fechas_obra(obra_id):
        - O fallback por orden secuencial
     3. Orden topológico (sin predecesoras primero).
     4. Para cada etapa en orden topo:
-       - Skip si fechas_manuales == True
+       - Skip si fechas_manuales == True (salvo que force_cascade y haya solapamiento)
        - Skip si estado == 'finalizada'
        - inicio_más_temprano = max(pred.fecha_fin + 1 + lag)
        - Si inicio_más_temprano > fecha_inicio → shift forward preservando duración
+
+    Args:
+        force_cascade: Si True, mueve etapas con fechas_manuales cuando hay
+                       solapamiento (la predecesora termina después del inicio).
     """
     etapas = (
         EtapaObra.query
@@ -221,8 +225,6 @@ def propagar_fechas_obra(obra_id):
     for eid in orden_topo:
         etapa = etapa_map[eid]
 
-        if etapa.fechas_manuales:
-            continue
         if etapa.estado == 'finalizada':
             continue
 
@@ -252,6 +254,15 @@ def propagar_fechas_obra(obra_id):
 
         if inicio_mas_temprano is None:
             continue
+
+        # Si tiene fechas_manuales, solo mover si hay solapamiento real
+        # (la predecesora termina después de cuando esta etapa empieza)
+        if etapa.fechas_manuales and not force_cascade:
+            continue
+        if etapa.fechas_manuales and force_cascade:
+            # Solo forzar si hay solapamiento (inicio actual < inicio requerido)
+            if etapa.fecha_inicio_estimada and etapa.fecha_inicio_estimada >= inicio_mas_temprano:
+                continue
 
         if etapa.fecha_inicio_estimada and inicio_mas_temprano != etapa.fecha_inicio_estimada:
             # Calcular duración actual para preservarla

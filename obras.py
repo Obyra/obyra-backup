@@ -1098,6 +1098,7 @@ def detalle(id):
                          etapas_disponibles=etapas_disponibles,
                          roles_por_categoria=obtener_roles_por_categoria(),
                          TAREAS_POR_ETAPA=TAREAS_POR_ETAPA,
+                         todos_operarios=todos_operarios,
                          can_manage=can_manage_obra(obra),
                          current_user_id=current_user.id,
                          certificaciones_resumen=cert_resumen,
@@ -2057,7 +2058,7 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
 
 # === ETAPAS ENCADENADAS — PROPAGACIÓN DE FECHAS ===
 
-def propagar_fechas_etapas(obra_id):
+def propagar_fechas_etapas(obra_id, force_cascade=False):
     """Propaga fechas entre etapas usando dependencias y niveles.
 
     Algoritmo:
@@ -2065,7 +2066,7 @@ def propagar_fechas_etapas(obra_id):
     2. Si no, deriva del nivel_encadenamiento (nivel N depende de nivel N-1).
     3. Si no tiene nivel ni dependencias, fallback secuencial por orden.
     4. Orden topológico. Para cada etapa:
-       - Skip si fechas_manuales == True
+       - Skip si fechas_manuales == True (salvo solapamiento con force_cascade)
        - Skip si estado == 'finalizada'
        - inicio_más_temprano = max(pred.fin_efectivo + 1 + lag)
        - Solo desplaza hacia adelante, preservando duración.
@@ -2074,7 +2075,7 @@ def propagar_fechas_etapas(obra_id):
     from services.dependency_service import propagar_fechas_obra
     from datetime import timedelta
 
-    etapas_modificadas = propagar_fechas_obra(obra_id)
+    etapas_modificadas = propagar_fechas_obra(obra_id, force_cascade=force_cascade)
 
     details = []
     for etapa in etapas_modificadas:
@@ -5000,7 +5001,7 @@ def editar_fechas_etapa(etapa_id):
         if deps_creadas:
             db.session.commit()
 
-        result = propagar_fechas_etapas(etapa.obra_id)
+        result = propagar_fechas_etapas(etapa.obra_id, force_cascade=True)
         propagadas = result['shifted_count']
         if propagadas > 0:
             db.session.commit()
