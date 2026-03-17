@@ -305,12 +305,14 @@
     <div class="row mt-4">
         <!-- Presupuesto vs Gastado por Obra -->
         <div class="col-lg-6 mb-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>Presupuesto vs Gastado</h5>
                 </div>
                 <div class="card-body">
-                    <canvas id="chartPresVsReal" height="250"></canvas>
+                    <div style="max-height: 300px; position: relative;">
+                        <canvas id="chartPresVsReal"></canvas>
+                    </div>
                     <table class="table table-sm table-striped mt-3 mb-0" style="font-size: 0.75rem;">
                         <thead><tr><th>Obra</th><th class="text-end">Presupuesto</th><th class="text-end">Gastado</th><th class="text-end">Desvío</th></tr></thead>
                         <tbody>
@@ -330,7 +332,7 @@
 
         <!-- Desglose Presupuesto vs Real -->
         <div class="col-lg-3 mb-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-chart-pie text-success me-2"></i>Presupuesto</h5>
                 </div>
@@ -355,7 +357,7 @@
         </div>
 
         <div class="col-lg-3 mb-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-chart-pie text-danger me-2"></i>Gastado Real</h5>
                 </div>
@@ -393,7 +395,9 @@
                     </select>
                 </div>
                 <div class="card-body">
-                    <canvas id="chartCurvaS" height="280"></canvas>
+                    <div style="max-height: 300px; position: relative;">
+                        <canvas id="chartCurvaS"></canvas>
+                    </div>
                     <div id="curvaS-empty" class="text-center text-muted py-3 d-none">
                         <i class="fas fa-bezier-curve fa-2x mb-2 opacity-50 d-block"></i>
                         <small>Sin datos de planificación semanal para esta obra.<br>Cargue el plan semanal desde el detalle de la obra para ver la Curva S.</small>
@@ -506,8 +510,6 @@ document.addEventListener('DOMContentLoaded', function() {
     (function() {
         var ctx = document.getElementById('chartPresVsReal');
         if (!ctx) return;
-        var data = {{ obras_data | map(attribute='obra') | list | tojson if false else '[]' }};
-        // Build data from template
         var labels = [], pres = [], real = [], pcts = [];
         {% for od in obras_data %}
         labels.push('{{ od.obra.nombre[:25] | e }}');
@@ -515,6 +517,9 @@ document.addEventListener('DOMContentLoaded', function() {
         real.push({{ od.costo_real }});
         pcts.push({{ od.desvio }});
         {% endfor %}
+        // Altura dinámica: 50px por obra, mínimo 150, máximo 300
+        var h = Math.min(300, Math.max(150, labels.length * 50 + 60));
+        ctx.parentElement.style.height = h + 'px';
         new Chart(ctx, {
             type: 'bar',
             data: {
@@ -573,6 +578,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var emptyMsg = document.getElementById('curvaS-empty');
         if (!ctx || !select) return;
         var curvaChart = null;
+        ctx.parentElement.style.height = '280px';
 
         function cargarCurvaS(obraId) {
             fetch('/reportes/api/curva-s/' + obraId)
