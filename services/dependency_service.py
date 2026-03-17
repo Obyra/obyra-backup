@@ -269,6 +269,7 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
     for eid in orden_topo:
         etapa = etapa_map[eid]
 
+        # No tocar etapas finalizadas
         if etapa.estado == 'finalizada':
             continue
 
@@ -276,14 +277,17 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
         if not preds:
             continue
 
-        # Calcular el inicio más temprano (usando días hábiles: L-V)
-        inicio_mas_temprano = None
+        # Sin force_cascade, respetar fechas_manuales
+        if etapa.fechas_manuales and not force_cascade:
+            continue
+
+        # ── Calcular inicio: siguiente día hábil después del fin de la predecesora ──
+        inicio_nuevo = None
         for pred_id, lag in preds:
             pred = etapa_map.get(pred_id)
             if not pred:
                 continue
 
-            # Usar fecha_fin_real si finalizada, sino fecha_fin_estimada
             fecha_fin_pred = None
             if pred.estado == 'finalizada' and pred.fecha_fin_real:
                 fecha_fin_pred = pred.fecha_fin_real
@@ -292,37 +296,30 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
             else:
                 continue
 
-            # Siguiente día hábil después del fin de la predecesora
+            # Día siguiente hábil (L-V) después del fin + lag
             candidata = _siguiente_dia_habil(fecha_fin_pred, 1 + lag)
-            if inicio_mas_temprano is None or candidata > inicio_mas_temprano:
-                inicio_mas_temprano = candidata
+            if inicio_nuevo is None or candidata > inicio_nuevo:
+                inicio_nuevo = candidata
 
-        if inicio_mas_temprano is None:
+        if inicio_nuevo is None:
             continue
 
-        # Con force_cascade, recalcular TODAS las sucesoras (salvo finalizadas)
-        # Sin force_cascade, respetar fechas_manuales
-        if etapa.fechas_manuales and not force_cascade:
+        # Si el inicio no cambió, no hay nada que hacer
+        if etapa.fecha_inicio_estimada == inicio_nuevo:
             continue
 
-        if etapa.fecha_inicio_estimada and inicio_mas_temprano != etapa.fecha_inicio_estimada:
-            # Calcular duración en días hábiles para preservarla
-            if etapa.fecha_inicio_estimada and etapa.fecha_fin_estimada:
-                dias_hab = _contar_dias_habiles(etapa.fecha_inicio_estimada, etapa.fecha_fin_estimada)
-                if dias_hab < 1:
-                    dias_hab = 10  # Default 10 días hábiles (2 semanas)
-            else:
-                dias_hab = 10
+        # ── Calcular duración en días hábiles (preservar la original) ──
+        dias_hab = 10  # Default: 2 semanas laborales
+        if etapa.fecha_inicio_estimada and etapa.fecha_fin_estimada:
+            d = _contar_dias_habiles(etapa.fecha_inicio_estimada, etapa.fecha_fin_estimada)
+            if d >= 1:
+                dias_hab = d
 
-            etapa.fecha_inicio_estimada = inicio_mas_temprano
-            etapa.fecha_fin_estimada = _sumar_dias_habiles(inicio_mas_temprano, dias_hab - 1)
-            etapas_modificadas.append(etapa)
-
-        elif etapa.fecha_inicio_estimada is None:
-            etapa.fecha_inicio_estimada = inicio_mas_temprano
-            if etapa.fecha_fin_estimada is None:
-                etapa.fecha_fin_estimada = _sumar_dias_habiles(inicio_mas_temprano, 9)  # 10 días hábiles
-            etapas_modificadas.append(etapa)
+        # ── Aplicar nuevas fechas ──
+        etapa.fecha_inicio_estimada = inicio_nuevo
+        # fin = inicio + (duración - 1) días hábiles (porque inicio ya cuenta como día 1)
+        etapa.fecha_fin_estimada = _sumar_dias_habiles(inicio_nuevo, dias_hab - 1)
+        etapas_modificadas.append(etapa)
 
     if etapas_modificadas:
         db.session.flush()
