@@ -830,10 +830,61 @@ def reporte_obras():
         'obras_finalizadas': len([o for o in obras if o.estado == 'finalizada']),
     }
 
+    # Desglose presupuesto por tipo (MO/Material/Equipo)
+    desglose_presupuesto = {'materiales': 0, 'mano_obra': 0, 'equipos': 0}
+    desglose_real = {'materiales': 0, 'mano_obra': 0, 'equipos': 0}
+    try:
+        obra_ids_list = [o.id for o in obras]
+        if obra_ids_list:
+            pres_ids = [p.id for p in Presupuesto.query.filter(
+                Presupuesto.obra_id.in_(obra_ids_list),
+                Presupuesto.organizacion_id == org_id
+            ).all()]
+            if pres_ids:
+                for tipo, total in db.session.query(
+                    ItemPresupuesto.tipo, func.sum(ItemPresupuesto.total)
+                ).filter(ItemPresupuesto.presupuesto_id.in_(pres_ids)
+                ).group_by(ItemPresupuesto.tipo).all():
+                    t = float(total or 0)
+                    if tipo == 'material':
+                        desglose_presupuesto['materiales'] = round(t, 0)
+                    elif tipo == 'mano_obra':
+                        desglose_presupuesto['mano_obra'] = round(t, 0)
+                    elif tipo == 'equipo':
+                        desglose_presupuesto['equipos'] = round(t, 0)
+
+            # Real: materiales
+            costo_mat = db.session.query(
+                func.coalesce(func.sum(
+                    UsoInventario.cantidad_usada * func.coalesce(
+                        UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio
+                    )), 0)
+            ).join(ItemInventario).filter(UsoInventario.obra_id.in_(obra_ids_list)).scalar() or 0
+            desglose_real['materiales'] = round(float(costo_mat), 0)
+
+            # Real: MO
+            from models import LiquidacionMO
+            costo_mo = db.session.query(
+                func.coalesce(func.sum(LiquidacionMO.monto_total), 0)
+            ).filter(LiquidacionMO.obra_id.in_(obra_ids_list),
+                     LiquidacionMO.organizacion_id == org_id).scalar() or 0
+            desglose_real['mano_obra'] = round(float(costo_mo), 0)
+
+            # Real: Equipos
+            from models.equipment import Equipment, EquipmentUsage
+            costo_eq = db.session.query(
+                func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0)
+            ).join(Equipment).filter(EquipmentUsage.project_id.in_(obra_ids_list)).scalar() or 0
+            desglose_real['equipos'] = round(float(costo_eq), 0)
+    except Exception:
+        db.session.rollback()
+
     return render_template('reportes/obras.html',
                          obras=obras,
                          obras_data=obras_data,
                          estadisticas=estadisticas,
+                         desglose_presupuesto=desglose_presupuesto,
+                         desglose_real=desglose_real,
                          estado=estado,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta)
@@ -1221,6 +1272,23 @@ def reporte_inventario():
         'categorias': len(por_categoria),
     }
 
+    # Días de stock restante (proyección)
+    dias_stock = []
+    for item_d in items_data:
+        if item_d.get('usos_90_dias', 0) > 0 and item_d.get('stock', 0) > 0:
+            consumo_diario = item_d['usos_90_dias'] / 90.0
+            dias_rest = item_d['stock'] / consumo_diario
+            if dias_rest <= 60:
+                dias_stock.append({
+                    'nombre': item_d['item'].nombre[:30],
+                    'stock': round(item_d['stock'], 1),
+                    'unidad': item_d['item'].unidad or 'u',
+                    'consumo_diario': round(consumo_diario, 1),
+                    'dias': round(dias_rest, 0),
+                    'critico': dias_rest <= 7,
+                })
+    dias_stock.sort(key=lambda x: x['dias'])
+
     return render_template('reportes/inventario.html',
                          items=items,
                          items_data=items_data,
@@ -1230,6 +1298,7 @@ def reporte_inventario():
                          top_rotacion=top_rotacion,
                          items_criticos_lista=items_criticos_lista,
                          items_obsoletos=items_obsoletos,
+                         dias_stock=dias_stock,
                          tipo=tipo,
                          stock_bajo=stock_bajo,
                          ordenar_por=ordenar_por)

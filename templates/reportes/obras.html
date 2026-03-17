@@ -300,6 +300,83 @@
     </div>
     {% endif %}
 
+    <!-- Gráficos Financieros -->
+    {% if obras_data %}
+    <div class="row mt-4">
+        <!-- Presupuesto vs Gastado por Obra -->
+        <div class="col-lg-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>Presupuesto vs Gastado</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartPresVsReal" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Desglose Presupuesto vs Real -->
+        <div class="col-lg-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie text-success me-2"></i>Presupuesto</h5>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    {% if desglose_presupuesto and (desglose_presupuesto.materiales > 0 or desglose_presupuesto.mano_obra > 0 or desglose_presupuesto.equipos > 0) %}
+                    <canvas id="chartDesglosePres" height="200"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-chart-pie fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin items presupuestados por tipo</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie text-danger me-2"></i>Gastado Real</h5>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    {% if desglose_real and (desglose_real.materiales > 0 or desglose_real.mano_obra > 0 or desglose_real.equipos > 0) %}
+                    <canvas id="chartDesgloseReal" height="200"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-chart-pie fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin gastos reales registrados</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Curva S por Obra -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-bezier-curve text-info me-2"></i>Curva S — Valor Planificado vs Ejecutado</h5>
+                    <select id="selectObraCurvaS" class="form-select form-select-sm" style="width: auto;">
+                        {% for od in obras_data %}
+                        <option value="{{ od.obra.id }}">{{ od.obra.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartCurvaS" height="280"></canvas>
+                    <div id="curvaS-empty" class="text-center text-muted py-3 d-none">
+                        <i class="fas fa-bezier-curve fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin datos de planificación semanal para esta obra.<br>Cargue el plan semanal desde el detalle de la obra para ver la Curva S.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Índices de Construcción por Obra -->
     {% if obras_data %}
     {% set obras_con_indices = [] %}
@@ -382,5 +459,127 @@ setTimeout(() => {
     location.reload();
 }, 300000); // 5 minutos
 {% endif %}
+</script>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof Chart === 'undefined') return;
+    const C = { primary: '#0d6efd', success: '#198754', warning: '#ffc107', danger: '#dc3545', info: '#0dcaf0', orange: '#fd7e14', purple: '#6f42c1', teal: '#20c997' };
+    function fmtMoney(v) { return '$' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v); }
+
+    // Presupuesto vs Gastado por obra
+    {% if obras_data %}
+    (function() {
+        var ctx = document.getElementById('chartPresVsReal');
+        if (!ctx) return;
+        var data = {{ obras_data | map(attribute='obra') | list | tojson if false else '[]' }};
+        // Build data from template
+        var labels = [], pres = [], real = [], pcts = [];
+        {% for od in obras_data %}
+        labels.push('{{ od.obra.nombre[:25] | e }}');
+        pres.push({{ od.presupuesto }});
+        real.push({{ od.costo_real }});
+        pcts.push({{ od.desvio }});
+        {% endfor %}
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Presupuesto', data: pres, backgroundColor: C.primary+'80', borderColor: C.primary, borderWidth: 1 },
+                    { label: 'Gastado', data: real, backgroundColor: real.map(function(v,i){ return pcts[i]>0 ? C.danger+'80' : C.success+'80'; }), borderColor: real.map(function(v,i){ return pcts[i]>0 ? C.danger : C.success; }), borderWidth: 1 }
+                ]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label + ': ' + fmtMoney(ctx.raw); } } }
+                },
+                scales: { x: { ticks: { callback: fmtMoney, font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } }
+            }
+        });
+    })();
+    {% endif %}
+
+    // Desglose Presupuesto (Donut)
+    {% if desglose_presupuesto and (desglose_presupuesto.materiales > 0 or desglose_presupuesto.mano_obra > 0 or desglose_presupuesto.equipos > 0) %}
+    (function() {
+        var ctx = document.getElementById('chartDesglosePres');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: ['Materiales', 'Mano de Obra', 'Equipos'], datasets: [{ data: [{{ desglose_presupuesto.materiales }}, {{ desglose_presupuesto.mano_obra }}, {{ desglose_presupuesto.equipos }}], backgroundColor: [C.primary, C.warning, C.teal], borderWidth: 2 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                tooltip: { callbacks: { label: function(ctx) { var t = ctx.dataset.data.reduce(function(a,b){return a+b},0); return ctx.label+': '+fmtMoney(ctx.raw)+' ('+(t>0?((ctx.raw/t)*100).toFixed(1):0)+'%)'; } } }
+            } }
+        });
+    })();
+    {% endif %}
+
+    // Desglose Real (Donut)
+    {% if desglose_real and (desglose_real.materiales > 0 or desglose_real.mano_obra > 0 or desglose_real.equipos > 0) %}
+    (function() {
+        var ctx = document.getElementById('chartDesgloseReal');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: ['Materiales', 'Mano de Obra', 'Equipos'], datasets: [{ data: [{{ desglose_real.materiales }}, {{ desglose_real.mano_obra }}, {{ desglose_real.equipos }}], backgroundColor: [C.danger, C.orange, C.purple], borderWidth: 2 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                tooltip: { callbacks: { label: function(ctx) { var t = ctx.dataset.data.reduce(function(a,b){return a+b},0); return ctx.label+': '+fmtMoney(ctx.raw)+' ('+(t>0?((ctx.raw/t)*100).toFixed(1):0)+'%)'; } } }
+            } }
+        });
+    })();
+    {% endif %}
+
+    // Curva S por Obra
+    {% if obras_data %}
+    (function() {
+        var ctx = document.getElementById('chartCurvaS');
+        var select = document.getElementById('selectObraCurvaS');
+        var emptyMsg = document.getElementById('curvaS-empty');
+        if (!ctx || !select) return;
+        var curvaChart = null;
+
+        function cargarCurvaS(obraId) {
+            fetch('/reportes/api/curva-s/' + obraId)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (curvaChart) curvaChart.destroy();
+                    if (!data.semanas || data.semanas.length === 0) {
+                        ctx.style.display = 'none';
+                        emptyMsg.classList.remove('d-none');
+                        return;
+                    }
+                    ctx.style.display = '';
+                    emptyMsg.classList.add('d-none');
+                    curvaChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.semanas,
+                            datasets: [
+                                { label: 'Valor Planificado (PV)', data: data.pv, borderColor: C.primary, backgroundColor: C.primary+'15', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 3 },
+                                { label: 'Valor Ganado (EV)', data: data.ev, borderColor: C.success, borderWidth: 2, tension: 0.3, pointRadius: 3, borderDash: [5,3] },
+                                { label: 'Costo Real (AC)', data: data.ac, borderColor: C.danger, borderWidth: 2, tension: 0.3, pointRadius: 3, borderDash: [2,2] }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                                tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label+': '+fmtMoney(ctx.raw); } } }
+                            },
+                            scales: { y: { beginAtZero: true, ticks: { callback: fmtMoney, font: { size: 10 } } }, x: { ticks: { font: { size: 10 }, maxRotation: 45 } } }
+                        }
+                    });
+                })
+                .catch(function() { ctx.style.display = 'none'; emptyMsg.classList.remove('d-none'); });
+        }
+
+        select.addEventListener('change', function() { cargarCurvaS(this.value); });
+        if (select.options.length > 0) cargarCurvaS(select.options[0].value);
+    })();
+    {% endif %}
+});
 </script>
 {% endblock %}
