@@ -28,6 +28,88 @@ except Exception:  # pragma: no cover - fallback for dev environments
 
 reportes_bp = Blueprint('reportes', __name__)
 
+# ============================================================================
+# Mapeo de categorías de inventario legacy → nombres alineados a etapas de obra
+# ============================================================================
+_MAPEO_CATEGORIAS = {
+    # Materiales generales
+    'material de construcción': 'Materiales de Construcción',
+    'material de construccion': 'Materiales de Construcción',
+    'materiales': 'Materiales de Construcción',
+    # Estructura / encofrados
+    'encofrados': 'Estructura y Encofrados',
+    'encofrado': 'Estructura y Encofrados',
+    'hierro': 'Estructura y Encofrados',
+    'acero': 'Estructura y Encofrados',
+    'hormigón': 'Estructura y Encofrados',
+    'hormigon': 'Estructura y Encofrados',
+    # Mampostería
+    'mampostería': 'Mampostería',
+    'mamposteria': 'Mampostería',
+    'ladrillos': 'Mampostería',
+    # Techos
+    'techos': 'Techos e Impermeabilización',
+    'cubiertas': 'Techos e Impermeabilización',
+    'impermeabilización': 'Techos e Impermeabilización',
+    'impermeabilizacion': 'Techos e Impermeabilización',
+    'membranas': 'Techos e Impermeabilización',
+    # Instalaciones eléctricas
+    'instalaciones electricas': 'Instalaciones Eléctricas',
+    'instalaciones eléctricas': 'Instalaciones Eléctricas',
+    'electricidad': 'Instalaciones Eléctricas',
+    # Instalaciones sanitarias
+    'instalaciones sanitarias': 'Instalaciones Sanitarias',
+    'sanitarios': 'Instalaciones Sanitarias',
+    'plomería': 'Instalaciones Sanitarias',
+    'plomeria': 'Instalaciones Sanitarias',
+    # Instalaciones de gas
+    'instalaciones de gas': 'Instalaciones de Gas',
+    'gas': 'Instalaciones de Gas',
+    # Climatización / complementarias
+    'instalaciones climatizacion': 'Instalaciones Complementarias',
+    'instalaciones climatización': 'Instalaciones Complementarias',
+    'climatización': 'Instalaciones Complementarias',
+    'climatizacion': 'Instalaciones Complementarias',
+    'aire acondicionado': 'Instalaciones Complementarias',
+    'calefacción': 'Instalaciones Complementarias',
+    'calefaccion': 'Instalaciones Complementarias',
+    'equipo contra incendios + maquinaria edificio': 'Instalaciones Complementarias',
+    'equipo contra incendios': 'Instalaciones Complementarias',
+    'incendios': 'Instalaciones Complementarias',
+    # Pisos / revestimientos
+    'pisos': 'Pisos y Revestimientos',
+    'pisos y revestimientos': 'Pisos y Revestimientos',
+    'revestimientos': 'Pisos y Revestimientos',
+    'cerámicos': 'Pisos y Revestimientos',
+    'ceramicos': 'Pisos y Revestimientos',
+    # Revoques / yesería
+    'revoques': 'Revoques y Terminaciones',
+    'yesería': 'Revoques y Terminaciones',
+    'yeseria': 'Revoques y Terminaciones',
+    # Carpintería
+    'carpintería': 'Carpintería',
+    'carpinteria': 'Carpintería',
+    # Pintura
+    'pintura': 'Pintura',
+    'pinturas': 'Pintura',
+    # Herramientas / maquinaria
+    'maquinarias': 'Equipos y Maquinaria',
+    'maquinaria': 'Equipos y Maquinaria',
+    'maquinaria edificio': 'Equipos y Maquinaria',
+    'herramientas': 'Equipos y Maquinaria',
+    'equipos': 'Equipos y Maquinaria',
+    # Seguridad
+    'seguridad': 'Seguridad e Higiene',
+    'epp': 'Seguridad e Higiene',
+}
+
+def _normalizar_categoria(nombre_original):
+    """Mapea nombre de categoría legacy a nombre alineado con etapas de obra."""
+    if not nombre_original:
+        return 'Sin Categoría'
+    clave = nombre_original.strip().lower()
+    return _MAPEO_CATEGORIAS.get(clave, nombre_original.strip().title())
+
 @reportes_bp.route('/dashboard')
 @login_required
 def dashboard():
@@ -1411,7 +1493,7 @@ def reporte_inventario():
             'rotacion': rotacion,
             'dias_sin_movimiento': dias_sin_movimiento,
             'necesita_reposicion': necesita_reposicion,
-            'categoria': item.categoria.nombre if item.categoria else 'Sin categoría'
+            'categoria': _normalizar_categoria(item.categoria.nombre if item.categoria else None)
         })
 
     # Ordenar según criterio
@@ -2071,7 +2153,7 @@ def exportar_inventario_pdf():
             'rotacion': rotacion,
             'dias_sin_movimiento': dias_sin_movimiento,
             'necesita_reposicion': necesita_reposicion,
-            'categoria': item.categoria.nombre if item.categoria else 'Sin categoria'
+            'categoria': _normalizar_categoria(item.categoria.nombre if item.categoria else None)
         })
 
     # Clasificacion ABC
