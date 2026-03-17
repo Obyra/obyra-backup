@@ -3369,6 +3369,51 @@ async function abrirGestionMateriales(obraId) {
     }
 }
 
+/* Construye un <select> de unidad con la unidad del material preseleccionada */
+function buildUnidadSelect(selectId, unidadOriginal) {
+    // Normalizar la unidad que viene del backend
+    var normalMap = {
+        'm³': 'm3', 'mts3': 'm3', 'mts³': 'm3', 'm3': 'm3',
+        'm²': 'm2', 'mts2': 'm2', 'mts²': 'm2', 'm2': 'm2',
+        'ml': 'ml', 'mts': 'ml', 'metro': 'ml', 'metros': 'ml',
+        'kg': 'kg', 'kgs': 'kg', 'kilogramo': 'kg', 'kilogramos': 'kg',
+        'l': 'l', 'lt': 'l', 'lts': 'l', 'litro': 'l', 'litros': 'l',
+        'u': 'u', 'uni': 'u', 'unidad': 'u', 'unidades': 'u',
+        'bolsa': 'bolsa', 'bolsas': 'bolsa',
+        'barra': 'barra', 'barras': 'barra',
+        'rollo': 'rollo', 'rollos': 'rollo',
+        'paquete': 'paquete', 'paquetes': 'paquete',
+        'caja': 'caja', 'cajas': 'caja',
+        'juego': 'juego', 'juegos': 'juego', 'jgo': 'juego',
+        'par': 'par', 'pares': 'par',
+        'tn': 'tn', 'tonelada': 'tn', 'toneladas': 'tn',
+        'gl': 'gl', 'global': 'gl',
+    };
+    var raw = (unidadOriginal || '').trim().toLowerCase();
+    var unidadNorm = normalMap[raw] || raw || 'u';
+
+    // Etiquetas de display
+    var opcionesDisplay = {
+        'u': 'u', 'kg': 'kg', 'm2': 'm²', 'm3': 'm³', 'ml': 'ml', 'l': 'l',
+        'bolsa': 'bolsa', 'barra': 'barra', 'rollo': 'rollo', 'paquete': 'paquete',
+        'caja': 'caja', 'juego': 'juego', 'par': 'par', 'tn': 'tn', 'gl': 'gl'
+    };
+    var opciones = ['u', 'kg', 'm2', 'm3', 'ml', 'l', 'bolsa', 'barra', 'rollo', 'paquete', 'caja', 'juego', 'par', 'tn', 'gl'];
+
+    // Si la unidad normalizada no está en la lista, agregarla
+    if (opciones.indexOf(unidadNorm) === -1) {
+        opciones.push(unidadNorm);
+        opcionesDisplay[unidadNorm] = unidadOriginal || unidadNorm;
+    }
+
+    var s = '<select class="form-select form-select-sm input-unidad-pedir" id="' + selectId + '" style="width:90px; display:inline-block;">';
+    opciones.forEach(function(u) {
+        s += '<option value="' + u + '"' + (u === unidadNorm ? ' selected' : '') + '>' + (opcionesDisplay[u] || u) + '</option>';
+    });
+    s += '</select>';
+    return s;
+}
+
 function renderAnalisisMateriales(data) {
     var body = document.getElementById('gestionMaterialesBody');
     var html = '';
@@ -3421,10 +3466,7 @@ function renderAnalisisMateriales(data) {
             html += '<td class="text-center small">' + m.cantidad_necesaria + ' ' + m.unidad + '</td>';
             html += '<td class="text-center"><span class="badge bg-success">' + m.a_reservar + ' ' + m.unidad + '</span></td>';
             html += '<td class="text-center"><input type="number" class="form-control form-control-sm text-center input-cantidad-pedir" id="cant-sp-' + idx + '" value="' + (restaPedir > 0 ? restaPedir : m.faltante) + '" min="1" style="width:80px; display:inline-block;"></td>';
-            html += '<td class="text-center"><select class="form-select form-select-sm input-unidad-pedir" id="uni-sp-' + idx + '" style="width:90px; display:inline-block;">';
-            var unidades = ['u', 'kg', 'm2', 'm3', 'ml', 'l', 'bolsa', 'barra', 'rollo', 'paquete'];
-            unidades.forEach(function(u) { html += '<option value="' + u + '"' + (u === m.unidad ? ' selected' : '') + '>' + u + '</option>'; });
-            html += '</select></td>';
+            html += '<td class="text-center">' + buildUnidadSelect('uni-sp-' + idx, m.unidad) + '</td>';
             if (yaPedido) {
                 html += '<td class="text-center"><span class="badge bg-info">Pedido: ' + cantPedida + '</span></td>';
             } else {
@@ -3455,10 +3497,7 @@ function renderAnalisisMateriales(data) {
             html += '<td class="text-center small">' + m.cantidad_necesaria + ' ' + m.unidad + '</td>';
             html += '<td class="text-center small text-muted">0</td>';
             html += '<td class="text-center"><input type="number" class="form-control form-control-sm text-center input-cantidad-pedir" id="cant-ss-' + idx + '" value="' + (restaPedir > 0 ? restaPedir : m.faltante) + '" min="1" style="width:80px; display:inline-block;"></td>';
-            html += '<td class="text-center"><select class="form-select form-select-sm input-unidad-pedir" id="uni-ss-' + idx + '" style="width:90px; display:inline-block;">';
-            var unidades = ['u', 'kg', 'm2', 'm3', 'ml', 'l', 'bolsa', 'barra', 'rollo', 'paquete'];
-            unidades.forEach(function(u) { html += '<option value="' + u + '"' + (u === m.unidad ? ' selected' : '') + '>' + u + '</option>'; });
-            html += '</select></td>';
+            html += '<td class="text-center">' + buildUnidadSelect('uni-ss-' + idx, m.unidad) + '</td>';
             if (yaPedido) {
                 html += '<td class="text-center"><span class="badge bg-info" title="Ya pedido en requerimiento">Pedido: ' + cantPedida + '</span></td>';
             } else {
