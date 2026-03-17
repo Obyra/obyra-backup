@@ -104,9 +104,9 @@ def asignar_niveles_por_defecto(obra_id):
 # Generar dependencias desde niveles
 # ---------------------------------------------------------------------------
 def generar_dependencias_desde_niveles(obra_id):
-    """Crea dependencias explícitas en etapa_dependencias basadas en
+    """Recrea dependencias explícitas en etapa_dependencias basadas en
     nivel_encadenamiento. Nivel N depende de todas las no-opcionales de nivel N-1.
-    No duplica dependencias existentes.
+    Limpia dependencias viejas y recrea desde cero para evitar datos basura.
     """
     etapas = (
         EtapaObra.query
@@ -119,20 +119,19 @@ def generar_dependencias_desde_niveles(obra_id):
     if not etapas:
         return 0
 
+    etapa_ids = [e.id for e in etapas]
+
+    # Limpiar dependencias viejas de etapas con nivel (borrón y cuenta nueva)
+    EtapaDependencia.query.filter(
+        EtapaDependencia.etapa_id.in_(etapa_ids)
+    ).delete(synchronize_session=False)
+
     # Agrupar por nivel
     por_nivel = {}
     for e in etapas:
         por_nivel.setdefault(e.nivel_encadenamiento, []).append(e)
 
     niveles_ordenados = sorted(por_nivel.keys())
-
-    # Dependencias existentes (para no duplicar)
-    deps_existentes = set()
-    deps = EtapaDependencia.query.filter(
-        EtapaDependencia.etapa_id.in_([e.id for e in etapas])
-    ).all()
-    for d in deps:
-        deps_existentes.add((d.etapa_id, d.depende_de_id))
 
     creadas = 0
     for i, nivel in enumerate(niveles_ordenados):
@@ -155,16 +154,14 @@ def generar_dependencias_desde_niveles(obra_id):
 
         for sucesora in por_nivel[nivel]:
             for pred in predecesoras:
-                if (sucesora.id, pred.id) not in deps_existentes:
-                    dep = EtapaDependencia(
-                        etapa_id=sucesora.id,
-                        depende_de_id=pred.id,
-                        tipo='FS',
-                        lag_dias=0,
-                    )
-                    db.session.add(dep)
-                    deps_existentes.add((sucesora.id, pred.id))
-                    creadas += 1
+                dep = EtapaDependencia(
+                    etapa_id=sucesora.id,
+                    depende_de_id=pred.id,
+                    tipo='FS',
+                    lag_dias=0,
+                )
+                db.session.add(dep)
+                creadas += 1
 
     if creadas:
         db.session.flush()

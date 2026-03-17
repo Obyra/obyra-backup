@@ -5003,11 +5003,10 @@ def editar_fechas_etapa(etapa_id):
 
         db.session.commit()
 
-        # Generar dependencias si faltan
+        # Recrear dependencias limpias desde niveles
         from services.dependency_service import generar_dependencias_desde_niveles
         deps_creadas = generar_dependencias_desde_niveles(etapa.obra_id)
-        if deps_creadas:
-            db.session.commit()
+        db.session.commit()
 
         # Propagar fechas a etapas SUCESORAS — skip la etapa editada
         # para que la propagación no pise las fechas que el usuario acaba de poner
@@ -5024,6 +5023,19 @@ def editar_fechas_etapa(etapa_id):
         distribuir_datos_etapa_a_tareas(etapa_id, forzar=True)
         db.session.commit()
 
+        # Debug: cargar todas las etapas para mostrar resultado
+        todas = EtapaObra.query.filter_by(obra_id=etapa.obra_id).order_by(EtapaObra.orden).all()
+        debug_etapas = []
+        for e in todas:
+            debug_etapas.append({
+                'nombre': e.nombre,
+                'nivel': e.nivel_encadenamiento,
+                'inicio': str(e.fecha_inicio_estimada) if e.fecha_inicio_estimada else None,
+                'fin': str(e.fecha_fin_estimada) if e.fecha_fin_estimada else None,
+                'manual': e.fechas_manuales,
+                'estado': e.estado,
+            })
+
         return jsonify({
             'ok': True,
             'fecha_inicio': str(etapa.fecha_inicio_estimada) if etapa.fecha_inicio_estimada else None,
@@ -5031,6 +5043,8 @@ def editar_fechas_etapa(etapa_id):
             'estado': etapa.estado,
             'fechas_manuales': etapa.fechas_manuales,
             'propagadas': propagadas,
+            'deps_creadas': deps_creadas,
+            'debug_etapas': debug_etapas,
         })
     except Exception as e:
         db.session.rollback()
