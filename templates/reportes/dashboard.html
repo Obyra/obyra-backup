@@ -1146,6 +1146,16 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('DOMContentLoaded', function() {
     if (typeof Chart === 'undefined') return;
 
+    // Formato de moneda argentino legible
+    function fmtARS(v) {
+        if (v >= 1000000) return '$ ' + (v / 1000000).toFixed(1).replace('.', ',') + ' M';
+        if (v >= 1000) return '$ ' + Math.round(v / 1000).toLocaleString('es-AR') + ' K';
+        return '$ ' + Math.round(v).toLocaleString('es-AR');
+    }
+    function fmtARSFull(v) {
+        return '$ ' + Math.round(v).toLocaleString('es-AR');
+    }
+
     // Presupuesto vs Gastado (Barras Horizontales)
     {% if datos_financieros and datos_financieros.presupuesto_vs_real %}
     (function() {
@@ -1160,14 +1170,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     {
                         label: 'Presupuesto',
                         data: data.map(d => d.presupuesto),
-                        backgroundColor: '#0d6efd80',
+                        backgroundColor: 'rgba(13, 110, 253, 0.6)',
                         borderColor: '#0d6efd',
                         borderWidth: 1
                     },
                     {
                         label: 'Gastado',
                         data: data.map(d => d.real),
-                        backgroundColor: data.map(d => d.porcentaje > 100 ? '#dc354580' : '#19875480'),
+                        backgroundColor: data.map(d => d.porcentaje > 100 ? 'rgba(220, 53, 69, 0.6)' : 'rgba(25, 135, 84, 0.6)'),
                         borderColor: data.map(d => d.porcentaje > 100 ? '#dc3545' : '#198754'),
                         borderWidth: 1
                     }
@@ -1182,19 +1192,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     tooltip: {
                         callbacks: {
                             label: function(ctx) {
-                                return ctx.dataset.label + ': $' + ctx.raw.toLocaleString('es-AR');
+                                return ctx.dataset.label + ': ' + fmtARSFull(ctx.raw);
+                            },
+                            afterBody: function(items) {
+                                var idx = items[0].dataIndex;
+                                var d = data[idx];
+                                if (d.porcentaje > 0) return 'Ejecutado: ' + d.porcentaje + '%';
                             }
                         }
                     }
                 },
                 scales: {
                     x: {
-                        ticks: {
-                            callback: function(v) { return '$' + (v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v)); },
-                            font: { size: 10 }
-                        }
+                        ticks: { callback: function(v) { return fmtARS(v); }, font: { size: 10 } }
                     },
-                    y: { ticks: { font: { size: 10 } } }
+                    y: { ticks: { font: { size: 11 } } }
                 }
             }
         });
