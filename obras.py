@@ -785,31 +785,26 @@ def detalle(id):
         porcentaje_obra = 0
 
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
-    # Solo usuarios activos de ESTA organización (excluir inactivos, super_admins, y NULL)
+    # Solo usuarios con membresía activa en esta organización (misma lógica que panel Equipos)
+    from models.core import OrgMembership
+    usuarios_ids_sub = db.session.query(OrgMembership.user_id).filter(
+        OrgMembership.org_id == org_id,
+        OrgMembership.status == 'active',
+        db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None))
+    ).subquery()
     usuarios_disponibles = Usuario.query.filter(
-        Usuario.organizacion_id == org_id,
-        db.or_(Usuario.activo.is_(True), Usuario.activo == True),
-        db.or_(Usuario.is_super_admin.is_(False), Usuario.is_super_admin.is_(None)),
+        Usuario.id.in_(usuarios_ids_sub),
+        Usuario.is_super_admin.isnot(True)
     ).order_by(Usuario.nombre, Usuario.apellido).all()
-    # Filtro extra en Python por si el campo booleano no se evalúa bien en PostgreSQL
-    usuarios_disponibles = [u for u in usuarios_disponibles if u.activo and not u.is_super_admin]
     etapas_disponibles = obtener_etapas_disponibles()
 
     # Usar asignaciones como miembros para Equipo Asignado (AsignacionObra tiene los usuarios asignados)
     miembros = asignaciones  # Las asignaciones ya incluyen usuario, rol_en_obra, etapa_id y fecha
 
-    # Obtener TODOS los operarios de la organización para el selector de responsables
-    # (no solo los asignados a esta obra)
+    # Obtener operarios con membresía activa para el selector de responsable en tareas
     todos_operarios = Usuario.query.filter(
-        Usuario.activo == True,
-        Usuario.organizacion_id == org_id,
-        Usuario.is_super_admin.is_(False),
-        db.or_(
-            Usuario.rol == 'operario',
-            Usuario.role == 'operario',
-            Usuario.rol == 'jefe_obra',
-            Usuario.role == 'pm'
-        )
+        Usuario.id.in_(usuarios_ids_sub),
+        Usuario.is_super_admin.isnot(True)
     ).order_by(Usuario.nombre, Usuario.apellido).all()
 
     responsables = [
