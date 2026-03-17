@@ -134,7 +134,24 @@
                     <h6 class="mb-0 fw-bold"><i class="fas fa-chart-bar text-primary me-2"></i>Presupuesto vs Gastado por Obra</h6>
                 </div>
                 <div class="card-body">
-                    <canvas id="chartPresupuestoReal" height="180"></canvas>
+                    <div id="chartPresRealWrap" style="position: relative;">
+                        <canvas id="chartPresupuestoReal"></canvas>
+                    </div>
+                    <table class="table table-sm table-striped mt-3 mb-0" style="font-size: 0.8rem;">
+                        <thead><tr><th>Obra</th><th class="text-end">Presupuesto</th><th class="text-end">Gastado</th><th class="text-end">Desvío</th></tr></thead>
+                        <tbody>
+                        {% for d in datos_financieros.presupuesto_vs_real %}
+                        <tr>
+                            <td>{{ d.nombre[:30] }}</td>
+                            <td class="text-end">$ {{ '{:,.0f}'.format(d.presupuesto).replace(',', '.') }}</td>
+                            <td class="text-end">$ {{ '{:,.0f}'.format(d.real).replace(',', '.') }}</td>
+                            <td class="text-end {% if d.porcentaje > 100 %}text-danger{% else %}text-success{% endif %} fw-bold">
+                                {% if d.presupuesto > 0 %}{{ '{:+.1f}'.format(((d.real / d.presupuesto) - 1) * 100) }}%{% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1162,6 +1179,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('chartPresupuestoReal');
         if (!ctx) return;
         const data = {{ datos_financieros.presupuesto_vs_real | tojson }};
+        var h = Math.min(300, Math.max(150, data.length * 60 + 60));
+        document.getElementById('chartPresRealWrap').style.height = h + 'px';
         new Chart(ctx, {
             type: 'bar',
             data: {
