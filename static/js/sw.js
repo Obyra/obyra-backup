@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v4.5.0';  // Fix maquinaria tab + historial por equipo + encargado dashboard
+const CACHE_VERSION = 'v4.5.1';  // Fix: no interceptar POST de onboarding
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
@@ -114,7 +114,8 @@ self.addEventListener('fetch', (event) => {
         // EXCEPTO fichadas y otras APIs críticas que NO deben encolarse offline
         if ((event.request.method === 'POST' || event.request.method === 'PUT') &&
             !url.pathname.startsWith('/fichadas/') &&
-            !url.pathname.startsWith('/auth/')) {
+            !url.pathname.startsWith('/auth/') &&
+            !url.pathname.startsWith('/onboarding/')) {
             event.respondWith(handleMutationRequest(event.request));
         }
         return;
