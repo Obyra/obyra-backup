@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v4.4.0';  // Tareas editables individualmente + selector medida + fix tarifa
+const CACHE_VERSION = 'v4.5.0';  // Fix maquinaria tab + historial por equipo + encargado dashboard
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;

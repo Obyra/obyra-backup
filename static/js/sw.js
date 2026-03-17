@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v3.2.0';  // Fix: no interceptar recursos externos ni fichadas POST
+const CACHE_VERSION = 'v4.5.0';  // Fix maquinaria tab + historial por equipo + encargado dashboard
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
@@ -44,7 +44,7 @@ const API_ROUTES = [
 // INSTALACIÓN
 // ============================================================================
 self.addEventListener('install', (event) => {
-    console.log('[SW] Instalando Service Worker...');
+    console.log('[SW] Instalando Service Worker ' + CACHE_VERSION + '...');
 
     event.waitUntil(
         caches.open(STATIC_CACHE)
@@ -70,7 +70,7 @@ self.addEventListener('install', (event) => {
 // ACTIVACIÓN
 // ============================================================================
 self.addEventListener('activate', (event) => {
-    console.log('[SW] Activando Service Worker...');
+    console.log('[SW] Activando Service Worker ' + CACHE_VERSION + '...');
 
     event.waitUntil(
         caches.keys()
@@ -266,9 +266,9 @@ async function networkFirstWithOffline(request) {
             </head>
             <body>
                 <div class="container">
-                    <div class="icon">📡</div>
-                    <h1>Sin Conexión</h1>
-                    <p>No hay conexión a internet. Los cambios se guardarán localmente y se sincronizarán cuando vuelvas a estar online.</p>
+                    <div class="icon">&#128225;</div>
+                    <h1>Sin Conexion</h1>
+                    <p>No hay conexion a internet. Los cambios se guardaran localmente y se sincronizaran cuando vuelvas a estar online.</p>
                     <button class="btn" onclick="location.reload()">Reintentar</button>
                 </div>
             </body>
@@ -494,4 +494,4 @@ async function removeFromSyncQueue(id) {
     });
 }
 
-console.log('[SW] Service Worker cargado - OBYRA Offline Mode');
+console.log('[SW] Service Worker v3.2.0 cargado - OBYRA Offline Mode');

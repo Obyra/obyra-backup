@@ -1845,8 +1845,13 @@ def serve_media(relpath):
 # === SERVICE WORKER ENDPOINT ===
 @app.route("/sw.js")
 def service_worker():
-    """Serve Service Worker from root directory"""
-    return send_from_directory(".", "sw.js", mimetype="application/javascript")
+    """Serve Service Worker from root directory - no cache para forzar updates"""
+    from flask import make_response
+    response = make_response(send_from_directory(".", "sw.js", mimetype="application/javascript"))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 # === ADMIN FIX ENDPOINT (TEMPORAL) ===
 @app.route("/admin/fix-etapa-nombre")
