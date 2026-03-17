@@ -197,7 +197,17 @@
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold">Proveedor</label>
                                 <input type="text" class="form-control form-control-sm" name="proveedor_global"
-                                       placeholder="Nombre del proveedor" value="{{ requerimiento.items[0].proveedor_compra or '' if requerimiento.items|list else '' }}">
+                                       list="lista-proveedores"
+                                       placeholder="Seleccionar o escribir proveedor"
+                                       value="{{ requerimiento.items[0].proveedor_compra or '' if requerimiento.items|list else '' }}"
+                                       autocomplete="off">
+                                <datalist id="lista-proveedores">
+                                    {% for prov in proveedores %}
+                                    <option value="{{ prov.nombre_fantasia or prov.razon_social }}">
+                                        {{ prov.razon_social }}{% if prov.nombre_fantasia %} ({{ prov.nombre_fantasia }}){% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </datalist>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold">N° Factura / Remito</label>
@@ -228,7 +238,13 @@
                                             <strong class="small">{{ item.descripcion }}</strong>
                                             <small class="text-muted d-block">{{ item.unidad }}</small>
                                         </td>
-                                        <td class="text-center">{{ "%.1f"|format(item.cantidad) }}</td>
+                                        <td>
+                                            <input type="number" step="0.01" min="0"
+                                                   class="form-control form-control-sm text-center input-cant-solicitada"
+                                                   name="cant_solicitada_{{ item.id }}"
+                                                   value="{{ "%.1f"|format(item.cantidad) }}"
+                                                   data-item-id="{{ item.id }}">
+                                        </td>
                                         <td>
                                             <input type="number" step="0.01" min="0"
                                                    class="form-control form-control-sm text-center input-cantidad"
@@ -277,17 +293,43 @@
             </div>
 
             <script>
-            document.querySelectorAll('.input-precio, .input-cantidad').forEach(function(input) {
+            // Track si el usuario editó manualmente la cant. comprada
+            var cantCompradaEditada = {};
+
+            document.querySelectorAll('.input-cantidad').forEach(function(input) {
+                input.addEventListener('input', function() {
+                    cantCompradaEditada[this.getAttribute('data-item-id')] = true;
+                });
+            });
+
+            // Al cambiar cant. solicitada, actualizar cant. comprada si no fue editada
+            document.querySelectorAll('.input-cant-solicitada').forEach(function(input) {
                 input.addEventListener('input', function() {
                     var itemId = this.getAttribute('data-item-id');
-                    var precio = parseFloat(document.querySelector('input[name="precio_' + itemId + '"]').value) || 0;
-                    var cantidad = parseFloat(document.querySelector('input[name="cantidad_' + itemId + '"]').value) || 0;
-                    var subtotal = precio * cantidad;
-                    var el = document.getElementById('subtotal_' + itemId);
-                    el.textContent = subtotal > 0 ? '$' + subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+                    var cantComprada = document.querySelector('input[name="cantidad_' + itemId + '"]');
+                    if (!cantCompradaEditada[itemId]) {
+                        cantComprada.value = this.value;
+                    }
+                    actualizarSubtotal(itemId);
                     recalcularTotal();
                 });
             });
+
+            document.querySelectorAll('.input-precio, .input-cantidad').forEach(function(input) {
+                input.addEventListener('input', function() {
+                    var itemId = this.getAttribute('data-item-id');
+                    actualizarSubtotal(itemId);
+                    recalcularTotal();
+                });
+            });
+
+            function actualizarSubtotal(itemId) {
+                var precio = parseFloat(document.querySelector('input[name="precio_' + itemId + '"]').value) || 0;
+                var cantidad = parseFloat(document.querySelector('input[name="cantidad_' + itemId + '"]').value) || 0;
+                var subtotal = precio * cantidad;
+                var el = document.getElementById('subtotal_' + itemId);
+                el.textContent = subtotal > 0 ? '$' + subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+            }
 
             function recalcularTotal() {
                 var total = 0;

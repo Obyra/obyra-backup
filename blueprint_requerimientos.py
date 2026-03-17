@@ -178,14 +178,22 @@ def crear(obra_id=None):
 def detalle(id):
     """Ver detalle de un requerimiento"""
     from models.inventory import RequerimientoCompra
+    from models.proveedores_oc import ProveedorOC
 
     requerimiento = RequerimientoCompra.query.filter_by(
         id=id,
         organizacion_id=current_user.organizacion_id
     ).first_or_404()
 
+    # Cargar proveedores para el dropdown de "Cargar Precios"
+    proveedores = ProveedorOC.query.filter_by(
+        organizacion_id=current_user.organizacion_id,
+        activo=True
+    ).order_by(ProveedorOC.razon_social).all()
+
     return render_template('requerimientos/detalle.html',
-                          requerimiento=requerimiento)
+                          requerimiento=requerimiento,
+                          proveedores=proveedores)
 
 
 @requerimientos_bp.route('/<int:id>/aprobar', methods=['POST'])
@@ -371,6 +379,15 @@ def cargar_precios(id):
     for item in requerimiento.items:
         precio_key = f'precio_{item.id}'
         cantidad_key = f'cantidad_{item.id}'
+        cant_solicitada_key = f'cant_solicitada_{item.id}'
+
+        # Actualizar cantidad solicitada si cambió
+        cant_sol_str = request.form.get(cant_solicitada_key, '').strip()
+        if cant_sol_str:
+            try:
+                item.cantidad = float(cant_sol_str)
+            except (ValueError, TypeError):
+                pass
 
         precio_str = request.form.get(precio_key, '').strip()
         if precio_str:
