@@ -175,31 +175,28 @@ def dashboard():
 
     # Encargados de obra (jefe_obra o supervisor) para cada obra activa
     encargados_obra = {}
-    if obras_activas:
-        obra_ids = [o.id for o in obras_activas]
-        asignaciones_jefe = db.session.query(
-            AsignacionObra.obra_id,
-            Usuario.nombre,
-            Usuario.apellido,
-            AsignacionObra.rol_en_obra
-        ).join(Usuario, AsignacionObra.usuario_id == Usuario.id).filter(
-            AsignacionObra.obra_id.in_(obra_ids),
-            AsignacionObra.activo == True,
-            AsignacionObra.rol_en_obra.in_(['jefe_obra', 'supervisor'])
-        ).order_by(
+    try:
+        if obras_activas:
+            obra_ids = [o.id for o in obras_activas]
+            asignaciones_jefe = db.session.query(
+                AsignacionObra.obra_id,
+                Usuario.nombre,
+                Usuario.apellido,
+                AsignacionObra.rol_en_obra
+            ).join(Usuario, AsignacionObra.usuario_id == Usuario.id).filter(
+                AsignacionObra.obra_id.in_(obra_ids),
+                AsignacionObra.activo == True,
+                AsignacionObra.rol_en_obra.in_(['jefe_obra', 'supervisor'])
+            ).all()
             # Priorizar jefe_obra sobre supervisor
-            db.case(
-                (AsignacionObra.rol_en_obra == 'jefe_obra', 1),
-                (AsignacionObra.rol_en_obra == 'supervisor', 2),
-                else_=3
-            )
-        ).all()
-        for obra_id, nombre, apellido, rol in asignaciones_jefe:
-            if obra_id not in encargados_obra:
-                encargados_obra[obra_id] = {
-                    'nombre': f"{nombre} {apellido or ''}".strip(),
-                    'rol': 'Jefe de Obra' if rol == 'jefe_obra' else 'Supervisor'
-                }
+            for obra_id, nombre, apellido, rol in asignaciones_jefe:
+                if obra_id not in encargados_obra or rol == 'jefe_obra':
+                    encargados_obra[obra_id] = {
+                        'nombre': f"{nombre} {apellido or ''}".strip(),
+                        'rol': 'Jefe de Obra' if rol == 'jefe_obra' else 'Supervisor'
+                    }
+    except Exception:
+        db.session.rollback()
 
     # Alertas del sistema - obtener eventos recientes
     from models import Event
