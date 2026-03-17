@@ -1414,6 +1414,52 @@ def exportar_obras_pdf():
 
     organizacion = Organizacion.query.get(org_id) if org_id else None
 
+    # Desglose presupuesto y real por categoría
+    desglose_presupuesto = {'materiales': 0, 'mano_obra': 0, 'equipos': 0}
+    desglose_real = {'materiales': 0, 'mano_obra': 0, 'equipos': 0}
+    try:
+        obra_ids_list = [o.id for o in obras]
+        if obra_ids_list:
+            pres_ids = [p.id for p in Presupuesto.query.filter(
+                Presupuesto.obra_id.in_(obra_ids_list),
+                Presupuesto.organizacion_id == org_id
+            ).all()]
+            if pres_ids:
+                for tipo, total in db.session.query(
+                    ItemPresupuesto.tipo, func.sum(ItemPresupuesto.total)
+                ).filter(ItemPresupuesto.presupuesto_id.in_(pres_ids)
+                ).group_by(ItemPresupuesto.tipo).all():
+                    t = float(total or 0)
+                    if tipo == 'material':
+                        desglose_presupuesto['materiales'] = round(t, 0)
+                    elif tipo == 'mano_obra':
+                        desglose_presupuesto['mano_obra'] = round(t, 0)
+                    elif tipo == 'equipo':
+                        desglose_presupuesto['equipos'] = round(t, 0)
+
+            costo_mat = db.session.query(
+                func.coalesce(func.sum(
+                    UsoInventario.cantidad_usada * func.coalesce(
+                        UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio
+                    )), 0)
+            ).join(ItemInventario).filter(UsoInventario.obra_id.in_(obra_ids_list)).scalar() or 0
+            desglose_real['materiales'] = round(float(costo_mat), 0)
+
+            from models import LiquidacionMO
+            costo_mo = db.session.query(
+                func.coalesce(func.sum(LiquidacionMO.monto_total), 0)
+            ).filter(LiquidacionMO.obra_id.in_(obra_ids_list),
+                     LiquidacionMO.organizacion_id == org_id).scalar() or 0
+            desglose_real['mano_obra'] = round(float(costo_mo), 0)
+
+            from models.equipment import Equipment, EquipmentUsage
+            costo_eq = db.session.query(
+                func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0)
+            ).join(Equipment).filter(EquipmentUsage.project_id.in_(obra_ids_list)).scalar() or 0
+            desglose_real['equipos'] = round(float(costo_eq), 0)
+    except Exception:
+        db.session.rollback()
+
     # Renderizar HTML
     html_content = render_template('reportes/pdf_obras.html',
                                    obras_data=obras_data,
@@ -1421,6 +1467,8 @@ def exportar_obras_pdf():
                                    filtros=filtros,
                                    organizacion=organizacion,
                                    usuario=current_user,
+                                   desglose_presupuesto=desglose_presupuesto,
+                                   desglose_real=desglose_real,
                                    fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
 
     # Convertir a PDF

@@ -219,6 +219,106 @@
         .text-warning { color: #ffc107; }
         .text-muted { color: #6c757d; }
         .fw-bold { font-weight: bold; }
+
+        /* Resumen financiero */
+        .finance-section {
+            margin-bottom: 15px;
+            page-break-inside: avoid;
+        }
+
+        .finance-section h3 {
+            font-size: 10pt;
+            color: #1A374D;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+        }
+
+        .finance-grid {
+            display: table;
+            width: 100%;
+        }
+
+        .finance-card {
+            display: table-cell;
+            width: 50%;
+            padding: 0 8px;
+            vertical-align: top;
+        }
+
+        .finance-card:first-child {
+            padding-left: 0;
+        }
+
+        .finance-card:last-child {
+            padding-right: 0;
+        }
+
+        .finance-card-title {
+            font-size: 9pt;
+            font-weight: bold;
+            color: #1A374D;
+            margin-bottom: 5px;
+            padding: 4px 8px;
+            background: #f0f0f0;
+            border-radius: 3px;
+        }
+
+        table.finance-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        table.finance-table td {
+            padding: 4px 8px;
+            font-size: 8pt;
+            border-bottom: 1px solid #eee;
+        }
+
+        table.finance-table td.right {
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .color-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+
+        /* Resumen por obra */
+        table.summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        table.summary-table thead {
+            background: #1A374D;
+        }
+
+        table.summary-table th {
+            padding: 6px 10px;
+            text-align: left;
+            font-size: 8pt;
+            font-weight: bold;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        table.summary-table th.right { text-align: right; }
+
+        table.summary-table td {
+            padding: 5px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 8pt;
+        }
+
+        table.summary-table td.right { text-align: right; }
+        table.summary-table tr:nth-child(even) { background: #f9f9f9; }
     </style>
 </head>
 <body>
@@ -258,7 +358,7 @@
             <div class="kpi-label">Finalizadas</div>
         </div>
         <div class="kpi-item">
-            <div class="kpi-value">${{ '{:,.0f}'.format(estadisticas.total_presupuesto / 1000000) }}M</div>
+            <div class="kpi-value">$ {{ '{:,.0f}'.format(estadisticas.total_presupuesto).replace(',', '.') }}</div>
             <div class="kpi-label">Presupuesto Total</div>
         </div>
         <div class="kpi-item">
@@ -287,7 +387,103 @@
     </div>
     {% endif %}
 
-    <!-- Tabla de obras -->
+    <!-- Resumen Financiero -->
+    {% if obras_data %}
+    <div class="finance-section">
+        <h3>Resumen Financiero</h3>
+
+        <!-- Presupuesto vs Gastado por obra -->
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th style="width: 30%;">Obra</th>
+                    <th class="right" style="width: 20%;">Presupuesto</th>
+                    <th class="right" style="width: 20%;">Gastado Real</th>
+                    <th class="right" style="width: 15%;">Diferencia</th>
+                    <th class="right" style="width: 15%;">Desvío</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in obras_data %}
+                <tr>
+                    <td><strong>{{ data.obra.nombre }}</strong></td>
+                    <td class="right">$ {{ '{:,.0f}'.format(data.presupuesto).replace(',', '.') }}</td>
+                    <td class="right">$ {{ '{:,.0f}'.format(data.costo_real).replace(',', '.') }}</td>
+                    <td class="right {% if data.presupuesto - data.costo_real < 0 %}text-danger{% else %}text-success{% endif %}">
+                        $ {{ '{:,.0f}'.format(data.presupuesto - data.costo_real).replace(',', '.') }}
+                    </td>
+                    <td class="right">
+                        <span class="{% if data.desvio > 10 %}text-danger fw-bold{% elif data.desvio > 0 %}text-warning{% else %}text-success{% endif %}">
+                            {{ '{:+.1f}'.format(data.desvio) }}%
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr style="background: #e8e8e8; font-weight: bold;">
+                    <td><strong>TOTAL</strong></td>
+                    <td class="right">$ {{ '{:,.0f}'.format(estadisticas.total_presupuesto).replace(',', '.') }}</td>
+                    <td class="right">$ {{ '{:,.0f}'.format(estadisticas.total_costo_real).replace(',', '.') }}</td>
+                    <td class="right {% if estadisticas.total_presupuesto - estadisticas.total_costo_real < 0 %}text-danger{% else %}text-success{% endif %}">
+                        $ {{ '{:,.0f}'.format(estadisticas.total_presupuesto - estadisticas.total_costo_real).replace(',', '.') }}
+                    </td>
+                    <td class="right">
+                        <span class="{% if estadisticas.desvio_promedio > 0 %}text-danger{% else %}text-success{% endif %}">
+                            {{ '{:+.1f}'.format(estadisticas.desvio_promedio) }}%
+                        </span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Desglose por categoría -->
+        <div class="finance-grid">
+            <div class="finance-card">
+                <div class="finance-card-title">Desglose Presupuesto</div>
+                <table class="finance-table">
+                    <tr>
+                        <td><span class="color-dot" style="background: #007bff;"></span>Materiales</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_presupuesto.materiales).replace(',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="color-dot" style="background: #ffc107;"></span>Mano de Obra</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_presupuesto.mano_obra).replace(',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="color-dot" style="background: #20c997;"></span>Equipos</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_presupuesto.equipos).replace(',', '.') }}</td>
+                    </tr>
+                    <tr style="background: #f0f0f0; font-weight: bold;">
+                        <td>Total</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_presupuesto.materiales + desglose_presupuesto.mano_obra + desglose_presupuesto.equipos).replace(',', '.') }}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="finance-card">
+                <div class="finance-card-title">Desglose Gastado Real</div>
+                <table class="finance-table">
+                    <tr>
+                        <td><span class="color-dot" style="background: #dc3545;"></span>Materiales</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_real.materiales).replace(',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="color-dot" style="background: #fd7e14;"></span>Mano de Obra</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_real.mano_obra).replace(',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="color-dot" style="background: #6f42c1;"></span>Equipos</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_real.equipos).replace(',', '.') }}</td>
+                    </tr>
+                    <tr style="background: #f0f0f0; font-weight: bold;">
+                        <td>Total</td>
+                        <td class="right">$ {{ '{:,.0f}'.format(desglose_real.materiales + desglose_real.mano_obra + desglose_real.equipos).replace(',', '.') }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detalle de Obras -->
     {% if obras_data %}
     <table class="report-table">
         <thead>
@@ -321,9 +517,9 @@
                     <br><small class="text-muted">{{ data.obra.fecha_fin_estimada.strftime('%d/%m/%y') }}</small>
                     {% endif %}
                 </td>
-                <td class="right">${{ '{:,.0f}'.format(data.presupuesto) }}</td>
+                <td class="right">$ {{ '{:,.0f}'.format(data.presupuesto).replace(',', '.') }}</td>
                 <td class="right {% if data.desvio > 0 %}text-danger{% else %}text-success{% endif %}">
-                    ${{ '{:,.0f}'.format(data.costo_real) }}
+                    $ {{ '{:,.0f}'.format(data.costo_real).replace(',', '.') }}
                 </td>
                 <td class="right">
                     <span class="{% if data.desvio > 10 %}text-danger fw-bold{% elif data.desvio > 0 %}text-warning{% else %}text-success{% endif %}">
