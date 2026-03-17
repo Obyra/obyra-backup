@@ -936,6 +936,40 @@ def reporte_costos():
 
     usos = query.order_by(desc(UsoInventario.fecha_uso)).all()
 
+    # ========== COSTOS DE MANO DE OBRA (LiquidacionMO) ==========
+    liquidaciones = []
+    try:
+        from models import LiquidacionMO
+        liq_query = LiquidacionMO.query.join(Obra).filter(
+            LiquidacionMO.organizacion_id == org_id
+        )
+        if obra_id:
+            liq_query = liq_query.filter(LiquidacionMO.obra_id == obra_id)
+        if fecha_desde_obj:
+            liq_query = liq_query.filter(LiquidacionMO.fecha_liquidacion >= fecha_desde_obj)
+        if fecha_hasta_obj:
+            liq_query = liq_query.filter(LiquidacionMO.fecha_liquidacion <= fecha_hasta_obj)
+        liquidaciones = liq_query.all()
+    except Exception:
+        pass
+
+    # ========== COSTOS DE EQUIPOS (EquipmentUsage) ==========
+    usos_equipos = []
+    try:
+        from models.equipment import Equipment, EquipmentUsage
+        eq_query = db.session.query(EquipmentUsage, Equipment).join(Equipment).join(
+            Obra, Obra.id == EquipmentUsage.project_id
+        ).filter(Obra.organizacion_id == org_id)
+        if obra_id:
+            eq_query = eq_query.filter(EquipmentUsage.project_id == obra_id)
+        if fecha_desde_obj:
+            eq_query = eq_query.filter(EquipmentUsage.date >= fecha_desde_obj)
+        if fecha_hasta_obj:
+            eq_query = eq_query.filter(EquipmentUsage.date <= fecha_hasta_obj)
+        usos_equipos = eq_query.all()
+    except Exception:
+        pass
+
     # Calcular costos detallados
     costo_total_ars = 0
     costo_total_usd = 0
@@ -989,6 +1023,67 @@ def reporte_costos():
             }
         materiales_mas_usados[material_nombre]['cantidad'] += cantidad
         materiales_mas_usados[material_nombre]['costo_ars'] += costo_item
+
+    # ========== PROCESAR LIQUIDACIONES DE MO ==========
+    for liq in liquidaciones:
+        costo_mo = float(liq.monto_total or 0)
+        costo_total_ars += costo_mo
+
+        obra_obj = liq.obra if hasattr(liq, 'obra') and liq.obra else Obra.query.get(liq.obra_id)
+        obra_nombre = obra_obj.nombre if obra_obj else 'Sin obra'
+        if obra_nombre not in costos_por_obra:
+            costos_por_obra[obra_nombre] = {
+                'ars': 0, 'usd': 0, 'items': 0,
+                'presupuesto': float(obra_obj.presupuesto_total or 0) if obra_obj else 0,
+                'obra_id': obra_obj.id if obra_obj else None
+            }
+        costos_por_obra[obra_nombre]['ars'] += costo_mo
+        costos_por_obra[obra_nombre]['items'] += 1
+
+        cat_mo = 'Mano de Obra'
+        if cat_mo not in costos_por_categoria:
+            costos_por_categoria[cat_mo] = {'ars': 0, 'usd': 0, 'items': 0}
+        costos_por_categoria[cat_mo]['ars'] += costo_mo
+        costos_por_categoria[cat_mo]['items'] += 1
+
+        fecha_liq = liq.fecha_liquidacion if hasattr(liq, 'fecha_liquidacion') else None
+        if fecha_liq:
+            mes_key = fecha_liq.strftime('%Y-%m')
+            mes_display = fecha_liq.strftime('%B %Y')
+            if mes_key not in costos_por_mes:
+                costos_por_mes[mes_key] = {'display': mes_display, 'ars': 0, 'usd': 0, 'items': 0}
+            costos_por_mes[mes_key]['ars'] += costo_mo
+            costos_por_mes[mes_key]['items'] += 1
+
+    # ========== PROCESAR USO DE EQUIPOS ==========
+    for usage, equip in usos_equipos:
+        costo_eq = float(usage.horas or 0) * float(equip.costo_hora or 0)
+        costo_total_ars += costo_eq
+
+        obra_obj = Obra.query.get(usage.project_id) if usage.project_id else None
+        obra_nombre = obra_obj.nombre if obra_obj else 'Sin obra'
+        if obra_nombre not in costos_por_obra:
+            costos_por_obra[obra_nombre] = {
+                'ars': 0, 'usd': 0, 'items': 0,
+                'presupuesto': float(obra_obj.presupuesto_total or 0) if obra_obj else 0,
+                'obra_id': obra_obj.id if obra_obj else None
+            }
+        costos_por_obra[obra_nombre]['ars'] += costo_eq
+        costos_por_obra[obra_nombre]['items'] += 1
+
+        cat_eq = 'Equipos / Maquinaria'
+        if cat_eq not in costos_por_categoria:
+            costos_por_categoria[cat_eq] = {'ars': 0, 'usd': 0, 'items': 0}
+        costos_por_categoria[cat_eq]['ars'] += costo_eq
+        costos_por_categoria[cat_eq]['items'] += 1
+
+        if usage.date:
+            mes_key = usage.date.strftime('%Y-%m')
+            mes_display = usage.date.strftime('%B %Y')
+            if mes_key not in costos_por_mes:
+                costos_por_mes[mes_key] = {'display': mes_display, 'ars': 0, 'usd': 0, 'items': 0}
+            costos_por_mes[mes_key]['ars'] += costo_eq
+            costos_por_mes[mes_key]['items'] += 1
 
     # Ordenar top materiales por costo
     top_materiales = sorted(
@@ -1078,10 +1173,13 @@ def reporte_costos():
     estadisticas = {
         'costo_total_ars': costo_total_ars,
         'costo_total_usd': costo_total_usd,
-        'total_usos': len(usos),
+        'total_usos': len(usos) + len(liquidaciones) + len(usos_equipos),
         'obras_con_costos': len(costos_por_obra),
         'categorias': len(costos_por_categoria),
         'promedio_diario': costo_total_ars / 30 if costo_total_ars > 0 else 0,
+        'total_materiales': len(usos),
+        'total_mo': len(liquidaciones),
+        'total_equipos': len(usos_equipos),
     }
 
     return render_template('reportes/costos.html',
