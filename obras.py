@@ -785,11 +785,14 @@ def detalle(id):
         porcentaje_obra = 0
 
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
+    # Solo usuarios activos de ESTA organización (excluir inactivos, super_admins, y NULL)
     usuarios_disponibles = Usuario.query.filter(
-        Usuario.activo.is_(True),
         Usuario.organizacion_id == org_id,
-        Usuario.is_super_admin.isnot(True)
+        db.or_(Usuario.activo.is_(True), Usuario.activo == True),
+        db.or_(Usuario.is_super_admin.is_(False), Usuario.is_super_admin.is_(None)),
     ).order_by(Usuario.nombre, Usuario.apellido).all()
+    # Filtro extra en Python por si el campo booleano no se evalúa bien en PostgreSQL
+    usuarios_disponibles = [u for u in usuarios_disponibles if u.activo and not u.is_super_admin]
     etapas_disponibles = obtener_etapas_disponibles()
 
     # Usar asignaciones como miembros para Equipo Asignado (AsignacionObra tiene los usuarios asignados)

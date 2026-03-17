@@ -8,6 +8,50 @@ from extensions import db
 from models.projects import EtapaObra, EtapaDependencia
 
 
+def _es_dia_habil(fecha):
+    """Retorna True si es lunes a viernes (weekday 0-4)."""
+    return fecha.weekday() < 5
+
+
+def _siguiente_dia_habil(fecha, dias_avanzar=1):
+    """Avanza N días hábiles (L-V) desde una fecha.
+    Si dias_avanzar=1, retorna el próximo día hábil después de fecha.
+    """
+    resultado = fecha
+    avanzados = 0
+    while avanzados < dias_avanzar:
+        resultado += timedelta(days=1)
+        if _es_dia_habil(resultado):
+            avanzados += 1
+    return resultado
+
+
+def _sumar_dias_habiles(fecha_inicio, dias_habiles):
+    """Suma N días hábiles a una fecha y retorna la fecha final."""
+    if dias_habiles <= 0:
+        return fecha_inicio
+    resultado = fecha_inicio
+    contados = 0
+    while contados < dias_habiles:
+        resultado += timedelta(days=1)
+        if _es_dia_habil(resultado):
+            contados += 1
+    return resultado
+
+
+def _contar_dias_habiles(fecha_inicio, fecha_fin):
+    """Cuenta los días hábiles entre dos fechas (inclusive ambas)."""
+    if not fecha_inicio or not fecha_fin or fecha_fin < fecha_inicio:
+        return 0
+    conteo = 0
+    actual = fecha_inicio
+    while actual <= fecha_fin:
+        if _es_dia_habil(actual):
+            conteo += 1
+        actual += timedelta(days=1)
+    return conteo
+
+
 # ---------------------------------------------------------------------------
 # Catálogo nombre → nivel  (para matcheo flexible)
 # ---------------------------------------------------------------------------
@@ -232,7 +276,7 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
         if not preds:
             continue
 
-        # Calcular el inicio más temprano
+        # Calcular el inicio más temprano (usando días hábiles: L-V)
         inicio_mas_temprano = None
         for pred_id, lag in preds:
             pred = etapa_map.get(pred_id)
@@ -248,39 +292,36 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
             else:
                 continue
 
-            candidata = fecha_fin_pred + timedelta(days=1 + lag)
+            # Siguiente día hábil después del fin de la predecesora
+            candidata = _siguiente_dia_habil(fecha_fin_pred, 1 + lag)
             if inicio_mas_temprano is None or candidata > inicio_mas_temprano:
                 inicio_mas_temprano = candidata
 
         if inicio_mas_temprano is None:
             continue
 
-        # Si tiene fechas_manuales, solo mover si hay solapamiento real
-        # (la predecesora termina después de cuando esta etapa empieza)
+        # Con force_cascade, recalcular TODAS las sucesoras (salvo finalizadas)
+        # Sin force_cascade, respetar fechas_manuales
         if etapa.fechas_manuales and not force_cascade:
             continue
-        if etapa.fechas_manuales and force_cascade:
-            # Solo forzar si hay solapamiento (inicio actual < inicio requerido)
-            if etapa.fecha_inicio_estimada and etapa.fecha_inicio_estimada >= inicio_mas_temprano:
-                continue
 
         if etapa.fecha_inicio_estimada and inicio_mas_temprano != etapa.fecha_inicio_estimada:
-            # Calcular duración actual para preservarla (mínimo 1 día)
+            # Calcular duración en días hábiles para preservarla
             if etapa.fecha_inicio_estimada and etapa.fecha_fin_estimada:
-                duracion = (etapa.fecha_fin_estimada - etapa.fecha_inicio_estimada).days
-                if duracion < 1:
-                    duracion = 14  # Default 14 días si la duración era inválida
+                dias_hab = _contar_dias_habiles(etapa.fecha_inicio_estimada, etapa.fecha_fin_estimada)
+                if dias_hab < 1:
+                    dias_hab = 10  # Default 10 días hábiles (2 semanas)
             else:
-                duracion = 14
+                dias_hab = 10
 
             etapa.fecha_inicio_estimada = inicio_mas_temprano
-            etapa.fecha_fin_estimada = inicio_mas_temprano + timedelta(days=duracion)
+            etapa.fecha_fin_estimada = _sumar_dias_habiles(inicio_mas_temprano, dias_hab - 1)
             etapas_modificadas.append(etapa)
 
         elif etapa.fecha_inicio_estimada is None:
             etapa.fecha_inicio_estimada = inicio_mas_temprano
             if etapa.fecha_fin_estimada is None:
-                etapa.fecha_fin_estimada = inicio_mas_temprano + timedelta(days=14)
+                etapa.fecha_fin_estimada = _sumar_dias_habiles(inicio_mas_temprano, 9)  # 10 días hábiles
             etapas_modificadas.append(etapa)
 
     if etapas_modificadas:

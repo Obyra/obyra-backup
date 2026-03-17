@@ -13,12 +13,12 @@
                                     <i class="fas fa-tasks me-2 text-primary"></i>
                                     <strong class="text-dark">{{ tarea.nombre }}</strong>
                                 </div>
-                                {% if can_manage %}
+                                {% if can_manage and tarea.avances|length > 0 %}
                                 <button type="button"
                                         class="btn btn-link btn-sm p-0 text-decoration-none"
-                                        onclick="abrirGaleriaCompleta({{ tarea.id }})"
+                                        onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or 'un' }}', '{{ tarea.rendimiento or '' }}')"
                                         title="Ver detalle de avances">
-                                    <i class="fas fa-info-circle me-1"></i>Detalle
+                                    <i class="fas fa-info-circle me-1"></i>Detalle ({{ tarea.avances|length }})
                                 </button>
                                 {% endif %}
                             </div>
