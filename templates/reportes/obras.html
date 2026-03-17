@@ -382,8 +382,8 @@
         </div>
     </div>
 
-    <!-- Curva S por Obra -->
-    <div class="row mt-3">
+    <!-- Curva S por Obra (oculta hasta que haya datos) -->
+    <div class="row mt-3 d-none" id="curvaSSection">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -397,10 +397,6 @@
                 <div class="card-body">
                     <div id="chartCurvaSWrap" style="height: 280px; position: relative;">
                         <canvas id="chartCurvaS"></canvas>
-                    </div>
-                    <div id="curvaS-empty" class="text-center text-muted py-3 d-none">
-                        <i class="fas fa-bezier-curve fa-2x mb-2 opacity-50 d-block"></i>
-                        <small>Sin datos de planificación semanal para esta obra.<br>Cargue el plan semanal desde el detalle de la obra para ver la Curva S.</small>
                     </div>
                 </div>
             </div>
@@ -575,7 +571,7 @@ document.addEventListener('DOMContentLoaded', function() {
     (function() {
         var ctx = document.getElementById('chartCurvaS');
         var select = document.getElementById('selectObraCurvaS');
-        var emptyMsg = document.getElementById('curvaS-empty');
+        var section = document.getElementById('curvaSSection');
         if (!ctx || !select) return;
         var curvaChart = null;
 
@@ -585,12 +581,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(function(data) {
                     if (curvaChart) curvaChart.destroy();
                     if (!data.semanas || data.semanas.length === 0) {
-                        ctx.style.display = 'none';
-                        emptyMsg.classList.remove('d-none');
+                        section.classList.add('d-none');
                         return;
                     }
-                    ctx.style.display = '';
-                    emptyMsg.classList.add('d-none');
+                    section.classList.remove('d-none');
                     curvaChart = new Chart(ctx, {
                         type: 'line',
                         data: {
@@ -610,7 +604,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     });
                 })
-                .catch(function() { ctx.style.display = 'none'; emptyMsg.classList.remove('d-none'); });
+                .catch(function() { section.classList.add('d-none'); });
         }
 
         select.addEventListener('change', function() { cargarCurvaS(this.value); });
