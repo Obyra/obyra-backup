@@ -786,10 +786,10 @@ def detalle(id):
 
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
     usuarios_disponibles = Usuario.query.filter(
-        Usuario.activo == True,
+        Usuario.activo.is_(True),
         Usuario.organizacion_id == org_id,
-        Usuario.is_super_admin.is_(False)
-    ).all()
+        Usuario.is_super_admin.isnot(True)
+    ).order_by(Usuario.nombre, Usuario.apellido).all()
     etapas_disponibles = obtener_etapas_disponibles()
 
     # Usar asignaciones como miembros para Equipo Asignado (AsignacionObra tiene los usuarios asignados)
@@ -3020,7 +3020,9 @@ def api_listar_tareas(etapa_id):
 
     try:
         tareas = q.order_by(TareaEtapa.id.asc()).all()
-        html = render_template('obras/_tareas_lista.html', tareas=tareas)
+        html = render_template('obras/_tareas_lista.html',
+                               tareas=tareas,
+                               can_manage=can_manage_obra(etapa.obra))
         return jsonify({'ok': True, 'html': html})
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500
@@ -4970,6 +4972,12 @@ def editar_fechas_etapa(etapa_id):
         # Capturar las fechas que el usuario quiere (valores puros)
         fecha_inicio_usuario = date.fromisoformat(data['fecha_inicio']) if data.get('fecha_inicio') else None
         fecha_fin_usuario = date.fromisoformat(data['fecha_fin']) if data.get('fecha_fin') else None
+
+        # Validar que fecha_fin no sea anterior a fecha_inicio
+        fi = fecha_inicio_usuario or etapa.fecha_inicio_estimada
+        ff = fecha_fin_usuario or etapa.fecha_fin_estimada
+        if fi and ff and ff < fi:
+            fecha_fin_usuario = fi  # Corregir: fin = inicio como mínimo
 
         if 'nivel' in data:
             etapa.nivel_encadenamiento = int(data['nivel']) if data['nivel'] is not None else None

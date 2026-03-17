@@ -265,11 +265,13 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
                 continue
 
         if etapa.fecha_inicio_estimada and inicio_mas_temprano != etapa.fecha_inicio_estimada:
-            # Calcular duración actual para preservarla
+            # Calcular duración actual para preservarla (mínimo 1 día)
             if etapa.fecha_inicio_estimada and etapa.fecha_fin_estimada:
                 duracion = (etapa.fecha_fin_estimada - etapa.fecha_inicio_estimada).days
+                if duracion < 1:
+                    duracion = 14  # Default 14 días si la duración era inválida
             else:
-                duracion = 0
+                duracion = 14
 
             etapa.fecha_inicio_estimada = inicio_mas_temprano
             etapa.fecha_fin_estimada = inicio_mas_temprano + timedelta(days=duracion)
