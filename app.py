@@ -670,8 +670,10 @@ def moneda_filter(valor, currency: str = 'ARS'):
         monto = Decimal(str(valor))
     except (InvalidOperation, ValueError, TypeError):
         monto = Decimal('0')
-    symbol = 'US$' if (currency or 'ARS').upper() == 'USD' else '$'
-    return f"{symbol}{monto:,.2f}"
+    symbol = 'US$ ' if (currency or 'ARS').upper() == 'USD' else '$ '
+    # Formato argentino: punto para miles, coma para decimales
+    formatted = f"{monto:,.0f}".replace(',', '.')
+    return f"{symbol}{formatted}"
 
 @app.template_filter('porcentaje')
 def porcentaje_filter(valor):

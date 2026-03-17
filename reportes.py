@@ -799,23 +799,114 @@ def reporte_obras():
             })
         indices_obra.sort(key=lambda x: x['costo_total'], reverse=True)
 
+        # ========== HORAS-HOMBRE (Fichadas) ==========
+        horas_hombre = 0
+        fichadas_count = 0
+        try:
+            from models.projects import Fichada
+            fichadas_obra = Fichada.query.filter(Fichada.obra_id == obra.id).order_by(Fichada.fecha_hora).all()
+            fichadas_count = len(fichadas_obra)
+            # Emparejar ingresos con egresos por usuario y fecha
+            ingresos_pendientes = {}
+            for f in fichadas_obra:
+                uid = f.usuario_id
+                if f.tipo == 'ingreso':
+                    ingresos_pendientes[uid] = f.fecha_hora
+                elif f.tipo == 'egreso' and uid in ingresos_pendientes:
+                    delta = (f.fecha_hora - ingresos_pendientes[uid]).total_seconds() / 3600.0
+                    if 0 < delta < 24:  # Validar que sea razonable
+                        horas_hombre += delta
+                    del ingresos_pendientes[uid]
+        except Exception:
+            pass
+
+        # ========== AVANCE POR ETAPAS ==========
+        etapas_data = []
+        try:
+            etapas = EtapaObra.query.filter(EtapaObra.obra_id == obra.id).order_by(EtapaObra.orden).all()
+            for etapa in etapas:
+                etapas_data.append({
+                    'nombre': etapa.nombre,
+                    'estado': etapa.estado,
+                    'progreso': etapa.progreso or 0,
+                    'fecha_inicio': etapa.fecha_inicio_real or etapa.fecha_inicio_estimada,
+                    'fecha_fin': etapa.fecha_fin_real or etapa.fecha_fin_estimada,
+                })
+        except Exception:
+            pass
+
+        total_etapas = len(etapas_data)
+        etapas_finalizadas = len([e for e in etapas_data if e['estado'] == 'finalizada'])
+        etapas_en_curso = len([e for e in etapas_data if e['estado'] == 'en_curso'])
+
+        # ========== CERTIFICACIONES ==========
+        total_certificado = 0
+        certificaciones_count = 0
+        try:
+            from models.templates import WorkCertification
+            certs = WorkCertification.query.filter(
+                WorkCertification.obra_id == obra.id,
+                WorkCertification.organizacion_id == org_id
+            ).all()
+            certificaciones_count = len(certs)
+            total_certificado = sum(float(c.monto_certificado_ars or 0) for c in certs)
+        except Exception:
+            pass
+
+        # Diferencia entre certificado y gastado
+        diferencia_cert_costo = total_certificado - costo_real if total_certificado > 0 else 0
+
+        # ========== COSTO MO y EQUIPOS por obra ==========
+        costo_mo_obra = 0
+        costo_eq_obra = 0
+        try:
+            from models import LiquidacionMO
+            costo_mo_obra = float(db.session.query(
+                func.coalesce(func.sum(LiquidacionMO.monto_total), 0)
+            ).filter(LiquidacionMO.obra_id == obra.id,
+                     LiquidacionMO.organizacion_id == org_id).scalar() or 0)
+        except Exception:
+            pass
+        try:
+            from models.equipment import Equipment, EquipmentUsage
+            costo_eq_obra = float(db.session.query(
+                func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0)
+            ).join(Equipment).filter(EquipmentUsage.project_id == obra.id).scalar() or 0)
+        except Exception:
+            pass
+
         obras_data.append({
             'obra': obra,
             'presupuesto': presupuesto,
             'costo_real': costo_real,
             'costo_inventario': float(costo_inventario),
+            'costo_materiales': float(costo_inventario),
+            'costo_mo': costo_mo_obra,
+            'costo_equipos': costo_eq_obra,
             'desvio': desvio,
             'rentabilidad': rentabilidad,
             'dias_transcurridos': dias_transcurridos,
             'dias_estimados': dias_estimados,
             'estado_cronograma': estado_cronograma,
             'indices_rubro': indices_obra,
+            'horas_hombre': round(horas_hombre, 1),
+            'fichadas_count': fichadas_count,
+            'etapas': etapas_data,
+            'total_etapas': total_etapas,
+            'etapas_finalizadas': etapas_finalizadas,
+            'etapas_en_curso': etapas_en_curso,
+            'total_certificado': total_certificado,
+            'certificaciones_count': certificaciones_count,
+            'diferencia_cert_costo': diferencia_cert_costo,
         })
 
     # Estadísticas globales
     obras_con_sobrecosto = len([o for o in obras_data if o['desvio'] > 0])
     obras_retrasadas = len([o for o in obras_data if o['estado_cronograma'] == 'retrasada'])
     rentabilidad_total = sum(o['rentabilidad'] for o in obras_data)
+
+    total_horas_hombre = sum(o['horas_hombre'] for o in obras_data)
+    total_certificado_global = sum(o['total_certificado'] for o in obras_data)
 
     estadisticas = {
         'total_obras': total_obras,
@@ -828,6 +919,8 @@ def reporte_obras():
         'rentabilidad_total': rentabilidad_total,
         'obras_en_curso': len([o for o in obras if o.estado == 'en_curso']),
         'obras_finalizadas': len([o for o in obras if o.estado == 'finalizada']),
+        'total_horas_hombre': round(total_horas_hombre, 1),
+        'total_certificado': total_certificado_global,
     }
 
     # Desglose presupuesto por tipo (MO/Material/Equipo)
@@ -992,10 +1085,12 @@ def reporte_costos():
         if obra_nombre not in costos_por_obra:
             costos_por_obra[obra_nombre] = {
                 'ars': 0, 'usd': 0, 'items': 0,
+                'materiales': 0, 'mano_obra': 0, 'equipos': 0,
                 'presupuesto': float(uso.obra.presupuesto_total or 0) if uso.obra else 0,
                 'obra_id': uso.obra.id if uso.obra else None
             }
         costos_por_obra[obra_nombre]['ars'] += costo_item
+        costos_por_obra[obra_nombre]['materiales'] += costo_item
         costos_por_obra[obra_nombre]['items'] += 1
 
         # Agrupar por categoría
@@ -1034,10 +1129,12 @@ def reporte_costos():
         if obra_nombre not in costos_por_obra:
             costos_por_obra[obra_nombre] = {
                 'ars': 0, 'usd': 0, 'items': 0,
+                'materiales': 0, 'mano_obra': 0, 'equipos': 0,
                 'presupuesto': float(obra_obj.presupuesto_total or 0) if obra_obj else 0,
                 'obra_id': obra_obj.id if obra_obj else None
             }
         costos_por_obra[obra_nombre]['ars'] += costo_mo
+        costos_por_obra[obra_nombre]['mano_obra'] += costo_mo
         costos_por_obra[obra_nombre]['items'] += 1
 
         cat_mo = 'Mano de Obra'
@@ -1065,10 +1162,12 @@ def reporte_costos():
         if obra_nombre not in costos_por_obra:
             costos_por_obra[obra_nombre] = {
                 'ars': 0, 'usd': 0, 'items': 0,
+                'materiales': 0, 'mano_obra': 0, 'equipos': 0,
                 'presupuesto': float(obra_obj.presupuesto_total or 0) if obra_obj else 0,
                 'obra_id': obra_obj.id if obra_obj else None
             }
         costos_por_obra[obra_nombre]['ars'] += costo_eq
+        costos_por_obra[obra_nombre]['equipos'] += costo_eq
         costos_por_obra[obra_nombre]['items'] += 1
 
         cat_eq = 'Equipos / Maquinaria'
@@ -1108,6 +1207,9 @@ def reporte_costos():
             'presupuesto': presupuesto,
             'costo_real': costo_total_obra,
             'costo_usd': datos['usd'],
+            'materiales': datos.get('materiales', 0),
+            'mano_obra': datos.get('mano_obra', 0),
+            'equipos': datos.get('equipos', 0),
             'desvio': desvio,
             'items_usados': datos['items'],
             'estado': 'sobrecosto' if desvio > 10 else 'alerta' if desvio > 0 else 'ok'
@@ -1387,6 +1489,36 @@ def reporte_inventario():
                 })
     dias_stock.sort(key=lambda x: x['dias'])
 
+    # ========== MOVIMIENTOS RECIENTES (últimos 30 días) ==========
+    fecha_30_dias = date.today() - timedelta(days=30)
+    movimientos_recientes = []
+    try:
+        from sqlalchemy.orm import joinedload as _jl_inv
+        movs = MovimientoInventario.query.options(
+            _jl_inv(MovimientoInventario.item)
+        ).join(ItemInventario).filter(
+            ItemInventario.organizacion_id == org_id,
+            MovimientoInventario.fecha >= fecha_30_dias
+        ).order_by(desc(MovimientoInventario.fecha)).limit(20).all()
+
+        for mov in movs:
+            movimientos_recientes.append({
+                'fecha': mov.fecha.strftime('%d/%m/%Y') if mov.fecha else '-',
+                'item_nombre': mov.item.nombre if mov.item else '-',
+                'tipo': mov.tipo,
+                'cantidad': float(mov.cantidad or 0),
+                'unidad': mov.item.unidad if mov.item else '',
+                'motivo': mov.motivo or '',
+                'observaciones': mov.observaciones or '',
+            })
+    except Exception:
+        pass
+
+    # ========== COSTO DE STOCK INMOVILIZADO ==========
+    valor_inmovilizado = sum(d['valor_ars'] for d in items_data if d.get('dias_sin_movimiento', 0) > 90)
+
+    estadisticas['valor_inmovilizado'] = valor_inmovilizado
+
     return render_template('reportes/inventario.html',
                          items=items,
                          items_data=items_data,
@@ -1397,6 +1529,7 @@ def reporte_inventario():
                          items_criticos_lista=items_criticos_lista,
                          items_obsoletos=items_obsoletos,
                          dias_stock=dias_stock,
+                         movimientos_recientes=movimientos_recientes,
                          tipo=tipo,
                          stock_bajo=stock_bajo,
                          ordenar_por=ordenar_por)
@@ -1633,6 +1766,56 @@ def exportar_costos_pdf():
 
     usos = query.order_by(desc(UsoInventario.fecha_uso)).all()
 
+    # ========== COSTOS DE MANO DE OBRA (LiquidacionMO) ==========
+    liquidaciones = []
+    try:
+        from models import LiquidacionMO
+        liq_query = LiquidacionMO.query.join(Obra).filter(
+            LiquidacionMO.organizacion_id == org_id
+        )
+        if obra_id:
+            liq_query = liq_query.filter(LiquidacionMO.obra_id == obra_id)
+        if fecha_desde:
+            try:
+                fd = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+                liq_query = liq_query.filter(LiquidacionMO.fecha_liquidacion >= fd)
+            except ValueError:
+                pass
+        if fecha_hasta:
+            try:
+                fh = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+                liq_query = liq_query.filter(LiquidacionMO.fecha_liquidacion <= fh)
+            except ValueError:
+                pass
+        liquidaciones = liq_query.all()
+    except Exception:
+        pass
+
+    # ========== COSTOS DE EQUIPOS (EquipmentUsage) ==========
+    usos_equipos = []
+    try:
+        from models.equipment import Equipment, EquipmentUsage
+        eq_query = db.session.query(EquipmentUsage, Equipment).join(Equipment).join(
+            Obra, Obra.id == EquipmentUsage.project_id
+        ).filter(Obra.organizacion_id == org_id)
+        if obra_id:
+            eq_query = eq_query.filter(EquipmentUsage.project_id == obra_id)
+        if fecha_desde:
+            try:
+                fd = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+                eq_query = eq_query.filter(EquipmentUsage.date >= fd)
+            except ValueError:
+                pass
+        if fecha_hasta:
+            try:
+                fh = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+                eq_query = eq_query.filter(EquipmentUsage.date <= fh)
+            except ValueError:
+                pass
+        usos_equipos = eq_query.all()
+    except Exception:
+        pass
+
     # Calcular costos
     costo_total_ars = 0
     costos_por_obra = {}
@@ -1670,6 +1853,50 @@ def exportar_costos_pdf():
         materiales_mas_usados[material_nombre]['cantidad'] += cantidad
         materiales_mas_usados[material_nombre]['costo_ars'] += costo_item
 
+    # ========== PROCESAR LIQUIDACIONES DE MO (PDF) ==========
+    for liq in liquidaciones:
+        costo_mo = float(liq.monto_total or 0)
+        costo_total_ars += costo_mo
+
+        obra_obj = liq.obra if hasattr(liq, 'obra') and liq.obra else Obra.query.get(liq.obra_id)
+        ob_nombre = obra_obj.nombre if obra_obj else 'Sin obra'
+        if ob_nombre not in costos_por_obra:
+            costos_por_obra[ob_nombre] = {
+                'ars': 0, 'items': 0,
+                'presupuesto': float(obra_obj.presupuesto_total or 0) if obra_obj else 0,
+                'obra_id': obra_obj.id if obra_obj else None
+            }
+        costos_por_obra[ob_nombre]['ars'] += costo_mo
+        costos_por_obra[ob_nombre]['items'] += 1
+
+        cat_mo = 'Mano de Obra'
+        if cat_mo not in costos_por_categoria:
+            costos_por_categoria[cat_mo] = {'ars': 0, 'items': 0}
+        costos_por_categoria[cat_mo]['ars'] += costo_mo
+        costos_por_categoria[cat_mo]['items'] += 1
+
+    # ========== PROCESAR USO DE EQUIPOS (PDF) ==========
+    for usage, equip in usos_equipos:
+        costo_eq = float(usage.horas or 0) * float(equip.costo_hora or 0)
+        costo_total_ars += costo_eq
+
+        obra_obj = Obra.query.get(usage.project_id) if usage.project_id else None
+        ob_nombre = obra_obj.nombre if obra_obj else 'Sin obra'
+        if ob_nombre not in costos_por_obra:
+            costos_por_obra[ob_nombre] = {
+                'ars': 0, 'items': 0,
+                'presupuesto': float(obra_obj.presupuesto_total or 0) if obra_obj else 0,
+                'obra_id': obra_obj.id if obra_obj else None
+            }
+        costos_por_obra[ob_nombre]['ars'] += costo_eq
+        costos_por_obra[ob_nombre]['items'] += 1
+
+        cat_eq = 'Equipos / Maquinaria'
+        if cat_eq not in costos_por_categoria:
+            costos_por_categoria[cat_eq] = {'ars': 0, 'items': 0}
+        costos_por_categoria[cat_eq]['ars'] += costo_eq
+        costos_por_categoria[cat_eq]['items'] += 1
+
     top_materiales = sorted(
         materiales_mas_usados.items(),
         key=lambda x: x[1]['costo_ars'],
@@ -1694,7 +1921,7 @@ def exportar_costos_pdf():
 
     estadisticas = {
         'costo_total_ars': costo_total_ars,
-        'total_usos': len(usos),
+        'total_usos': len(usos) + len(liquidaciones) + len(usos_equipos),
         'obras_con_costos': len(costos_por_obra),
         'categorias': len(costos_por_categoria),
         'promedio_diario': costo_total_ars / 30 if costo_total_ars > 0 else 0,

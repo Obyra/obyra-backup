@@ -25,41 +25,81 @@
 
     <!-- KPIs / Estadísticas -->
     <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
+        <div class="col-lg col-md-6 mb-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h3 class="mb-0 fw-bold">{{ estadisticas.total_obras }}</h3>
-                            <p class="mb-0 text-muted">Total de Obras</p>
+                            <p class="mb-0 text-muted small">Total de Obras</p>
+                            <small class="text-info">{{ estadisticas.obras_en_curso }} en curso</small>
                         </div>
-                        <i class="fas fa-building fa-2x text-primary"></i>
+                        <i class="fas fa-building fa-2x text-primary opacity-50"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
+        <div class="col-lg col-md-6 mb-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0 fw-bold">$ {{ '{:,.0f}'.format(estadisticas.total_presupuesto|default(0)).replace(',', '.') }}</h3>
-                            <p class="mb-0 text-muted">Presupuesto Total</p>
+                            <h3 class="mb-0 fw-bold">{{ estadisticas.total_presupuesto|default(0)|moneda }}</h3>
+                            <p class="mb-0 text-muted small">Presupuesto Total</p>
+                            <small class="{% if estadisticas.desvio_promedio > 0 %}text-danger{% else %}text-success{% endif %}">
+                                Desvío: {{ '{:+.1f}'.format(estadisticas.desvio_promedio) }}%
+                            </small>
                         </div>
-                        <i class="fas fa-dollar-sign fa-2x text-success"></i>
+                        <i class="fas fa-dollar-sign fa-2x text-success opacity-50"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
+        <div class="col-lg col-md-6 mb-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h3 class="mb-0 fw-bold">{{ estadisticas.progreso_promedio|default(0)|round(1) }}%</h3>
-                            <p class="mb-0 text-muted">Progreso Promedio</p>
+                            <p class="mb-0 text-muted small">Progreso Promedio</p>
+                            {% if estadisticas.obras_retrasadas > 0 %}
+                            <small class="text-danger">{{ estadisticas.obras_retrasadas }} retrasada{{ 's' if estadisticas.obras_retrasadas > 1 }}</small>
+                            {% else %}
+                            <small class="text-success">Todas en tiempo</small>
+                            {% endif %}
                         </div>
-                        <i class="fas fa-chart-line fa-2x text-info"></i>
+                        <i class="fas fa-chart-line fa-2x text-info opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg col-md-6 mb-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ '{:,.0f}'.format(estadisticas.total_horas_hombre|default(0)).replace(',', '.') }} hs</h3>
+                            <p class="mb-0 text-muted small">Horas-Hombre Total</p>
+                            <small class="text-muted">Registradas por fichadas</small>
+                        </div>
+                        <i class="fas fa-user-clock fa-2x text-warning opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg col-md-6 mb-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ estadisticas.total_certificado|default(0)|moneda }}</h3>
+                            <p class="mb-0 text-muted small">Total Certificado</p>
+                            {% set dif_cert = estadisticas.total_certificado|default(0) - estadisticas.total_costo_real|default(0) %}
+                            <small class="{% if dif_cert >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ 'Cobrás más de lo que gastás' if dif_cert >= 0 else 'Gastás más de lo que cobrás' }}
+                            </small>
+                        </div>
+                        <i class="fas fa-file-invoice-dollar fa-2x text-purple opacity-50" style="color: #6f42c1 !important;"></i>
                     </div>
                 </div>
             </div>
@@ -162,7 +202,7 @@
                                 </td>
                                 <td>
                                     <strong class="text-primary">
-                                        ${{ obra.presupuesto_total|default(0)|round(2)|moneda }}
+                                        {{ obra.presupuesto_total|default(0)|moneda }}
                                     </strong>
                                 </td>
                                 <td>
@@ -172,7 +212,7 @@
 
                                     <div>
                                         <strong class="{% if porcentaje > 100 %}text-danger{% else %}text-success{% endif %}">
-                                            ${{ costo|round(2)|moneda }}
+                                            {{ costo|moneda }}
                                         </strong>
                                     </div>
                                     {% if presupuesto > 0 %}
@@ -300,6 +340,159 @@
     </div>
     {% endif %}
 
+    <!-- Detalle Financiero por Obra -->
+    {% if obras_data %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-clipboard-list me-2"></i>Detalle por Obra</h5>
+                    <small class="text-muted">Desglose de costos, etapas, certificaciones y horas-hombre</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="accordion" id="accordionObras">
+                        {% for od in obras_data %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#obra-{{ od.obra.id }}">
+                                    <div class="d-flex w-100 justify-content-between align-items-center me-3">
+                                        <div>
+                                            <strong>{{ od.obra.nombre }}</strong>
+                                            <span class="badge ms-2
+                                                {% if od.obra.estado == 'en_curso' %}bg-primary
+                                                {% elif od.obra.estado == 'finalizada' %}bg-success
+                                                {% elif od.obra.estado == 'pausada' %}bg-warning
+                                                {% else %}bg-secondary{% endif %}">
+                                                {{ od.obra.estado|replace('_', ' ')|title }}
+                                            </span>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="me-3">Ppto: <strong>{{ od.presupuesto|moneda }}</strong></span>
+                                            <span class="{% if od.desvio > 0 %}text-danger{% else %}text-success{% endif %}">
+                                                Real: <strong>{{ od.costo_real|moneda }}</strong>
+                                                ({{ '{:+.1f}'.format(od.desvio) }}%)
+                                            </span>
+                                        </div>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="obra-{{ od.obra.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionObras">
+                                <div class="accordion-body">
+                                    <div class="row">
+                                        <!-- Desglose de Costos -->
+                                        <div class="col-md-4 mb-3">
+                                            <h6 class="border-bottom pb-2"><i class="fas fa-coins me-1 text-success"></i> Desglose de Costos</h6>
+                                            <table class="table table-sm mb-0">
+                                                <tr>
+                                                    <td><i class="fas fa-boxes text-primary me-1"></i> Materiales</td>
+                                                    <td class="text-end fw-bold">{{ od.costo_materiales|moneda }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><i class="fas fa-hard-hat text-warning me-1"></i> Mano de Obra</td>
+                                                    <td class="text-end fw-bold">{{ od.costo_mo|moneda }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><i class="fas fa-truck text-info me-1"></i> Equipos</td>
+                                                    <td class="text-end fw-bold">{{ od.costo_equipos|moneda }}</td>
+                                                </tr>
+                                                <tr class="table-light">
+                                                    <td><strong>Total Real</strong></td>
+                                                    <td class="text-end fw-bold text-success">{{ od.costo_real|moneda }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Rentabilidad</td>
+                                                    <td class="text-end fw-bold {% if od.rentabilidad >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                                        {{ od.rentabilidad|moneda }}
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </div>
+
+                                        <!-- Etapas -->
+                                        <div class="col-md-4 mb-3">
+                                            <h6 class="border-bottom pb-2"><i class="fas fa-tasks me-1 text-info"></i> Etapas ({{ od.etapas_finalizadas }}/{{ od.total_etapas }})</h6>
+                                            {% if od.etapas %}
+                                            <div style="max-height: 200px; overflow-y: auto;">
+                                                {% for etapa in od.etapas %}
+                                                <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="font-size: 0.8rem;">
+                                                    <div class="d-flex align-items-center">
+                                                        {% if etapa.estado == 'finalizada' %}
+                                                        <i class="fas fa-check-circle text-success me-1"></i>
+                                                        {% elif etapa.estado == 'en_curso' %}
+                                                        <i class="fas fa-spinner text-primary me-1"></i>
+                                                        {% else %}
+                                                        <i class="far fa-circle text-muted me-1"></i>
+                                                        {% endif %}
+                                                        <span>{{ etapa.nombre|truncate(25) }}</span>
+                                                    </div>
+                                                    <div>
+                                                        <div class="progress" style="width: 60px; height: 6px;">
+                                                            <div class="progress-bar {% if etapa.progreso >= 100 %}bg-success{% elif etapa.progreso > 0 %}bg-primary{% else %}bg-secondary{% endif %}"
+                                                                 style="width: {{ etapa.progreso }}%"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                            {% else %}
+                                            <p class="text-muted small mb-0">Sin etapas definidas</p>
+                                            {% endif %}
+                                        </div>
+
+                                        <!-- Certificaciones + Horas -->
+                                        <div class="col-md-4 mb-3">
+                                            <h6 class="border-bottom pb-2"><i class="fas fa-file-invoice-dollar me-1" style="color: #6f42c1;"></i> Certificaciones y Horas</h6>
+                                            <table class="table table-sm mb-0">
+                                                <tr>
+                                                    <td>Certificado</td>
+                                                    <td class="text-end fw-bold" style="color: #6f42c1;">{{ od.total_certificado|moneda }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Gastado</td>
+                                                    <td class="text-end fw-bold">{{ od.costo_real|moneda }}</td>
+                                                </tr>
+                                                <tr class="{% if od.diferencia_cert_costo >= 0 %}table-success{% else %}table-danger{% endif %}">
+                                                    <td>Diferencia</td>
+                                                    <td class="text-end fw-bold">{{ od.diferencia_cert_costo|moneda }}</td>
+                                                </tr>
+                                                <tr><td colspan="2"><hr class="my-1"></td></tr>
+                                                <tr>
+                                                    <td><i class="fas fa-user-clock text-warning me-1"></i> Horas-hombre</td>
+                                                    <td class="text-end fw-bold">{{ '{:,.0f}'.format(od.horas_hombre).replace(',', '.') }} hs</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><i class="fas fa-id-card text-muted me-1"></i> Fichadas</td>
+                                                    <td class="text-end">{{ od.fichadas_count }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Cronograma</td>
+                                                    <td class="text-end">
+                                                        {% if od.estado_cronograma == 'retrasada' %}
+                                                        <span class="badge bg-danger">Retrasada</span>
+                                                        {% elif od.estado_cronograma == 'en_tiempo' %}
+                                                        <span class="badge bg-success">En tiempo</span>
+                                                        {% elif od.estado_cronograma == 'completada' %}
+                                                        <span class="badge bg-info">Completada</span>
+                                                        {% else %}
+                                                        <span class="badge bg-secondary">Sin datos</span>
+                                                        {% endif %}
+                                                        <div class="small text-muted">{{ od.dias_transcurridos }} / {{ od.dias_estimados }} días</div>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Gráficos Financieros -->
     {% if obras_data %}
     <div class="row mt-4">
@@ -319,8 +512,8 @@
                         {% for od in obras_data %}
                         <tr>
                             <td>{{ od.obra.nombre[:30] }}</td>
-                            <td class="text-end">$ {{ '{:,.0f}'.format(od.presupuesto).replace(',', '.') }}</td>
-                            <td class="text-end">$ {{ '{:,.0f}'.format(od.costo_real).replace(',', '.') }}</td>
+                            <td class="text-end">{{ od.presupuesto|moneda }}</td>
+                            <td class="text-end">{{ od.costo_real|moneda }}</td>
                             <td class="text-end {% if od.desvio > 0 %}text-danger{% else %}text-success{% endif %} fw-bold">{{ '{:+.1f}'.format(od.desvio) }}%</td>
                         </tr>
                         {% endfor %}
@@ -341,9 +534,9 @@
                     <div class="w-100">
                         <canvas id="chartDesglosePres"></canvas>
                         <table class="table table-sm table-borderless mt-2 mb-0" style="font-size: 0.75rem;">
-                            <tr><td><span class="badge" style="background: #0d6efd;">&nbsp;</span> Materiales</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_presupuesto.materiales).replace(',', '.') }}</td></tr>
-                            <tr><td><span class="badge" style="background: #ffc107;">&nbsp;</span> Mano de Obra</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_presupuesto.mano_obra).replace(',', '.') }}</td></tr>
-                            <tr><td><span class="badge" style="background: #20c997;">&nbsp;</span> Equipos</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_presupuesto.equipos).replace(',', '.') }}</td></tr>
+                            <tr><td><span class="badge" style="background: #0d6efd;">&nbsp;</span> Materiales</td><td class="text-end fw-bold">{{ desglose_presupuesto.materiales|moneda }}</td></tr>
+                            <tr><td><span class="badge" style="background: #ffc107;">&nbsp;</span> Mano de Obra</td><td class="text-end fw-bold">{{ desglose_presupuesto.mano_obra|moneda }}</td></tr>
+                            <tr><td><span class="badge" style="background: #20c997;">&nbsp;</span> Equipos</td><td class="text-end fw-bold">{{ desglose_presupuesto.equipos|moneda }}</td></tr>
                         </table>
                     </div>
                     {% else %}
@@ -366,9 +559,9 @@
                     <div class="w-100">
                         <canvas id="chartDesgloseReal"></canvas>
                         <table class="table table-sm table-borderless mt-2 mb-0" style="font-size: 0.75rem;">
-                            <tr><td><span class="badge" style="background: #dc3545;">&nbsp;</span> Materiales</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_real.materiales).replace(',', '.') }}</td></tr>
-                            <tr><td><span class="badge" style="background: #fd7e14;">&nbsp;</span> Mano de Obra</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_real.mano_obra).replace(',', '.') }}</td></tr>
-                            <tr><td><span class="badge" style="background: #6f42c1;">&nbsp;</span> Equipos</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_real.equipos).replace(',', '.') }}</td></tr>
+                            <tr><td><span class="badge" style="background: #dc3545;">&nbsp;</span> Materiales</td><td class="text-end fw-bold">{{ desglose_real.materiales|moneda }}</td></tr>
+                            <tr><td><span class="badge" style="background: #fd7e14;">&nbsp;</span> Mano de Obra</td><td class="text-end fw-bold">{{ desglose_real.mano_obra|moneda }}</td></tr>
+                            <tr><td><span class="badge" style="background: #6f42c1;">&nbsp;</span> Equipos</td><td class="text-end fw-bold">{{ desglose_real.equipos|moneda }}</td></tr>
                         </table>
                     </div>
                     {% else %}
@@ -449,8 +642,8 @@
                                     <td><strong>{{ idx.nombre }}</strong></td>
                                     <td class="text-center"><span class="badge bg-info">{{ idx.unidad }}</span></td>
                                     <td class="text-end">{{ "{:,.2f}".format(idx.cantidad) }} {{ idx.unidad }}</td>
-                                    <td class="text-end"><strong>${{ "{:,.0f}".format(idx.costo_por_unidad) }}</strong><small class="text-muted">/{{ idx.unidad }}</small></td>
-                                    <td class="text-end"><strong class="text-success">${{ "{:,.0f}".format(idx.costo_total) }}</strong></td>
+                                    <td class="text-end"><strong>{{ idx.costo_por_unidad|moneda }}</strong><small class="text-muted">/{{ idx.unidad }}</small></td>
+                                    <td class="text-end"><strong class="text-success">{{ idx.costo_total|moneda }}</strong></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

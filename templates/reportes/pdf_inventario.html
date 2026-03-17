@@ -344,7 +344,7 @@
     <!-- KPIs -->
     <div class="kpis-bar">
         <div class="kpi-item">
-            <div class="kpi-value info">${{ '{:,.0f}'.format(estadisticas.valor_total_ars) }}</div>
+            <div class="kpi-value info">{{ estadisticas.valor_total_ars|moneda }}</div>
             <div class="kpi-label">Valor Total ARS</div>
         </div>
         <div class="kpi-item">
@@ -427,7 +427,7 @@
                     <td class="right text-danger fw-bold">{{ '{:,.1f}'.format(data.stock) }} {{ data.item.unidad }}</td>
                     <td class="right">{{ '{:,.1f}'.format(data.item.stock_minimo or 0) }}</td>
                     <td class="right text-danger">{{ '{:,.1f}'.format(faltante if faltante > 0 else 0) }}</td>
-                    <td class="right">${{ '{:,.0f}'.format(faltante * data.precio_ars if faltante > 0 else 0) }}</td>
+                    <td class="right">{{ (faltante * data.precio_ars if faltante > 0 else 0)|moneda }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -453,8 +453,8 @@
                 {% set porcentaje = (datos.valor_ars / estadisticas.valor_total_ars * 100) if estadisticas.valor_total_ars > 0 else 0 %}
                 <tr>
                     <td><strong>{{ categoria }}</strong></td>
-                    <td class="right">{{ datos.items }}</td>
-                    <td class="right text-info fw-bold">${{ '{:,.0f}'.format(datos.valor_ars) }}</td>
+                    <td class="right">{{ datos['items'] }}</td>
+                    <td class="right text-info fw-bold">{{ datos.valor_ars|moneda }}</td>
                     <td class="right">{{ '{:.1f}'.format(porcentaje) }}%</td>
                 </tr>
                 {% endfor %}
@@ -497,8 +497,8 @@
                     <td><strong>{{ data.item.nombre|truncate(25) }}</strong></td>
                     <td>{{ data.categoria|truncate(12) }}</td>
                     <td class="right">{{ '{:,.0f}'.format(data.stock) }} {{ data.item.unidad }}</td>
-                    <td class="right">${{ '{:,.0f}'.format(data.precio_ars) }}</td>
-                    <td class="right text-info fw-bold">${{ '{:,.0f}'.format(data.valor_ars) }}</td>
+                    <td class="right">{{ data.precio_ars|moneda }}</td>
+                    <td class="right text-info fw-bold">{{ data.valor_ars|moneda }}</td>
                     <td class="center">
                         {% if data.rotacion > 0 %}
                         {{ '{:.1f}'.format(data.rotacion) }}x

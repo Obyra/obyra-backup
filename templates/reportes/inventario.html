@@ -30,10 +30,10 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0 fw-bold text-primary">${{ '{:,.0f}'.format(estadisticas.valor_total_ars) }}</h3>
+                            <h3 class="mb-0 fw-bold text-primary">{{ estadisticas.valor_total_ars|moneda }}</h3>
                             <p class="mb-0 text-muted">Valor Total (ARS)</p>
                             {% if estadisticas.valor_total_usd > 0 %}
-                            <small class="text-info">US$ {{ '{:,.0f}'.format(estadisticas.valor_total_usd) }}</small>
+                            <small class="text-info">{{ estadisticas.valor_total_usd|moneda('USD') }}</small>
                             {% endif %}
                         </div>
                         <i class="fas fa-dollar-sign fa-2x text-primary opacity-50"></i>
@@ -71,7 +71,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-lg-3 col-md-6 mb-3">
+        <div class="col-lg col-md-6 mb-3">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
@@ -83,6 +83,20 @@
                             <small class="text-muted">+90 días inactivos</small>
                         </div>
                         <i class="fas fa-clock fa-2x {% if estadisticas.items_sin_movimiento > 0 %}text-danger{% else %}text-muted{% endif %} opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 {% if estadisticas.valor_inmovilizado|default(0) > 0 %}border-danger{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold text-danger">{{ estadisticas.valor_inmovilizado|default(0)|moneda }}</h3>
+                            <p class="mb-0 text-muted">Capital Inmovilizado</p>
+                            <small class="text-muted">Stock sin movimiento (+90d)</small>
+                        </div>
+                        <i class="fas fa-lock fa-2x text-danger opacity-50"></i>
                     </div>
                 </div>
             </div>
@@ -291,13 +305,13 @@
                                         <small class="text-muted">{{ data.item.unidad }}</small>
                                     </td>
                                     <td class="text-end">
-                                        ${{ '{:,.0f}'.format(data.precio_ars) }}
+                                        {{ data.precio_ars|moneda }}
                                         {% if data.precio_usd > 0 %}
-                                        <div class="small text-info">US$ {{ '{:,.2f}'.format(data.precio_usd) }}</div>
+                                        <div class="small text-info">{{ data.precio_usd|moneda('USD') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
-                                        <strong class="text-primary">${{ '{:,.0f}'.format(data.valor_ars) }}</strong>
+                                        <strong class="text-primary">{{ data.valor_ars|moneda }}</strong>
                                     </td>
                                     <td class="text-center">
                                         {% if data.rotacion > 0 %}
@@ -345,12 +359,12 @@
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <h5 class="card-title mb-1">{{ categoria }}</h5>
-                                    <p class="text-muted mb-2">{{ datos.items }} items</p>
+                                    <p class="text-muted mb-2">{{ datos['items'] }} items</p>
                                 </div>
                                 <div class="text-end">
-                                    <h4 class="text-primary mb-0">${{ '{:,.0f}'.format(datos.valor_ars) }}</h4>
+                                    <h4 class="text-primary mb-0">{{ datos.valor_ars|moneda }}</h4>
                                     {% if datos.valor_usd > 0 %}
-                                    <small class="text-info">US$ {{ '{:,.0f}'.format(datos.valor_usd) }}</small>
+                                    <small class="text-info">{{ datos.valor_usd|moneda('USD') }}</small>
                                     {% endif %}
                                 </div>
                             </div>
@@ -404,7 +418,7 @@
                                         <strong>{{ '{:,.1f}'.format(faltante if faltante > 0 else 0) }}</strong> {{ data.item.unidad }}
                                     </td>
                                     <td class="text-end">
-                                        ${{ '{:,.0f}'.format(faltante * data.precio_ars if faltante > 0 else 0) }}
+                                        {{ (faltante * data.precio_ars if faltante > 0 else 0)|moneda }}
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -441,7 +455,7 @@
                                         <strong>{{ data.item.nombre }}</strong>
                                         <div class="small text-muted">{{ '{:,.1f}'.format(data.stock) }} {{ data.item.unidad }}</div>
                                     </div>
-                                    <span class="badge bg-primary rounded-pill">${{ '{:,.0f}'.format(data.valor_ars) }}</span>
+                                    <span class="badge bg-primary rounded-pill">{{ data.valor_ars|moneda }}</span>
                                 </div>
                                 {% endfor %}
                             </div>
@@ -498,7 +512,7 @@
                                 <tr>
                                     <td>{{ data.item.nombre }}</td>
                                     <td class="text-end">{{ '{:,.1f}'.format(data.stock) }}</td>
-                                    <td class="text-end">${{ '{:,.0f}'.format(data.valor_ars) }}</td>
+                                    <td class="text-end">{{ data.valor_ars|moneda }}</td>
                                     <td class="text-center">
                                         <span class="badge bg-danger">{{ data.dias_sin_movimiento if data.dias_sin_movimiento < 999 else '+999' }} días</span>
                                     </td>
@@ -512,6 +526,53 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Movimientos Recientes -->
+    {% if movimientos_recientes %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-exchange-alt me-2 text-info"></i>Movimientos Recientes (últimos 30 días)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" style="font-size: 0.85rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Fecha</th>
+                                    <th>Material</th>
+                                    <th class="text-center">Tipo</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th>Motivo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mov in movimientos_recientes %}
+                                <tr>
+                                    <td class="ps-3">{{ mov.fecha }}</td>
+                                    <td><strong>{{ mov.item_nombre }}</strong></td>
+                                    <td class="text-center">
+                                        {% if mov.tipo == 'entrada' %}
+                                        <span class="badge bg-success"><i class="fas fa-arrow-down me-1"></i>Entrada</span>
+                                        {% elif mov.tipo == 'salida' %}
+                                        <span class="badge bg-danger"><i class="fas fa-arrow-up me-1"></i>Salida</span>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-sync me-1"></i>Ajuste</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ mov.cantidad }} {{ mov.unidad }}</td>
+                                    <td class="text-muted">{{ mov.motivo|truncate(40) if mov.motivo else '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 

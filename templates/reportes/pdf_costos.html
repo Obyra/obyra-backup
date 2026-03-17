@@ -283,7 +283,7 @@
     <!-- KPIs -->
     <div class="kpis-bar">
         <div class="kpi-item">
-            <div class="kpi-value success">${{ '{:,.0f}'.format(estadisticas.costo_total_ars) }}</div>
+            <div class="kpi-value success">{{ estadisticas.costo_total_ars|moneda }}</div>
             <div class="kpi-label">Costo Total ARS</div>
         </div>
         <div class="kpi-item">
@@ -299,7 +299,7 @@
             <div class="kpi-label">Categorias</div>
         </div>
         <div class="kpi-item">
-            <div class="kpi-value">${{ '{:,.0f}'.format(estadisticas.promedio_diario) }}</div>
+            <div class="kpi-value">{{ estadisticas.promedio_diario|moneda }}</div>
             <div class="kpi-label">Promedio Diario</div>
         </div>
     </div>
@@ -317,23 +317,29 @@
     <!-- Costos por Obra -->
     {% if analisis_obras %}
     <div class="section">
-        <div class="section-header">Costos por Obra</div>
-        <table class="report-table">
+        <div class="section-header">Costos por Obra (Desglose)</div>
+        <table class="report-table" style="font-size: 9px;">
             <thead>
                 <tr>
-                    <th style="width: 35%;">Obra</th>
-                    <th class="right" style="width: 20%;">Costo Real</th>
-                    <th class="right" style="width: 20%;">Presupuesto</th>
-                    <th class="right" style="width: 12%;">Desvio</th>
-                    <th class="center" style="width: 13%;">Estado</th>
+                    <th style="width: 22%;">Obra</th>
+                    <th class="right" style="width: 13%;">Materiales</th>
+                    <th class="right" style="width: 13%;">Mano Obra</th>
+                    <th class="right" style="width: 13%;">Equipos</th>
+                    <th class="right" style="width: 13%;">Total</th>
+                    <th class="right" style="width: 13%;">Presupuesto</th>
+                    <th class="right" style="width: 7%;">Desvio</th>
+                    <th class="center" style="width: 6%;">Est.</th>
                 </tr>
             </thead>
             <tbody>
                 {% for obra in analisis_obras %}
                 <tr>
-                    <td><strong>{{ obra.nombre }}</strong></td>
-                    <td class="right">${{ '{:,.0f}'.format(obra.costo_real) }}</td>
-                    <td class="right text-muted">${{ '{:,.0f}'.format(obra.presupuesto) }}</td>
+                    <td><strong>{{ obra.nombre|truncate(25) }}</strong></td>
+                    <td class="right">{{ obra.materiales|default(0)|moneda }}</td>
+                    <td class="right">{{ obra.mano_obra|default(0)|moneda }}</td>
+                    <td class="right">{{ obra.equipos|default(0)|moneda }}</td>
+                    <td class="right fw-bold">{{ obra.costo_real|moneda }}</td>
+                    <td class="right text-muted">{{ obra.presupuesto|moneda }}</td>
                     <td class="right">
                         <span class="{% if obra.desvio > 10 %}text-danger fw-bold{% elif obra.desvio > 0 %}text-warning{% else %}text-success{% endif %}">
                             {{ '{:+.1f}'.format(obra.desvio) }}%
@@ -341,9 +347,9 @@
                     </td>
                     <td class="center">
                         {% if obra.estado == 'sobrecosto' %}
-                        <span class="badge badge-danger">Sobrecosto</span>
+                        <span class="badge badge-danger">!</span>
                         {% elif obra.estado == 'alerta' %}
-                        <span class="badge badge-warning">Alerta</span>
+                        <span class="badge badge-warning">~</span>
                         {% else %}
                         <span class="badge badge-success">OK</span>
                         {% endif %}
@@ -354,7 +360,8 @@
             <tfoot>
                 <tr>
                     <td><strong>TOTAL</strong></td>
-                    <td class="right"><strong>${{ '{:,.0f}'.format(estadisticas.costo_total_ars) }}</strong></td>
+                    <td class="right" colspan="3"></td>
+                    <td class="right"><strong>{{ estadisticas.costo_total_ars|moneda }}</strong></td>
                     <td colspan="3"></td>
                 </tr>
             </tfoot>
@@ -380,8 +387,8 @@
                 {% set porcentaje = (datos.ars / estadisticas.costo_total_ars * 100) if estadisticas.costo_total_ars > 0 else 0 %}
                 <tr>
                     <td><strong>{{ cat_nombre }}</strong></td>
-                    <td class="right text-success">${{ '{:,.0f}'.format(datos.ars) }}</td>
-                    <td class="right">{{ datos.items }}</td>
+                    <td class="right text-success">{{ datos.ars|moneda }}</td>
+                    <td class="right">{{ datos['items'] }}</td>
                     <td class="right">{{ '{:.1f}'.format(porcentaje) }}%</td>
                 </tr>
                 {% endfor %}
@@ -411,7 +418,7 @@
                     <td><strong>{{ material_nombre }}</strong></td>
                     <td><code>{{ datos.codigo or '-' }}</code></td>
                     <td class="right">{{ '{:,.1f}'.format(datos.cantidad) }} {{ datos.unidad or '' }}</td>
-                    <td class="right text-success fw-bold">${{ '{:,.0f}'.format(datos.costo_ars) }}</td>
+                    <td class="right text-success fw-bold">{{ datos.costo_ars|moneda }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

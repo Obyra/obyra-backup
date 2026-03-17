@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v4.7.0';  // Refactor: materiales y recursos con tabs unificados
+const CACHE_VERSION = 'v4.8.0';  // Feat: reportes enriquecidos con horas-hombre, etapas, certificaciones, desglose Mat/MO/Eq
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
