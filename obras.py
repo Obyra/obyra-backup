@@ -11,6 +11,7 @@ from app import db
 from extensions import limiter, csrf
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import selectinload
 from utils.pagination import Pagination
 from utils import safe_int
 from models import (
@@ -625,14 +626,23 @@ def detalle(id):
         sincronizar_estado_obra(obra)
         db.session.commit()
 
-    # Pre-cargar todas las tareas de todas las etapas en UN solo query
+    # Pre-cargar todas las tareas de todas las etapas en UN solo query (con avances eager-loaded)
     etapa_ids = [e.id for e in etapas]
     todas_tareas = []
     tareas_por_etapa = {}
+
+    def _cargar_tareas(etapa_ids):
+        """Carga tareas + avances en 2 queries (selectin) en vez de N+1."""
+        tareas = TareaEtapa.query.options(
+            selectinload(TareaEtapa.avances)
+        ).filter(TareaEtapa.etapa_id.in_(etapa_ids)).all() if etapa_ids else []
+        por_etapa = {}
+        for t in tareas:
+            por_etapa.setdefault(t.etapa_id, []).append(t)
+        return tareas, por_etapa
+
     if etapa_ids:
-        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
-        for t in todas_tareas:
-            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+        todas_tareas, tareas_por_etapa = _cargar_tareas(etapa_ids)
 
     # Auto-distribuir cantidad/unidad/fechas/horas de etapa a tareas sin datos
     from tareas_predefinidas import obtener_tareas_por_etapa as _obt_tareas_cat
@@ -690,10 +700,7 @@ def detalle(id):
     if datos_distribuidos:
         db.session.commit()
         # Refrescar datos
-        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
-        tareas_por_etapa = {}
-        for t in todas_tareas:
-            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+        todas_tareas, tareas_por_etapa = _cargar_tareas(etapa_ids)
 
     # Limpiar fechas reales de etapas pendientes (no deberían tener)
     for etapa in etapas:
@@ -751,10 +758,7 @@ def detalle(id):
 
     if fechas_sync:
         db.session.commit()
-        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
-        tareas_por_etapa = {}
-        for t in todas_tareas:
-            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+        todas_tareas, tareas_por_etapa = _cargar_tareas(etapa_ids)
 
     # Auto-sync: recalcular tareas con avances aprobados que aún figuran como pendientes
     tareas_desync = [t for t in todas_tareas if t.estado == 'pendiente' and any(a.status == 'aprobado' for a in t.avances)]
@@ -762,10 +766,7 @@ def detalle(id):
         for t in tareas_desync:
             recalc_tarea_pct(t.id)
         # Refrescar datos después del recálculo
-        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
-        tareas_por_etapa = {}
-        for t in todas_tareas:
-            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+        todas_tareas, tareas_por_etapa = _cargar_tareas(etapa_ids)
 
     # Calcular porcentaje de avance por etapa (tareas completadas / total tareas)
     etapas_con_avance = {}
