@@ -43,7 +43,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0 fw-bold">${{ estadisticas.total_presupuesto|default(0)|round(1) }}M</h3>
+                            <h3 class="mb-0 fw-bold">$ {{ '{:,.0f}'.format(estadisticas.total_presupuesto|default(0)).replace(',', '.') }}</h3>
                             <p class="mb-0 text-muted">Presupuesto Total</p>
                         </div>
                         <i class="fas fa-dollar-sign fa-2x text-success"></i>
@@ -311,6 +311,19 @@
                 </div>
                 <div class="card-body">
                     <canvas id="chartPresVsReal" height="250"></canvas>
+                    <table class="table table-sm table-striped mt-3 mb-0" style="font-size: 0.75rem;">
+                        <thead><tr><th>Obra</th><th class="text-end">Presupuesto</th><th class="text-end">Gastado</th><th class="text-end">Desvío</th></tr></thead>
+                        <tbody>
+                        {% for od in obras_data %}
+                        <tr>
+                            <td>{{ od.obra.nombre[:30] }}</td>
+                            <td class="text-end">$ {{ '{:,.0f}'.format(od.presupuesto).replace(',', '.') }}</td>
+                            <td class="text-end">$ {{ '{:,.0f}'.format(od.costo_real).replace(',', '.') }}</td>
+                            <td class="text-end {% if od.desvio > 0 %}text-danger{% else %}text-success{% endif %} fw-bold">{{ '{:+.1f}'.format(od.desvio) }}%</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -323,7 +336,14 @@
                 </div>
                 <div class="card-body d-flex align-items-center justify-content-center">
                     {% if desglose_presupuesto and (desglose_presupuesto.materiales > 0 or desglose_presupuesto.mano_obra > 0 or desglose_presupuesto.equipos > 0) %}
-                    <canvas id="chartDesglosePres" height="200"></canvas>
+                    <div class="w-100">
+                        <canvas id="chartDesglosePres" height="180"></canvas>
+                        <table class="table table-sm table-borderless mt-2 mb-0" style="font-size: 0.75rem;">
+                            <tr><td><span class="badge" style="background: #0d6efd;">&nbsp;</span> Materiales</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_presupuesto.materiales).replace(',', '.') }}</td></tr>
+                            <tr><td><span class="badge" style="background: #ffc107;">&nbsp;</span> Mano de Obra</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_presupuesto.mano_obra).replace(',', '.') }}</td></tr>
+                            <tr><td><span class="badge" style="background: #20c997;">&nbsp;</span> Equipos</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_presupuesto.equipos).replace(',', '.') }}</td></tr>
+                        </table>
+                    </div>
                     {% else %}
                     <div class="text-center text-muted">
                         <i class="fas fa-chart-pie fa-2x mb-2 opacity-50 d-block"></i>
@@ -341,7 +361,14 @@
                 </div>
                 <div class="card-body d-flex align-items-center justify-content-center">
                     {% if desglose_real and (desglose_real.materiales > 0 or desglose_real.mano_obra > 0 or desglose_real.equipos > 0) %}
-                    <canvas id="chartDesgloseReal" height="200"></canvas>
+                    <div class="w-100">
+                        <canvas id="chartDesgloseReal" height="180"></canvas>
+                        <table class="table table-sm table-borderless mt-2 mb-0" style="font-size: 0.75rem;">
+                            <tr><td><span class="badge" style="background: #dc3545;">&nbsp;</span> Materiales</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_real.materiales).replace(',', '.') }}</td></tr>
+                            <tr><td><span class="badge" style="background: #fd7e14;">&nbsp;</span> Mano de Obra</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_real.mano_obra).replace(',', '.') }}</td></tr>
+                            <tr><td><span class="badge" style="background: #6f42c1;">&nbsp;</span> Equipos</td><td class="text-end fw-bold">$ {{ '{:,.0f}'.format(desglose_real.equipos).replace(',', '.') }}</td></tr>
+                        </table>
+                    </div>
                     {% else %}
                     <div class="text-center text-muted">
                         <i class="fas fa-chart-pie fa-2x mb-2 opacity-50 d-block"></i>
@@ -467,7 +494,12 @@ setTimeout(() => {
 document.addEventListener('DOMContentLoaded', function() {
     if (typeof Chart === 'undefined') return;
     const C = { primary: '#0d6efd', success: '#198754', warning: '#ffc107', danger: '#dc3545', info: '#0dcaf0', orange: '#fd7e14', purple: '#6f42c1', teal: '#20c997' };
-    function fmtMoney(v) { return '$' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v); }
+    function fmtMoney(v) {
+        if (v >= 1000000) return '$ ' + (v / 1000000).toFixed(1).replace('.', ',') + ' M';
+        if (v >= 1000) return '$ ' + Math.round(v / 1000).toLocaleString('es-AR') + ' K';
+        return '$ ' + Math.round(v).toLocaleString('es-AR');
+    }
+    function fmtFull(v) { return '$ ' + Math.round(v).toLocaleString('es-AR'); }
 
     // Presupuesto vs Gastado por obra
     {% if obras_data %}
@@ -495,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
             options: {
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                    tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label + ': ' + fmtMoney(ctx.raw); } } }
+                    tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label + ': ' + fmtFull(ctx.raw); } } }
                 },
                 scales: { x: { ticks: { callback: fmtMoney, font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } }
             }
@@ -512,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
             type: 'doughnut',
             data: { labels: ['Materiales', 'Mano de Obra', 'Equipos'], datasets: [{ data: [{{ desglose_presupuesto.materiales }}, {{ desglose_presupuesto.mano_obra }}, {{ desglose_presupuesto.equipos }}], backgroundColor: [C.primary, C.warning, C.teal], borderWidth: 2 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
-                tooltip: { callbacks: { label: function(ctx) { var t = ctx.dataset.data.reduce(function(a,b){return a+b},0); return ctx.label+': '+fmtMoney(ctx.raw)+' ('+(t>0?((ctx.raw/t)*100).toFixed(1):0)+'%)'; } } }
+                tooltip: { callbacks: { label: function(ctx) { var t = ctx.dataset.data.reduce(function(a,b){return a+b},0); return ctx.label+': '+fmtFull(ctx.raw)+' ('+(t>0?((ctx.raw/t)*100).toFixed(1):0)+'%)'; } } }
             } }
         });
     })();
@@ -527,7 +559,7 @@ document.addEventListener('DOMContentLoaded', function() {
             type: 'doughnut',
             data: { labels: ['Materiales', 'Mano de Obra', 'Equipos'], datasets: [{ data: [{{ desglose_real.materiales }}, {{ desglose_real.mano_obra }}, {{ desglose_real.equipos }}], backgroundColor: [C.danger, C.orange, C.purple], borderWidth: 2 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
-                tooltip: { callbacks: { label: function(ctx) { var t = ctx.dataset.data.reduce(function(a,b){return a+b},0); return ctx.label+': '+fmtMoney(ctx.raw)+' ('+(t>0?((ctx.raw/t)*100).toFixed(1):0)+'%)'; } } }
+                tooltip: { callbacks: { label: function(ctx) { var t = ctx.dataset.data.reduce(function(a,b){return a+b},0); return ctx.label+': '+fmtFull(ctx.raw)+' ('+(t>0?((ctx.raw/t)*100).toFixed(1):0)+'%)'; } } }
             } }
         });
     })();
@@ -567,7 +599,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         options: {
                             responsive: true, maintainAspectRatio: false,
                             plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                                tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label+': '+fmtMoney(ctx.raw); } } }
+                                tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label+': '+fmtFull(ctx.raw); } } }
                             },
                             scales: { y: { beginAtZero: true, ticks: { callback: fmtMoney, font: { size: 10 } } }, x: { ticks: { font: { size: 10 }, maxRotation: 45 } } }
                         }
