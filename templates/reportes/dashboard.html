@@ -125,6 +125,164 @@
         </div>
     </div>
     
+    <!-- Gráficos Financieros -->
+    {% if datos_financieros %}
+    <div class="row mb-4">
+        <!-- Presupuesto vs Gastado por Obra -->
+        <div class="col-lg-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-chart-bar text-primary me-2"></i>Presupuesto vs Gastado</h6>
+                </div>
+                <div class="card-body">
+                    {% if datos_financieros.presupuesto_vs_real %}
+                    <canvas id="chartPresupuestoReal" height="220"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-chart-bar fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin datos de presupuesto cargados</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Desglose de Costos (Donut) -->
+        <div class="col-lg-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-chart-pie text-success me-2"></i>Desglose Presupuesto</h6>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    {% set dp = datos_financieros.desglose_presupuesto %}
+                    {% if dp.materiales > 0 or dp.mano_obra > 0 or dp.equipos > 0 %}
+                    <canvas id="chartDesglose" height="200"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-chart-pie fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin items presupuestados</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Desglose Real (Donut) -->
+        <div class="col-lg-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-chart-pie text-danger me-2"></i>Desglose Real</h6>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    {% set dr = datos_financieros.desglose_real %}
+                    {% if dr.materiales > 0 or dr.mano_obra > 0 or dr.equipos > 0 %}
+                    <canvas id="chartDesgloseReal" height="200"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-chart-pie fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin gastos registrados</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <!-- Burn Rate - Tendencia Mensual -->
+        <div class="col-lg-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-fire text-warning me-2"></i>Burn Rate (Gastos Mensuales)</h6>
+                </div>
+                <div class="card-body">
+                    {% if datos_financieros.gastos_mensuales %}
+                    <canvas id="chartBurnRate" height="200"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-fire fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin datos de consumo en los últimos 6 meses</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Días de Stock Restante -->
+        <div class="col-lg-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-hourglass-half text-danger me-2"></i>Días de Stock Restante</h6>
+                    <small class="text-muted">Proyección basada en consumo 30 días</small>
+                </div>
+                <div class="card-body p-0">
+                    {% if datos_financieros.dias_stock %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Material</th>
+                                    <th class="text-end">Stock</th>
+                                    <th class="text-end">Consumo/día</th>
+                                    <th class="text-end pe-3">Días</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in datos_financieros.dias_stock %}
+                                <tr class="{% if item.critico %}table-danger{% elif item.dias <= 15 %}table-warning{% endif %}">
+                                    <td class="ps-3">
+                                        {% if item.critico %}<i class="fas fa-exclamation-triangle text-danger me-1"></i>{% endif %}
+                                        {{ item.nombre }}
+                                    </td>
+                                    <td class="text-end">{{ item.stock }} {{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.consumo_diario }} {{ item.unidad }}</td>
+                                    <td class="text-end pe-3">
+                                        <span class="badge bg-{% if item.critico %}danger{% elif item.dias <= 15 %}warning text-dark{% else %}info{% endif %}">
+                                            {{ item.dias|int }} días
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-check-circle fa-2x text-success mb-2 d-block"></i>
+                        <small>Stock suficiente (>30 días) en todos los items</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Curva S por Obra -->
+    {% if obras_activas %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-bezier-curve text-info me-2"></i>Curva S — Valor Planificado vs Ejecutado</h6>
+                    <select id="selectObraCurvaS" class="form-select form-select-sm" style="width: auto;">
+                        {% for obra in obras_activas %}
+                        <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartCurvaS" height="250"></canvas>
+                    <div id="curvaS-empty" class="text-center text-muted py-3 d-none">
+                        <i class="fas fa-bezier-curve fa-2x mb-2 opacity-50 d-block"></i>
+                        <small>Sin datos de planificación semanal para esta obra. Cargue el plan semanal desde el detalle de la obra.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
     <!-- Contenido Principal - 2 Columnas -->
     <div class="row">
         <!-- Columna Izquierda -->
@@ -1120,6 +1278,318 @@ document.addEventListener('DOMContentLoaded', function() {
             this.remove();
         });
     }
+});
+</script>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof Chart === 'undefined') return;
+
+    const colores = {
+        primary: '#0d6efd',
+        success: '#198754',
+        warning: '#ffc107',
+        danger: '#dc3545',
+        info: '#0dcaf0',
+        orange: '#fd7e14',
+        purple: '#6f42c1',
+        teal: '#20c997',
+    };
+
+    // =============================================
+    // 1) Presupuesto vs Gastado (Barras Horizontales)
+    // =============================================
+    {% if datos_financieros and datos_financieros.presupuesto_vs_real %}
+    (function() {
+        const ctx = document.getElementById('chartPresupuestoReal');
+        if (!ctx) return;
+        const data = {{ datos_financieros.presupuesto_vs_real | tojson }};
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.nombre),
+                datasets: [
+                    {
+                        label: 'Presupuesto',
+                        data: data.map(d => d.presupuesto),
+                        backgroundColor: colores.primary + '80',
+                        borderColor: colores.primary,
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Gastado',
+                        data: data.map(d => d.real),
+                        backgroundColor: data.map(d => d.porcentaje > 100 ? colores.danger + '80' : colores.success + '80'),
+                        borderColor: data.map(d => d.porcentaje > 100 ? colores.danger : colores.success),
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return ctx.dataset.label + ': $' + ctx.raw.toLocaleString('es-AR');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            callback: function(v) { return '$' + (v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v)); },
+                            font: { size: 10 }
+                        }
+                    },
+                    y: { ticks: { font: { size: 10 } } }
+                }
+            }
+        });
+    })();
+    {% endif %}
+
+    // =============================================
+    // 2) Desglose Presupuesto (Donut)
+    // =============================================
+    {% if datos_financieros %}
+    {% set dp = datos_financieros.desglose_presupuesto %}
+    {% if dp.materiales > 0 or dp.mano_obra > 0 or dp.equipos > 0 %}
+    (function() {
+        const ctx = document.getElementById('chartDesglose');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Materiales', 'Mano de Obra', 'Equipos'],
+                datasets: [{
+                    data: [{{ dp.materiales }}, {{ dp.mano_obra }}, {{ dp.equipos }}],
+                    backgroundColor: [colores.primary, colores.warning, colores.teal],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                return ctx.label + ': $' + ctx.raw.toLocaleString('es-AR') + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    })();
+    {% endif %}
+
+    // =============================================
+    // 3) Desglose Real (Donut)
+    // =============================================
+    {% set dr = datos_financieros.desglose_real %}
+    {% if dr.materiales > 0 or dr.mano_obra > 0 or dr.equipos > 0 %}
+    (function() {
+        const ctx = document.getElementById('chartDesgloseReal');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Materiales', 'Mano de Obra', 'Equipos'],
+                datasets: [{
+                    data: [{{ dr.materiales }}, {{ dr.mano_obra }}, {{ dr.equipos }}],
+                    backgroundColor: [colores.danger, colores.orange, colores.purple],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                return ctx.label + ': $' + ctx.raw.toLocaleString('es-AR') + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    })();
+    {% endif %}
+    {% endif %}
+
+    // =============================================
+    // 4) Burn Rate (Línea Mensual)
+    // =============================================
+    {% if datos_financieros and datos_financieros.gastos_mensuales %}
+    (function() {
+        const ctx = document.getElementById('chartBurnRate');
+        if (!ctx) return;
+        const data = {{ datos_financieros.gastos_mensuales | tojson }};
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.map(d => d.mes),
+                datasets: [{
+                    label: 'Gasto Mensual',
+                    data: data.map(d => d.total),
+                    borderColor: colores.warning,
+                    backgroundColor: colores.warning + '20',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointBackgroundColor: colores.warning,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return 'Gasto: $' + ctx.raw.toLocaleString('es-AR');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(v) { return '$' + (v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v)); },
+                            font: { size: 10 }
+                        }
+                    },
+                    x: { ticks: { font: { size: 10 } } }
+                }
+            }
+        });
+    })();
+    {% endif %}
+
+    // =============================================
+    // 5) Curva S por Obra
+    // =============================================
+    {% if obras_activas %}
+    (function() {
+        const ctx = document.getElementById('chartCurvaS');
+        const select = document.getElementById('selectObraCurvaS');
+        const emptyMsg = document.getElementById('curvaS-empty');
+        if (!ctx || !select) return;
+
+        let curvaChart = null;
+
+        function cargarCurvaS(obraId) {
+            fetch('/reportes/api/curva-s/' + obraId)
+                .then(r => r.json())
+                .then(data => {
+                    if (curvaChart) curvaChart.destroy();
+
+                    if (!data.semanas || data.semanas.length === 0) {
+                        ctx.style.display = 'none';
+                        emptyMsg.classList.remove('d-none');
+                        return;
+                    }
+                    ctx.style.display = '';
+                    emptyMsg.classList.add('d-none');
+
+                    curvaChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.semanas,
+                            datasets: [
+                                {
+                                    label: 'Valor Planificado (PV)',
+                                    data: data.pv,
+                                    borderColor: colores.primary,
+                                    backgroundColor: colores.primary + '15',
+                                    fill: true,
+                                    tension: 0.3,
+                                    borderWidth: 2,
+                                    pointRadius: 3
+                                },
+                                {
+                                    label: 'Valor Ganado (EV)',
+                                    data: data.ev,
+                                    borderColor: colores.success,
+                                    borderWidth: 2,
+                                    tension: 0.3,
+                                    pointRadius: 3,
+                                    borderDash: [5, 3]
+                                },
+                                {
+                                    label: 'Costo Real (AC)',
+                                    data: data.ac,
+                                    borderColor: colores.danger,
+                                    borderWidth: 2,
+                                    tension: 0.3,
+                                    pointRadius: 3,
+                                    borderDash: [2, 2]
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(ctx) {
+                                            return ctx.dataset.label + ': $' + ctx.raw.toLocaleString('es-AR');
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(v) { return '$' + (v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v)); },
+                                        font: { size: 10 }
+                                    }
+                                },
+                                x: { ticks: { font: { size: 10 }, maxRotation: 45 } }
+                            }
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.error('Error cargando Curva S:', err);
+                    ctx.style.display = 'none';
+                    emptyMsg.classList.remove('d-none');
+                });
+        }
+
+        select.addEventListener('change', function() {
+            cargarCurvaS(this.value);
+        });
+
+        // Cargar la primera obra
+        if (select.options.length > 0) {
+            cargarCurvaS(select.options[0].value);
+        }
+    })();
+    {% endif %}
 });
 </script>
 {% endblock %}

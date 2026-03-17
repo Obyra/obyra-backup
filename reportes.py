@@ -5,7 +5,8 @@ from sqlalchemy import func, desc
 from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario,
-                   Organizacion, OrgMembership)
+                   Organizacion, OrgMembership, ItemPresupuesto, EtapaObra,
+                   TareaPlanSemanal, TareaAvanceSemanal)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia, limpiar_alertas_presupuestos_confirmados
 from services.alertas_dashboard import obtener_alertas_para_dashboard, contar_alertas_por_severidad
 from services.memberships import get_current_org_id
@@ -235,6 +236,9 @@ def dashboard():
     should_warn_reports = reports_service_enabled and (not CHARTS_ENABLED)
     show_reports_banner = is_admin_user and is_dev_env and should_warn_reports
 
+    # Datos financieros para gráficos
+    datos_financieros = calcular_datos_financieros(obras_activas, org_id)
+
     return render_template('reportes/dashboard.html',
                          kpis=kpis,
                          obras_activas=obras_activas,
@@ -250,6 +254,7 @@ def dashboard():
                          charts_enabled=CHARTS_ENABLED,
                          show_reports_banner=show_reports_banner,
                          encargados_obra=encargados_obra,
+                         datos_financieros=datos_financieros,
                          fecha_hoy=date.today())
 
 
@@ -292,6 +297,248 @@ def ver_alertas():
                          alertas_en_riesgo=alertas_en_riesgo,
                          alertas_sobrecosto=alertas_sobrecosto,
                          conteo=conteo)
+
+
+@reportes_bp.route('/api/curva-s/<int:obra_id>')
+@login_required
+def api_curva_s(obra_id):
+    """API: datos de Curva S (Planned Value vs Earned Value vs Actual Cost) por semana"""
+    from flask import jsonify
+    from models.projects import TareaEtapa
+
+    obra = Obra.query.get_or_404(obra_id)
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if obra.organizacion_id != org_id:
+        return jsonify({'error': 'No autorizado'}), 403
+
+    tarea_ids = [t.id for t in TareaEtapa.query.filter_by(obra_id=obra_id).all()]
+
+    semanas = []
+    pv_acum = []
+    ev_acum = []
+    ac_acum = []
+
+    if tarea_ids:
+        # Planned Value semanal
+        pv_data = db.session.query(
+            TareaPlanSemanal.semana,
+            func.sum(TareaPlanSemanal.pv_mo).label('pv')
+        ).filter(
+            TareaPlanSemanal.tarea_id.in_(tarea_ids)
+        ).group_by(TareaPlanSemanal.semana).order_by(TareaPlanSemanal.semana).all()
+
+        # Actual Cost y Earned Value semanal
+        av_data = db.session.query(
+            TareaAvanceSemanal.semana,
+            func.sum(TareaAvanceSemanal.ac_mo).label('ac'),
+            func.sum(TareaAvanceSemanal.ev_mo).label('ev')
+        ).filter(
+            TareaAvanceSemanal.tarea_id.in_(tarea_ids)
+        ).group_by(TareaAvanceSemanal.semana).order_by(TareaAvanceSemanal.semana).all()
+
+        # Unificar semanas
+        all_weeks = sorted(set(
+            [r.semana for r in pv_data] + [r.semana for r in av_data]
+        ))
+
+        pv_dict = {r.semana: float(r.pv or 0) for r in pv_data}
+        ac_dict = {r.semana: float(r.ac or 0) for r in av_data}
+        ev_dict = {r.semana: float(r.ev or 0) for r in av_data}
+
+        acum_pv = 0
+        acum_ev = 0
+        acum_ac = 0
+
+        for w in all_weeks:
+            acum_pv += pv_dict.get(w, 0)
+            acum_ev += ev_dict.get(w, 0)
+            acum_ac += ac_dict.get(w, 0)
+            semanas.append(w.strftime('%d/%m'))
+            pv_acum.append(round(acum_pv, 0))
+            ev_acum.append(round(acum_ev, 0))
+            ac_acum.append(round(acum_ac, 0))
+
+    # Si no hay datos EVM, usar etapas como fallback visual
+    if not semanas:
+        etapas = EtapaObra.query.filter_by(obra_id=obra_id).order_by(EtapaObra.orden).all()
+        if etapas and obra.fecha_inicio:
+            presupuesto = float(obra.presupuesto_total or 0)
+            total_etapas = len(etapas)
+            for i, etapa in enumerate(etapas, 1):
+                label = etapa.fecha_fin_estimada.strftime('%d/%m') if etapa.fecha_fin_estimada else f'Et.{i}'
+                semanas.append(label)
+                pv_acum.append(round(presupuesto * i / total_etapas, 0))
+                # EV based on actual progress
+                progreso = float(etapa.porcentaje_avance_medicion or 0) / 100
+                ev_acum.append(round(presupuesto * (sum(
+                    float(e.porcentaje_avance_medicion or 0) for e in etapas[:i]
+                ) / (100 * total_etapas)), 0))
+            ac_acum = [round(float(obra.costo_real or 0) * (i / total_etapas), 0)
+                       for i in range(1, total_etapas + 1)]
+
+    return jsonify({
+        'obra': obra.nombre,
+        'semanas': semanas,
+        'pv': pv_acum,
+        'ev': ev_acum,
+        'ac': ac_acum,
+    })
+
+
+def calcular_datos_financieros(obras_activas, org_id):
+    """Calcula datos para gráficos financieros del dashboard"""
+    datos = {
+        'presupuesto_vs_real': [],
+        'desglose_presupuesto': {'materiales': 0, 'mano_obra': 0, 'equipos': 0},
+        'desglose_real': {'materiales': 0, 'mano_obra': 0, 'equipos': 0},
+        'gastos_mensuales': [],
+        'dias_stock': [],
+    }
+
+    if not obras_activas:
+        return datos
+
+    obra_ids = [o.id for o in obras_activas]
+
+    # 1) Presupuesto vs Real por obra
+    for obra in obras_activas:
+        pres = float(obra.presupuesto_total or 0)
+        real = float(obra.costo_real or 0)
+        if pres > 0 or real > 0:
+            datos['presupuesto_vs_real'].append({
+                'nombre': obra.nombre[:25],
+                'presupuesto': round(pres, 0),
+                'real': round(real, 0),
+                'porcentaje': round((real / pres) * 100, 1) if pres > 0 else 0,
+            })
+
+    # 2) Desglose por tipo (del presupuesto confirmado como obra)
+    try:
+        presupuesto_ids = [p.id for o in obras_activas
+                          for p in (Presupuesto.query.filter_by(
+                              obra_id=o.id, organizacion_id=org_id
+                          ).all())]
+        if presupuesto_ids:
+            desglose = db.session.query(
+                ItemPresupuesto.tipo,
+                func.sum(ItemPresupuesto.total)
+            ).filter(
+                ItemPresupuesto.presupuesto_id.in_(presupuesto_ids)
+            ).group_by(ItemPresupuesto.tipo).all()
+
+            for tipo, total in desglose:
+                total_f = float(total or 0)
+                if tipo == 'material':
+                    datos['desglose_presupuesto']['materiales'] = round(total_f, 0)
+                elif tipo == 'mano_obra':
+                    datos['desglose_presupuesto']['mano_obra'] = round(total_f, 0)
+                elif tipo == 'equipo':
+                    datos['desglose_presupuesto']['equipos'] = round(total_f, 0)
+    except Exception:
+        db.session.rollback()
+
+    # 3) Desglose real: materiales (UsoInventario), MO (LiquidacionMO), Equipos (EquipmentUsage)
+    try:
+        # Materiales reales
+        costo_materiales = db.session.query(
+            func.coalesce(func.sum(
+                UsoInventario.cantidad_usada * func.coalesce(
+                    UsoInventario.precio_unitario_al_uso,
+                    ItemInventario.precio_promedio
+                )
+            ), 0)
+        ).join(ItemInventario).filter(
+            UsoInventario.obra_id.in_(obra_ids)
+        ).scalar() or 0
+        datos['desglose_real']['materiales'] = round(float(costo_materiales), 0)
+
+        # MO real
+        from models import LiquidacionMO
+        costo_mo = db.session.query(
+            func.coalesce(func.sum(LiquidacionMO.monto_total), 0)
+        ).filter(
+            LiquidacionMO.obra_id.in_(obra_ids),
+            LiquidacionMO.organizacion_id == org_id
+        ).scalar() or 0
+        datos['desglose_real']['mano_obra'] = round(float(costo_mo), 0)
+
+        # Equipos real
+        from models.equipment import Equipment, EquipmentUsage
+        costo_equipos = db.session.query(
+            func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0)
+        ).join(Equipment).filter(
+            EquipmentUsage.project_id.in_(obra_ids)
+        ).scalar() or 0
+        datos['desglose_real']['equipos'] = round(float(costo_equipos), 0)
+    except Exception:
+        db.session.rollback()
+
+    # 4) Gastos mensuales (burn rate) - últimos 6 meses de UsoInventario
+    try:
+        hace_6_meses = date.today() - timedelta(days=180)
+        gastos_mes = db.session.query(
+            func.date_trunc('month', UsoInventario.fecha_uso).label('mes'),
+            func.sum(
+                UsoInventario.cantidad_usada * func.coalesce(
+                    UsoInventario.precio_unitario_al_uso,
+                    ItemInventario.precio_promedio
+                )
+            ).label('total')
+        ).join(ItemInventario).filter(
+            UsoInventario.obra_id.in_(obra_ids),
+            UsoInventario.fecha_uso >= hace_6_meses
+        ).group_by('mes').order_by('mes').all()
+
+        for mes, total in gastos_mes:
+            datos['gastos_mensuales'].append({
+                'mes': mes.strftime('%b %Y') if mes else '',
+                'total': round(float(total or 0), 0),
+            })
+    except Exception:
+        db.session.rollback()
+
+    # 5) Días de stock restante para items críticos
+    try:
+        fecha_30_dias = date.today() - timedelta(days=30)
+        items_activos = ItemInventario.query.filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo == True,
+            ItemInventario.stock_actual > 0
+        ).all()
+
+        item_ids = [i.id for i in items_activos]
+        if item_ids:
+            consumos = db.session.query(
+                UsoInventario.item_id,
+                func.sum(UsoInventario.cantidad_usada).label('consumo_30d')
+            ).filter(
+                UsoInventario.item_id.in_(item_ids),
+                UsoInventario.fecha_uso >= fecha_30_dias
+            ).group_by(UsoInventario.item_id).all()
+
+            consumo_dict = {c.item_id: float(c.consumo_30d) for c in consumos}
+
+            for item in items_activos:
+                consumo_30 = consumo_dict.get(item.id, 0)
+                if consumo_30 > 0:
+                    consumo_diario = consumo_30 / 30.0
+                    dias_restantes = float(item.stock_actual) / consumo_diario
+                    if dias_restantes <= 30:  # Solo mostrar items con menos de 30 días
+                        datos['dias_stock'].append({
+                            'nombre': item.nombre[:30],
+                            'stock': float(item.stock_actual),
+                            'unidad': item.unidad or 'u',
+                            'consumo_diario': round(consumo_diario, 1),
+                            'dias': round(dias_restantes, 0),
+                            'critico': dias_restantes <= 7,
+                        })
+
+            datos['dias_stock'].sort(key=lambda x: x['dias'])
+            datos['dias_stock'] = datos['dias_stock'][:10]
+    except Exception:
+        db.session.rollback()
+
+    return datos
 
 
 def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None):
