@@ -335,6 +335,12 @@
                                 {% endfor %}
                             </tbody>
                         </table>
+                        {% if mostrar_mas %}
+                        <div class="text-center py-3 bg-light border-top">
+                            <i class="fas fa-info-circle text-muted me-1"></i>
+                            <span class="text-muted">Mostrando {{ items_data|length }} de {{ total_items_real }} items. Usá los filtros para acotar resultados.</span>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>

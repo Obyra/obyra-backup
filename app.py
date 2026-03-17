@@ -1506,6 +1506,31 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Marketplace initialization skipped: {e}")
 
+    # Índices de performance para reportes de inventario
+    try:
+        idx_sql = """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_uso_inventario_item_fecha') THEN
+                CREATE INDEX ix_uso_inventario_item_fecha ON uso_inventario(item_id, fecha_uso);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_movimientos_inv_item_fecha') THEN
+                CREATE INDEX ix_movimientos_inv_item_fecha ON movimientos_inventario(item_id, fecha);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_items_inventario_org_activo') THEN
+                CREATE INDEX ix_items_inventario_org_activo ON items_inventario(organizacion_id, activo);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_fichadas_obra_fecha') THEN
+                CREATE INDEX ix_fichadas_obra_fecha ON fichadas(obra_id, fecha_hora);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(idx_sql))
+        db.session.commit()
+        print("[OK] Performance indexes created")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Performance indexes skipped: {e}")
+
     print("[OK] Database tables created successfully")
 
     # Asegurar admin por defecto

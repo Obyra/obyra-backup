@@ -1328,28 +1328,31 @@ def reporte_inventario():
     # Período para análisis de rotación (últimos 90 días)
     fecha_90_dias = date.today() - timedelta(days=90)
 
-    # OPTIMIZACION: Obtener todos los usos de los últimos 90 días en UNA sola query
-    item_ids = [item.id for item in items]
+    # OPTIMIZACION: Subquery de IDs activos de la org (evita IN con miles de IDs)
+    item_ids_subq = db.session.query(ItemInventario.id).filter(
+        ItemInventario.organizacion_id == org_id,
+        ItemInventario.activo == True
+    ).subquery()
+
+    # Obtener usos agrupados
     usos_query = db.session.query(
         UsoInventario.item_id,
         func.coalesce(func.sum(UsoInventario.cantidad_usada), 0).label('total_usos')
     ).filter(
-        UsoInventario.item_id.in_(item_ids),
+        UsoInventario.item_id.in_(item_ids_subq),
         UsoInventario.fecha_uso >= fecha_90_dias
     ).group_by(UsoInventario.item_id).all()
 
-    # Convertir a diccionario para acceso O(1)
     usos_dict = {u.item_id: float(u.total_usos) for u in usos_query}
 
-    # OPTIMIZACION: Obtener últimos movimientos en UNA sola query
+    # Obtener últimos movimientos
     movimientos_query = db.session.query(
         MovimientoInventario.item_id,
         func.max(MovimientoInventario.fecha).label('ultima_fecha')
     ).filter(
-        MovimientoInventario.item_id.in_(item_ids)
+        MovimientoInventario.item_id.in_(item_ids_subq)
     ).group_by(MovimientoInventario.item_id).all()
 
-    # Convertir a diccionario para acceso O(1)
     movimientos_dict = {m.item_id: m.ultima_fecha for m in movimientos_query}
 
     # Calcular métricas por item (sin queries adicionales en el loop)
@@ -1519,15 +1522,21 @@ def reporte_inventario():
 
     estadisticas['valor_inmovilizado'] = valor_inmovilizado
 
+    # Limitar tabla detallada a 100 items para performance del template
+    items_data_table = items_data[:100]
+    mostrar_mas = len(items_data) > 100
+
     return render_template('reportes/inventario.html',
                          items=items,
-                         items_data=items_data,
+                         items_data=items_data_table,
+                         total_items_real=len(items_data),
+                         mostrar_mas=mostrar_mas,
                          estadisticas=estadisticas,
                          por_categoria=por_categoria,
                          top_valor=top_valor,
                          top_rotacion=top_rotacion,
-                         items_criticos_lista=items_criticos_lista,
-                         items_obsoletos=items_obsoletos,
+                         items_criticos_lista=items_criticos_lista[:20],
+                         items_obsoletos=items_obsoletos[:20],
                          dias_stock=dias_stock,
                          movimientos_recientes=movimientos_recientes,
                          tipo=tipo,
@@ -1989,26 +1998,27 @@ def exportar_inventario_pdf():
 
     items = query.filter(ItemInventario.activo == True).all()
 
-    # OPTIMIZACION: Queries batch para evitar N+1
+    # OPTIMIZACION: Subquery + batch queries
     fecha_90_dias = date.today() - timedelta(days=90)
-    item_ids = [item.id for item in items]
+    item_ids_subq = db.session.query(ItemInventario.id).filter(
+        ItemInventario.organizacion_id == org_id,
+        ItemInventario.activo == True
+    ).subquery()
 
-    # Obtener usos en una sola query
     usos_query = db.session.query(
         UsoInventario.item_id,
         func.coalesce(func.sum(UsoInventario.cantidad_usada), 0).label('total_usos')
     ).filter(
-        UsoInventario.item_id.in_(item_ids),
+        UsoInventario.item_id.in_(item_ids_subq),
         UsoInventario.fecha_uso >= fecha_90_dias
     ).group_by(UsoInventario.item_id).all()
     usos_dict = {u.item_id: float(u.total_usos) for u in usos_query}
 
-    # Obtener movimientos en una sola query
     movimientos_query = db.session.query(
         MovimientoInventario.item_id,
         func.max(MovimientoInventario.fecha).label('ultima_fecha')
     ).filter(
-        MovimientoInventario.item_id.in_(item_ids)
+        MovimientoInventario.item_id.in_(item_ids_subq)
     ).group_by(MovimientoInventario.item_id).all()
     movimientos_dict = {m.item_id: m.ultima_fecha for m in movimientos_query}
 
@@ -2109,24 +2119,33 @@ def exportar_inventario_pdf():
 
     organizacion = Organizacion.query.get(org_id) if org_id else None
 
-    html_content = render_template('reportes/pdf_inventario.html',
-                                   items_data=items_data,
-                                   estadisticas=estadisticas,
-                                   por_categoria=por_categoria,
-                                   items_criticos_lista=items_criticos_lista,
-                                   filtros=filtros,
-                                   organizacion=organizacion,
-                                   usuario=current_user,
-                                   fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
+    # Limitar items para el PDF (WeasyPrint es lento con tablas grandes)
+    items_data_pdf = items_data[:50]
+    items_criticos_pdf = items_criticos_lista[:15]
 
-    pdf_buffer = io.BytesIO()
-    HTML(string=html_content).write_pdf(pdf_buffer)
-    pdf_buffer.seek(0)
+    try:
+        html_content = render_template('reportes/pdf_inventario.html',
+                                       items_data=items_data_pdf,
+                                       total_items_real=len(items_data),
+                                       estadisticas=estadisticas,
+                                       por_categoria=por_categoria,
+                                       items_criticos_lista=items_criticos_pdf,
+                                       filtros=filtros,
+                                       organizacion=organizacion,
+                                       usuario=current_user,
+                                       fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
 
-    filename = f"reporte_inventario_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-    return send_file(
-        pdf_buffer,
-        mimetype='application/pdf',
-        as_attachment=True,
-        download_name=filename
-    )
+        pdf_buffer = io.BytesIO()
+        HTML(string=html_content).write_pdf(pdf_buffer)
+        pdf_buffer.seek(0)
+
+        filename = f"reporte_inventario_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        flash(f'Error al generar el PDF: {str(e)[:200]}', 'danger')
+        return redirect(url_for('reportes.reporte_inventario'))
