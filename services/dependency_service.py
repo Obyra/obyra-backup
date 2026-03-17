@@ -175,7 +175,7 @@ def generar_dependencias_desde_niveles(obra_id):
 # ---------------------------------------------------------------------------
 # Cascadeo de fechas (algoritmo principal)
 # ---------------------------------------------------------------------------
-def propagar_fechas_obra(obra_id, force_cascade=False):
+def propagar_fechas_obra(obra_id, force_cascade=False, skip_etapa_id=None):
     """Propaga fechas de etapas según dependencias y niveles.
 
     Algoritmo:
@@ -186,7 +186,8 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
        - O fallback por orden secuencial
     3. Orden topológico (sin predecesoras primero).
     4. Para cada etapa en orden topo:
-       - Skip si fechas_manuales == True (salvo que force_cascade y haya solapamiento)
+       - Skip si es la etapa editada manualmente (skip_etapa_id)
+       - Skip si fechas_manuales == True (salvo force_cascade)
        - Skip si estado == 'finalizada'
        - inicio_más_temprano = max(pred.fecha_fin + 1 + lag)
        - Si inicio_más_temprano > fecha_inicio → shift forward preservando duración
@@ -194,6 +195,7 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
     Args:
         force_cascade: Si True, mueve etapas con fechas_manuales cuando hay
                        solapamiento (la predecesora termina después del inicio).
+        skip_etapa_id: ID de la etapa editada manualmente (no se toca).
     """
     etapas = (
         EtapaObra.query
@@ -268,6 +270,10 @@ def propagar_fechas_obra(obra_id, force_cascade=False):
 
     for eid in orden_topo:
         etapa = etapa_map[eid]
+
+        # No tocar la etapa que el usuario editó manualmente
+        if skip_etapa_id and eid == skip_etapa_id:
+            continue
 
         # No tocar etapas finalizadas
         if etapa.estado == 'finalizada':

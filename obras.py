@@ -2056,7 +2056,7 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
 
 # === ETAPAS ENCADENADAS — PROPAGACIÓN DE FECHAS ===
 
-def propagar_fechas_etapas(obra_id, force_cascade=False):
+def propagar_fechas_etapas(obra_id, force_cascade=False, skip_etapa_id=None):
     """Propaga fechas entre etapas usando dependencias y niveles.
 
     Algoritmo:
@@ -2064,6 +2064,7 @@ def propagar_fechas_etapas(obra_id, force_cascade=False):
     2. Si no, deriva del nivel_encadenamiento (nivel N depende de nivel N-1).
     3. Si no tiene nivel ni dependencias, fallback secuencial por orden.
     4. Orden topológico. Para cada etapa:
+       - Skip si es la etapa editada manualmente (skip_etapa_id)
        - Skip si fechas_manuales == True (salvo solapamiento con force_cascade)
        - Skip si estado == 'finalizada'
        - inicio_más_temprano = max(pred.fin_efectivo + 1 + lag)
@@ -2073,7 +2074,9 @@ def propagar_fechas_etapas(obra_id, force_cascade=False):
     from services.dependency_service import propagar_fechas_obra
     from datetime import timedelta
 
-    etapas_modificadas = propagar_fechas_obra(obra_id, force_cascade=force_cascade)
+    etapas_modificadas = propagar_fechas_obra(
+        obra_id, force_cascade=force_cascade, skip_etapa_id=skip_etapa_id
+    )
 
     details = []
     for etapa in etapas_modificadas:
@@ -4995,62 +4998,38 @@ def editar_fechas_etapa(etapa_id):
         bloquear = data.get('bloquear_fechas')
         if bloquear is not None:
             etapa.fechas_manuales = bool(bloquear)
-
-        # Temporalmente bloquear para que la propagación no pise las fechas
-        etapa.fechas_manuales = True
+        else:
+            etapa.fechas_manuales = True
 
         db.session.commit()
 
-        # Propagar fechas a etapas SUCESORAS solamente
+        # Generar dependencias si faltan
         from services.dependency_service import generar_dependencias_desde_niveles
         deps_creadas = generar_dependencias_desde_niveles(etapa.obra_id)
         if deps_creadas:
             db.session.commit()
 
-        result = propagar_fechas_etapas(etapa.obra_id, force_cascade=True)
+        # Propagar fechas a etapas SUCESORAS — skip la etapa editada
+        # para que la propagación no pise las fechas que el usuario acaba de poner
+        result = propagar_fechas_etapas(
+            etapa.obra_id,
+            force_cascade=True,
+            skip_etapa_id=etapa.id
+        )
         propagadas = result['shifted_count']
         if propagadas > 0:
             db.session.commit()
-
-        # SQL DIRECTO: forzar las fechas del usuario en BD, sin pasar por SQLAlchemy
-        # Esto garantiza que ningún proceso intermedio pueda pisar los valores
-        # Ahora restaurar el valor real de fechas_manuales que el usuario eligió
-        usuario_quiere_bloquear = bool(bloquear) if bloquear is not None else True
-        if fecha_inicio_usuario or fecha_fin_usuario:
-            sets = []
-            params = {"eid": etapa_id}
-            if fecha_inicio_usuario:
-                sets.append("fecha_inicio_estimada = :fi")
-                params["fi"] = fecha_inicio_usuario
-            if fecha_fin_usuario:
-                sets.append("fecha_fin_estimada = :ff")
-                params["ff"] = fecha_fin_usuario
-            sets.append("fechas_manuales = :fm")
-            params["fm"] = usuario_quiere_bloquear
-            db.session.execute(
-                db.text(f"UPDATE etapas_obra SET {', '.join(sets)} WHERE id = :eid"),
-                params
-            )
-            db.session.commit()
-            # Refrescar el objeto SA para que refleje los valores reales de BD
-            db.session.expire(etapa)
 
         # Redistribuir fechas de tareas dentro de esta etapa
         distribuir_datos_etapa_a_tareas(etapa_id, forzar=True)
         db.session.commit()
 
-        # Leer valores finales directo de BD para la respuesta
-        row = db.session.execute(
-            db.text("SELECT fecha_inicio_estimada, fecha_fin_estimada, estado, fechas_manuales FROM etapas_obra WHERE id = :eid"),
-            {"eid": etapa_id}
-        ).fetchone()
-
         return jsonify({
             'ok': True,
-            'fecha_inicio': str(row[0]) if row[0] else None,
-            'fecha_fin': str(row[1]) if row[1] else None,
-            'estado': row[2],
-            'fechas_manuales': row[3],
+            'fecha_inicio': str(etapa.fecha_inicio_estimada) if etapa.fecha_inicio_estimada else None,
+            'fecha_fin': str(etapa.fecha_fin_estimada) if etapa.fecha_fin_estimada else None,
+            'estado': etapa.estado,
+            'fechas_manuales': etapa.fechas_manuales,
             'propagadas': propagadas,
         })
     except Exception as e:
