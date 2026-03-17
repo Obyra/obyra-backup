@@ -402,6 +402,49 @@
                             font-weight: bold;
                         }
                     </style>
+                    <script>
+                    // Definida ANTES de las pills para evitar ReferenceError
+                    function mostrarMaquinaria() {
+                        console.log('=== mostrarMaquinaria() ejecutado ===');
+
+                        // Ocultar tab-content de Bootstrap
+                        var tabContent = document.getElementById('materialesTabContent');
+                        if (tabContent) tabContent.style.display = 'none';
+
+                        // Desactivar todas las tab-panes activas
+                        document.querySelectorAll('#materialesTabContent .tab-pane').forEach(function(p) {
+                            p.classList.remove('show', 'active');
+                        });
+
+                        // Mostrar panel maquinaria
+                        var panel = document.getElementById('panelMaquinaria');
+                        if (panel) {
+                            panel.style.display = 'block';
+                            panel.style.visibility = 'visible';
+                            panel.style.opacity = '1';
+                            console.log('Panel maquinaria visible, children:', panel.children.length, 'innerHTML length:', panel.innerHTML.length);
+                        } else {
+                            console.error('ERROR: #panelMaquinaria no encontrado en el DOM');
+                            alert('Error: panel de maquinaria no encontrado. Recargue la página.');
+                            return;
+                        }
+
+                        // Ocultar paneles auxiliares
+                        var panelReservas = document.getElementById('panelReservasActivas');
+                        var alertasReservas = document.getElementById('alertasReservas');
+                        if (panelReservas) panelReservas.style.display = 'none';
+                        if (alertasReservas) alertasReservas.style.display = 'none';
+
+                        // Desactivar pills de Bootstrap y activar la de maquinaria
+                        document.querySelectorAll('#materialesTab .nav-link').forEach(function(btn) {
+                            btn.classList.remove('active');
+                        });
+                        document.getElementById('maquinaria-tab').classList.add('active');
+
+                        // Scroll al contenido
+                        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                    </script>
                     <ul class="nav nav-pills mb-3" id="materialesTab" role="tablist">
                         <li class="nav-item" role="presentation">
                             <button class="nav-link active btn-sm" id="materiales-tab" data-bs-toggle="pill" data-bs-target="#materiales" type="button" role="tab">
@@ -887,7 +930,10 @@
                     </div>
 
                     <!-- Panel Maquinaria: FUERA del tab-content, controlado por JS puro -->
-                    <div id="panelMaquinaria" style="display: none;">
+                    <div id="panelMaquinaria" style="display: none; min-height: 120px; background: #fff; border: 2px solid #17a2b8; border-radius: 8px; padding: 15px;">
+                        <h5 style="color: #17a2b8; margin-bottom: 15px;">
+                            <i class="fas fa-truck-loading me-2"></i>Maquinaria de esta Obra
+                        </h5>
                         <div class="bg-white text-dark rounded p-3 border" style="min-height: 100px;">
 
                             {% if movimientos_pendientes|length > 0 %}
@@ -972,7 +1018,7 @@
                             </div>
                             {% endif %}
                         </div>
-                    </div>
+                    </div><!-- cierra panelMaquinaria -->
 
                 </div>
             </div>
@@ -4035,44 +4081,6 @@ async function actualizarTablaMateriales(obraId) {
 }
 
 // ========== GESTIÓN DE STOCK EN OBRA ==========
-// Mostrar panel Maquinaria (fuera del sistema de tabs Bootstrap)
-function mostrarMaquinaria() {
-    console.log('=== mostrarMaquinaria() ejecutado ===');
-
-    // Ocultar tab-content de Bootstrap
-    var tabContent = document.getElementById('materialesTabContent');
-    if (tabContent) tabContent.style.display = 'none';
-
-    // Desactivar todas las tab-panes activas
-    document.querySelectorAll('#materialesTabContent .tab-pane').forEach(function(p) {
-        p.classList.remove('show', 'active');
-    });
-
-    // Mostrar panel maquinaria
-    var panel = document.getElementById('panelMaquinaria');
-    if (panel) {
-        panel.style.display = 'block';
-        console.log('Panel maquinaria visible:', panel.offsetHeight, 'px');
-    } else {
-        console.error('ERROR: #panelMaquinaria no encontrado!');
-    }
-
-    // Ocultar paneles auxiliares
-    var panelReservas = document.getElementById('panelReservasActivas');
-    var alertasReservas = document.getElementById('alertasReservas');
-    if (panelReservas) panelReservas.style.display = 'none';
-    if (alertasReservas) alertasReservas.style.display = 'none';
-
-    // Desactivar pills de Bootstrap y activar la de maquinaria
-    document.querySelectorAll('#materialesTab .nav-link').forEach(function(btn) {
-        btn.classList.remove('active');
-    });
-    document.getElementById('maquinaria-tab').classList.add('active');
-
-    // Scroll al contenido
-    if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
 function aceptarMovimiento(movId, nombre) {
     if (!confirm('Confirmar recepcion de "' + nombre + '"?')) return;
     var form = new FormData();
