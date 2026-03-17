@@ -4380,6 +4380,23 @@ def api_editar_datos_tarea(tarea_id):
             tarea.fecha_fin_plan = f
             tarea.fecha_fin_estimada = f
 
+        # Responsable / Operario
+        if 'responsable_id' in data:
+            nuevo_resp = data['responsable_id']
+            if nuevo_resp:
+                tarea.responsable_id = int(nuevo_resp)
+                # También agregar como miembro si no lo es
+                existe = TareaMiembro.query.filter_by(
+                    tarea_id=tarea.id, user_id=int(nuevo_resp)
+                ).first()
+                if not existe:
+                    db.session.add(TareaMiembro(
+                        tarea_id=tarea.id,
+                        user_id=int(nuevo_resp)
+                    ))
+            else:
+                tarea.responsable_id = None
+
         db.session.commit()
 
         return jsonify(

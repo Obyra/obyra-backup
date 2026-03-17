@@ -80,7 +80,7 @@
                                 <!-- Botón editar datos de tarea -->
                                 {% if can_manage %}
                                 <button class="badge bg-white text-primary border border-primary" style="cursor:pointer; font-size:.65rem;"
-                                        onclick="editarDatosTarea({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', {{ tarea.horas_estimadas|float if tarea.horas_estimadas else 0 }}, {{ tarea.cantidad_planificada|float if tarea.cantidad_planificada else 0 }}, '{{ tarea.unidad or 'un' }}', {{ tarea.rendimiento|float if tarea.rendimiento else 0 }}, '{{ tarea.fecha_inicio_plan.strftime('%Y-%m-%d') if tarea.fecha_inicio_plan else '' }}', '{{ tarea.fecha_fin_plan.strftime('%Y-%m-%d') if tarea.fecha_fin_plan else '' }}')"
+                                        onclick="editarDatosTarea({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', {{ tarea.horas_estimadas|float if tarea.horas_estimadas else 0 }}, {{ tarea.cantidad_planificada|float if tarea.cantidad_planificada else 0 }}, '{{ tarea.unidad or 'un' }}', {{ tarea.rendimiento|float if tarea.rendimiento else 0 }}, '{{ tarea.fecha_inicio_plan.strftime('%Y-%m-%d') if tarea.fecha_inicio_plan else '' }}', '{{ tarea.fecha_fin_plan.strftime('%Y-%m-%d') if tarea.fecha_fin_plan else '' }}', {{ tarea.responsable_id or 'null' }})"
                                         title="Editar datos de la tarea">
                                     <i class="fas fa-pen me-1"></i>Editar
                                 </button>

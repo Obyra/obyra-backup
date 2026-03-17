@@ -2200,6 +2200,15 @@
                         <label class="form-label fw-bold"><i class="fas fa-calendar-check me-1"></i>Fecha fin</label>
                         <input type="date" class="form-control" id="edt-fecha-fin">
                     </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold"><i class="fas fa-user-hard-hat me-1"></i>Responsable / Operario</label>
+                        <select class="form-select" id="edt-responsable">
+                            <option value="">— Sin asignar —</option>
+                            {% for op in todos_operarios %}
+                            <option value="{{ op.id }}">{{ op.nombre_completo }} ({{ op.rol }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
                 <div class="alert alert-info mt-3 mb-0 py-2" style="font-size:.8rem;">
                     <i class="fas fa-info-circle me-1"></i>
@@ -4225,7 +4234,7 @@ document.addEventListener('DOMContentLoaded', initGantt);
 
 
 /* ===== Modal Editar Datos de Tarea ===== */
-function editarDatosTarea(tareaId, nombre, horas, cantidad, unidad, rendimiento, fechaInicio, fechaFin) {
+function editarDatosTarea(tareaId, nombre, horas, cantidad, unidad, rendimiento, fechaInicio, fechaFin, responsableId) {
     document.getElementById('edt-tarea-id').value = tareaId;
     document.getElementById('edt-nombre').textContent = nombre;
     document.getElementById('edt-horas').value = horas || '';
@@ -4235,6 +4244,7 @@ function editarDatosTarea(tareaId, nombre, horas, cantidad, unidad, rendimiento,
     document.getElementById('edt-rend-unidad').textContent = unidad || 'un';
     document.getElementById('edt-fecha-inicio').value = fechaInicio || '';
     document.getElementById('edt-fecha-fin').value = fechaFin || '';
+    document.getElementById('edt-responsable').value = responsableId || '';
 
     // Auto-recalcular rendimiento al cambiar horas o cantidad
     var horasInput = document.getElementById('edt-horas');
@@ -4259,6 +4269,7 @@ function editarDatosTarea(tareaId, nombre, horas, cantidad, unidad, rendimiento,
 
 async function guardarDatosTarea() {
     var tareaId = document.getElementById('edt-tarea-id').value;
+    var responsableVal = document.getElementById('edt-responsable').value;
     var data = {
         horas_estimadas: parseFloat(document.getElementById('edt-horas').value) || null,
         cantidad_planificada: parseFloat(document.getElementById('edt-cantidad').value) || null,
@@ -4266,6 +4277,7 @@ async function guardarDatosTarea() {
         rendimiento: parseFloat(document.getElementById('edt-rendimiento').value) || null,
         fecha_inicio: document.getElementById('edt-fecha-inicio').value || null,
         fecha_fin: document.getElementById('edt-fecha-fin').value || null,
+        responsable_id: responsableVal ? parseInt(responsableVal) : null,
     };
 
     try {
