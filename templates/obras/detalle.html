@@ -4421,35 +4421,65 @@ async function cargarItemsDeOC(ocId) {
     try {
         const resp = await fetch('/ordenes-compra/' + ocId + '/items-para-remito');
         const data = await resp.json();
-        if (!data.ok) return;
+        if (!data.ok) { alert('Error al cargar items: ' + (data.error || '')); return; }
 
         // Auto-llenar proveedor
         if (data.proveedor) {
             document.getElementById('rem-proveedor').value = data.proveedor;
         }
 
+        // Normalizar unidad para que matchee con el select
+        function normalizarUnidad(u) {
+            if (!u) return 'u';
+            var ul = u.toLowerCase().replace('²','2').replace('³','3').replace('í','i').replace('ó','o');
+            if (ul.indexOf('m3') >= 0 || ul.indexOf('m³') >= 0 || ul.indexOf('metro cubico') >= 0) return 'm3';
+            if (ul.indexOf('m2') >= 0 || ul.indexOf('m²') >= 0 || ul.indexOf('metro cuadrado') >= 0) return 'm2';
+            if (ul === 'kg' || ul.indexOf('kilo') >= 0) return 'kg';
+            if (ul === 'ml' || ul.indexOf('metro lineal') >= 0 || ul.indexOf('metro l') >= 0) return 'ml';
+            if (ul === 'l' || ul.indexOf('litro') >= 0) return 'l';
+            if (ul.indexOf('bolsa') >= 0) return 'bolsa';
+            if (ul.indexOf('pallet') >= 0) return 'pallet';
+            return 'u';
+        }
+
         // Limpiar items existentes y cargar los de la OC
-        const container = document.getElementById('rem-items');
+        var container = document.getElementById('rem-items');
         container.innerHTML = '';
+
+        if (!data.items || data.items.length === 0) {
+            alert('La OC no tiene items');
+            return;
+        }
+
         data.items.forEach(function(item) {
-            var html = `<div class="row mb-2 rem-item-row">
-                <div class="col-5"><input type="text" class="form-control form-control-sm" placeholder="Descripción" data-field="descripcion" value="${item.descripcion}"></div>
-                <div class="col-2"><input type="number" class="form-control form-control-sm text-center" placeholder="Cant." step="0.1" min="0.1" data-field="cantidad" value="${item.cantidad}"></div>
-                <div class="col-2"><select class="form-select form-select-sm" data-field="unidad">
-                    <option value="u" ${item.unidad=='u'?'selected':''}>u</option><option value="kg" ${item.unidad=='kg'?'selected':''}>kg</option><option value="m2" ${item.unidad=='m2'?'selected':''}>m2</option>
-                    <option value="m3" ${item.unidad=='m3'?'selected':''}>m3</option><option value="ml" ${item.unidad=='ml'?'selected':''}>ml</option><option value="l" ${item.unidad=='l'?'selected':''}>litro</option>
-                    <option value="bolsa" ${item.unidad=='bolsa'?'selected':''}>bolsa</option><option value="pallet" ${item.unidad=='pallet'?'selected':''}>pallet</option>
-                </select></div>
-                <div class="col-2"><input type="text" class="form-control form-control-sm" placeholder="Obs." data-field="observacion"></div>
-                <div class="col-1"><button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('.rem-item-row').remove()"><i class="fas fa-times"></i></button></div>
-                <input type="hidden" data-field="oc_item_id" value="${item.oc_item_id}">
-                <input type="hidden" data-field="item_inventario_id" value="${item.item_inventario_id || ''}">
-                <input type="hidden" data-field="precio_unitario" value="${item.precio_unitario}">
-            </div>`;
-            container.insertAdjacentHTML('beforeend', html);
+            var unidadNorm = normalizarUnidad(item.unidad);
+            var desc = (item.descripcion || '').replace(/"/g, '&quot;');
+            var row = document.createElement('div');
+            row.className = 'row mb-2 rem-item-row';
+            row.innerHTML =
+                '<div class="col-5"><input type="text" class="form-control form-control-sm" placeholder="Descripción" data-field="descripcion" value="' + desc + '"></div>' +
+                '<div class="col-2"><input type="number" class="form-control form-control-sm text-center" placeholder="Cant." step="0.1" min="0.1" data-field="cantidad" value="' + (item.cantidad || 0) + '"></div>' +
+                '<div class="col-2"><select class="form-select form-select-sm" data-field="unidad">' +
+                    '<option value="u"' + (unidadNorm=='u'?' selected':'') + '>u</option>' +
+                    '<option value="kg"' + (unidadNorm=='kg'?' selected':'') + '>kg</option>' +
+                    '<option value="m2"' + (unidadNorm=='m2'?' selected':'') + '>m2</option>' +
+                    '<option value="m3"' + (unidadNorm=='m3'?' selected':'') + '>m3</option>' +
+                    '<option value="ml"' + (unidadNorm=='ml'?' selected':'') + '>ml</option>' +
+                    '<option value="l"' + (unidadNorm=='l'?' selected':'') + '>litro</option>' +
+                    '<option value="bolsa"' + (unidadNorm=='bolsa'?' selected':'') + '>bolsa</option>' +
+                    '<option value="pallet"' + (unidadNorm=='pallet'?' selected':'') + '>pallet</option>' +
+                '</select></div>' +
+                '<div class="col-2"><input type="text" class="form-control form-control-sm" placeholder="Obs." data-field="observacion"></div>' +
+                '<div class="col-1"><button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.rem-item-row\').remove()"><i class="fas fa-times"></i></button></div>' +
+                '<input type="hidden" data-field="oc_item_id" value="' + (item.oc_item_id || '') + '">' +
+                '<input type="hidden" data-field="item_inventario_id" value="' + (item.item_inventario_id || '') + '">' +
+                '<input type="hidden" data-field="precio_unitario" value="' + (item.precio_unitario || 0) + '">';
+            container.appendChild(row);
         });
+
     } catch(e) {
         console.error('Error cargando items de OC:', e);
+        alert('Error al cargar items de la OC: ' + e.message);
     }
 }
 
