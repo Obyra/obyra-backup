@@ -541,12 +541,14 @@ def oc_pdf(id):
         logo_base64=logo_base64,
     )
 
+    from flask import send_file
     pdf_buffer = io.BytesIO()
     HTML(string=html_string).write_pdf(pdf_buffer, presentational_hints=True)
     pdf_buffer.seek(0)
 
-    from flask import make_response
-    response = make_response(pdf_buffer.read())
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'inline; filename=OC_{oc.numero}.pdf'
-    return response
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'OC_{oc.numero}.pdf'
+    )

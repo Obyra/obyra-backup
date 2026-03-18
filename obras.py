@@ -6031,14 +6031,17 @@ def remito_pdf(obra_id, remito_id):
         oc_numero=oc_numero,
     )
 
+    from flask import send_file
     pdf_buffer = io.BytesIO()
     HTML(string=html_string).write_pdf(pdf_buffer, presentational_hints=True)
     pdf_buffer.seek(0)
 
-    response = make_response(pdf_buffer.read())
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'inline; filename=Remito_{remito.numero_remito}.pdf'
-    return response
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'Remito_{remito.numero_remito}.pdf'
+    )
 
 
 # ============================================================
