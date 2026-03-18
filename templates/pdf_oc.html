@@ -6,7 +6,7 @@
     <style>
         @page {
             size: A4;
-            margin: 8mm 12mm 10mm 12mm;
+            margin: 0;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -17,12 +17,13 @@
         }
         .header-wrapper {
             background: #1A374D;
-            padding: 12px 20px;
-            margin: -8mm -15mm 8px -15mm;
-            width: calc(100% + 30mm);
+            padding: 12px 18px;
+            width: 100%;
             display: table;
             table-layout: fixed;
-            overflow: hidden;
+        }
+        .page-content {
+            padding: 8px 12mm 10mm 12mm;
         }
         .header-left {
             display: table-cell;
@@ -236,6 +237,7 @@
         </div>
     </div>
 
+    <div class="page-content">
     <!-- Info general -->
     <div class="info-bar">
         <table>
@@ -330,5 +332,6 @@
     <div class="footer-section">
         Documento generado por OBYRA | {{ nombre_org }} | {{ oc.fecha_emision.strftime('%d/%m/%Y') if oc.fecha_emision else '' }}
     </div>
+    </div><!-- /page-content -->
 </body>
 </html>
