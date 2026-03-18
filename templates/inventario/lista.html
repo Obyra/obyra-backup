@@ -42,6 +42,9 @@
                         <i class="fas fa-file-excel me-1"></i>Importar Excel
                     </button>
                     <input type="file" id="inputExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarExcel(this)">
+                    <button type="button" class="btn btn-outline-danger ms-1" onclick="limpiarMarcas()">
+                        <i class="fas fa-broom me-1"></i>Limpiar Marcas
+                    </button>
                     {% endif %}
                     {% endif %}
                 </div>
@@ -929,6 +932,27 @@ function seedConstructoras() {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-building me-1"></i>Cargar Ref. Constructoras';
         });
+}
+
+async function limpiarMarcas() {
+    if (!confirm('¿Limpiar marcas comerciales de todos los items del inventario?\n\nEjemplo: "Viga Sinis-Kaufmann HT20" → "Viga HT20"')) return;
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    try {
+        var resp = await fetch('{{ url_for("inventario.limpiar_marcas") }}', {
+            method: 'POST',
+            headers: csrfToken ? {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'} : {'Content-Type': 'application/json'}
+        });
+        var data = await resp.json();
+        if (data.ok) {
+            alert('Limpieza completada:\n' + data.limpiados + ' items modificados de ' + data.total + ' totales');
+            if (data.limpiados > 0) location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Error desconocido'));
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
 }
 
 async function importarExcel(input) {

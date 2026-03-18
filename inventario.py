@@ -2258,6 +2258,36 @@ def seed_constructoras():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+def limpiar_marca_item(nombre):
+    """Elimina marcas comerciales conocidas del nombre de un item de inventario."""
+    import re
+    # Marcas comunes de construcción en Argentina
+    marcas = [
+        'Sinis-Kaufmann', 'Sinis Kaufmann', 'Kaufmann', 'Sinis',
+        'Klaukol', 'Weber', 'Loma Negra', 'Acindar', 'Siderar', 'Ternium',
+        'Isover', 'Durlock', 'Knauf', 'Tigre', 'Amanco', 'Rotoplas',
+        'Cerro Negro', 'Ctibor', 'Fanelli', 'FV', 'Griferia FV',
+        'Ferrum', 'Roca', 'DECA', 'Briggs', 'Piazza',
+        'Aluar', 'Modena', 'De Angeli', 'Rehau', 'Veka',
+        'Sherwin Williams', 'Alba', 'Tersuave', 'Sinteplast', 'Colorin',
+        'Ceresita', 'Sika', 'Mapei', 'Plavicon',
+        'Leiten', 'Peisa', 'Rheem', 'Orbis', 'Eskabe', 'Emege',
+        'Daikin', 'Carrier', 'Samsung', 'LG', 'Midea', 'Surrey',
+        'Schneider', 'Legrand', 'Siemens', 'ABB', 'Bticino',
+        'Stanley', 'Black & Decker', 'DeWalt', 'Bosch', 'Makita',
+        'BOMAG', 'Caterpillar', 'CAT', 'Volvo', 'Komatsu',
+    ]
+    resultado = nombre
+    for marca in sorted(marcas, key=len, reverse=True):  # Más largas primero
+        patron = re.compile(re.escape(marca), re.IGNORECASE)
+        resultado = patron.sub('', resultado)
+    # Limpiar espacios dobles, guiones sueltos, etc.
+    resultado = re.sub(r'\s*-\s*-\s*', ' ', resultado)
+    resultado = re.sub(r'\s{2,}', ' ', resultado)
+    resultado = resultado.strip(' -,')
+    return resultado
+
+
 @inventario_bp.route('/importar-excel', methods=['POST'])
 @login_required
 def importar_excel():
@@ -2323,9 +2353,10 @@ def importar_excel():
 
         # Procesar filas
         for fila in filas:
-            nombre = str(fila.get('nombre', '')).strip()
-            if not nombre:
+            nombre_raw = str(fila.get('nombre', '')).strip()
+            if not nombre_raw:
                 continue
+            nombre = limpiar_marca_item(nombre_raw)
 
             try:
                 unidad = str(fila.get('unidad', 'u')).strip() or 'u'
@@ -2397,6 +2428,27 @@ def importar_excel():
         db.session.rollback()
         current_app.logger.exception(f"Error importando Excel: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@inventario_bp.route('/limpiar-marcas', methods=['POST'])
+@login_required
+def limpiar_marcas():
+    """Limpia marcas comerciales de todos los items del inventario. Solo super_admin."""
+    if not current_user.is_super_admin:
+        return jsonify({'ok': False, 'error': 'Solo super admin'}), 403
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    items = ItemInventario.query.filter_by(organizacion_id=org_id, activo=True).all()
+
+    limpiados = 0
+    for item in items:
+        nombre_limpio = limpiar_marca_item(item.nombre)
+        if nombre_limpio != item.nombre:
+            item.nombre = nombre_limpio
+            limpiados += 1
+
+    db.session.commit()
+    return jsonify({'ok': True, 'limpiados': limpiados, 'total': len(items)})
 
 
 @inventario_bp.route('/deposito')
