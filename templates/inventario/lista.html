@@ -9,6 +9,9 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2><i class="fas fa-boxes me-2"></i>Gestión de Inventario</h2>
                 <div>
+                    <a href="{{ url_for('inventario.deposito') }}" class="btn btn-info me-2 text-white">
+                        <i class="fas fa-warehouse me-1"></i>Depósito
+                    </a>
                     <a href="{{ url_for('inventario.alertas_stock') }}" class="btn btn-warning me-2" id="btnAlertasStock">
                         <i class="fas fa-exclamation-triangle me-1"></i>Alertas
                         <span class="badge bg-danger ms-1" id="badgeAlertas" style="display:none;">0</span>

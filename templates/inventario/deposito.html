@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Depósito General - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-warehouse me-2"></i>Depósito General</h2>
+                <div>
+                    <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-arrow-left me-1"></i>Inventario
+                    </a>
+                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Registrar Compra
+                    </a>
+                </div>
+            </div>
+
+            <!-- Resumen -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Items en Depósito</h5>
+                            <h2>{{ total_items }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Valor Total en Stock</h5>
+                            <h2>$ {{ "{:,.0f}".format(valor_total) }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Obras Activas</h5>
+                            <h2>{{ obras|length }}</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla de stock -->
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>Stock Disponible para Traslado</h5>
+                    <input type="text" id="buscarItem" class="form-control form-control-sm" style="max-width:250px;" placeholder="Buscar material..." onkeyup="filtrarItems()">
+                </div>
+                <div class="card-body p-0">
+                    {% if items %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0" id="tablaDeposito">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Material</th>
+                                    <th class="text-center">Stock Depósito</th>
+                                    <th class="text-center">En Obras</th>
+                                    <th class="text-center">Precio Unit.</th>
+                                    <th class="text-center">Valor</th>
+                                    <th class="text-center">Trasladar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr class="item-row">
+                                    <td>
+                                        <strong>{{ item.nombre }}</strong>
+                                        <br><small class="text-muted">{{ item.codigo or '-' }} | {{ item.unidad }}</small>
+                                        {% if item.categoria %}
+                                        <br><span class="badge bg-light text-dark" style="font-size:.65rem;">{{ item.categoria.nombre }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success fs-6">{{ "%.2f"|format(item.stock_actual) }} {{ item.unidad }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% set en_obras = stock_obras_map.get(item.id, 0) %}
+                                        {% if en_obras > 0 %}
+                                        <span class="badge bg-info">{{ "%.2f"|format(en_obras) }} {{ item.unidad }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        $ {{ "{:,.2f}".format(item.precio_promedio or 0) }}
+                                    </td>
+                                    <td class="text-center">
+                                        $ {{ "{:,.0f}".format((item.stock_actual or 0) * (item.precio_promedio or 0)) }}
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="abrirTraslado({{ item.id }}, '{{ item.nombre }}', {{ item.stock_actual or 0 }}, '{{ item.unidad }}')">
+                                            <i class="fas fa-truck me-1"></i>Trasladar
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>No hay items con stock en el depósito general.</p>
+                        <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>Registrar primera compra
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Movimientos recientes -->
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Últimos Movimientos</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if movimientos %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Material</th>
+                                    <th class="text-center">Tipo</th>
+                                    <th class="text-center">Cantidad</th>
+                                    <th>Motivo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mov in movimientos %}
+                                <tr>
+                                    <td><small>{{ mov.fecha.strftime('%d/%m/%Y %H:%M') if mov.fecha else '-' }}</small></td>
+                                    <td><strong>{{ mov.item.nombre if mov.item else '-' }}</strong></td>
+                                    <td class="text-center">
+                                        {% if mov.tipo == 'entrada' %}
+                                        <span class="badge bg-success">Entrada</span>
+                                        {% elif mov.tipo == 'salida' %}
+                                        <span class="badge bg-danger">Salida</span>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark">Ajuste</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ "%.2f"|format(mov.cantidad or 0) }}</td>
+                                    <td><small class="text-muted">{{ mov.motivo or mov.observaciones or '-' }}</small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center py-3 text-muted mb-0">Sin movimientos recientes</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Trasladar a Obra -->
+<div class="modal fade" id="modalTraslado" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title"><i class="fas fa-truck me-2"></i>Trasladar a Obra</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formTraslado" method="POST">
+                <div class="modal-body">
+                    <p class="mb-2">Material: <strong id="trasladoItemNombre"></strong></p>
+                    <p class="mb-3">Disponible: <span class="badge bg-success" id="trasladoDisponible"></span></p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Obra destino *</label>
+                        <select class="form-select" name="obra_destino_id" required>
+                            <option value="">Seleccionar obra...</option>
+                            {% for obra in obras %}
+                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Cantidad *</label>
+                        <input type="number" class="form-control" name="cantidad" id="trasladoCantidad" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observaciones</label>
+                        <input type="text" class="form-control" name="observaciones" placeholder="Motivo del traslado...">
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="fas fa-truck me-1"></i>Confirmar Traslado
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function filtrarItems() {
+    var filtro = document.getElementById('buscarItem').value.toLowerCase();
+    document.querySelectorAll('.item-row').forEach(function(row) {
+        var texto = row.textContent.toLowerCase();
+        row.style.display = texto.includes(filtro) ? '' : 'none';
+    });
+}
+
+function abrirTraslado(itemId, nombre, disponible, unidad) {
+    document.getElementById('trasladoItemNombre').textContent = nombre;
+    document.getElementById('trasladoDisponible').textContent = disponible.toFixed(2) + ' ' + unidad;
+    document.getElementById('trasladoCantidad').max = disponible;
+    document.getElementById('trasladoCantidad').value = '';
+    document.getElementById('formTraslado').action = '/inventario/trasladar/' + itemId;
+    new bootstrap.Modal(document.getElementById('modalTraslado')).show();
+}
+</script>
+{% endblock %}

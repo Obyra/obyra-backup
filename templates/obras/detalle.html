@@ -409,6 +409,9 @@
                             </button>
                         </li>
                         <li class="nav-item ms-auto d-flex align-items-center gap-2">
+                            <button class="btn btn-sm btn-warning text-dark" onclick="abrirConsumoMateriales()" title="Registrar consumo de materiales">
+                                <i class="fas fa-minus-circle me-1"></i>Registrar Consumo
+                            </button>
                             <button class="btn btn-sm btn-primary" onclick="abrirGestionMateriales({{ obra.id }})" title="Analizar stock, reservar y solicitar compra">
                                 <i class="fas fa-boxes me-1"></i>Gestionar Materiales
                             </button>
@@ -1177,6 +1180,19 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold small">Notas / Observaciones</label>
                     <textarea class="form-control" id="rem-notas" rows="2" placeholder="Ej: Faltaron 2 bolsas de cemite..."></textarea>
+                </div>
+
+                <!-- Vincular a OC -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Vincular a Orden de Compra (opcional)</label>
+                    <select class="form-select" id="rem-oc" onchange="cargarItemsDeOC(this.value)">
+                        <option value="">— Sin vincular —</option>
+                        {% for oc in ordenes_compra_list %}
+                        {% if oc.estado in ('emitida', 'recibida_parcial', 'completada') %}
+                        <option value="{{ oc.id }}">{{ oc.numero }} — {{ oc.proveedor_oc.razon_social if oc.proveedor_oc else 'Sin proveedor' }} ({{ oc.estado }})</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <!-- Items -->
@@ -4387,6 +4403,43 @@ function promptNivel(etapaId, nivelActual) {
 // REMITOS
 // ============================================================
 
+async function cargarItemsDeOC(ocId) {
+    if (!ocId) return;
+    try {
+        const resp = await fetch('/ordenes-compra/' + ocId + '/items-para-remito');
+        const data = await resp.json();
+        if (!data.ok) return;
+
+        // Auto-llenar proveedor
+        if (data.proveedor) {
+            document.getElementById('rem-proveedor').value = data.proveedor;
+        }
+
+        // Limpiar items existentes y cargar los de la OC
+        const container = document.getElementById('rem-items');
+        container.innerHTML = '';
+        data.items.forEach(function(item) {
+            var html = `<div class="row mb-2 rem-item-row">
+                <div class="col-5"><input type="text" class="form-control form-control-sm" placeholder="Descripción" data-field="descripcion" value="${item.descripcion}"></div>
+                <div class="col-2"><input type="number" class="form-control form-control-sm text-center" placeholder="Cant." step="0.1" min="0.1" data-field="cantidad" value="${item.cantidad}"></div>
+                <div class="col-2"><select class="form-select form-select-sm" data-field="unidad">
+                    <option value="u" ${item.unidad=='u'?'selected':''}>u</option><option value="kg" ${item.unidad=='kg'?'selected':''}>kg</option><option value="m2" ${item.unidad=='m2'?'selected':''}>m2</option>
+                    <option value="m3" ${item.unidad=='m3'?'selected':''}>m3</option><option value="ml" ${item.unidad=='ml'?'selected':''}>ml</option><option value="l" ${item.unidad=='l'?'selected':''}>litro</option>
+                    <option value="bolsa" ${item.unidad=='bolsa'?'selected':''}>bolsa</option><option value="pallet" ${item.unidad=='pallet'?'selected':''}>pallet</option>
+                </select></div>
+                <div class="col-2"><input type="text" class="form-control form-control-sm" placeholder="Obs." data-field="observacion"></div>
+                <div class="col-1"><button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('.rem-item-row').remove()"><i class="fas fa-times"></i></button></div>
+                <input type="hidden" data-field="oc_item_id" value="${item.oc_item_id}">
+                <input type="hidden" data-field="item_inventario_id" value="${item.item_inventario_id || ''}">
+                <input type="hidden" data-field="precio_unitario" value="${item.precio_unitario}">
+            </div>`;
+            container.insertAdjacentHTML('beforeend', html);
+        });
+    } catch(e) {
+        console.error('Error cargando items de OC:', e);
+    }
+}
+
 function agregarItemRemito() {
     var container = document.getElementById('rem-items');
     var html = `<div class="row mb-2 rem-item-row">
@@ -4415,7 +4468,15 @@ function guardarRemito() {
         var cant = parseFloat(row.querySelector('[data-field="cantidad"]').value) || 0;
         var unid = row.querySelector('[data-field="unidad"]').value;
         var obs = row.querySelector('[data-field="observacion"]').value.trim();
-        if (desc && cant > 0) items.push({ descripcion: desc, cantidad: cant, unidad: unid, observacion: obs });
+        var ocItemId = row.querySelector('[data-field="oc_item_id"]');
+        var itemInvId = row.querySelector('[data-field="item_inventario_id"]');
+        var precioUnit = row.querySelector('[data-field="precio_unitario"]');
+        if (desc && cant > 0) items.push({
+            descripcion: desc, cantidad: cant, unidad: unid, observacion: obs,
+            oc_item_id: ocItemId ? (ocItemId.value || null) : null,
+            item_inventario_id: itemInvId ? (itemInvId.value || null) : null,
+            precio_unitario: precioUnit ? (parseFloat(precioUnit.value) || null) : null,
+        });
     });
 
     if (!items.length) { alert('Agregá al menos un item'); return; }
@@ -4426,6 +4487,7 @@ function guardarRemito() {
         fecha: fecha,
         estado: document.getElementById('rem-estado').value,
         requerimiento_id: document.getElementById('rem-requerimiento').value || null,
+        orden_compra_id: document.getElementById('rem-oc').value || null,
         recibido_por_id: document.getElementById('rem-recibido-por').value || null,
         notas: document.getElementById('rem-notas').value.trim(),
         items: items,
@@ -4498,6 +4560,163 @@ document.addEventListener('DOMContentLoaded', function() {
         fechaInput.value = new Date().toISOString().split('T')[0];
     }
 });
+
+// ═══════════════════════════════════════════════════════
+// CONSUMO BATCH DE MATERIALES
+// ═══════════════════════════════════════════════════════
+async function abrirConsumoMateriales() {
+    const obraId = {{ obra.id }};
+    const tbody = document.getElementById('consumoBatchBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><i class="fas fa-spinner fa-spin me-2"></i>Cargando...</td></tr>';
+
+    new bootstrap.Modal(document.getElementById('modalConsumoBatch')).show();
+
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/stock-obra`);
+        const data = await response.json();
+
+        if (!data.ok || !data.stock || data.stock.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No hay materiales con stock en esta obra</td></tr>';
+            return;
+        }
+
+        const conStock = data.stock.filter(s => (s.cantidad_disponible || 0) > 0);
+        if (conStock.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No hay materiales disponibles para consumir</td></tr>';
+            return;
+        }
+
+        let html = '';
+        conStock.forEach(s => {
+            const disp = (s.cantidad_disponible || 0).toFixed(2);
+            html += `
+                <tr data-stock-id="${s.id}">
+                    <td>
+                        <div class="form-check">
+                            <input class="form-check-input consumo-check" type="checkbox" data-stock-id="${s.id}">
+                        </div>
+                    </td>
+                    <td>
+                        <strong>${s.item_nombre}</strong>
+                        <br><small class="text-muted">${s.item_codigo}</small>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge bg-success">${disp} ${s.unidad}</span>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm consumo-cantidad"
+                               data-stock-id="${s.id}" data-max="${disp}" data-unidad="${s.unidad}"
+                               min="0.01" max="${disp}" step="0.01" placeholder="0" disabled>
+                    </td>
+                    <td><small>${s.unidad}</small></td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+
+        // Habilitar/deshabilitar input al checkear
+        document.querySelectorAll('.consumo-check').forEach(chk => {
+            chk.addEventListener('change', function() {
+                const input = document.querySelector(`.consumo-cantidad[data-stock-id="${this.dataset.stockId}"]`);
+                input.disabled = !this.checked;
+                if (this.checked) input.focus();
+                else input.value = '';
+            });
+        });
+
+    } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${error.message}</td></tr>`;
+    }
+}
+
+async function confirmarConsumoBatch() {
+    const obraId = {{ obra.id }};
+    const items = [];
+    const obs = document.getElementById('consumoBatchObs').value || '';
+
+    document.querySelectorAll('.consumo-check:checked').forEach(chk => {
+        const stockId = chk.dataset.stockId;
+        const input = document.querySelector(`.consumo-cantidad[data-stock-id="${stockId}"]`);
+        const cantidad = parseFloat(input.value);
+        const max = parseFloat(input.dataset.max);
+
+        if (cantidad > 0 && cantidad <= max) {
+            items.push({ stock_obra_id: parseInt(stockId), cantidad: cantidad, observaciones: obs });
+        }
+    });
+
+    if (items.length === 0) {
+        alert('Seleccioná al menos un material y cargá la cantidad');
+        return;
+    }
+
+    const btn = document.getElementById('btnConfirmarConsumo');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Procesando...';
+
+    try {
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+        const response = await fetch(`/obras/api/obras/${obraId}/consumo-batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ items: items })
+        });
+        const data = await response.json();
+
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalConsumoBatch')).hide();
+            alert(`Se consumieron ${data.items.length} materiales correctamente`);
+            location.reload();
+        } else {
+            throw new Error(data.error || 'Error al registrar consumo');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>Confirmar Consumo';
+    }
+}
 </script>
+
+<!-- Modal Consumo Batch -->
+<div class="modal fade" id="modalConsumoBatch" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark py-2">
+                <h5 class="modal-title"><i class="fas fa-minus-circle me-2"></i>Registrar Consumo de Materiales</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:40px"></th>
+                                <th>Material</th>
+                                <th class="text-center">Disponible</th>
+                                <th style="width:120px">Cantidad</th>
+                                <th>Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="consumoBatchBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top">
+                    <label class="form-label small mb-1">Observaciones (opcional)</label>
+                    <input type="text" class="form-control form-control-sm" id="consumoBatchObs" placeholder="Ej: Consumo semanal, uso en fundaciones...">
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-sm" id="btnConfirmarConsumo" onclick="confirmarConsumoBatch()">
+                    <i class="fas fa-check me-1"></i>Confirmar Consumo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 

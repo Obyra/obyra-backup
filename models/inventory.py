@@ -1306,6 +1306,7 @@ class Remito(db.Model):
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     requerimiento_id = db.Column(db.Integer, db.ForeignKey('requerimientos_compra.id'), nullable=True)
+    orden_compra_id = db.Column(db.Integer, db.ForeignKey('ordenes_compra.id'), nullable=True)
 
     numero_remito = db.Column(db.String(50), nullable=False)       # Nro del proveedor
     proveedor = db.Column(db.String(200), nullable=False)
@@ -1324,6 +1325,7 @@ class Remito(db.Model):
     organizacion = db.relationship('Organizacion')
     obra = db.relationship('Obra', backref=db.backref('remitos', lazy='dynamic'))
     requerimiento = db.relationship('RequerimientoCompra', backref='remitos')
+    orden_compra = db.relationship('OrdenCompra', backref=db.backref('remitos_vinculados', lazy='dynamic'))
     proveedor_ref = db.relationship('ProveedorOC', foreign_keys=[proveedor_oc_id])
     recibido_por = db.relationship('Usuario', foreign_keys=[recibido_por_id])
     created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
@@ -1356,10 +1358,15 @@ class RemitoItem(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     remito_id = db.Column(db.Integer, db.ForeignKey('remitos.id', ondelete='CASCADE'), nullable=False)
+    oc_item_id = db.Column(db.Integer, db.ForeignKey('orden_compra_items.id'), nullable=True)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
     descripcion = db.Column(db.String(300), nullable=False)
     cantidad = db.Column(db.Numeric(10, 3), nullable=False)
     unidad = db.Column(db.String(20), default='u')                # u, kg, m2, m3, ml, l, bolsa, etc.
+    precio_unitario = db.Column(db.Numeric(15, 2), nullable=True)
     observacion = db.Column(db.String(300))                        # Observación por item
 
     # Relaciones
     remito = db.relationship('Remito', back_populates='items')
+    oc_item = db.relationship('OrdenCompraItem', backref='remito_items')
+    item_inventario = db.relationship('ItemInventario')

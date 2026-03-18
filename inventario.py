@@ -2256,3 +2256,59 @@ def seed_constructoras():
         db.session.rollback()
         current_app.logger.error(f"Error en seed_constructoras: {e}", exc_info=True)
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@inventario_bp.route('/deposito')
+@login_required
+def deposito():
+    """Vista del depósito general — stock disponible para trasladar a obras."""
+    if not current_user.puede_acceder_modulo('inventario'):
+        flash('No tienes acceso al módulo de inventario.', 'danger')
+        return redirect(url_for('home'))
+
+    from models.inventory import StockObra
+    from models.projects import Obra
+    from sqlalchemy import func
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    # Items con stock > 0 en inventario general
+    items = ItemInventario.query.filter(
+        ItemInventario.organizacion_id == org_id,
+        ItemInventario.activo == True,
+        ItemInventario.stock_actual > 0
+    ).order_by(ItemInventario.nombre).all()
+
+    # Stock distribuido en obras (para info)
+    stock_en_obras = db.session.query(
+        StockObra.item_inventario_id,
+        func.sum(StockObra.cantidad_disponible).label('total_en_obras')
+    ).join(Obra, StockObra.obra_id == Obra.id)\
+     .filter(Obra.organizacion_id == org_id)\
+     .group_by(StockObra.item_inventario_id).all()
+    stock_obras_map = {s.item_inventario_id: float(s.total_en_obras or 0) for s in stock_en_obras}
+
+    # Obras disponibles para traslado
+    obras = Obra.query.filter_by(
+        organizacion_id=org_id
+    ).filter(Obra.estado.in_(['en_curso', 'pendiente', 'activa'])
+    ).order_by(Obra.nombre).all()
+
+    # Movimientos recientes
+    movimientos = MovimientoInventario.query.join(
+        ItemInventario
+    ).filter(
+        ItemInventario.organizacion_id == org_id
+    ).order_by(MovimientoInventario.fecha.desc()).limit(20).all()
+
+    # Totales
+    total_items = len(items)
+    valor_total = sum(float(i.stock_actual or 0) * float(i.precio_promedio or 0) for i in items)
+
+    return render_template('inventario/deposito.html',
+                         items=items,
+                         stock_obras_map=stock_obras_map,
+                         obras=obras,
+                         movimientos=movimientos,
+                         total_items=total_items,
+                         valor_total=valor_total)

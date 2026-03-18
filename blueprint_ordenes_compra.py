@@ -327,7 +327,7 @@ def cancelar(id):
 @ordenes_compra_bp.route('/<int:id>/recepcion', methods=['GET', 'POST'])
 @login_required
 def recepcion(id):
-    from models.inventory import OrdenCompra, RecepcionOC, RecepcionOCItem, StockObra
+    from models.inventory import OrdenCompra, RecepcionOC, RecepcionOCItem, StockObra, MovimientoStockObra
 
     if not _tiene_permiso_oc():
         flash('No tiene permisos.', 'danger')
@@ -409,6 +409,20 @@ def recepcion(id):
                             fecha_ultimo_traslado=datetime.utcnow(),
                         )
                         db.session.add(stock)
+                    db.session.flush()
+
+                    # Registrar movimiento de entrada con precio de OC
+                    mov_entrada = MovimientoStockObra(
+                        stock_obra_id=stock.id,
+                        tipo='entrada',
+                        cantidad=float(cant),
+                        fecha=datetime.utcnow(),
+                        usuario_id=current_user.id,
+                        observaciones=f'Recepción OC {oc.numero}' + (f' - Remito: {remito}' if remito else ''),
+                        precio_unitario=float(oc_item.precio_unitario or 0),
+                        moneda=oc.moneda or 'ARS'
+                    )
+                    db.session.add(mov_entrada)
 
             if not alguno_recibido:
                 db.session.rollback()
@@ -461,3 +475,35 @@ def recepcion(id):
 
     # GET
     return render_template('ordenes_compra/recepcion.html', oc=oc)
+
+
+@ordenes_compra_bp.route('/<int:id>/items-para-remito')
+@login_required
+def items_para_remito(id):
+    """Retorna items de una OC para pre-llenar un remito."""
+    from models.inventory import OrdenCompra
+
+    oc = OrdenCompra.query.get_or_404(id)
+    if oc.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin acceso'}), 403
+
+    items = []
+    for item in oc.items:
+        items.append({
+            'oc_item_id': item.id,
+            'item_inventario_id': item.item_inventario_id,
+            'descripcion': item.descripcion,
+            'cantidad': float(item.cantidad or 0),
+            'cantidad_recibida': float(item.cantidad_recibida or 0),
+            'pendiente': float(item.pendiente_recibir) if hasattr(item, 'pendiente_recibir') else float((item.cantidad or 0) - (item.cantidad_recibida or 0)),
+            'unidad': item.unidad or 'u',
+            'precio_unitario': float(item.precio_unitario or 0),
+        })
+
+    return jsonify({
+        'ok': True,
+        'oc_numero': oc.numero,
+        'proveedor': oc.proveedor_oc.razon_social if oc.proveedor_oc else '',
+        'moneda': oc.moneda or 'ARS',
+        'items': items
+    })

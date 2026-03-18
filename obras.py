@@ -65,6 +65,20 @@ from services import wizard_budgeting
 from services.project_shared_service import ProjectSharedService
 from utils.security_logger import log_data_modification, log_data_deletion
 
+def calcular_costo_materiales(obra_id):
+    """Calcula el costo real de materiales consumidos desde UsoInventario."""
+    from decimal import Decimal
+    resultado = db.session.query(
+        db.func.coalesce(
+            db.func.sum(
+                UsoInventario.cantidad_usada *
+                db.func.coalesce(UsoInventario.precio_unitario_al_uso, 0)
+            ), 0
+        )
+    ).filter(UsoInventario.obra_id == obra_id).scalar()
+    return Decimal(str(resultado or 0))
+
+
 obras_bp = Blueprint('obras', __name__)
 
 _COORD_PRECISION = Decimal('0.00000001')
@@ -960,15 +974,7 @@ def detalle(id):
     from sqlalchemy import func
 
     # 1. Costo de materiales consumidos (desde uso_inventario)
-    costo_materiales = db.session.query(
-        db.func.coalesce(
-            db.func.sum(
-                UsoInventario.cantidad_usada *
-                db.func.coalesce(UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio)
-            ), 0
-        )
-    ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
-    ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
+    costo_materiales = calcular_costo_materiales(obra.id)
 
     # 2. Costo de mano de obra desde liquidaciones pagadas (costo REAL)
     from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
@@ -2341,15 +2347,7 @@ def _crear_avance_impl(tarea_id):
     obra.calcular_progreso_automatico()
 
     # Calcular y actualizar el costo real de la obra
-    costo_materiales = db.session.query(
-        db.func.coalesce(
-            db.func.sum(
-                UsoInventario.cantidad_usada *
-                db.func.coalesce(UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio)
-            ), 0
-        )
-    ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
-    ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
+    costo_materiales = calcular_costo_materiales(obra.id)
 
     # Costo MO = suma de liquidaciones (lo realmente liquidado, no estimado)
     from models import LiquidacionMO
@@ -3742,6 +3740,19 @@ def api_usar_stock_obra(obra_id):
         )
         stock_obra.fecha_ultimo_uso = datetime.utcnow()
 
+        # Buscar precio real de la última entrada (OC) para este stock
+        ultimo_precio_entry = db.session.query(MovimientoStockObra.precio_unitario, MovimientoStockObra.moneda)\
+            .filter_by(stock_obra_id=stock_obra.id, tipo='entrada')\
+            .filter(MovimientoStockObra.precio_unitario > 0)\
+            .order_by(MovimientoStockObra.fecha.desc())\
+            .first()
+        if ultimo_precio_entry:
+            precio_unitario = float(ultimo_precio_entry[0])
+            moneda = ultimo_precio_entry[1] or 'ARS'
+        else:
+            precio_unitario = float(stock_obra.item.precio_promedio or 0)
+            moneda = 'ARS'
+
         # Registrar movimiento de consumo
         movimiento = MovimientoStockObra(
             stock_obra_id=stock_obra.id,
@@ -3750,10 +3761,24 @@ def api_usar_stock_obra(obra_id):
             fecha=datetime.utcnow(),
             usuario_id=current_user.id,
             observaciones=observaciones,
-            precio_unitario=stock_obra.item.precio_promedio,
-            moneda='ARS'
+            precio_unitario=precio_unitario,
+            moneda=moneda
         )
         db.session.add(movimiento)
+
+        # Registrar UsoInventario para que cuente en Costo Real
+        from models.inventory import UsoInventario
+        uso = UsoInventario(
+            obra_id=obra_id,
+            item_id=stock_obra.item_inventario_id,
+            cantidad_usada=cantidad,
+            fecha_uso=datetime.utcnow().date(),
+            usuario_id=current_user.id,
+            observaciones=observaciones,
+            precio_unitario_al_uso=precio_unitario,
+            moneda=moneda
+        )
+        db.session.add(uso)
 
         db.session.commit()
 
@@ -3766,6 +3791,128 @@ def api_usar_stock_obra(obra_id):
 
     except Exception as e:
         current_app.logger.exception(f"Error al registrar uso de stock: {e}")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/consumo-batch', methods=['POST'])
+@login_required
+def api_consumo_batch(obra_id):
+    """Registra consumo de múltiples materiales del stock de obra de una sola vez."""
+    try:
+        from models.inventory import StockObra, MovimientoStockObra, UsoInventario
+        from decimal import Decimal
+        from datetime import datetime
+
+        obra = Obra.query.get_or_404(obra_id)
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        data = request.get_json() or {}
+        items = data.get('items', [])
+        if not items:
+            return jsonify({'ok': False, 'error': 'No se enviaron materiales'}), 400
+
+        resultados = []
+        for item_data in items:
+            stock_obra_id = item_data.get('stock_obra_id')
+            cantidad = float(item_data.get('cantidad', 0))
+            obs = item_data.get('observaciones', '')
+
+            if not stock_obra_id or cantidad <= 0:
+                continue
+
+            stock_obra = StockObra.query.get(stock_obra_id)
+            if not stock_obra or stock_obra.obra_id != obra_id:
+                continue
+
+            disponible = float(stock_obra.cantidad_disponible or 0)
+            if cantidad > disponible:
+                cantidad = disponible
+
+            if cantidad <= 0:
+                continue
+
+            # Actualizar stock
+            stock_obra.cantidad_disponible = float(
+                Decimal(str(disponible)) - Decimal(str(cantidad))
+            )
+            stock_obra.cantidad_consumida = float(
+                Decimal(str(stock_obra.cantidad_consumida or 0)) + Decimal(str(cantidad))
+            )
+            stock_obra.fecha_ultimo_uso = datetime.utcnow()
+
+            # Buscar precio real de última entrada (OC)
+            ultimo_precio_entry = db.session.query(
+                MovimientoStockObra.precio_unitario, MovimientoStockObra.moneda
+            ).filter_by(stock_obra_id=stock_obra.id, tipo='entrada')\
+             .filter(MovimientoStockObra.precio_unitario > 0)\
+             .order_by(MovimientoStockObra.fecha.desc()).first()
+
+            if ultimo_precio_entry:
+                precio_unitario = float(ultimo_precio_entry[0])
+                moneda = ultimo_precio_entry[1] or 'ARS'
+            else:
+                precio_unitario = float(stock_obra.item.precio_promedio or 0)
+                moneda = 'ARS'
+
+            # Movimiento de consumo
+            mov = MovimientoStockObra(
+                stock_obra_id=stock_obra.id,
+                tipo='consumo',
+                cantidad=cantidad,
+                fecha=datetime.utcnow(),
+                usuario_id=current_user.id,
+                observaciones=obs,
+                precio_unitario=precio_unitario,
+                moneda=moneda
+            )
+            db.session.add(mov)
+
+            # UsoInventario para Costo Real
+            uso = UsoInventario(
+                obra_id=obra_id,
+                item_id=stock_obra.item_inventario_id,
+                cantidad_usada=cantidad,
+                fecha_uso=datetime.utcnow().date(),
+                usuario_id=current_user.id,
+                observaciones=obs,
+                precio_unitario_al_uso=precio_unitario,
+                moneda=moneda
+            )
+            db.session.add(uso)
+
+            resultados.append({
+                'nombre': stock_obra.item.nombre,
+                'cantidad': cantidad,
+                'costo': precio_unitario * cantidad
+            })
+
+        if not resultados:
+            return jsonify({'ok': False, 'error': 'No se pudo consumir ningún material'}), 400
+
+        # Recalcular costo real
+        costo_materiales = calcular_costo_materiales(obra_id)
+        from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
+        costo_mo = db.session.query(
+            db.func.coalesce(db.func.sum(LiquidacionMOItem.monto), 0)
+        ).join(LiqMO).filter(
+            LiqMO.obra_id == obra_id,
+            LiquidacionMOItem.estado == 'pagado'
+        ).scalar() or Decimal('0')
+        obra.costo_real = float(Decimal(str(costo_materiales)) + Decimal(str(costo_mo)))
+
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'mensaje': f'Se consumieron {len(resultados)} materiales',
+            'items': resultados,
+            'costo_real_actualizado': float(obra.costo_real)
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error en consumo batch: {e}")
         db.session.rollback()
         return jsonify({'ok': False, 'error': str(e)}), 500
 
@@ -4237,15 +4384,7 @@ def actualizar_progreso_automatico(id):
         from sqlalchemy import func
 
         # Costo de materiales
-        costo_materiales = db.session.query(
-            db.func.coalesce(
-                db.func.sum(
-                    UsoInventario.cantidad_usada *
-                    db.func.coalesce(UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio)
-                ), 0
-            )
-        ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
-        ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
+        costo_materiales = calcular_costo_materiales(obra.id)
 
         # Costo MO = suma de liquidaciones (lo realmente liquidado)
         from models import LiquidacionMO
@@ -4596,14 +4735,7 @@ def confirmar_y_pagar_liquidacion(obra_id):
             .scalar()
         ) + _decimal(liq.monto_total)  # sumar la nueva liquidación
 
-        from models import UsoInventario
-        costo_materiales = _decimal(
-            db.session.query(
-                db.func.coalesce(db.func.sum(
-                    UsoInventario.cantidad_usada * db.func.coalesce(UsoInventario.precio_unitario_al_uso, 0)
-                ), 0)
-            ).filter(UsoInventario.obra_id == obra_id).scalar()
-        )
+        costo_materiales = calcular_costo_materiales(obra_id)
         obra.costo_real = float(costo_materiales + costo_mo_pagado)
 
         db.session.commit()
@@ -5779,6 +5911,7 @@ def crear_remito(obra_id):
             fecha=date.fromisoformat(data['fecha']),
             estado=data.get('estado', 'recibido'),
             requerimiento_id=int(data['requerimiento_id']) if data.get('requerimiento_id') else None,
+            orden_compra_id=int(data['orden_compra_id']) if data.get('orden_compra_id') else None,
             recibido_por_id=int(data['recibido_por_id']) if data.get('recibido_por_id') else current_user.id,
             notas=data.get('notas'),
             created_by_id=current_user.id,
@@ -5793,6 +5926,9 @@ def crear_remito(obra_id):
                 cantidad=item_data['cantidad'],
                 unidad=item_data.get('unidad', 'u'),
                 observacion=item_data.get('observacion'),
+                oc_item_id=int(item_data['oc_item_id']) if item_data.get('oc_item_id') else None,
+                item_inventario_id=int(item_data['item_inventario_id']) if item_data.get('item_inventario_id') else None,
+                precio_unitario=float(item_data['precio_unitario']) if item_data.get('precio_unitario') else None,
             )
             db.session.add(item)
 

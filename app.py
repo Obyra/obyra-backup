@@ -1316,6 +1316,35 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Remitos + Stock Obra migration skipped: {e}")
 
+    # Remito <-> OC vinculación
+    try:
+        remito_oc_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remitos' AND column_name='orden_compra_id') THEN
+                ALTER TABLE remitos ADD COLUMN orden_compra_id INTEGER REFERENCES ordenes_compra(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remito_items' AND column_name='oc_item_id') THEN
+                ALTER TABLE remito_items ADD COLUMN oc_item_id INTEGER REFERENCES orden_compra_items(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remito_items' AND column_name='item_inventario_id') THEN
+                ALTER TABLE remito_items ADD COLUMN item_inventario_id INTEGER REFERENCES items_inventario(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remito_items' AND column_name='precio_unitario') THEN
+                ALTER TABLE remito_items ADD COLUMN precio_unitario NUMERIC(15,2);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(remito_oc_sql))
+        db.session.commit()
+        print("[OK] Remito-OC vinculacion migration applied")
+    except Exception as e:
+        print(f"[WARN] Remito-OC migration skipped: {e}")
+
     # Etapa dependencies and chaining
     try:
         dep_sql = """
