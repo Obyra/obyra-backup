@@ -1322,6 +1322,30 @@ with app.app_context():
         DO $$
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remitos' AND column_name='requerimiento_id') THEN
+                ALTER TABLE remitos ADD COLUMN requerimiento_id INTEGER REFERENCES requerimientos_compra(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remitos' AND column_name='proveedor_oc_id') THEN
+                ALTER TABLE remitos ADD COLUMN proveedor_oc_id INTEGER REFERENCES proveedores_oc(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remitos' AND column_name='recibido_por_id') THEN
+                ALTER TABLE remitos ADD COLUMN recibido_por_id INTEGER REFERENCES usuarios(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remitos' AND column_name='archivo_url') THEN
+                ALTER TABLE remitos ADD COLUMN archivo_url VARCHAR(500);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remitos' AND column_name='created_by_id') THEN
+                ALTER TABLE remitos ADD COLUMN created_by_id INTEGER REFERENCES usuarios(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='remitos' AND column_name='updated_at') THEN
+                ALTER TABLE remitos ADD COLUMN updated_at TIMESTAMP;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                           WHERE table_name='remitos' AND column_name='orden_compra_id') THEN
                 ALTER TABLE remitos ADD COLUMN orden_compra_id INTEGER REFERENCES ordenes_compra(id);
             END IF;
