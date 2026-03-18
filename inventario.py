@@ -2258,6 +2258,147 @@ def seed_constructoras():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@inventario_bp.route('/importar-excel', methods=['POST'])
+@login_required
+def importar_excel():
+    """Importa items de inventario desde un archivo Excel/CSV. Solo super_admin."""
+    if not current_user.is_super_admin:
+        return jsonify({'ok': False, 'error': 'Solo super admin'}), 403
+
+    import openpyxl
+    from io import BytesIO
+
+    archivo = request.files.get('archivo')
+    if not archivo:
+        return jsonify({'ok': False, 'error': 'No se recibió archivo'}), 400
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    creados = 0
+    actualizados = 0
+    errores = 0
+
+    try:
+        contenido = archivo.read()
+        nombre_archivo = archivo.filename.lower()
+
+        filas = []
+        if nombre_archivo.endswith('.csv'):
+            import csv
+            from io import StringIO
+            texto = contenido.decode('utf-8', errors='replace')
+            reader = csv.DictReader(StringIO(texto))
+            filas = list(reader)
+        else:
+            wb = openpyxl.load_workbook(BytesIO(contenido), read_only=True, data_only=True)
+            ws = wb.active
+
+            # Leer headers de la primera fila
+            headers = []
+            for cell in next(ws.iter_rows(min_row=1, max_row=1)):
+                val = str(cell.value or '').strip().lower()
+                # Normalizar nombres de columna
+                if val in ('nombre', 'descripcion', 'descripción', 'material', 'item', 'articulo'):
+                    headers.append('nombre')
+                elif val in ('unidad', 'unid', 'u.m.', 'um', 'medida'):
+                    headers.append('unidad')
+                elif val in ('precio', 'precio_unitario', 'precio unitario', 'p.u.', 'pu', 'costo'):
+                    headers.append('precio')
+                elif val in ('stock', 'cantidad', 'cant', 'stock_actual', 'existencia'):
+                    headers.append('stock')
+                elif val in ('categoria', 'categoría', 'rubro', 'tipo', 'cat'):
+                    headers.append('categoria')
+                elif val in ('codigo', 'código', 'cod', 'sku', 'code'):
+                    headers.append('codigo')
+                else:
+                    headers.append(val)
+
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                fila = {}
+                for i, val in enumerate(row):
+                    if i < len(headers):
+                        fila[headers[i]] = val
+                if fila.get('nombre'):
+                    filas.append(fila)
+            wb.close()
+
+        # Procesar filas
+        for fila in filas:
+            nombre = str(fila.get('nombre', '')).strip()
+            if not nombre:
+                continue
+
+            try:
+                unidad = str(fila.get('unidad', 'u')).strip() or 'u'
+                precio = float(fila.get('precio', 0) or 0)
+                stock = float(fila.get('stock', 0) or 0)
+                categoria_nombre = str(fila.get('categoria', '')).strip()
+                codigo = str(fila.get('codigo', '')).strip()
+
+                # Buscar si ya existe por nombre en esta org
+                existente = ItemInventario.query.filter_by(
+                    organizacion_id=org_id,
+                    nombre=nombre
+                ).first()
+
+                if existente:
+                    # Actualizar precio y stock si vienen con datos
+                    if precio > 0:
+                        existente.precio_promedio = precio
+                    if stock > 0:
+                        existente.stock_actual = stock
+                    actualizados += 1
+                else:
+                    # Buscar o crear categoría
+                    categoria_id = None
+                    if categoria_nombre:
+                        from models import InventoryCategory
+                        cat = InventoryCategory.query.filter_by(
+                            company_id=org_id,
+                            nombre=categoria_nombre
+                        ).first()
+                        if not cat:
+                            cat = InventoryCategory(
+                                company_id=org_id,
+                                nombre=categoria_nombre,
+                                is_active=True
+                            )
+                            db.session.add(cat)
+                            db.session.flush()
+                        categoria_id = cat.id
+
+                    item = ItemInventario(
+                        organizacion_id=org_id,
+                        nombre=nombre,
+                        codigo=codigo or None,
+                        unidad=unidad,
+                        precio_promedio=precio,
+                        stock_actual=stock,
+                        stock_minimo=0,
+                        categoria_id=categoria_id,
+                        activo=True,
+                    )
+                    db.session.add(item)
+                    creados += 1
+
+            except Exception as e:
+                current_app.logger.warning(f"Error importando fila '{nombre}': {e}")
+                errores += 1
+
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'creados': creados,
+            'actualizados': actualizados,
+            'errores': errores,
+            'total': len(filas)
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Error importando Excel: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @inventario_bp.route('/deposito')
 @login_required
 def deposito():

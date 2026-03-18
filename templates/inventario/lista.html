@@ -31,7 +31,18 @@
                     <a href="{{ url_for('inventario.categorias') }}" class="btn btn-outline-secondary ms-1">
                         <i class="fas fa-cog me-1"></i>Gestión Global
                     </a>
-                    {# Botones de seed/desarrollo ocultos — solo accesibles via API directa #}
+                    {% if current_user.is_super_admin %}
+                    <button type="button" class="btn btn-outline-info ms-1" id="btnSeedIA" onclick="seedItemsIA()">
+                        <i class="fas fa-robot me-1"></i>Cargar Items IA
+                    </button>
+                    <button type="button" class="btn btn-outline-success ms-1" id="btnSeedConstructoras" onclick="seedConstructoras()">
+                        <i class="fas fa-building me-1"></i>Ref. Constructoras
+                    </button>
+                    <button type="button" class="btn btn-outline-warning ms-1" onclick="document.getElementById('inputExcel').click()">
+                        <i class="fas fa-file-excel me-1"></i>Importar Excel
+                    </button>
+                    <input type="file" id="inputExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarExcel(this)">
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -918,6 +929,40 @@ function seedConstructoras() {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-building me-1"></i>Cargar Ref. Constructoras';
         });
+}
+
+async function importarExcel(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+
+    if (!confirm('¿Importar items desde "' + file.name + '"?\n\nEl archivo debe tener columnas: nombre, unidad, precio (opcional), stock (opcional), categoría (opcional)')) {
+        input.value = '';
+        return;
+    }
+
+    var formData = new FormData();
+    formData.append('archivo', file);
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    try {
+        var resp = await fetch('{{ url_for("inventario.importar_excel") }}', {
+            method: 'POST',
+            headers: csrfToken ? {'X-CSRFToken': csrfToken} : {},
+            body: formData
+        });
+        var data = await resp.json();
+
+        if (data.ok) {
+            alert('Importación exitosa:\n' + data.creados + ' items creados\n' + data.actualizados + ' actualizados\n' + data.errores + ' errores');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Error desconocido'));
+        }
+    } catch(e) {
+        alert('Error de conexión: ' + e.message);
+    }
+    input.value = '';
 }
 </script>
 {% endblock %}
