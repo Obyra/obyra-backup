@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Orden de Compra {{ oc.numero }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 8mm 12mm 10mm 12mm;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 8pt;
+            color: #2c2c2c;
+            line-height: 1.3;
+        }
+        .header-wrapper {
+            background: #1A374D;
+            padding: 10px 18px;
+            margin: -8mm -12mm 8px -12mm;
+            width: calc(100% + 24mm);
+            display: table;
+            table-layout: fixed;
+        }
+        .header-left {
+            display: table-cell;
+            vertical-align: middle;
+            width: 65%;
+        }
+        .header-right {
+            display: table-cell;
+            vertical-align: middle;
+            text-align: right;
+            width: 35%;
+        }
+        .company-name {
+            font-size: 13pt;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 2px;
+        }
+        .company-logo-img {
+            max-height: 50px;
+            max-width: 140px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        .company-info {
+            font-size: 7pt;
+            color: rgba(255,255,255,0.85);
+        }
+        .company-info span { margin-right: 10px; }
+        .doc-type {
+            font-size: 10pt;
+            font-weight: bold;
+            color: white;
+        }
+        .doc-numero {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .doc-estado {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 3px;
+            font-size: 8pt;
+            font-weight: bold;
+            color: white;
+            margin-top: 4px;
+        }
+        .estado-borrador { background: #9E9E9E; }
+        .estado-emitida { background: #2196F3; }
+        .estado-recibida_parcial { background: #FF9800; }
+        .estado-completada { background: #4CAF50; }
+        .estado-cancelada { background: #f44336; }
+        .info-bar {
+            background: #f5f5f5;
+            padding: 6px 10px;
+            margin-bottom: 8px;
+            border-radius: 3px;
+        }
+        .info-bar table { width: 100%; border-collapse: collapse; }
+        .info-bar td { padding: 2px 4px; font-size: 7.5pt; }
+        .info-bar .label { font-weight: bold; color: #666; width: 120px; }
+        .info-bar .value { color: #2c2c2c; }
+        .proveedor-box {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            padding: 6px 10px;
+            margin-bottom: 8px;
+            border-radius: 3px;
+        }
+        .proveedor-box .prov-name {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #1565c0;
+        }
+        .proveedor-box .prov-info {
+            font-size: 7pt;
+            color: #555;
+            margin-top: 2px;
+        }
+        .proveedor-box .prov-info span { margin-right: 12px; }
+        .service-header {
+            background: #1A374D;
+            color: white;
+            padding: 4px 10px;
+            font-weight: bold;
+            font-size: 8pt;
+            margin-bottom: 0;
+        }
+        table.items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 6px;
+        }
+        table.items-table thead { background: #f0f0f0; }
+        table.items-table th {
+            padding: 4px 8px;
+            text-align: left;
+            font-size: 7pt;
+            font-weight: bold;
+            color: #555;
+            text-transform: uppercase;
+            border-bottom: 2px solid #4CAF50;
+        }
+        table.items-table th.right { text-align: right; }
+        table.items-table th.center { text-align: center; }
+        table.items-table td {
+            padding: 4px 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 8pt;
+        }
+        table.items-table td.right { text-align: right; }
+        table.items-table td.center { text-align: center; }
+        table.items-table tr { page-break-inside: avoid; }
+        table.items-table tr:nth-child(even) { background: #fafafa; }
+        .totals-box {
+            text-align: right;
+            margin-top: 6px;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border-radius: 3px;
+        }
+        .totals-box .total-label {
+            font-size: 8pt;
+            color: #666;
+        }
+        .totals-box .total-value {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #1A374D;
+        }
+        .totals-box .moneda {
+            font-size: 8pt;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .observaciones {
+            margin-top: 6px;
+            padding: 5px 8px;
+            background: #f8f8f8;
+            border-left: 3px solid #1A374D;
+            font-size: 7.5pt;
+        }
+        .observaciones-title {
+            font-weight: bold;
+            margin-bottom: 2px;
+            color: #666;
+        }
+        .condiciones {
+            margin-top: 8px;
+            font-size: 7pt;
+            color: #888;
+            padding: 4px 8px;
+            border: 1px dashed #ccc;
+            border-radius: 3px;
+        }
+        .firma-section {
+            margin-top: 40px;
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+        .firma-box {
+            display: table-cell;
+            text-align: center;
+            padding: 0 20px;
+        }
+        .firma-linea {
+            border-top: 1px solid #666;
+            padding-top: 4px;
+            font-size: 7.5pt;
+            color: #666;
+        }
+        .footer-section {
+            margin-top: 15px;
+            padding-top: 8px;
+            border-top: 2px solid #1A374D;
+            font-size: 7pt;
+            color: #888;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    {% set nombre_org = organizacion.nombre|replace('Organizacion de ', '') if organizacion.nombre else 'Empresa' %}
+
+    <div class="header-wrapper">
+        <div class="header-left">
+            <div class="company-name">
+                {% if logo_base64 %}
+                <img src="data:image/png;base64,{{ logo_base64 }}" class="company-logo-img" alt="Logo">
+                {% else %}
+                <svg width="20" height="20" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;">
+                    <circle cx="12" cy="12" r="12" fill="white"/>
+                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ nombre_org[0] }}</text>
+                </svg>
+                {% endif %}
+                {{ nombre_org }}
+            </div>
+            <div class="company-info">
+                {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
+                {% if organizacion.direccion %}<span>{{ organizacion.direccion }}</span>{% endif %}
+                {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
+                {% if organizacion.email %}<span>{{ organizacion.email }}</span>{% endif %}
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="doc-type">ORDEN DE COMPRA</div>
+            <div class="doc-numero">{{ oc.numero }}</div>
+            <div class="doc-estado estado-{{ oc.estado }}">{{ oc.estado|upper }}</div>
+        </div>
+    </div>
+
+    <!-- Info general -->
+    <div class="info-bar">
+        <table>
+            <tr>
+                <td class="label">Obra:</td>
+                <td class="value"><strong>{{ oc.obra.nombre if oc.obra else '-' }}</strong></td>
+                <td class="label">Fecha emision:</td>
+                <td class="value">{{ oc.fecha_emision.strftime('%d/%m/%Y') if oc.fecha_emision else '-' }}</td>
+            </tr>
+            <tr>
+                <td class="label">Fecha entrega est.:</td>
+                <td class="value">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') if oc.fecha_entrega_estimada else '-' }}</td>
+                <td class="label">Moneda:</td>
+                <td class="value"><strong>{{ oc.moneda or 'ARS' }}</strong></td>
+            </tr>
+            {% if oc.requerimiento %}
+            <tr>
+                <td class="label">Requerimiento:</td>
+                <td class="value" colspan="3">{{ oc.requerimiento.numero }} — {{ oc.requerimiento.motivo[:80] if oc.requerimiento.motivo else '' }}</td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+
+    <!-- Proveedor -->
+    {% if oc.proveedor_oc %}
+    <div class="proveedor-box">
+        <div class="prov-name">{{ oc.proveedor_oc.razon_social }}</div>
+        <div class="prov-info">
+            {% if oc.proveedor_oc.cuit %}<span>CUIT: {{ oc.proveedor_oc.cuit }}</span>{% endif %}
+            {% if oc.proveedor_oc.telefono %}<span>Tel: {{ oc.proveedor_oc.telefono }}</span>{% endif %}
+            {% if oc.proveedor_oc.email %}<span>{{ oc.proveedor_oc.email }}</span>{% endif %}
+            {% if oc.proveedor_oc.direccion %}<span>{{ oc.proveedor_oc.direccion }}</span>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Items -->
+    <div class="service-header">Detalle de Items</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width:5%;">N.</th>
+                <th style="width:40%;">Descripcion</th>
+                <th class="center" style="width:10%;">Cantidad</th>
+                <th class="center" style="width:10%;">Unidad</th>
+                <th class="right" style="width:15%;">P. Unitario</th>
+                <th class="right" style="width:15%;">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in oc.items %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ item.descripcion }}</strong></td>
+                <td class="center">{{ "{:,.2f}".format(item.cantidad|float) }}</td>
+                <td class="center">{{ item.unidad or 'u' }}</td>
+                <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) }}</td>
+                <td class="right"><strong>{{ "{:,.2f}".format(item.subtotal|float) }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals-box">
+        <span class="moneda">{{ oc.moneda or 'ARS' }}</span>
+        <span class="total-label">TOTAL:</span>
+        <span class="total-value">$ {{ "{:,.2f}".format(oc.total|float) }}</span>
+    </div>
+
+    {% if oc.notas %}
+    <div class="observaciones">
+        <div class="observaciones-title">Notas / Condiciones:</div>
+        {{ oc.notas }}
+    </div>
+    {% endif %}
+
+    <div class="condiciones">
+        <strong>Condiciones generales:</strong> Los materiales deben entregarse en obra en las condiciones y cantidades especificadas.
+        Cualquier diferencia debe ser notificada antes de la entrega. La recepcion esta sujeta a control de calidad y cantidad.
+    </div>
+
+    <div class="firma-section">
+        <div class="firma-box">
+            <div class="firma-linea">Autorizado por</div>
+        </div>
+        <div class="firma-box">
+            <div class="firma-linea">Proveedor</div>
+        </div>
+    </div>
+
+    <div class="footer-section">
+        Documento generado por OBYRA | {{ nombre_org }} | {{ oc.fecha_emision.strftime('%d/%m/%Y') if oc.fecha_emision else '' }}
+    </div>
+</body>
+</html>

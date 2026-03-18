@@ -507,3 +507,46 @@ def items_para_remito(id):
         'moneda': oc.moneda or 'ARS',
         'items': items
     })
+
+
+@ordenes_compra_bp.route('/<int:id>/pdf')
+@login_required
+def oc_pdf(id):
+    """Genera PDF de la Orden de Compra."""
+    from models.inventory import OrdenCompra
+    from weasyprint import HTML
+    import io, os, base64
+
+    oc = OrdenCompra.query.get_or_404(id)
+    if oc.organizacion_id != current_user.organizacion_id:
+        flash('Sin acceso.', 'danger')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    organizacion = oc.organizacion
+
+    # Logo en base64
+    logo_base64 = None
+    if organizacion.logo_url:
+        try:
+            logo_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+            if os.path.exists(logo_path):
+                with open(logo_path, 'rb') as f:
+                    logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+        except Exception:
+            pass
+
+    html_string = render_template('pdf_oc.html',
+        oc=oc,
+        organizacion=organizacion,
+        logo_base64=logo_base64,
+    )
+
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_string).write_pdf(pdf_buffer, presentational_hints=True)
+    pdf_buffer.seek(0)
+
+    from flask import make_response
+    response = make_response(pdf_buffer.read())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename=OC_{oc.numero}.pdf'
+    return response

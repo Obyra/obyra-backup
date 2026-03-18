@@ -1050,6 +1050,10 @@
                                                    class="btn btn-sm btn-outline-primary">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
+                                                <a href="{{ url_for('ordenes_compra.oc_pdf', id=oc.id) }}" target="_blank"
+                                                   class="btn btn-sm btn-outline-success" title="Descargar PDF">
+                                                    <i class="fas fa-file-pdf"></i>
+                                                </a>
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -1111,6 +1115,9 @@
                                                 <button class="btn btn-sm btn-outline-primary" onclick="verRemito({{ r.id }})">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
+                                                <a href="{{ url_for('obras.remito_pdf', obra_id=obra.id, remito_id=r.id) }}" target="_blank" class="btn btn-sm btn-outline-success" title="Descargar PDF">
+                                                    <i class="fas fa-file-pdf"></i>
+                                                </a>
                                                 <button class="btn btn-sm btn-outline-danger" onclick="eliminarRemito({{ r.id }}, '{{ r.numero_remito }}')">
                                                     <i class="fas fa-trash"></i>
                                                 </button>

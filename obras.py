@@ -5987,6 +5987,61 @@ def eliminar_remito(obra_id, remito_id):
 
 
 # ============================================================
+# PDF — REMITO
+# ============================================================
+
+@obras_bp.route('/<int:obra_id>/remitos/<int:remito_id>/pdf')
+@login_required
+def remito_pdf(obra_id, remito_id):
+    """Genera PDF del remito con la misma estetica que presupuestos."""
+    from models.inventory import Remito
+    from weasyprint import HTML
+    import io, os, base64
+
+    remito = Remito.query.get_or_404(remito_id)
+    organizacion = remito.organizacion
+
+    # Logo en base64
+    logo_base64 = None
+    if organizacion.logo_url:
+        try:
+            logo_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+            if os.path.exists(logo_path):
+                with open(logo_path, 'rb') as f:
+                    logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+        except Exception:
+            pass
+
+    # Verificar si items tienen precios
+    tiene_precios = any(i.precio_unitario and float(i.precio_unitario) > 0 for i in remito.items)
+    total_remito = sum(
+        float(i.cantidad or 0) * float(i.precio_unitario or 0)
+        for i in remito.items
+    ) if tiene_precios else 0
+
+    # Numero de OC vinculada
+    oc_numero = remito.orden_compra.numero if remito.orden_compra else None
+
+    html_string = render_template('pdf_remito.html',
+        remito=remito,
+        organizacion=organizacion,
+        logo_base64=logo_base64,
+        tiene_precios=tiene_precios,
+        total_remito=total_remito,
+        oc_numero=oc_numero,
+    )
+
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_string).write_pdf(pdf_buffer, presentational_hints=True)
+    pdf_buffer.seek(0)
+
+    response = make_response(pdf_buffer.read())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename=Remito_{remito.numero_remito}.pdf'
+    return response
+
+
+# ============================================================
 # ESCALA SALARIAL UOCRA + CUADRILLAS TIPO
 # ============================================================
 
