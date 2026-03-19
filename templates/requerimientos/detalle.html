@@ -470,6 +470,7 @@
                     {% if requerimiento.estado != 'completado' and (current_user.rol in ['administrador', 'admin'] or requerimiento.solicitante_id == current_user.id) %}
                     <hr>
                     <form method="POST" action="{{ url_for('requerimientos.eliminar', id=requerimiento.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-outline-danger btn-sm w-100"
                                 onclick="return confirm('¿Eliminar permanentemente el requerimiento {{ requerimiento.numero }}?\n\nEsta acción no se puede deshacer.')">
                             <i class="fas fa-trash me-1"></i>Eliminar Requerimiento
