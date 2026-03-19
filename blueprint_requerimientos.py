@@ -343,12 +343,32 @@ def eliminar(id):
         return redirect(url_for('requerimientos.detalle', id=id))
 
     numero = requerimiento.numero
-    # Eliminar items primero
-    RequerimientoCompraItem.query.filter_by(requerimiento_id=id).delete()
-    db.session.delete(requerimiento)
-    db.session.commit()
 
-    flash(f'Requerimiento {numero} eliminado', 'info')
+    try:
+        # Desvincular OC que referencian este requerimiento
+        from models.inventory import OrdenCompra, Remito
+        OrdenCompra.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+        Remito.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+
+        # Desvincular cotizaciones si existen
+        try:
+            from models.proveedores_oc import CotizacionProveedor
+            CotizacionProveedor.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+        except Exception:
+            pass
+
+        # Eliminar items del requerimiento
+        RequerimientoCompraItem.query.filter_by(requerimiento_id=id).delete()
+
+        # Eliminar el requerimiento
+        db.session.delete(requerimiento)
+        db.session.commit()
+
+        flash(f'Requerimiento {numero} eliminado', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar: {str(e)}', 'danger')
+
     return redirect(url_for('requerimientos.lista'))
 
 
