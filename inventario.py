@@ -500,10 +500,11 @@ def unificar_categorias():
         'carpintería y aberturas': 'Carpintería y Aberturas',
         # Estructura
         'estructura': 'Estructura',
-        # Excavación
-        'excavacion y movimiento suelo': 'Excavación',
+        # Excavación (separado de Movimiento de Suelos)
         'excavación': 'Excavación',
-        'movimiento de suelos': 'Excavación',
+        # Movimiento de Suelos
+        'excavacion y movimiento suelo': 'Movimiento de Suelos',
+        'movimiento de suelos': 'Movimiento de Suelos',
         # Fundaciones
         'fundaciones': 'Fundaciones',
         # Herrería
