@@ -28,7 +28,15 @@
                     </button>
                     {% endif %}
                     {% if current_user.rol == 'administrador' %}
+                    <form method="POST" action="{{ url_for('inventario.unificar_categorias') }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-warning ms-1"
+                                onclick="return confirm('Unificar categorías duplicadas?\n\nEsto fusiona categorías con el mismo nombre (ej: ESTRUCTURA + Estructura) en una sola.')">
+                            <i class="fas fa-compress-arrows-alt me-1"></i>Unificar Categorías
+                        </button>
+                    </form>
                     <form method="POST" action="{{ url_for('inventario.reclasificar_encofrados') }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-outline-info ms-1"
                                 onclick="return confirm('Reclasificar items de encofrado (vigas H20, puntales, cabezales, trípodes) a la categoría Encofrados?')">
                             <i class="fas fa-exchange-alt me-1"></i>Fix Encofrados

@@ -479,6 +479,52 @@ def reclasificar_encofrados():
     return redirect(url_for('inventario.lista'))
 
 
+@inventario_bp.route('/unificar-categorias', methods=['POST'])
+@login_required
+def unificar_categorias():
+    """Unificar categorías duplicadas (mismo nombre, distinto case)."""
+    if current_user.rol != 'administrador':
+        flash('Solo administradores pueden unificar categorías', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    categorias = InventoryCategory.query.filter(
+        InventoryCategory.company_id == org_id
+    ).all()
+
+    # Agrupar por nombre normalizado (lowercase, stripped)
+    grupos = {}
+    for cat in categorias:
+        key = cat.nombre.strip().lower()
+        if key not in grupos:
+            grupos[key] = []
+        grupos[key].append(cat)
+
+    eliminadas = 0
+    items_movidos = 0
+    for key, cats in grupos.items():
+        if len(cats) <= 1:
+            continue
+        # Elegir la que tiene más items como principal, preferir Title Case
+        cats.sort(key=lambda c: (
+            -ItemInventario.query.filter_by(categoria_id=c.id).count(),
+            0 if c.nombre[0].isupper() and not c.nombre.isupper() else 1
+        ))
+        principal = cats[0]
+        for duplicada in cats[1:]:
+            # Mover items de la duplicada a la principal
+            items_dup = ItemInventario.query.filter_by(categoria_id=duplicada.id).all()
+            for item in items_dup:
+                item.categoria_id = principal.id
+                items_movidos += 1
+            db.session.delete(duplicada)
+            eliminadas += 1
+
+    db.session.commit()
+    flash(f'{eliminadas} categorías duplicadas eliminadas, {items_movidos} items reasignados', 'success')
+    return redirect(url_for('inventario.lista'))
+
+
 @inventario_bp.route('/<int:id>/eliminar', methods=['POST'])
 @login_required
 def eliminar(id):
