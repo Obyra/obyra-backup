@@ -214,14 +214,13 @@ def lista():
         # Usar el conteo pre-calculado en lugar de queries individuales
         total_items_categoria = conteo_items.get(cat_principal.id, 0)
 
-        if total_items_categoria > 0:
-            arbol_categorias.append({
-                'id': cat_principal.id,
-                'nombre': cat_principal.nombre,
-                'subcategorias': [],
-                'total_items': total_items_categoria,
-                'tiene_items_directos': True
-            })
+        arbol_categorias.append({
+            'id': cat_principal.id,
+            'nombre': cat_principal.nombre,
+            'subcategorias': [],
+            'total_items': total_items_categoria,
+            'tiene_items_directos': total_items_categoria > 0
+        })
 
     return render_template('inventario/lista.html',
                          items_con_obras=items_con_obras,
@@ -521,7 +520,8 @@ def unificar_categorias():
         'instalaciones sanitarias y provisiones': 'Instalaciones Sanitarias y Provisiones',
         # Instalaciones gas
         'instalaciones de gas': 'Instalaciones de Gas',
-        # Instalaciones climatización
+        # Instalaciones → fusionar en Complementarias
+        'instalaciones': 'Instalaciones Complementarias',
         'instalaciones climatizacion': 'Instalaciones Complementarias',
         'instalaciones complementarias': 'Instalaciones Complementarias',
         # Limpieza
@@ -536,10 +536,11 @@ def unificar_categorias():
         # Pisos
         'pisos': 'Pisos y Revestimientos',
         'pisos y revestimientos': 'Pisos y Revestimientos',
-        # Revoque
+        # Revoque (Grueso y Fino son categorías SEPARADAS)
         'revoque fino/yeseria': 'Revoque Fino',
         'revoque fino': 'Revoque Fino',
-        'revoque grueso': 'Yesería y Enlucidos',
+        'revoque grueso': 'Revoque Grueso',
+        # Yesería
         'yesería y enlucidos': 'Yesería y Enlucidos',
         # Techos
         'techos': 'Techos y Cubiertas',
@@ -551,9 +552,13 @@ def unificar_categorias():
         'encofrados': 'Encofrados',
         'sistemas de encofrado y andamiaje': 'Encofrados',
         'apuntalamientos': 'Encofrados',
-        # Seguridad
+        # Seguridad + Indumentaria
         'seguridad': 'Seguridad e Higiene',
         'seguridad e higiene': 'Seguridad e Higiene',
+        'indumentaria': 'Seguridad e Higiene',
+        # Materiales (fusionar duplicados)
+        'material de construcción': 'Materiales de Obra',
+        'materiales de obra': 'Materiales de Obra',
         # Equipo contra incendios
         'equipo contra incendios + maquinaria edificio': 'Instalaciones Complementarias',
     }
