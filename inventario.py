@@ -482,7 +482,7 @@ def reclasificar_encofrados():
 @inventario_bp.route('/unificar-categorias', methods=['POST'])
 @login_required
 def unificar_categorias():
-    """Unificar categorías duplicadas (mismo nombre, distinto case)."""
+    """Unificar categorías duplicadas y variantes similares."""
     if current_user.rol != 'administrador':
         flash('Solo administradores pueden unificar categorías', 'danger')
         return redirect(url_for('inventario.lista'))
@@ -492,27 +492,138 @@ def unificar_categorias():
         InventoryCategory.company_id == org_id
     ).all()
 
-    # Agrupar por nombre normalizado (lowercase, stripped)
-    grupos = {}
+    # Mapeo de categorías que deben fusionarse → nombre canónico
+    # Las variantes (keys) se fusionan en el nombre canónico (value)
+    FUSIONES = {
+        # Carpintería
+        'carpinteria + metalicas + aberturas': 'Carpintería y Aberturas',
+        'carpintería y aberturas': 'Carpintería y Aberturas',
+        # Estructura
+        'estructura': 'Estructura',
+        # Excavación
+        'excavacion y movimiento suelo': 'Excavación',
+        'excavación': 'Excavación',
+        'movimiento de suelos': 'Excavación',
+        # Fundaciones
+        'fundaciones': 'Fundaciones',
+        # Herrería
+        'herreria de obra': 'Herrería de Obra',
+        'herrería de obra': 'Herrería de Obra',
+        # Impermeabilización
+        'impermeabilizacion y aislacion': 'Impermeabilizaciones y Aislaciones',
+        'impermeabilizaciones y aislaciones': 'Impermeabilizaciones y Aislaciones',
+        # Instalaciones eléctricas
+        'instalaciones electricas': 'Instalaciones Eléctricas',
+        'instalaciones eléctricas': 'Instalaciones Eléctricas',
+        # Instalaciones sanitarias
+        'instalaciones sanitarias': 'Instalaciones Sanitarias y Provisiones',
+        'instalaciones sanitarias y provisiones': 'Instalaciones Sanitarias y Provisiones',
+        # Instalaciones gas
+        'instalaciones de gas': 'Instalaciones de Gas',
+        # Instalaciones climatización
+        'instalaciones climatizacion': 'Instalaciones Complementarias',
+        'instalaciones complementarias': 'Instalaciones Complementarias',
+        # Limpieza
+        'limpieza final': 'Limpieza Final y Puesta en Marcha',
+        'limpieza final y puesta en marcha': 'Limpieza Final y Puesta en Marcha',
+        # Mampostería
+        'mamposteria': 'Mampostería',
+        'mampostería': 'Mampostería',
+        # Pinturas
+        'pinturas y revestimientos': 'Pintura',
+        'pintura': 'Pintura',
+        # Pisos
+        'pisos': 'Pisos y Revestimientos',
+        'pisos y revestimientos': 'Pisos y Revestimientos',
+        # Revoque
+        'revoque fino/yeseria': 'Revoque Fino',
+        'revoque fino': 'Revoque Fino',
+        'revoque grueso': 'Yesería y Enlucidos',
+        'yesería y enlucidos': 'Yesería y Enlucidos',
+        # Techos
+        'techos': 'Techos y Cubiertas',
+        'techos y cubiertas': 'Techos y Cubiertas',
+        # Maquinarias
+        'maquinarias': 'Maquinarias y Equipos',
+        'maquinarias y equipos': 'Maquinarias y Equipos',
+        # Encofrados
+        'encofrados': 'Encofrados',
+        'sistemas de encofrado y andamiaje': 'Encofrados',
+        'apuntalamientos': 'Encofrados',
+        # Seguridad
+        'seguridad': 'Seguridad e Higiene',
+        'seguridad e higiene': 'Seguridad e Higiene',
+        # Equipo contra incendios
+        'equipo contra incendios + maquinaria edificio': 'Instalaciones Complementarias',
+    }
+
+    # Paso 1: agrupar categorías por nombre canónico
+    grupos = {}  # canonical_name -> [cat, cat, ...]
+    sin_mapeo = []
     for cat in categorias:
         key = cat.nombre.strip().lower()
-        if key not in grupos:
-            grupos[key] = []
-        grupos[key].append(cat)
+        canonical = FUSIONES.get(key)
+        if canonical:
+            if canonical not in grupos:
+                grupos[canonical] = []
+            grupos[canonical].append(cat)
+        else:
+            sin_mapeo.append(cat)
 
     eliminadas = 0
     items_movidos = 0
-    for key, cats in grupos.items():
+    renombradas = 0
+
+    for canonical, cats in grupos.items():
+        if len(cats) == 0:
+            continue
+
+        # Buscar si ya existe una con el nombre canónico exacto
+        principal = None
+        for c in cats:
+            if c.nombre == canonical:
+                principal = c
+                break
+
+        if not principal:
+            # Usar la que tiene más items y renombrarla
+            cats.sort(key=lambda c: -ItemInventario.query.filter_by(categoria_id=c.id).count())
+            principal = cats[0]
+            if principal.nombre != canonical:
+                principal.nombre = canonical
+                renombradas += 1
+
+        # Mover items de las duplicadas a la principal
+        for duplicada in cats:
+            if duplicada.id == principal.id:
+                continue
+            items_dup = ItemInventario.query.filter_by(categoria_id=duplicada.id).all()
+            for item in items_dup:
+                item.categoria_id = principal.id
+                items_movidos += 1
+            # Mover subcategorías hijas
+            for hijo in InventoryCategory.query.filter_by(parent_id=duplicada.id).all():
+                hijo.parent_id = principal.id
+            db.session.delete(duplicada)
+            eliminadas += 1
+
+    # Paso 2: también fusionar duplicados exactos (case-insensitive) que no están en FUSIONES
+    grupos_exactos = {}
+    for cat in sin_mapeo:
+        key = cat.nombre.strip().lower()
+        if key not in grupos_exactos:
+            grupos_exactos[key] = []
+        grupos_exactos[key].append(cat)
+
+    for key, cats in grupos_exactos.items():
         if len(cats) <= 1:
             continue
-        # Elegir la que tiene más items como principal, preferir Title Case
         cats.sort(key=lambda c: (
             -ItemInventario.query.filter_by(categoria_id=c.id).count(),
             0 if c.nombre[0].isupper() and not c.nombre.isupper() else 1
         ))
         principal = cats[0]
         for duplicada in cats[1:]:
-            # Mover items de la duplicada a la principal
             items_dup = ItemInventario.query.filter_by(categoria_id=duplicada.id).all()
             for item in items_dup:
                 item.categoria_id = principal.id
@@ -521,7 +632,7 @@ def unificar_categorias():
             eliminadas += 1
 
     db.session.commit()
-    flash(f'{eliminadas} categorías duplicadas eliminadas, {items_movidos} items reasignados', 'success')
+    flash(f'{eliminadas} categorías eliminadas, {renombradas} renombradas, {items_movidos} items reasignados', 'success')
     return redirect(url_for('inventario.lista'))
 
 
