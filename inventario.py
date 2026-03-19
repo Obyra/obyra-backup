@@ -179,11 +179,11 @@ def lista():
                 InventoryCategory.company_id == org_id,
                 InventoryCategory.is_global == True
             ),
-            InventoryCategory.is_active == True,
-            InventoryCategory.parent_id.is_(None)
-        ).order_by(InventoryCategory.sort_order, InventoryCategory.nombre).all()
+            InventoryCategory.is_active == True
+        ).order_by(InventoryCategory.nombre).all()
 
-    categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
+    # CategoriaInventario está DEPRECATED - solo usar InventoryCategory
+    categorias = []
 
     # Get all obras for dropdowns (solo si hay filtros activos)
     obras_disponibles = []
