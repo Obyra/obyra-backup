@@ -16,13 +16,7 @@
                         <i class="fas fa-exclamation-triangle me-1"></i>Alertas
                         <span class="badge bg-danger ms-1" id="badgeAlertas" style="display:none;">0</span>
                     </a>
-                    <a href="{{ url_for('inventario.analisis') }}" class="btn btn-success me-2">
-                        <i class="fas fa-chart-line me-1"></i>Análisis y Reportes
-                    </a>
                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-primary me-2">
-                        <i class="fas fa-shopping-cart me-1"></i>Compras
-                    </a>
                     <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalGestionCategorias">
                         <i class="fas fa-tags me-1"></i>Categorías
                     </button>
@@ -35,16 +29,6 @@
                             <i class="fas fa-compress-arrows-alt me-1"></i>Unificar Categorías
                         </button>
                     </form>
-                    <form method="POST" action="{{ url_for('inventario.reclasificar_encofrados') }}" class="d-inline">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-outline-info ms-1"
-                                onclick="return confirm('Reclasificar items de encofrado (vigas H20, puntales, cabezales, trípodes) a la categoría Encofrados?')">
-                            <i class="fas fa-exchange-alt me-1"></i>Fix Encofrados
-                        </button>
-                    </form>
-                    <a href="{{ url_for('inventario.categorias') }}" class="btn btn-outline-secondary ms-1">
-                        <i class="fas fa-cog me-1"></i>Gestión Global
-                    </a>
                     {% if current_user.is_super_admin %}
                     <button type="button" class="btn btn-outline-info ms-1" id="btnSeedIA" onclick="seedItemsIA()">
                         <i class="fas fa-robot me-1"></i>Cargar Items IA
