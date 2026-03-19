@@ -319,6 +319,39 @@ def completar(id):
     return redirect(url_for('requerimientos.detalle', id=id))
 
 
+@requerimientos_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar(id):
+    """Eliminar un requerimiento (solo admin o solicitante)."""
+    from models.inventory import RequerimientoCompra, RequerimientoCompraItem
+
+    requerimiento = RequerimientoCompra.query.filter_by(
+        id=id,
+        organizacion_id=current_user.organizacion_id
+    ).first_or_404()
+
+    # Solo el solicitante o admin puede eliminar
+    es_admin = current_user.rol in ['administrador', 'admin']
+    es_solicitante = requerimiento.solicitante_id == current_user.id
+    if not (es_admin or es_solicitante):
+        flash('No tiene permisos para eliminar este requerimiento', 'danger')
+        return redirect(url_for('requerimientos.detalle', id=id))
+
+    # No eliminar si tiene OC vinculada
+    if requerimiento.estado == 'completado':
+        flash('No se puede eliminar un requerimiento completado', 'warning')
+        return redirect(url_for('requerimientos.detalle', id=id))
+
+    numero = requerimiento.numero
+    # Eliminar items primero
+    RequerimientoCompraItem.query.filter_by(requerimiento_id=id).delete()
+    db.session.delete(requerimiento)
+    db.session.commit()
+
+    flash(f'Requerimiento {numero} eliminado', 'info')
+    return redirect(url_for('requerimientos.lista'))
+
+
 @requerimientos_bp.route('/<int:id>/cancelar', methods=['POST'])
 @login_required
 def cancelar(id):
