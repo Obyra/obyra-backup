@@ -396,10 +396,87 @@ def detalle(id):
     # Obtener uso en obras
     usos_obra = item.usos.join(Obra).order_by(UsoInventario.fecha_uso.desc()).limit(10).all()
     
+    # Categorías para el selector de edición
+    categorias = InventoryCategory.query.filter(
+        InventoryCategory.company_id == org_id,
+        InventoryCategory.is_active == True
+    ).order_by(InventoryCategory.nombre).all()
+
     return render_template('inventario/detalle.html',
                          item=item,
                          movimientos=movimientos,
-                         usos_obra=usos_obra)
+                         usos_obra=usos_obra,
+                         categorias=categorias)
+
+
+@inventario_bp.route('/<int:id>/editar', methods=['POST'])
+@login_required
+def editar_item(id):
+    """Editar categoría y datos básicos de un item."""
+    item = ItemInventario.query.get_or_404(id)
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    if not current_user.is_super_admin and item.organizacion_id != org_id:
+        flash('No tienes permisos para editar este item.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    categoria_id = request.form.get('categoria_id')
+    nombre = request.form.get('nombre')
+    unidad = request.form.get('unidad')
+    stock_minimo = request.form.get('stock_minimo')
+
+    if categoria_id:
+        item.categoria_id = int(categoria_id) if categoria_id != '0' else None
+    if nombre:
+        item.nombre = nombre.strip()
+    if unidad:
+        item.unidad_medida = unidad.strip()
+    if stock_minimo is not None and stock_minimo != '':
+        item.stock_minimo = float(stock_minimo)
+
+    db.session.commit()
+    flash(f'Item {item.codigo} actualizado', 'success')
+    return redirect(url_for('inventario.detalle', id=id))
+
+
+@inventario_bp.route('/reclasificar-encofrados', methods=['POST'])
+@login_required
+def reclasificar_encofrados():
+    """Reclasificar items de encofrado que están mal categorizados."""
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    # Buscar categoría ENCOFRADOS
+    cat_encofrados = InventoryCategory.query.filter(
+        InventoryCategory.company_id == org_id,
+        InventoryCategory.nombre.ilike('%encofrado%')
+    ).first()
+
+    if not cat_encofrados:
+        flash('No se encontró la categoría de Encofrados', 'warning')
+        return redirect(url_for('inventario.lista'))
+
+    # Keywords que identifican items de encofrado
+    keywords_encofrado = ['viga h20', 'puntal', 'cabezal', 'tripode', 'trípode',
+                          'fork', 'gato', 'mensula', 'ménsula', 'tensor',
+                          'panel encofrado', 'tablero encofrado', 'placa encofrado']
+
+    from sqlalchemy import or_
+    filtros = [ItemInventario.nombre.ilike(f'%{kw}%') for kw in keywords_encofrado]
+
+    items = ItemInventario.query.filter(
+        ItemInventario.organizacion_id == org_id,
+        or_(*filtros)
+    ).all()
+
+    count = 0
+    for item in items:
+        if item.categoria_id != cat_encofrados.id:
+            item.categoria_id = cat_encofrados.id
+            count += 1
+
+    db.session.commit()
+    flash(f'{count} items reclasificados a Encofrados', 'success')
+    return redirect(url_for('inventario.lista'))
 
 
 @inventario_bp.route('/<int:id>/eliminar', methods=['POST'])

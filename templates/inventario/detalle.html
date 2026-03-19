@@ -35,10 +35,31 @@
                             <tr>
                                 <th>Categoría</th>
                                 <td>
-                                    {% if item.categoria %}
-                                    <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
-                                    {% else %}
-                                    <span class="text-muted">Sin categoría</span>
+                                    <div id="cat-display">
+                                        {% if item.categoria %}
+                                        <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                                        {% else %}
+                                        <span class="text-muted">Sin categoría</span>
+                                        {% endif %}
+                                        {% if current_user.rol == 'administrador' %}
+                                        <button class="btn btn-sm btn-link p-0 ms-1" onclick="document.getElementById('cat-display').style.display='none'; document.getElementById('cat-edit').style.display='block';" title="Cambiar categoría">
+                                            <i class="fas fa-pencil-alt"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                    {% if current_user.rol == 'administrador' %}
+                                    <div id="cat-edit" style="display:none;">
+                                        <form method="POST" action="{{ url_for('inventario.editar_item', id=item.id) }}" class="d-flex align-items-center gap-1">
+                                            <select name="categoria_id" class="form-select form-select-sm" style="width:auto;">
+                                                <option value="0">Sin categoría</option>
+                                                {% for cat in categorias %}
+                                                <option value="{{ cat.id }}" {% if item.categoria_id == cat.id %}selected{% endif %}>{{ cat.nombre }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('cat-display').style.display='block'; document.getElementById('cat-edit').style.display='none';"><i class="fas fa-times"></i></button>
+                                        </form>
+                                    </div>
                                     {% endif %}
                                 </td>
                             </tr>
