@@ -87,6 +87,7 @@ from models.inventory import (
     # Legacy
     CategoriaInventario,
     ItemInventario,
+    item_categorias_adicionales,
     MovimientoInventario,
     UsoInventario,
     # New

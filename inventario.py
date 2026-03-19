@@ -297,7 +297,17 @@ def lista():
         current_app.logger.info(f"[INVENTARIO] Filtrando por org_id={org_id}")
 
     if categoria_id:
-        query = query.filter(ItemInventario.categoria_id == categoria_id)
+        from models.inventory import item_categorias_adicionales
+        query = query.filter(
+            db.or_(
+                ItemInventario.categoria_id == categoria_id,
+                ItemInventario.id.in_(
+                    db.session.query(item_categorias_adicionales.c.item_id).filter(
+                        item_categorias_adicionales.c.categoria_id == categoria_id
+                    )
+                )
+            )
+        )
 
     # Improved search with case-insensitive partial matching
     if buscar:
@@ -386,7 +396,7 @@ def lista():
         ).distinct().all()
 
     # Construir árbol de categorías con items agrupados (para vista de carpetas)
-    # OPTIMIZACIÓN: Una sola query para contar items por categoría
+    # Conteo por categoría principal
     conteo_items = {}
     if org_id:
         conteo_query = db.session.query(
@@ -398,10 +408,24 @@ def lista():
         ).group_by(ItemInventario.categoria_id).all()
         conteo_items = {cat_id: count for cat_id, count in conteo_query}
 
+    # Conteo por categorías adicionales (many-to-many)
+    conteo_adicionales = {}
+    if org_id:
+        from models.inventory import item_categorias_adicionales
+        conteo_adic_query = db.session.query(
+            item_categorias_adicionales.c.categoria_id,
+            db.func.count(item_categorias_adicionales.c.item_id)
+        ).join(
+            ItemInventario, ItemInventario.id == item_categorias_adicionales.c.item_id
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo == True
+        ).group_by(item_categorias_adicionales.c.categoria_id).all()
+        conteo_adicionales = {cat_id: count for cat_id, count in conteo_adic_query}
+
     arbol_categorias = []
     for cat_principal in categorias_nuevas:
-        # Usar el conteo pre-calculado en lugar de queries individuales
-        total_items_categoria = conteo_items.get(cat_principal.id, 0)
+        total_items_categoria = conteo_items.get(cat_principal.id, 0) + conteo_adicionales.get(cat_principal.id, 0)
 
         arbol_categorias.append({
             'id': cat_principal.id,
@@ -584,11 +608,11 @@ def detalle(id):
     # Obtener uso en obras
     usos_obra = item.usos.join(Obra).order_by(UsoInventario.fecha_uso.desc()).limit(10).all()
     
-    # Categorías para el selector de edición
+    # Categorías para el selector de edición (orden lógico de obra)
     categorias = InventoryCategory.query.filter(
         InventoryCategory.company_id == org_id,
         InventoryCategory.is_active == True
-    ).order_by(InventoryCategory.nombre).all()
+    ).order_by(InventoryCategory.sort_order, InventoryCategory.nombre).all()
 
     return render_template('inventario/detalle.html',
                          item=item,
@@ -625,6 +649,54 @@ def editar_item(id):
     db.session.commit()
     flash(f'Item {item.codigo} actualizado', 'success')
     return redirect(url_for('inventario.detalle', id=id))
+
+
+@inventario_bp.route('/<int:id>/categorias-adicionales', methods=['POST'])
+@csrf.exempt
+@login_required
+def categorias_adicionales(id):
+    """Gestionar categorías adicionales de un item (many-to-many)."""
+    item = ItemInventario.query.get_or_404(id)
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    if current_user.rol not in ('administrador', 'tecnico'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(ok=False, error='Datos inválidos'), 400
+
+    action = data.get('action')  # 'add' o 'remove' o 'set'
+    categoria_ids = data.get('categoria_ids', [])
+
+    if action == 'set':
+        # Reemplazar todas las categorías adicionales
+        cats = InventoryCategory.query.filter(
+            InventoryCategory.id.in_(categoria_ids),
+            InventoryCategory.company_id == org_id
+        ).all()
+        # Excluir la categoría principal
+        item.categorias_adicionales = [c for c in cats if c.id != item.categoria_id]
+    elif action == 'add':
+        for cat_id in categoria_ids:
+            if cat_id == item.categoria_id:
+                continue
+            cat = InventoryCategory.query.get(cat_id)
+            if cat and cat not in item.categorias_adicionales:
+                item.categorias_adicionales.append(cat)
+    elif action == 'remove':
+        for cat_id in categoria_ids:
+            cat = InventoryCategory.query.get(cat_id)
+            if cat and cat in item.categorias_adicionales:
+                item.categorias_adicionales.remove(cat)
+    else:
+        return jsonify(ok=False, error='Acción inválida (add/remove/set)'), 400
+
+    db.session.commit()
+    return jsonify(
+        ok=True,
+        categorias=[{'id': c.id, 'nombre': c.nombre} for c in item.categorias_adicionales]
+    )
 
 
 @inventario_bp.route('/reclasificar-encofrados', methods=['POST'])

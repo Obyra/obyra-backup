@@ -48,6 +48,26 @@
                                 </td>
                             </tr>
                             <tr>
+                                <th>También en</th>
+                                <td>
+                                    <div id="catsAdicionales">
+                                    {% for cat in item.categorias_adicionales %}
+                                        <span class="badge bg-outline-secondary border me-1 mb-1">
+                                            {{ cat.nombre }}
+                                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                            <a href="#" onclick="quitarCatAdicional({{ cat.id }}); return false;" class="text-danger ms-1" title="Quitar"><i class="fas fa-times"></i></a>
+                                            {% endif %}
+                                        </span>
+                                    {% endfor %}
+                                    </div>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                    <button class="btn btn-sm btn-link p-0 mt-1" data-bs-toggle="modal" data-bs-target="#modalCatsAdicionales" title="Agregar categorías">
+                                        <i class="fas fa-plus-circle me-1"></i>Agregar
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
                                 <th>Unidad</th>
                                 <td>{{ item.unidad }}</td>
                             </tr>
@@ -387,7 +407,7 @@ function cargarTraslados() {
 }
 </script>
 
-{% if current_user.rol == 'administrador' %}
+{% if current_user.rol in ['administrador', 'tecnico'] %}
 <!-- Modal Cambiar Categoría -->
 <div class="modal fade" id="modalCambiarCat" tabindex="-1">
     <div class="modal-dialog">
@@ -417,5 +437,84 @@ function cargarTraslados() {
         </div>
     </div>
 </div>
+<!-- Modal Categorías Adicionales -->
+<div class="modal fade" id="modalCatsAdicionales" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-tags me-2"></i>Categorías adicionales</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Item: <strong>{{ item.nombre }}</strong></p>
+                <p class="mb-2 small text-muted">Principal: <span class="badge bg-primary">{{ item.categoria.nombre if item.categoria else 'Sin categoría' }}</span></p>
+                <p class="mb-3 small text-muted">Seleccioná las categorías donde también debe aparecer este item:</p>
+                <div style="max-height:350px; overflow-y:auto;">
+                    {% for cat in categorias %}
+                    {% if cat.id != item.categoria_id %}
+                    <div class="form-check mb-1">
+                        <input class="form-check-input cat-adic-check" type="checkbox" value="{{ cat.id }}" id="catAdic_{{ cat.id }}"
+                               {% if cat in item.categorias_adicionales %}checked{% endif %}>
+                        <label class="form-check-label" for="catAdic_{{ cat.id }}">{{ cat.nombre }}</label>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="guardarCatsAdicionales()">
+                    <i class="fas fa-check me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function guardarCatsAdicionales() {
+    var checks = document.querySelectorAll('.cat-adic-check:checked');
+    var ids = Array.from(checks).map(function(c) { return parseInt(c.value); });
+
+    fetch('/inventario/{{ item.id }}/categorias-adicionales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set', categoria_ids: ids })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            // Actualizar badges
+            var container = document.getElementById('catsAdicionales');
+            var html = '';
+            data.categorias.forEach(function(cat) {
+                html += '<span class="badge bg-outline-secondary border me-1 mb-1">' + cat.nombre +
+                    ' <a href="#" onclick="quitarCatAdicional(' + cat.id + '); return false;" class="text-danger ms-1" title="Quitar"><i class="fas fa-times"></i></a></span>';
+            });
+            container.innerHTML = html;
+            bootstrap.Modal.getInstance(document.getElementById('modalCatsAdicionales')).hide();
+        } else {
+            alert(data.error || 'Error');
+        }
+    })
+    .catch(function(err) { alert('Error: ' + err.message); });
+}
+
+function quitarCatAdicional(catId) {
+    if (!confirm('Quitar esta categoría adicional?')) return;
+
+    fetch('/inventario/{{ item.id }}/categorias-adicionales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove', categoria_ids: [catId] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) { location.reload(); }
+        else { alert(data.error || 'Error'); }
+    })
+    .catch(function(err) { alert('Error: ' + err.message); });
+}
+</script>
 {% endif %}
 {% endblock %}

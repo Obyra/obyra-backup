@@ -231,6 +231,9 @@
                             </td>
                             <td>
                                 <span class="badge bg-secondary">{{ item.categoria.nombre if item.categoria else 'Sin categoría' }}</span>
+                                {% if item.categorias_adicionales %}
+                                <br><small class="text-muted" title="También en: {% for c in item.categorias_adicionales %}{{ c.nombre }}{% if not loop.last %}, {% endif %}{% endfor %}">+{{ item.categorias_adicionales|length }}</small>
+                                {% endif %}
                             </td>
                             <td class="text-center">
                                 <strong class="{{ 'text-danger' if item.necesita_reposicion else 'text-success' }}">

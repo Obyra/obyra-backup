@@ -204,6 +204,14 @@ class CategoriaInventario(db.Model):
         return f'<CategoriaInventario {self.nombre}>'
 
 
+# Tabla de asociación many-to-many: item ↔ categorías adicionales
+item_categorias_adicionales = db.Table(
+    'item_categorias_adicionales',
+    db.Column('item_id', db.Integer, db.ForeignKey('items_inventario.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('categoria_id', db.Integer, db.ForeignKey('inventory_category.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
 class ItemInventario(db.Model):
     __tablename__ = 'items_inventario'
 
@@ -241,6 +249,9 @@ class ItemInventario(db.Model):
 
     # Relaciones
     categoria = db.relationship('InventoryCategory', backref='items_inventario')
+    categorias_adicionales = db.relationship(
+        'InventoryCategory', secondary=item_categorias_adicionales,
+        backref='items_adicionales', lazy='selectin')
     organizacion = db.relationship('Organizacion', back_populates='inventario')
     movimientos = db.relationship('MovimientoInventario', back_populates='item', lazy='dynamic')
     usos = db.relationship('UsoInventario', back_populates='item', lazy='dynamic')
