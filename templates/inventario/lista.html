@@ -217,6 +217,9 @@
                 <table class="table table-hover table-striped align-middle">
                     <thead class="table-dark">
                         <tr>
+                            {% if current_user.rol == 'administrador' %}
+                            <th style="width:35px;"><input type="checkbox" id="selectAll" onclick="toggleAll(this)" class="form-check-input"></th>
+                            {% endif %}
                             <th>Código</th>
                             <th>Nombre</th>
                             <th>Categoría</th>
@@ -237,6 +240,9 @@
                         {% set total_trasladado = item_data.total_trasladado or 0 %}
                         {% set ubicaciones_stock = item_data.ubicaciones_stock or [] %}
                         <tr class="{{ 'table-warning' if item.necesita_reposicion }}" id="item-row-{{ item.id }}">
+                            {% if current_user.rol == 'administrador' %}
+                            <td><input type="checkbox" class="form-check-input item-check" value="{{ item.id }}" onchange="updateBulkBar()"></td>
+                            {% endif %}
                             <td>
                                 <strong>{{ item.codigo }}</strong>
                                 {% if item.necesita_reposicion %}
@@ -1002,5 +1008,107 @@ async function importarExcel(input) {
     }
     input.value = '';
 }
+
+// ---- Selección múltiple y mover categoría en lote ----
+function toggleAll(master) {
+    document.querySelectorAll('.item-check').forEach(cb => cb.checked = master.checked);
+    updateBulkBar();
+}
+
+function updateBulkBar() {
+    var checked = document.querySelectorAll('.item-check:checked');
+    var bar = document.getElementById('bulkBar');
+    var count = document.getElementById('bulkCount');
+    if (checked.length > 0) {
+        bar.style.display = 'flex';
+        count.textContent = checked.length;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function moverCategoriaBulk() {
+    var catSelect = document.getElementById('bulkCatSelect');
+    var catId = catSelect.value;
+    if (!catId) { alert('Seleccioná una categoría'); return; }
+
+    var ids = [];
+    document.querySelectorAll('.item-check:checked').forEach(cb => ids.push(cb.value));
+    if (ids.length === 0) return;
+
+    var catName = catSelect.options[catSelect.selectedIndex].text;
+    if (!confirm('Mover ' + ids.length + ' items a "' + catName + '"?')) return;
+
+    fetch('/inventario/mover-categoria-bulk', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ item_ids: ids, categoria_id: catId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert(data.movidos + ' items movidos a ' + catName);
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Error'));
+        }
+    })
+    .catch(e => alert('Error: ' + e.message));
+}
+
+function eliminarBulk() {
+    var ids = [];
+    document.querySelectorAll('.item-check:checked').forEach(cb => ids.push(cb.value));
+    if (ids.length === 0) return;
+    if (!confirm('¿Eliminar ' + ids.length + ' items permanentemente?\n\nEsta acción no se puede deshacer.')) return;
+
+    fetch('/inventario/eliminar-bulk', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ item_ids: ids })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert(data.eliminados + ' items eliminados');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Error'));
+        }
+    })
+    .catch(e => alert('Error: ' + e.message));
+}
 </script>
+
+{% if current_user.rol == 'administrador' %}
+<!-- Barra flotante de acciones en lote -->
+<div id="bulkBar" style="display:none; position:fixed; bottom:0; left:0; right:0; z-index:1050;"
+     class="bg-dark text-white p-3 d-flex align-items-center justify-content-center gap-3 shadow-lg">
+    <span><strong id="bulkCount">0</strong> items seleccionados</span>
+    <select id="bulkCatSelect" class="form-select form-select-sm" style="width:250px;">
+        <option value="">Mover a categoría...</option>
+        {% for cat in categorias_nuevas %}
+        <option value="{{ cat.id }}">{{ cat.nombre }}</option>
+        {% endfor %}
+        {% for cat in categorias %}
+        <option value="{{ cat.id }}">{{ cat.nombre }}</option>
+        {% endfor %}
+    </select>
+    <button class="btn btn-success btn-sm" onclick="moverCategoriaBulk()">
+        <i class="fas fa-exchange-alt me-1"></i>Mover
+    </button>
+    <button class="btn btn-danger btn-sm" onclick="eliminarBulk()">
+        <i class="fas fa-trash me-1"></i>Eliminar
+    </button>
+    <button class="btn btn-outline-light btn-sm" onclick="document.getElementById('selectAll').checked=false; toggleAll(document.getElementById('selectAll'))">
+        <i class="fas fa-times me-1"></i>Cancelar
+    </button>
+</div>
+{% endif %}
 {% endblock %}

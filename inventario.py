@@ -637,6 +637,68 @@ def unificar_categorias():
     return redirect(url_for('inventario.lista'))
 
 
+@inventario_bp.route('/mover-categoria-bulk', methods=['POST'])
+@csrf.exempt
+@login_required
+def mover_categoria_bulk():
+    """Mover múltiples items a otra categoría."""
+    if current_user.rol != 'administrador':
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(ok=False, error='Datos inválidos'), 400
+
+    item_ids = data.get('item_ids', [])
+    categoria_id = data.get('categoria_id')
+    if not item_ids or not categoria_id:
+        return jsonify(ok=False, error='Faltan datos'), 400
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    cat_id = int(categoria_id) if str(categoria_id) != '0' else None
+
+    movidos = 0
+    for item_id in item_ids:
+        item = ItemInventario.query.filter_by(id=int(item_id), organizacion_id=org_id).first()
+        if item:
+            item.categoria_id = cat_id
+            movidos += 1
+
+    db.session.commit()
+    return jsonify(ok=True, movidos=movidos)
+
+
+@inventario_bp.route('/eliminar-bulk', methods=['POST'])
+@csrf.exempt
+@login_required
+def eliminar_bulk():
+    """Eliminar múltiples items."""
+    if current_user.rol != 'administrador':
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(ok=False, error='Datos inválidos'), 400
+
+    item_ids = data.get('item_ids', [])
+    if not item_ids:
+        return jsonify(ok=False, error='No hay items seleccionados'), 400
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    eliminados = 0
+    for item_id in item_ids:
+        item = ItemInventario.query.filter_by(id=int(item_id), organizacion_id=org_id).first()
+        if item:
+            # Eliminar movimientos asociados
+            MovimientoInventario.query.filter_by(item_id=item.id).delete()
+            UsoInventario.query.filter_by(item_id=item.id).delete()
+            db.session.delete(item)
+            eliminados += 1
+
+    db.session.commit()
+    return jsonify(ok=True, eliminados=eliminados)
+
+
 @inventario_bp.route('/<int:id>/eliminar', methods=['POST'])
 @login_required
 def eliminar(id):
