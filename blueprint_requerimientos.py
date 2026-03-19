@@ -345,19 +345,34 @@ def eliminar(id):
     numero = requerimiento.numero
 
     try:
-        # Desvincular OC que referencian este requerimiento
-        from models.inventory import OrdenCompra, Remito
-        OrdenCompra.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
-        Remito.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
-
-        # Desvincular cotizaciones si existen
+        # Eliminar cotizaciones y sus items (FK es NOT NULL, no se puede desvincular)
         try:
-            from models.proveedores_oc import CotizacionProveedor
-            CotizacionProveedor.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+            from models.proveedores_oc import CotizacionProveedor, CotizacionProveedorItem
+            cotizaciones = CotizacionProveedor.query.filter_by(requerimiento_id=id).all()
+            for cot in cotizaciones:
+                CotizacionProveedorItem.query.filter_by(cotizacion_id=cot.id).delete()
+                db.session.delete(cot)
+            db.session.flush()
         except Exception:
-            pass
+            db.session.rollback()
 
-        # Eliminar items del requerimiento
+        # Desvincular OC (FK es nullable)
+        try:
+            from models.inventory import OrdenCompra
+            OrdenCompra.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+            db.session.flush()
+        except Exception:
+            db.session.rollback()
+
+        # Desvincular Remitos (FK es nullable)
+        try:
+            from models.inventory import Remito
+            Remito.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+            db.session.flush()
+        except Exception:
+            db.session.rollback()
+
+        # Eliminar items del requerimiento (cascade debería hacerlo, pero por si acaso)
         RequerimientoCompraItem.query.filter_by(requerimiento_id=id).delete()
 
         # Eliminar el requerimiento
