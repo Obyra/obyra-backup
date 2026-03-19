@@ -22,13 +22,6 @@
                     </button>
                     {% endif %}
                     {% if current_user.rol == 'administrador' %}
-                    <form method="POST" action="{{ url_for('inventario.unificar_categorias') }}" class="d-inline">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-outline-warning ms-1"
-                                onclick="return confirm('Unificar categorías duplicadas?\n\nEsto fusiona categorías con el mismo nombre (ej: ESTRUCTURA + Estructura) en una sola.')">
-                            <i class="fas fa-compress-arrows-alt me-1"></i>Unificar Categorías
-                        </button>
-                    </form>
                     {% if current_user.is_super_admin %}
                     <button type="button" class="btn btn-outline-info ms-1" id="btnSeedIA" onclick="seedItemsIA()">
                         <i class="fas fa-robot me-1"></i>Cargar Items IA
@@ -58,13 +51,9 @@
                     <label for="categoria" class="form-label">Categoría</label>
                     <select class="form-select" id="categoria" name="categoria">
                         <option value="">Todas las categorías</option>
-                        {% set cats_unicas = [] %}
-                        {% set cats_ids_vistos = [] %}
-                        {% if categorias_nuevas %}{% for cat in categorias_nuevas %}{% if cat.id not in cats_ids_vistos %}{{ cats_unicas.append(cat) or '' }}{{ cats_ids_vistos.append(cat.id) or '' }}{% endif %}{% endfor %}{% endif %}
-                        {% if categorias %}{% for cat in categorias %}{% if cat.id not in cats_ids_vistos %}{{ cats_unicas.append(cat) or '' }}{{ cats_ids_vistos.append(cat.id) or '' }}{% endif %}{% endfor %}{% endif %}
-                        {% for categoria in cats_unicas|sort(attribute='nombre') %}
-                        <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id }}>
-                            {{ categoria.nombre }}
+                        {% for cat in categorias_nuevas %}
+                        <option value="{{ cat.id }}" {{ 'selected' if categoria_id == cat.id }}>
+                            {{ cat.nombre }}
                         </option>
                         {% endfor %}
                     </select>
@@ -577,28 +566,6 @@
                     </div>
                     {% endif %}
 
-                    {% if categorias %}
-                    <div class="col-12">
-                        <h6 class="border-bottom pb-2 mb-3">Otras Categorías</h6>
-                        <div class="row">
-                            {% for categoria in categorias %}
-                            <div class="col-md-6 mb-2">
-                                <div class="form-check">
-                                    <input class="form-check-input categoria-checkbox"
-                                           type="checkbox"
-                                           value="{{ categoria.id }}"
-                                           id="cat_old_{{ categoria.id }}"
-                                           data-nombre="{{ categoria.nombre }}"
-                                           checked>
-                                    <label class="form-check-label" for="cat_old_{{ categoria.id }}">
-                                        {{ categoria.nombre }}
-                                    </label>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
             <div class="modal-footer">
@@ -1078,10 +1045,7 @@ function eliminarBulk() {
     <span><strong id="bulkCount">0</strong> items seleccionados</span>
     <select id="bulkCatSelect" class="form-select form-select-sm" style="width:250px;">
         <option value="">Mover a categoría...</option>
-        {% set todas_cats = [] %}
-        {% if categorias_nuevas %}{% for cat in categorias_nuevas %}{% if cat not in todas_cats %}{{ todas_cats.append(cat) or '' }}{% endif %}{% endfor %}{% endif %}
-        {% if categorias %}{% for cat in categorias %}{% if cat not in todas_cats %}{{ todas_cats.append(cat) or '' }}{% endif %}{% endfor %}{% endif %}
-        {% for cat in todas_cats|sort(attribute='nombre') %}
+        {% for cat in categorias_nuevas %}
         <option value="{{ cat.id }}">{{ cat.nombre }}</option>
         {% endfor %}
     </select>
