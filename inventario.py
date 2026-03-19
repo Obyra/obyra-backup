@@ -481,164 +481,159 @@ def reclasificar_encofrados():
 @inventario_bp.route('/unificar-categorias', methods=['POST'])
 @login_required
 def unificar_categorias():
-    """Unificar categorías duplicadas y variantes similares."""
+    """Limpieza definitiva: establecer categorías canónicas, fusionar, crear faltantes."""
     if current_user.rol != 'administrador':
         flash('Solo administradores pueden unificar categorías', 'danger')
         return redirect(url_for('inventario.lista'))
 
     org_id = get_current_org_id() or current_user.organizacion_id
-    categorias = InventoryCategory.query.filter(
-        InventoryCategory.company_id == org_id
-    ).all()
 
-    # Mapeo de categorías que deben fusionarse → nombre canónico
-    # Las variantes (keys) se fusionan en el nombre canónico (value)
+    # ===== LISTA CANÓNICA DE CATEGORÍAS (orden lógico de obra) =====
+    CATEGORIAS_CANONICAS = [
+        'Preliminares y Obrador',
+        'Demoliciones',
+        'Movimiento de Suelos',
+        'Excavación',
+        'Depresión de Napa / Bombeo',
+        'Fundaciones',
+        'Estructura',
+        'Encofrados',
+        'Mampostería',
+        'Contrapisos y Carpetas',
+        'Impermeabilizaciones y Aislaciones',
+        'Revoque Grueso',
+        'Revoque Fino',
+        'Cielorrasos',
+        'Yesería y Enlucidos',
+        'Pisos y Revestimientos',
+        'Carpintería y Aberturas',
+        'Herrería de Obra',
+        'Pintura',
+        'Instalaciones Eléctricas',
+        'Instalaciones Sanitarias y Provisiones',
+        'Instalaciones de Gas',
+        'Ventilaciones y Conductos',
+        'Instalaciones Complementarias',
+        'Construcción en Seco',
+        'Techos y Cubiertas',
+        'Limpieza Final y Puesta en Marcha',
+        # Soporte
+        'Mano de Obra',
+        'Maquinarias y Equipos',
+        'Materiales de Obra',
+        'Seguridad e Higiene',
+        'Consumibles e Insumos',
+        'Logística y Depósito',
+        'Otros',
+    ]
+
+    # Mapeo: nombre existente (lowercase) → categoría canónica destino
     FUSIONES = {
-        # Carpintería
         'carpinteria + metalicas + aberturas': 'Carpintería y Aberturas',
         'carpintería y aberturas': 'Carpintería y Aberturas',
-        # Estructura
         'estructura': 'Estructura',
-        # Excavación (separado de Movimiento de Suelos)
         'excavación': 'Excavación',
-        # Movimiento de Suelos
         'excavacion y movimiento suelo': 'Movimiento de Suelos',
         'movimiento de suelos': 'Movimiento de Suelos',
-        # Fundaciones
         'fundaciones': 'Fundaciones',
-        # Herrería
         'herreria de obra': 'Herrería de Obra',
         'herrería de obra': 'Herrería de Obra',
-        # Impermeabilización
         'impermeabilizacion y aislacion': 'Impermeabilizaciones y Aislaciones',
         'impermeabilizaciones y aislaciones': 'Impermeabilizaciones y Aislaciones',
-        # Instalaciones eléctricas
         'instalaciones electricas': 'Instalaciones Eléctricas',
         'instalaciones eléctricas': 'Instalaciones Eléctricas',
-        # Instalaciones sanitarias
         'instalaciones sanitarias': 'Instalaciones Sanitarias y Provisiones',
         'instalaciones sanitarias y provisiones': 'Instalaciones Sanitarias y Provisiones',
-        # Instalaciones gas
         'instalaciones de gas': 'Instalaciones de Gas',
-        # Instalaciones → fusionar en Complementarias
         'instalaciones': 'Instalaciones Complementarias',
         'instalaciones climatizacion': 'Instalaciones Complementarias',
         'instalaciones complementarias': 'Instalaciones Complementarias',
-        # Limpieza
+        'equipo contra incendios + maquinaria edificio': 'Instalaciones Complementarias',
         'limpieza final': 'Limpieza Final y Puesta en Marcha',
         'limpieza final y puesta en marcha': 'Limpieza Final y Puesta en Marcha',
-        # Mampostería
         'mamposteria': 'Mampostería',
         'mampostería': 'Mampostería',
-        # Pinturas
         'pinturas y revestimientos': 'Pintura',
         'pintura': 'Pintura',
-        # Pisos
         'pisos': 'Pisos y Revestimientos',
         'pisos y revestimientos': 'Pisos y Revestimientos',
-        # Revoque (Grueso y Fino son categorías SEPARADAS)
         'revoque fino/yeseria': 'Revoque Fino',
         'revoque fino': 'Revoque Fino',
         'revoque grueso': 'Revoque Grueso',
-        # Yesería
         'yesería y enlucidos': 'Yesería y Enlucidos',
-        # Techos
         'techos': 'Techos y Cubiertas',
         'techos y cubiertas': 'Techos y Cubiertas',
-        # Maquinarias
         'maquinarias': 'Maquinarias y Equipos',
         'maquinarias y equipos': 'Maquinarias y Equipos',
-        # Encofrados
         'encofrados': 'Encofrados',
         'sistemas de encofrado y andamiaje': 'Encofrados',
         'apuntalamientos': 'Encofrados',
-        # Seguridad + Indumentaria
         'seguridad': 'Seguridad e Higiene',
         'seguridad e higiene': 'Seguridad e Higiene',
         'indumentaria': 'Seguridad e Higiene',
-        # Materiales (fusionar duplicados)
         'material de construcción': 'Materiales de Obra',
         'materiales de obra': 'Materiales de Obra',
-        # Equipo contra incendios
-        'equipo contra incendios + maquinaria edificio': 'Instalaciones Complementarias',
+        'consumibles e insumos': 'Consumibles e Insumos',
+        'administrativo y oficina de obra': 'Otros',
     }
 
-    # Paso 1: agrupar categorías por nombre canónico
-    grupos = {}  # canonical_name -> [cat, cat, ...]
-    sin_mapeo = []
-    for cat in categorias:
-        key = cat.nombre.strip().lower()
-        canonical = FUSIONES.get(key)
-        if canonical:
-            if canonical not in grupos:
-                grupos[canonical] = []
-            grupos[canonical].append(cat)
+    # Paso 1: crear categorías canónicas que no existen
+    creadas = 0
+    canonicas_db = {}  # nombre → InventoryCategory object
+    for idx, nombre in enumerate(CATEGORIAS_CANONICAS):
+        cat = InventoryCategory.query.filter(
+            InventoryCategory.company_id == org_id,
+            InventoryCategory.nombre == nombre
+        ).first()
+        if not cat:
+            cat = InventoryCategory(
+                company_id=org_id,
+                nombre=nombre,
+                sort_order=idx,
+                is_active=True
+            )
+            db.session.add(cat)
+            db.session.flush()
+            creadas += 1
         else:
-            sin_mapeo.append(cat)
+            cat.sort_order = idx
+        canonicas_db[nombre] = cat
+
+    # Paso 2: fusionar categorías existentes en las canónicas
+    todas = InventoryCategory.query.filter(
+        InventoryCategory.company_id == org_id
+    ).all()
 
     eliminadas = 0
     items_movidos = 0
-    renombradas = 0
+    for cat in todas:
+        if cat.nombre in CATEGORIAS_CANONICAS:
+            continue  # es canónica, no tocar
 
-    for canonical, cats in grupos.items():
-        if len(cats) == 0:
-            continue
-
-        # Buscar si ya existe una con el nombre canónico exacto
-        principal = None
-        for c in cats:
-            if c.nombre == canonical:
-                principal = c
-                break
-
-        if not principal:
-            # Usar la que tiene más items y renombrarla
-            cats.sort(key=lambda c: -ItemInventario.query.filter_by(categoria_id=c.id).count())
-            principal = cats[0]
-            if principal.nombre != canonical:
-                principal.nombre = canonical
-                renombradas += 1
-
-        # Mover items de las duplicadas a la principal
-        for duplicada in cats:
-            if duplicada.id == principal.id:
-                continue
-            items_dup = ItemInventario.query.filter_by(categoria_id=duplicada.id).all()
-            for item in items_dup:
-                item.categoria_id = principal.id
-                items_movidos += 1
-            # Mover subcategorías hijas
-            for hijo in InventoryCategory.query.filter_by(parent_id=duplicada.id).all():
-                hijo.parent_id = principal.id
-            db.session.delete(duplicada)
-            eliminadas += 1
-
-    # Paso 2: también fusionar duplicados exactos (case-insensitive) que no están en FUSIONES
-    grupos_exactos = {}
-    for cat in sin_mapeo:
         key = cat.nombre.strip().lower()
-        if key not in grupos_exactos:
-            grupos_exactos[key] = []
-        grupos_exactos[key].append(cat)
+        destino_nombre = FUSIONES.get(key)
 
-    for key, cats in grupos_exactos.items():
-        if len(cats) <= 1:
-            continue
-        cats.sort(key=lambda c: (
-            -ItemInventario.query.filter_by(categoria_id=c.id).count(),
-            0 if c.nombre[0].isupper() and not c.nombre.isupper() else 1
-        ))
-        principal = cats[0]
-        for duplicada in cats[1:]:
-            items_dup = ItemInventario.query.filter_by(categoria_id=duplicada.id).all()
-            for item in items_dup:
-                item.categoria_id = principal.id
+        if destino_nombre and destino_nombre in canonicas_db:
+            destino = canonicas_db[destino_nombre]
+            # Mover items
+            items_cat = ItemInventario.query.filter_by(categoria_id=cat.id).all()
+            for item in items_cat:
+                item.categoria_id = destino.id
                 items_movidos += 1
-            db.session.delete(duplicada)
+            # Mover hijos
+            for hijo in InventoryCategory.query.filter_by(parent_id=cat.id).all():
+                hijo.parent_id = destino.id
+            db.session.delete(cat)
             eliminadas += 1
+        elif cat.nombre not in CATEGORIAS_CANONICAS:
+            # Categoría sin mapeo y no es canónica: si tiene 0 items, eliminar
+            count = ItemInventario.query.filter_by(categoria_id=cat.id).count()
+            if count == 0:
+                db.session.delete(cat)
+                eliminadas += 1
 
     db.session.commit()
-    flash(f'{eliminadas} categorías eliminadas, {renombradas} renombradas, {items_movidos} items reasignados', 'success')
+    flash(f'Categorías organizadas: {creadas} creadas, {eliminadas} eliminadas, {items_movidos} items reasignados', 'success')
     return redirect(url_for('inventario.lista'))
 
 
