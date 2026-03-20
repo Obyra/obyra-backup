@@ -597,6 +597,32 @@ PRECIO_REFERENCIA = {
     'MAT-REJILLA-VENT': 4800.0,     # unidad
     'MAT-EXTRACTOR': 35000.0,       # unidad
     'MAT-SOMBRERETE': 8500.0,       # unidad
+    # Ventilación - Items del pliego
+    'VENT-NATURAL-PALIERS': 5477371.0,         # gl - Ventilación natural en paliers
+    'VENT-NATURAL-SANITARIOS': 16405821.0,     # gl - Ventilación natural en locales sanitarios (sombrerete de chapa)
+    'VENT-MECANICA-AUXILIAR': 3286422.0,       # gl - Ventilaciones mecánicas auxiliares (subsuelos, etc.) Ay. de Gremios
+    'VENT-REMATES-SOMBRETES': 5155172.0,       # gl - Remates sombretes reglamentarios (tachos y albañilería)
+    # Ventilación - Items adicionales de arquitecto
+    'MAT-CONDUCTO-GALV-CIRCULAR': 12500.0,     # ml - Conducto galvanizado circular (Ø100-300mm)
+    'MAT-CONDUCTO-GALV-RECTANGULAR': 15000.0,  # ml - Conducto galvanizado rectangular
+    'MAT-CONDUCTO-FLEXIBLE': 6500.0,           # ml - Conducto flexible aluminio (Ø100-200mm)
+    'MAT-CONDUCTO-PVC-VENT': 4200.0,           # ml - Conducto PVC para ventilación (Ø110mm)
+    'MAT-DAMPER-REGULACION': 18000.0,          # unidad - Damper de regulación de caudal
+    'MAT-DAMPER-CORTA-FUEGO': 45000.0,         # unidad - Damper cortafuego (REI 120)
+    'MAT-REJILLA-LINEAL': 12000.0,             # ml - Rejilla lineal de ventilación (aluminio)
+    'MAT-REJILLA-RETORNO': 6500.0,             # unidad - Rejilla de retorno con filtro
+    'MAT-DIFUSOR-CUADRADO': 15000.0,           # unidad - Difusor cuadrado para inyección de aire
+    'MAT-EXTRACTOR-CENTRIFUGO': 85000.0,       # unidad - Extractor centrífugo (alta presión)
+    'MAT-EXTRACTOR-HELICOIDAL': 45000.0,       # unidad - Extractor helicoidal (baja presión, alto caudal)
+    'MAT-EXTRACTOR-BANO': 22000.0,             # unidad - Extractor de baño silencioso
+    'MAT-SOMBRERETE-CHAPA': 12000.0,           # unidad - Sombrerete de chapa galvanizada
+    'MAT-SOMBRERETE-GIRATORIO': 18000.0,       # unidad - Sombrerete giratorio (eólico)
+    'MAT-CODO-GALV': 4500.0,                   # unidad - Codo galvanizado 90° para conductos
+    'MAT-REDUCCION-GALV': 5500.0,              # unidad - Reducción galvanizada para conductos
+    'MAT-AISLACION-CONDUCTO': 5200.0,          # m² - Aislación térmica para conductos (lana de vidrio + papel kraft)
+    'MAT-SELLADOR-CONDUCTOS': 3800.0,          # cartucho - Sellador para juntas de conductos
+    'MAT-CINTA-ALUMINIO': 2500.0,              # rollo - Cinta de aluminio para sellado de conductos
+    'MAT-TIRO-BALANCEADO': 65000.0,            # unidad - Kit tiro balanceado (calefactores/calefones)
     # Revoques y yeseria
     'MAT-YESO': 5100.0,             # kg
     'MAT-YESO-PROY': 6200.0,        # kg yeso proyectado
@@ -800,6 +826,7 @@ PRECIO_REFERENCIA = {
     'MO-SANIT': 46800.0,
     'MO-GAS': 47800.0,
     'MO-VENT': 43000.0,
+    'MO-VENT-CHAPA': 46000.0,      # jornal chapista especializado conductos
     'MO-IMP': 44500.0,
     'MO-IMP-AYUDANTE': 32000.0,    # jornal ayudante impermeabilizaciones
     'MO-REV': 41000.0,
@@ -881,6 +908,9 @@ PRECIO_REFERENCIA = {
     'EQ-PISTOLA-AIRLESS': 25000.0,  # dia pistola airless para membrana líquida
     'EQ-PROYECTORA-PU': 45000.0,    # dia equipo proyector poliuretano
     'EQ-SOLDADORA': 18000.0,        # dia
+    'EQ-PLEGADORA-CHAPA': 25000.0,  # dia plegadora de chapa para conductos
+    'EQ-REMACHADORA': 8000.0,       # dia remachadora neumática
+    'EQ-ANEMOMETRO': 12000.0,       # dia anemómetro digital medición caudal
     'EQ-AMOLADORA': 8000.0,         # dia
     'EQ-GUINCHE': 65000.0,          # dia guinche de carga
     'EQ-TOPOGRAFO': 75000.0,        # dia equipo topografico
@@ -1841,18 +1871,50 @@ ETAPA_REGLAS_BASE = {
     'ventilaciones-conductos': {
         'nombre': 'Ventilaciones y Conductos',
         'materiales': [
-            {'codigo': 'MAT-CONDUCTO-VENT', 'material_key': 'conducto_vent', 'descripcion': 'Conductos de chapa galvanizada / PVC', 'unidad': 'ml', 'coef_por_m2': 0.8},
-            {'codigo': 'MAT-REJILLA-VENT', 'material_key': 'rejilla_vent', 'descripcion': 'Rejillas de ventilación', 'unidad': 'unidades', 'coef_por_m2': 0.06},
-            {'codigo': 'MAT-EXTRACTOR', 'material_key': 'extractor', 'descripcion': 'Extractor de aire mecánico', 'unidad': 'unidades', 'coef_por_m2': 0.008},
-            {'codigo': 'MAT-SOMBRERETE', 'material_key': 'sombrerete', 'descripcion': 'Sombrerete ventilación', 'unidad': 'unidades', 'coef_por_m2': 0.008},
+            # --- Del pliego (globales) ---
+            {'codigo': 'VENT-NATURAL-PALIERS', 'material_key': 'vent_paliers', 'descripcion': 'Ventilación natural en paliers', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'VENT-NATURAL-SANITARIOS', 'material_key': 'vent_sanitarios', 'descripcion': 'Ventilación natural en locales sanitarios (sombrerete de chapa)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'VENT-MECANICA-AUXILIAR', 'material_key': 'vent_mecanica', 'descripcion': 'Ventilaciones mecánicas auxiliares (subsuelos, etc.) Ay. de Gremios', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'VENT-REMATES-SOMBRETES', 'material_key': 'remates_sombretes', 'descripcion': 'Remates sombretes reglamentarios (tachos y albañilería)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            # --- Conductos por tipo ---
+            {'codigo': 'MAT-CONDUCTO-GALV-CIRCULAR', 'material_key': 'conducto_circular', 'descripcion': 'Conducto galvanizado circular (Ø100-300mm)', 'unidad': 'ml', 'coef_por_m2': 0.40},
+            {'codigo': 'MAT-CONDUCTO-GALV-RECTANGULAR', 'material_key': 'conducto_rectangular', 'descripcion': 'Conducto galvanizado rectangular', 'unidad': 'ml', 'coef_por_m2': 0.20},
+            {'codigo': 'MAT-CONDUCTO-FLEXIBLE', 'material_key': 'conducto_flexible', 'descripcion': 'Conducto flexible aluminio (Ø100-200mm)', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-CONDUCTO-PVC-VENT', 'material_key': 'conducto_pvc', 'descripcion': 'Conducto PVC para ventilación (Ø110mm)', 'unidad': 'ml', 'coef_por_m2': 0.10},
+            # --- Dampers ---
+            {'codigo': 'MAT-DAMPER-REGULACION', 'material_key': 'damper_regulacion', 'descripcion': 'Damper de regulación de caudal', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'MAT-DAMPER-CORTA-FUEGO', 'material_key': 'damper_cortafuego', 'descripcion': 'Damper cortafuego (REI 120)', 'unidad': 'unidad', 'coef_por_m2': 0.003},
+            # --- Rejillas y difusores ---
+            {'codigo': 'MAT-REJILLA-VENT', 'material_key': 'rejilla_vent', 'descripcion': 'Rejillas de ventilación estándar', 'unidad': 'unidad', 'coef_por_m2': 0.06},
+            {'codigo': 'MAT-REJILLA-LINEAL', 'material_key': 'rejilla_lineal', 'descripcion': 'Rejilla lineal de ventilación (aluminio)', 'unidad': 'ml', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-REJILLA-RETORNO', 'material_key': 'rejilla_retorno', 'descripcion': 'Rejilla de retorno con filtro', 'unidad': 'unidad', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-DIFUSOR-CUADRADO', 'material_key': 'difusor_cuadrado', 'descripcion': 'Difusor cuadrado para inyección de aire', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            # --- Extractores ---
+            {'codigo': 'MAT-EXTRACTOR-CENTRIFUGO', 'material_key': 'extractor_centrifugo', 'descripcion': 'Extractor centrífugo (alta presión)', 'unidad': 'unidad', 'coef_por_m2': 0.002},
+            {'codigo': 'MAT-EXTRACTOR-HELICOIDAL', 'material_key': 'extractor_helicoidal', 'descripcion': 'Extractor helicoidal (baja presión, alto caudal)', 'unidad': 'unidad', 'coef_por_m2': 0.003},
+            {'codigo': 'MAT-EXTRACTOR-BANO', 'material_key': 'extractor_bano', 'descripcion': 'Extractor de baño silencioso', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            # --- Sombretes ---
+            {'codigo': 'MAT-SOMBRERETE-CHAPA', 'material_key': 'sombrerete_chapa', 'descripcion': 'Sombrerete de chapa galvanizada', 'unidad': 'unidad', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-SOMBRERETE-GIRATORIO', 'material_key': 'sombrerete_giratorio', 'descripcion': 'Sombrerete giratorio (eólico)', 'unidad': 'unidad', 'coef_por_m2': 0.004},
+            # --- Accesorios y complementos ---
+            {'codigo': 'MAT-CODO-GALV', 'material_key': 'codo_galv', 'descripcion': 'Codo galvanizado 90° para conductos', 'unidad': 'unidad', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-REDUCCION-GALV', 'material_key': 'reduccion_galv', 'descripcion': 'Reducción galvanizada para conductos', 'unidad': 'unidad', 'coef_por_m2': 0.01},
+            {'codigo': 'MAT-AISLACION-CONDUCTO', 'material_key': 'aisl_conducto', 'descripcion': 'Aislación térmica para conductos (lana vidrio + papel kraft)', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-SELLADOR-CONDUCTOS', 'material_key': 'sellador_conductos', 'descripcion': 'Sellador para juntas de conductos', 'unidad': 'cartucho', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-CINTA-ALUMINIO', 'material_key': 'cinta_aluminio', 'descripcion': 'Cinta de aluminio para sellado de conductos', 'unidad': 'rollo', 'coef_por_m2': 0.005},
+            {'codigo': 'MAT-TIRO-BALANCEADO', 'material_key': 'tiro_balanceado', 'descripcion': 'Kit tiro balanceado (calefactores/calefones)', 'unidad': 'unidad', 'coef_por_m2': 0.005},
         ],
         'mano_obra': [
-            {'codigo': 'MO-VENT', 'descripcion': 'Instalador de ventilación', 'unidad': 'jornal', 'coef_por_m2': 0.10}
+            {'codigo': 'MO-VENT', 'descripcion': 'Instalador de ventilación / cañista', 'unidad': 'jornal', 'coef_por_m2': 0.10},
+            {'codigo': 'MO-VENT-CHAPA', 'descripcion': 'Chapista especializado en conductos', 'unidad': 'jornal', 'coef_por_m2': 0.06},
         ],
         'equipos': [
             {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios y escaleras para instalación', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-PLEGADORA-CHAPA', 'descripcion': 'Plegadora de chapa para conductos', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-REMACHADORA', 'descripcion': 'Remachadora neumática para conductos', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-ANEMOMETRO', 'descripcion': 'Anemómetro digital para medición de caudal', 'unidad': 'día', 'dias_por_m2': 0.001, 'min_dias': 1},
         ],
-        'notas': 'Conductos de ventilación natural, extracción mecánica, sombretes y tiro balanceado.'
+        'notas': 'Ventilación natural paliers y sanitarios, mecánica auxiliar subsuelos, sombretes reglamentarios. Conductos galvanizados (circular/rectangular), flexibles, PVC. Dampers regulación y cortafuego. Extractores centrífugos, helicoidales y de baño. Tiro balanceado.'
     },
     'impermeabilizaciones-aislaciones': {
         'nombre': 'Impermeabilizaciones y Aislaciones',
