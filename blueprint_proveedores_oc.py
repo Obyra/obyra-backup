@@ -178,7 +178,7 @@ def detalle(id):
     try:
         from models.proveedores_oc import CotizacionProveedor
         cotizaciones = CotizacionProveedor.query.filter_by(
-            proveedor_id=prov.id
+            proveedor_oc_id=prov.id
         ).order_by(CotizacionProveedor.created_at.desc()).all()
     except Exception:
         pass
