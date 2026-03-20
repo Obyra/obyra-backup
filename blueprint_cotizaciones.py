@@ -132,6 +132,18 @@ def agregar_proveedor(rc_id):
             )
             db.session.add(cot_item)
 
+        # Agregar item "Flete" siempre para comparativa
+        flete_item = CotizacionProveedorItem(
+            cotizacion_id=cot.id,
+            requerimiento_item_id=None,
+            descripcion='Flete',
+            cantidad=1,
+            unidad='gl',
+            precio_unitario=0,
+            subtotal=0,
+        )
+        db.session.add(flete_item)
+
         db.session.commit()
         flash(f'Proveedor "{prov.razon_social}" agregado. Cargue los precios cotizados.', 'success')
 
