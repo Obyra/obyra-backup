@@ -57,13 +57,13 @@
                         </div>
                         <div class="card-body p-4">
                             <div class="precio-grande text-center mb-4">
-                                <span class="display-4 fw-bold" style="color: #6B21A8;">${{ "{:,.0f}".format(precio_ars) }}</span>
+                                <span class="display-4 fw-bold" style="color: #6B21A8;">${{ "{:,.0f}".format(precio_ars_tarjeta) }}</span>
                                 <span class="text-muted fs-5">ARS</span>
                             </div>
                             <div class="text-center mb-3">
                                 <small class="text-muted">
                                     <i class="fas fa-info-circle me-1"></i>
-                                    Equivalente a ${{ precio_usd|int }} USD
+                                    USD ${{ precio_usd_sin_iva|int }} + IVA 21% = USD ${{ "{:,.0f}".format(precio_usd_con_iva) }}
                                 </small>
                             </div>
 
@@ -103,9 +103,14 @@
                             </div>
                         </div>
                         <div class="card-body p-4">
-                            <div class="precio-grande text-center mb-4">
-                                <span class="display-4 fw-bold text-primary">${{ precio_usd|int }}</span>
+                            <div class="precio-grande text-center mb-3">
+                                <span class="display-4 fw-bold text-primary">${{ "{:,.0f}".format(precio_usd_con_iva) }}</span>
                                 <span class="text-muted fs-5">USD</span>
+                            </div>
+                            <div class="text-center mb-3">
+                                <small class="text-muted">
+                                    USD ${{ precio_usd_sin_iva|int }} + IVA 21%
+                                </small>
                             </div>
 
                             <div class="datos-bancarios">
@@ -178,7 +183,7 @@
                         </div>
                         <div class="card-body p-4">
                             <div class="precio-grande text-center mb-3">
-                                <span class="display-4 fw-bold text-success" id="precio-ars-display">${{ "{:,.0f}".format(precio_ars) }}</span>
+                                <span class="display-4 fw-bold text-success" id="precio-ars-display">${{ "{:,.0f}".format(precio_ars_transferencia) }}</span>
                                 <span class="text-muted fs-5">ARS</span>
                             </div>
                             <div class="text-center mb-4">

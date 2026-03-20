@@ -176,13 +176,24 @@ def seleccionar_plan(plan_tipo):
 
     plan = PLANES_CONFIG[plan_tipo]
     cotizacion = obtener_cotizacion_bna()
-    precio_ars = plan['precio_usd'] * Decimal(str(cotizacion['value']))
+
+    IVA = Decimal('1.21')
+    precio_usd_sin_iva = plan['precio_usd']
+    precio_usd_con_iva = (precio_usd_sin_iva * IVA).quantize(Decimal('0.01'))
+
+    tc = Decimal(str(cotizacion['value']))
+    # Tarjeta: USD con IVA × tipo de cambio
+    precio_ars_tarjeta = (precio_usd_con_iva * tc).quantize(Decimal('0.01'))
+    # Transferencia ARS: USD con IVA × tipo de cambio (mismo, sin comisión MP)
+    precio_ars_transferencia = precio_ars_tarjeta
 
     return render_template('planes/instrucciones_pago.html',
         plan_seleccionado=plan_tipo,
         plan_nombre=plan['nombre'],
-        precio_usd=float(plan['precio_usd']),
-        precio_ars=float(precio_ars.quantize(Decimal('0.01'))),
+        precio_usd_sin_iva=float(precio_usd_sin_iva),
+        precio_usd_con_iva=float(precio_usd_con_iva),
+        precio_ars_tarjeta=float(precio_ars_tarjeta),
+        precio_ars_transferencia=float(precio_ars_transferencia),
         max_usuarios=plan['max_usuarios'],
         cotizacion=cotizacion,
         bank_info=BILLING.get_bank_info(),
