@@ -362,69 +362,187 @@ def obtener_alertas_sobrecosto(org_id, limite=5, umbral_porcentaje=10):
 
 def obtener_alertas_fichadas(org_id, limite=5):
     """
-    Detecta operarios que no ficharon hoy en obras en curso.
+    Detecta operarios con tareas activas que no ficharon ingreso (después de 5am)
+    o no ficharon egreso (después de 17hs). Solo lunes a viernes.
+    También envía notificaciones a los operarios afectados.
     """
-    from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
+    from models import Obra, Fichada, Usuario
+    from models.projects import TareaEtapa, TareaMiembro, EtapaObra
 
     hoy = _hoy_argentina()
-    # Solo alertar en dias de semana
-    if hoy.weekday() >= 5:  # sabado/domingo
+    ahora = datetime.now(_AR_TZ).replace(tzinfo=None)
+    hora_actual = ahora.hour
+
+    # Solo alertar lunes a viernes
+    if hoy.weekday() >= 5:
         return []
 
-    obras_activas = Obra.query.filter_by(
-        organizacion_id=org_id, estado='en_curso'
-    ).all()
-
     alertas = []
-    for obra in obras_activas:
-        # Obtener miembros asignados
-        miembro_ids = set()
-        for m in ObraMiembro.query.filter_by(obra_id=obra.id).all():
-            miembro_ids.add(m.usuario_id)
-        for a in AsignacionObra.query.filter_by(obra_id=obra.id, activo=True).all():
-            miembro_ids.add(a.usuario_id)
 
-        if not miembro_ids:
-            continue
-
-        # Quienes ficharon hoy en esta obra
-        ficharon_hoy = set(
-            f.usuario_id for f in Fichada.query.filter(
-                Fichada.obra_id == obra.id,
-                db.func.date(Fichada.fecha_hora) == hoy
-            ).all()
-        )
-
-        # Quienes no ficharon
-        no_ficharon = miembro_ids - ficharon_hoy
-        if not no_ficharon:
-            continue
-
-        usuarios_no = Usuario.query.filter(
-            Usuario.id.in_(no_ficharon), Usuario.activo == True
+    try:
+        # Buscar operarios con tareas activas HOY
+        # (tareas en_curso o pendiente, cuya fecha incluye hoy)
+        operarios_con_tareas = db.session.query(
+            TareaMiembro.user_id,
+            TareaEtapa.id.label('tarea_id'),
+            TareaEtapa.nombre.label('tarea_nombre'),
+            EtapaObra.obra_id
+        ).join(
+            TareaEtapa, TareaMiembro.tarea_id == TareaEtapa.id
+        ).join(
+            EtapaObra, TareaEtapa.etapa_id == EtapaObra.id
+        ).join(
+            Obra, EtapaObra.obra_id == Obra.id
+        ).filter(
+            Obra.organizacion_id == org_id,
+            Obra.estado == 'en_curso',
+            TareaEtapa.estado.in_(['pendiente', 'en_curso']),
+            db.or_(
+                # Tarea con fechas estimadas que incluyen hoy
+                db.and_(
+                    TareaEtapa.fecha_inicio_estimada <= hoy,
+                    TareaEtapa.fecha_fin_estimada >= hoy
+                ),
+                # O tarea en_curso sin fechas específicas
+                db.and_(
+                    TareaEtapa.estado == 'en_curso',
+                    TareaEtapa.fecha_inicio_estimada.is_(None)
+                )
+            )
         ).all()
 
-        if not usuarios_no:
-            continue
+        if not operarios_con_tareas:
+            return []
 
-        nombres = ', '.join(u.nombre_completo for u in usuarios_no[:3])
-        if len(usuarios_no) > 3:
-            nombres += f' y {len(usuarios_no) - 3} mas'
+        # Agrupar por operario: {user_id: {obra_ids, tareas}}
+        operarios_info = {}
+        for row in operarios_con_tareas:
+            if row.user_id not in operarios_info:
+                operarios_info[row.user_id] = {'obra_ids': set(), 'tareas': []}
+            operarios_info[row.user_id]['obra_ids'].add(row.obra_id)
+            operarios_info[row.user_id]['tareas'].append(row.tarea_nombre)
 
-        severidad = 'alta' if len(usuarios_no) >= 3 else 'media'
-        alertas.append({
-            'tipo': 'sin_fichada',
-            'severidad': severidad,
-            'titulo': f'{len(usuarios_no)} sin fichar en {obra.nombre}',
-            'descripcion': nombres,
-            'referencia': f'{len(ficharon_hoy)} de {len(miembro_ids)} ficharon hoy',
-            'url': f'/fichadas/historial?obra_id={obra.id}',
-        })
+        user_ids = list(operarios_info.keys())
 
-        if len(alertas) >= limite:
-            break
+        # Buscar fichadas de hoy para estos operarios
+        fichadas_hoy = Fichada.query.filter(
+            Fichada.usuario_id.in_(user_ids),
+            db.func.date(Fichada.fecha_hora) == hoy
+        ).all()
 
-    return alertas
+        # Mapear: {user_id: {'ingreso': bool, 'egreso': bool}}
+        fichadas_map = {}
+        for f in fichadas_hoy:
+            if f.usuario_id not in fichadas_map:
+                fichadas_map[f.usuario_id] = {'ingreso': False, 'egreso': False}
+            if f.tipo == 'ingreso':
+                fichadas_map[f.usuario_id]['ingreso'] = True
+            elif f.tipo == 'egreso':
+                fichadas_map[f.usuario_id]['egreso'] = True
+
+        # Después de las 5am: alertar sin ingreso
+        sin_ingreso = []
+        sin_egreso = []
+
+        if hora_actual >= 5:
+            for uid in user_ids:
+                estado = fichadas_map.get(uid, {'ingreso': False, 'egreso': False})
+                if not estado['ingreso']:
+                    sin_ingreso.append(uid)
+
+        # Después de las 17hs: alertar sin egreso (solo si fichó ingreso)
+        if hora_actual >= 17:
+            for uid in user_ids:
+                estado = fichadas_map.get(uid, {'ingreso': False, 'egreso': False})
+                if estado['ingreso'] and not estado['egreso']:
+                    sin_egreso.append(uid)
+
+        # Generar alertas de ingreso
+        if sin_ingreso:
+            usuarios = Usuario.query.filter(
+                Usuario.id.in_(sin_ingreso), Usuario.activo == True
+            ).all()
+
+            for u in usuarios:
+                tareas = operarios_info[u.id]['tareas'][:2]
+                tareas_str = ', '.join(tareas)
+                if len(operarios_info[u.id]['tareas']) > 2:
+                    tareas_str += f' (+{len(operarios_info[u.id]["tareas"]) - 2})'
+
+                alertas.append({
+                    'tipo': 'sin_fichada_ingreso',
+                    'severidad': 'alta' if hora_actual >= 9 else 'media',
+                    'titulo': f'{u.nombre_completo} no fichó ingreso',
+                    'descripcion': f'Tareas activas: {tareas_str}',
+                    'referencia': f'Desde las 5:00 hs - Ahora {hora_actual}:{ahora.minute:02d} hs',
+                    'url': '/fichadas/historial',
+                })
+
+                # Enviar notificación al operario
+                _notificar_fichada_pendiente(u.id, org_id, 'ingreso', tareas_str)
+
+        # Generar alertas de egreso
+        if sin_egreso:
+            usuarios = Usuario.query.filter(
+                Usuario.id.in_(sin_egreso), Usuario.activo == True
+            ).all()
+
+            for u in usuarios:
+                alertas.append({
+                    'tipo': 'sin_fichada_egreso',
+                    'severidad': 'media',
+                    'titulo': f'{u.nombre_completo} no fichó egreso',
+                    'descripcion': 'Fichó ingreso pero no registró salida',
+                    'referencia': f'Hora mínima salida: 17:00 hs',
+                    'url': '/fichadas/historial',
+                })
+
+                # Enviar notificación al operario
+                _notificar_fichada_pendiente(u.id, org_id, 'egreso', '')
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error alertas fichadas: {e}")
+
+    return alertas[:limite]
+
+
+def _notificar_fichada_pendiente(usuario_id, org_id, tipo_fichada, tareas_str):
+    """Envía notificación al operario si no tiene una igual hoy."""
+    try:
+        from models.core import Notificacion
+
+        hoy = _hoy_argentina()
+
+        # No duplicar: verificar si ya se envió hoy
+        ya_existe = Notificacion.query.filter(
+            Notificacion.usuario_id == usuario_id,
+            Notificacion.tipo == f'fichada_{tipo_fichada}_pendiente',
+            db.func.date(Notificacion.fecha_creacion) == hoy
+        ).first()
+
+        if ya_existe:
+            return
+
+        if tipo_fichada == 'ingreso':
+            titulo = 'Recordatorio: Fichá tu ingreso'
+            mensaje = f'Tenés tareas activas hoy ({tareas_str}). Recordá fichar tu ingreso.'
+        else:
+            titulo = 'Recordatorio: Fichá tu egreso'
+            mensaje = 'Ya fichaste ingreso pero no registraste la salida. Recordá fichar tu egreso.'
+
+        notif = Notificacion(
+            usuario_id=usuario_id,
+            organizacion_id=org_id,
+            tipo=f'fichada_{tipo_fichada}_pendiente',
+            titulo=titulo,
+            mensaje=mensaje,
+            url='/fichadas/',
+        )
+        db.session.add(notif)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def obtener_todas_alertas(org_id, limite_por_tipo=3):
