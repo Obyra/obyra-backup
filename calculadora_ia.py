@@ -573,6 +573,48 @@ PRECIO_REFERENCIA = {
     'MAT-MASILLA-JUNTA': 5800.0,    # kg
     'MAT-CINTA-PAPEL': 2200.0,      # rollo
     'MAT-TORNILLO-DRYWALL': 3500.0, # caja
+    # Construcción en seco - Items ampliados
+    'SECO-M14': 19993.0,                       # m² - Placa M14 (Agregado en CIRC N°2)
+    'MAT-PLACA-STD-12': 12500.0,               # m² - Placa de yeso estándar 12.5mm
+    'MAT-PLACA-STD-15': 14800.0,               # m² - Placa de yeso estándar 15mm
+    'MAT-PLACA-RH-12': 16500.0,                # m² - Placa de yeso resistente a humedad (verde) 12.5mm
+    'MAT-PLACA-RH-15': 18900.0,                # m² - Placa de yeso resistente a humedad (verde) 15mm
+    'MAT-PLACA-RF-12': 18200.0,                # m² - Placa de yeso resistente al fuego (rosa) 12.5mm
+    'MAT-PLACA-RF-15': 21000.0,                # m² - Placa de yeso resistente al fuego (rosa) 15mm
+    'MAT-PLACA-EXTERIOR': 22500.0,             # m² - Placa de yeso para exterior (fibrocemento)
+    'MAT-PLACA-CEMENTICIA': 28000.0,           # m² - Placa cementicia para fachadas y húmedos
+    'MAT-MONTANTE-35': 3200.0,                 # ml - Montante galvanizado 35mm
+    'MAT-MONTANTE-70': 4500.0,                 # ml - Montante galvanizado 70mm
+    'MAT-MONTANTE-100': 5800.0,                # ml - Montante galvanizado 100mm
+    'MAT-SOLERA-35': 2800.0,                   # ml - Solera galvanizada 35mm (piso y techo)
+    'MAT-SOLERA-70': 3800.0,                   # ml - Solera galvanizada 70mm
+    'MAT-SOLERA-100': 5200.0,                  # ml - Solera galvanizada 100mm
+    'MAT-PERFIL-OMEGA': 3500.0,                # ml - Perfil omega para cielorrasos
+    'MAT-PERFIL-F': 2800.0,                    # ml - Perfil F perimetral para cielorrasos
+    'MAT-TORNILLO-T1': 800.0,                  # caja(100) - Tornillo T1 punta mecha (perfil a perfil)
+    'MAT-TORNILLO-T2': 900.0,                  # caja(100) - Tornillo T2 punta aguda (placa a perfil)
+    'MAT-TORNILLO-T3': 1100.0,                 # caja(100) - Tornillo T3 para doble placa
+    'MAT-CINTA-MALLA': 2800.0,                 # rollo - Cinta de malla de fibra de vidrio
+    'MAT-GUARDACANTO': 3200.0,                 # ml - Guardacanto metálico para esquinas
+    'MAT-MASILLA-PREMEZCLADA': 6500.0,         # balde(15kg) - Masilla premezclada para juntas
+    'MAT-MASILLA-SECADO-RAPIDO': 8200.0,       # balde(15kg) - Masilla de secado rápido
+    'MAT-LANA-VIDRIO-50': 8500.0,              # m² - Lana de vidrio 50mm (aislación acústica/térmica)
+    'MAT-LANA-VIDRIO-100': 14200.0,            # m² - Lana de vidrio 100mm
+    'MAT-LANA-ROCA-50': 12000.0,               # m² - Lana de roca 50mm (resistente al fuego)
+    'MAT-LANA-ROCA-100': 19500.0,              # m² - Lana de roca 100mm
+    'MAT-EPS-20': 3500.0,                      # m² - Poliestireno expandido 20mm
+    'MAT-EPS-50': 7200.0,                      # m² - Poliestireno expandido 50mm
+    'MAT-BARRERA-VAPOR': 3800.0,               # m² - Barrera de vapor polietileno
+    'MAT-MEMBRANA-HIDROFUGA-SECO': 5200.0,     # m² - Membrana hidrófuga para zonas húmedas
+    'MAT-BANDA-ACUSTICA': 2200.0,              # ml - Banda acústica para soleras (aislación de impacto)
+    'MAT-SELLADOR-ACRILICO': 4500.0,           # cartucho - Sellador acrílico para juntas
+    'MAT-ADHESIVO-CEMENTICIO-SECO': 8500.0,    # bolsa(25kg) - Adhesivo cementicio para placa cementicia
+    'MAT-MALLA-FIBRA-REFUERZO': 5500.0,        # m² - Malla de fibra de vidrio para refuerzo de juntas
+    'MAT-PERFIL-ARRANQUE-STEEL': 4200.0,       # ml - Perfil de arranque para steel framing
+    'MAT-OSB-9': 18500.0,                      # m² - Placa OSB 9mm (steel framing)
+    'MAT-OSB-12': 22000.0,                     # m² - Placa OSB 12mm (steel framing)
+    'MAT-STEEL-PGC-100': 8500.0,               # ml - Perfil galvanizado C 100mm (steel framing estructural)
+    'MAT-STEEL-PGU-100': 7200.0,               # ml - Perfil galvanizado U 100mm (steel framing guía)
     # Cielorrasos
     'MAT-PLACA-YESO-CR': 13800.0,   # m2
     'MAT-PERFILERIA-CR': 7600.0,    # ml
@@ -717,6 +759,7 @@ PRECIO_REFERENCIA = {
     'MO-ESTR-ENCOFRADOR': 45000.0,
     'MO-MAMPO': 43500.0,
     'MO-SECO': 45000.0,
+    'MO-SECO-AYUDANTE': 32000.0,   # jornal ayudante drywall
     'MO-TECH': 45200.0,
     'MO-ELEC': 47200.0,
     'MO-SANIT': 46800.0,
@@ -793,6 +836,9 @@ PRECIO_REFERENCIA = {
     'DNAPA-RED-DEPRESORA': 2944880.0,          # gl - Red depresora de napa
     'DNAPA-RETIRO-CEGADO': 1962586.0,          # gl - Retiro y cegado de perforaciones
     'EQ-ATORNILLADOR': 8500.0,      # dia
+    'EQ-CORTADORA-PLACAS': 6000.0,  # dia cortadora placas de yeso
+    'EQ-LIJADORA-ORBITAL': 7500.0,  # dia lijadora orbital para juntas
+    'EQ-ELEVADOR-PLACAS': 15000.0,  # dia elevador de placas para cielorrasos
     'EQ-CORTADORA-CERAM': 12000.0,  # dia cortadora ceramicos
     'EQ-SEGURIDAD': 22000.0,        # dia herramientas seguridad
     'EQ-SOLDADORA': 18000.0,        # dia
@@ -1692,21 +1738,66 @@ ETAPA_REGLAS_BASE = {
     'construccion-en-seco': {
         'nombre': 'Construcción en Seco',
         'materiales': [
-            {'codigo': 'MAT-DURLOCK', 'material_key': 'durlock', 'descripcion': 'Placas de yeso (Durlock/Knauf)', 'unidad': 'm²', 'coef_por_m2': 0.45},
-            {'codigo': 'MAT-PERFIL-STEEL', 'material_key': 'perfileria_steel', 'descripcion': 'Perfilería galvanizada (montantes y soleras)', 'unidad': 'ml', 'coef_por_m2': 1.8},
-            {'codigo': 'MAT-MASILLA-JUNTA', 'material_key': 'masilla_junta', 'descripcion': 'Masilla para juntas de placas', 'unidad': 'kg', 'coef_por_m2': 0.6},
+            # --- Del pliego ---
+            {'codigo': 'SECO-M14', 'material_key': 'placa_m14', 'descripcion': 'Placa M14 (Agregado en CIRC N°2)', 'unidad': 'm²', 'coef_por_m2': 0.40},
+            # --- Placas de yeso por tipo ---
+            {'codigo': 'MAT-PLACA-STD-12', 'material_key': 'placa_std_12', 'descripcion': 'Placa de yeso estándar 12.5mm', 'unidad': 'm²', 'coef_por_m2': 0.35},
+            {'codigo': 'MAT-PLACA-STD-15', 'material_key': 'placa_std_15', 'descripcion': 'Placa de yeso estándar 15mm', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-PLACA-RH-12', 'material_key': 'placa_rh_12', 'descripcion': 'Placa resistente a humedad (verde) 12.5mm', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-PLACA-RH-15', 'material_key': 'placa_rh_15', 'descripcion': 'Placa resistente a humedad (verde) 15mm', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-PLACA-RF-12', 'material_key': 'placa_rf_12', 'descripcion': 'Placa resistente al fuego (rosa) 12.5mm', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-PLACA-RF-15', 'material_key': 'placa_rf_15', 'descripcion': 'Placa resistente al fuego (rosa) 15mm', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-PLACA-EXTERIOR', 'material_key': 'placa_exterior', 'descripcion': 'Placa de yeso para exterior (fibrocemento)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-PLACA-CEMENTICIA', 'material_key': 'placa_cementicia', 'descripcion': 'Placa cementicia para fachadas y zonas húmedas', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Perfilería (montantes y soleras por medida) ---
+            {'codigo': 'MAT-MONTANTE-70', 'material_key': 'montante_70', 'descripcion': 'Montante galvanizado 70mm', 'unidad': 'ml', 'coef_por_m2': 1.2},
+            {'codigo': 'MAT-MONTANTE-100', 'material_key': 'montante_100', 'descripcion': 'Montante galvanizado 100mm', 'unidad': 'ml', 'coef_por_m2': 0.6},
+            {'codigo': 'MAT-SOLERA-70', 'material_key': 'solera_70', 'descripcion': 'Solera galvanizada 70mm (piso y techo)', 'unidad': 'ml', 'coef_por_m2': 0.8},
+            {'codigo': 'MAT-SOLERA-100', 'material_key': 'solera_100', 'descripcion': 'Solera galvanizada 100mm', 'unidad': 'ml', 'coef_por_m2': 0.4},
+            {'codigo': 'MAT-PERFIL-OMEGA', 'material_key': 'perfil_omega', 'descripcion': 'Perfil omega para cielorrasos suspendidos', 'unidad': 'ml', 'coef_por_m2': 0.8},
+            {'codigo': 'MAT-PERFIL-F', 'material_key': 'perfil_f', 'descripcion': 'Perfil F perimetral para cielorrasos', 'unidad': 'ml', 'coef_por_m2': 0.3},
+            # --- Tornillería ---
+            {'codigo': 'MAT-TORNILLO-T1', 'material_key': 'tornillo_t1', 'descripcion': 'Tornillo T1 punta mecha (perfil a perfil)', 'unidad': 'caja(100)', 'coef_por_m2': 0.015},
+            {'codigo': 'MAT-TORNILLO-T2', 'material_key': 'tornillo_t2', 'descripcion': 'Tornillo T2 punta aguda (placa a perfil)', 'unidad': 'caja(100)', 'coef_por_m2': 0.025},
+            {'codigo': 'MAT-TORNILLO-T3', 'material_key': 'tornillo_t3', 'descripcion': 'Tornillo T3 para doble placa', 'unidad': 'caja(100)', 'coef_por_m2': 0.008},
+            # --- Juntas y terminaciones ---
+            {'codigo': 'MAT-MASILLA-PREMEZCLADA', 'material_key': 'masilla_premezclada', 'descripcion': 'Masilla premezclada para juntas (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.025},
+            {'codigo': 'MAT-MASILLA-SECADO-RAPIDO', 'material_key': 'masilla_rapida', 'descripcion': 'Masilla de secado rápido (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.008},
             {'codigo': 'MAT-CINTA-PAPEL', 'material_key': 'cinta_papel', 'descripcion': 'Cinta de papel microperforada', 'unidad': 'rollo', 'coef_por_m2': 0.015},
-            {'codigo': 'MAT-TORNILLO-DRYWALL', 'material_key': 'tornillo_drywall', 'descripcion': 'Tornillos autoperforantes para drywall', 'unidad': 'caja', 'coef_por_m2': 0.025},
-            {'codigo': 'MAT-AISLACION', 'material_key': 'aislacion_termica', 'descripcion': 'Lana de vidrio para tabiques', 'unidad': 'm²', 'coef_por_m2': 0.4},
+            {'codigo': 'MAT-CINTA-MALLA', 'material_key': 'cinta_malla', 'descripcion': 'Cinta de malla de fibra de vidrio', 'unidad': 'rollo', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-GUARDACANTO', 'material_key': 'guardacanto', 'descripcion': 'Guardacanto metálico para esquinas', 'unidad': 'ml', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-MALLA-FIBRA-REFUERZO', 'material_key': 'malla_fibra', 'descripcion': 'Malla de fibra de vidrio para refuerzo de juntas', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Aislaciones ---
+            {'codigo': 'MAT-LANA-VIDRIO-50', 'material_key': 'lana_vidrio_50', 'descripcion': 'Lana de vidrio 50mm (aislación acústica/térmica)', 'unidad': 'm²', 'coef_por_m2': 0.30},
+            {'codigo': 'MAT-LANA-VIDRIO-100', 'material_key': 'lana_vidrio_100', 'descripcion': 'Lana de vidrio 100mm', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-LANA-ROCA-50', 'material_key': 'lana_roca_50', 'descripcion': 'Lana de roca 50mm (resistente al fuego)', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-LANA-ROCA-100', 'material_key': 'lana_roca_100', 'descripcion': 'Lana de roca 100mm', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-EPS-20', 'material_key': 'eps_20', 'descripcion': 'Poliestireno expandido 20mm', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-EPS-50', 'material_key': 'eps_50', 'descripcion': 'Poliestireno expandido 50mm', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-BARRERA-VAPOR', 'material_key': 'barrera_vapor', 'descripcion': 'Barrera de vapor polietileno', 'unidad': 'm²', 'coef_por_m2': 0.35},
+            {'codigo': 'MAT-MEMBRANA-HIDROFUGA-SECO', 'material_key': 'membrana_hidrofuga_seco', 'descripcion': 'Membrana hidrófuga para zonas húmedas', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-BANDA-ACUSTICA', 'material_key': 'banda_acustica', 'descripcion': 'Banda acústica para soleras (aislación de impacto)', 'unidad': 'ml', 'coef_por_m2': 0.40},
+            # --- Selladores y adhesivos ---
+            {'codigo': 'MAT-SELLADOR-ACRILICO', 'material_key': 'sellador_acrilico', 'descripcion': 'Sellador acrílico para juntas', 'unidad': 'cartucho', 'coef_por_m2': 0.012},
+            {'codigo': 'MAT-ADHESIVO-CEMENTICIO-SECO', 'material_key': 'adhesivo_cementicio', 'descripcion': 'Adhesivo cementicio para placa cementicia (bolsa 25kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.015},
+            # --- Steel framing (estructura) ---
+            {'codigo': 'MAT-STEEL-PGC-100', 'material_key': 'steel_pgc_100', 'descripcion': 'Perfil galvanizado C 100mm (steel framing estructural)', 'unidad': 'ml', 'coef_por_m2': 0.30},
+            {'codigo': 'MAT-STEEL-PGU-100', 'material_key': 'steel_pgu_100', 'descripcion': 'Perfil galvanizado U 100mm (steel framing guía)', 'unidad': 'ml', 'coef_por_m2': 0.20},
+            {'codigo': 'MAT-OSB-9', 'material_key': 'osb_9', 'descripcion': 'Placa OSB 9mm (steel framing)', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-OSB-12', 'material_key': 'osb_12', 'descripcion': 'Placa OSB 12mm (steel framing)', 'unidad': 'm²', 'coef_por_m2': 0.10},
         ],
         'mano_obra': [
-            {'codigo': 'MO-SECO', 'descripcion': 'Oficial especializado en drywall', 'unidad': 'jornal', 'coef_por_m2': 0.16}
+            {'codigo': 'MO-SECO', 'descripcion': 'Oficial especializado en drywall', 'unidad': 'jornal', 'coef_por_m2': 0.16},
+            {'codigo': 'MO-SECO-AYUDANTE', 'descripcion': 'Ayudante de drywall', 'unidad': 'jornal', 'coef_por_m2': 0.12},
         ],
         'equipos': [
-            {'codigo': 'EQ-ATORNILLADOR', 'descripcion': 'Atornillador y herramientas de corte', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-ATORNILLADOR', 'descripcion': 'Atornillador eléctrico para drywall', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
             {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios livianos y escaleras', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-CORTADORA-PLACAS', 'descripcion': 'Cortadora de placas de yeso', 'unidad': 'día', 'dias_por_m2': 0.001, 'min_dias': 1},
+            {'codigo': 'EQ-LIJADORA-ORBITAL', 'descripcion': 'Lijadora orbital para juntas', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-ELEVADOR-PLACAS', 'descripcion': 'Elevador de placas para cielorrasos', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Tabiques y cielorrasos de placas de yeso, steel framing, aislación interior.'
+        'notas': 'Tabiques y cielorrasos: placas estándar, RH (humedad), RF (fuego), cementicias y exterior. Perfilería por medida, tornillería T1/T2/T3, masillas, aislaciones (lana vidrio/roca, EPS), steel framing con OSB.'
     },
     'ventilaciones-conductos': {
         'nombre': 'Ventilaciones y Conductos',
