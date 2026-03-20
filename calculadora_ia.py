@@ -537,6 +537,41 @@ PRECIO_REFERENCIA = {
     'MAT-AISLACION': 17800.0,       # m2 EPS / lana de vidrio
     'MAT-POLIESTIRENO': 8500.0,     # m2
     'MAT-FOAM': 12000.0,            # m2 espuma poliuretano
+    # Aislaciones/Impermeabilizaciones - Items del pliego
+    'IMP-TRAT-PLATEA': 11401.0,                # m² - Tratamiento especial sobre platea/losa supresión con capa adherencia s/PET
+    'IMP-TRAT-TABIQUES-SUBSUELO': 16197.0,     # m² - Tratamiento especial tabiques H° en subsuelos, h. total, capa adherencia
+    'IMP-HIDROREPELENTE-FACHADA': 9466.0,      # m² - Tratamiento hidrorepelente para H° visto en cielorrasos de fachada
+    'IMP-AISL-LOSA-PB-CANTEROS': 27010.0,      # m² - Aislación sobre losa de PB y áreas de canteros (Patio y Cantero)
+    'IMP-AISL-VEREDAS-RETIRO': 4331.0,         # m² - Aislación de veredas en sectores de retiro de fachada
+    'IMP-HIDROFUGA-MUROS-EXT': 4331.0,         # m² - Aislación hidrófuga muros en contacto con exterior
+    'IMP-HIDROFUGA-BALCONES': 14668.0,         # m² - Aislación hidrófuga en balcones, semicubiertos, descubiertos y cubiertas
+    'IMP-AISL-SANITARIOS': 7966.0,             # m² - Aislación bajo revestimientos y solados en locales sanitarios S/PET (azotado hidrófugo)
+    'IMP-HIDROFUGA-CEMENTICIA': 10941.0,       # m² - Aislación hidrófuga cementicia según PET (sanitarios, cocinas)
+    'IMP-AISL-BANERAS-JACUZZIS': 24887.0,      # m² - Aislación reforzada perimetral bajo bañeras y/o jacuzzis, cementicia según PET
+    'IMP-TRAT-TANQUES': 16698.0,               # m² - Tratamiento especial para tanques según PET
+    'IMP-JUNTAS-TABIQUES-PISOS': 21063.0,      # ml - Tratamiento de juntas en encuentro entre tabiques y pisos en subsuelo
+    'IMP-POZOS-BOMBEOS-CAMARAS': 16197.0,      # m² - Impermeabilización de pozos de bombeos y cámaras
+    'IMP-SELLADO-FISURAS': 21063.0,            # m² - Sellado de fisuras, taponados de nidos de abeja, oquedades, etc.
+    'IMP-BARRERA-VAPOR-MUROS': 3824.0,         # m² - Barrera de vapor vertical de muros exteriores
+    'IMP-BABETAS-PERIMETRALES': 2934.0,        # ml - Babetas perimetrales
+    'IMP-AISL-TERMICA-TECHO': 16421.0,         # m² - Aislación térmica en techados: poliestireno expandido 5cm (min 20-25 kg/m³)
+    'IMP-AISL-ACUSTICA': 9936.0,               # m² - Aislación acústica según Planilla de Locales
+    'IMP-CAJON-HIDROFUGO': 4331.0,             # m² - Cajón hidrófugo (mamposterías de 5° y 4° SS según Planilla de Locales)
+    'IMP-TERRAZA-VERDE': 43984.0,              # m² - Terraza verde
+    # Items adicionales de arquitecto
+    'IMP-MEMBRANA-LIQUIDA': 8500.0,            # litro - Membrana líquida impermeabilizante
+    'IMP-MEMBRANA-TRANSITABLE': 22000.0,       # m² - Membrana asfáltica transitable con geotextil
+    'IMP-MEMBRANA-NO-TRANSITABLE': 15700.0,    # m² - Membrana asfáltica no transitable con aluminio
+    'IMP-PRIMER-ASFALTICO': 5200.0,            # litro - Primer asfáltico (imprimación)
+    'IMP-CEMENTO-FLEX': 12500.0,               # kg - Cemite/cementicio flexible bicomponente
+    'IMP-CINTA-SELLADORA': 3500.0,             # ml - Cinta selladora para juntas de membrana
+    'IMP-PINTURA-ASFALTICA': 6800.0,           # litro - Pintura asfáltica para fundaciones
+    'IMP-EMULSION-ASFALTICA': 5500.0,          # litro - Emulsión asfáltica en frío
+    'IMP-POLIURETANO-PROYECTADO': 18000.0,     # m² - Poliuretano proyectado (aislación + impermeabilización)
+    'IMP-XPS-30': 12500.0,                     # m² - Poliestireno extruido (XPS) 30mm para pisos/techos
+    'IMP-XPS-50': 18000.0,                     # m² - Poliestireno extruido (XPS) 50mm
+    'IMP-GEOMEMBRANA-HDPE': 9500.0,            # m² - Geomembrana HDPE para subsuelos y cisternas
+    'IMP-BENTONITA-SODICA': 14000.0,           # m² - Lámina de bentonita sódica para impermeabilización bajo tierra
     # Instalaciones electricas
     'MAT-CABLE': 9800.0,            # m
     'MAT-CABLE-4MM': 14200.0,       # m
@@ -766,6 +801,7 @@ PRECIO_REFERENCIA = {
     'MO-GAS': 47800.0,
     'MO-VENT': 43000.0,
     'MO-IMP': 44500.0,
+    'MO-IMP-AYUDANTE': 32000.0,    # jornal ayudante impermeabilizaciones
     'MO-REV': 41000.0,
     'MO-CIELORRASO': 43000.0,
     'MO-YESERO': 42000.0,
@@ -841,6 +877,9 @@ PRECIO_REFERENCIA = {
     'EQ-ELEVADOR-PLACAS': 15000.0,  # dia elevador de placas para cielorrasos
     'EQ-CORTADORA-CERAM': 12000.0,  # dia cortadora ceramicos
     'EQ-SEGURIDAD': 22000.0,        # dia herramientas seguridad
+    'EQ-SOPLETE-GAS': 8000.0,       # dia soplete gas para membrana asfáltica
+    'EQ-PISTOLA-AIRLESS': 25000.0,  # dia pistola airless para membrana líquida
+    'EQ-PROYECTORA-PU': 45000.0,    # dia equipo proyector poliuretano
     'EQ-SOLDADORA': 18000.0,        # dia
     'EQ-AMOLADORA': 8000.0,         # dia
     'EQ-GUINCHE': 65000.0,          # dia guinche de carga
@@ -1818,19 +1857,65 @@ ETAPA_REGLAS_BASE = {
     'impermeabilizaciones-aislaciones': {
         'nombre': 'Impermeabilizaciones y Aislaciones',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-MEMBRANA-IMP', 'material_key': 'membrana', 'descripcion': 'Membrana asfáltica con aluminio', 'unidad': 'm²', 'coef_por_m2': 0.9},
             {'codigo': 'MAT-HIDROFUGO', 'material_key': 'hidrofugo', 'descripcion': 'Hidrófugo cementicio / pintura asfáltica', 'unidad': 'litros', 'coef_por_m2': 0.25},
             {'codigo': 'MAT-AISLACION', 'material_key': 'aislacion_termica', 'descripcion': 'Aislación térmica EPS / lana de vidrio', 'unidad': 'm²', 'coef_por_m2': 0.85},
             {'codigo': 'MAT-POLIESTIRENO', 'material_key': 'poliestireno', 'descripcion': 'Poliestireno expandido para aislación', 'unidad': 'm²', 'coef_por_m2': 0.5},
             {'codigo': 'MAT-FOAM', 'material_key': 'foam', 'descripcion': 'Espuma poliuretano proyectada', 'unidad': 'm²', 'coef_por_m2': 0.3},
+            # --- Tratamientos especiales (del pliego) ---
+            {'codigo': 'IMP-TRAT-PLATEA', 'material_key': 'trat_platea', 'descripcion': 'Tratamiento especial sobre platea/losa supresión con capa adherencia s/PET', 'unidad': 'm²', 'coef_por_m2': 0.20},
+            {'codigo': 'IMP-TRAT-TABIQUES-SUBSUELO', 'material_key': 'trat_tabiques_sub', 'descripcion': 'Tratamiento especial tabiques H° en subsuelos, h. total, capa adherencia', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'IMP-HIDROREPELENTE-FACHADA', 'material_key': 'hidrorepelente_fachada', 'descripcion': 'Tratamiento hidrorepelente para H° visto en cielorrasos de fachada', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            # --- Aislaciones por zona ---
+            {'codigo': 'IMP-AISL-LOSA-PB-CANTEROS', 'material_key': 'aisl_losa_pb', 'descripcion': 'Aislación sobre losa de PB y áreas de canteros', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'IMP-AISL-VEREDAS-RETIRO', 'material_key': 'aisl_veredas', 'descripcion': 'Aislación de veredas en sectores de retiro de fachada', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'IMP-HIDROFUGA-MUROS-EXT', 'material_key': 'hidrofuga_muros', 'descripcion': 'Aislación hidrófuga muros en contacto con exterior', 'unidad': 'm²', 'coef_por_m2': 0.20},
+            {'codigo': 'IMP-HIDROFUGA-BALCONES', 'material_key': 'hidrofuga_balcones', 'descripcion': 'Aislación hidrófuga en balcones, semicubiertos, descubiertos y cubiertas', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            # --- Aislaciones en sanitarios y cocinas ---
+            {'codigo': 'IMP-AISL-SANITARIOS', 'material_key': 'aisl_sanitarios', 'descripcion': 'Aislación bajo revestimientos en locales sanitarios S/PET (azotado hidrófugo)', 'unidad': 'm²', 'coef_por_m2': 0.25},
+            {'codigo': 'IMP-HIDROFUGA-CEMENTICIA', 'material_key': 'hidrofuga_cementicia', 'descripcion': 'Aislación hidrófuga cementicia según PET (sanitarios, cocinas)', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'IMP-AISL-BANERAS-JACUZZIS', 'material_key': 'aisl_baneras', 'descripcion': 'Aislación reforzada perimetral bajo bañeras y/o jacuzzis, cementicia según PET', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            # --- Tanques e infraestructura ---
+            {'codigo': 'IMP-TRAT-TANQUES', 'material_key': 'trat_tanques', 'descripcion': 'Tratamiento especial para tanques según PET', 'unidad': 'm²', 'coef_por_m2': 0.04},
+            {'codigo': 'IMP-POZOS-BOMBEOS-CAMARAS', 'material_key': 'pozos_bombeos', 'descripcion': 'Impermeabilización de pozos de bombeos y cámaras', 'unidad': 'm²', 'coef_por_m2': 0.01},
+            # --- Juntas y sellados ---
+            {'codigo': 'IMP-JUNTAS-TABIQUES-PISOS', 'material_key': 'juntas_tabiques', 'descripcion': 'Tratamiento de juntas en encuentro entre tabiques y pisos en subsuelo', 'unidad': 'ml', 'coef_por_m2': 0.10},
+            {'codigo': 'IMP-SELLADO-FISURAS', 'material_key': 'sellado_fisuras', 'descripcion': 'Sellado de fisuras, taponados de nidos de abeja, oquedades, etc.', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Barreras y babetas ---
+            {'codigo': 'IMP-BARRERA-VAPOR-MUROS', 'material_key': 'barrera_vapor_muros', 'descripcion': 'Barrera de vapor vertical de muros exteriores', 'unidad': 'm²', 'coef_por_m2': 0.20},
+            {'codigo': 'IMP-BABETAS-PERIMETRALES', 'material_key': 'babetas', 'descripcion': 'Babetas perimetrales', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            # --- Aislaciones especiales ---
+            {'codigo': 'IMP-AISL-TERMICA-TECHO', 'material_key': 'aisl_termica_techo', 'descripcion': 'Aislación térmica en techados: EPS 5cm (mín 20-25 kg/m³)', 'unidad': 'm²', 'coef_por_m2': 0.30},
+            {'codigo': 'IMP-AISL-ACUSTICA', 'material_key': 'aisl_acustica', 'descripcion': 'Aislación acústica según Planilla de Locales', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'IMP-CAJON-HIDROFUGO', 'material_key': 'cajon_hidrofugo', 'descripcion': 'Cajón hidrófugo (mamposterías de 5° y 4° SS)', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            {'codigo': 'IMP-TERRAZA-VERDE', 'material_key': 'terraza_verde', 'descripcion': 'Terraza verde (sistema completo)', 'unidad': 'm²', 'coef_por_m2': 0.01},
+            # --- Membranas y productos (agregados como arquitecto) ---
+            {'codigo': 'IMP-MEMBRANA-LIQUIDA', 'material_key': 'membrana_liquida', 'descripcion': 'Membrana líquida impermeabilizante', 'unidad': 'litro', 'coef_por_m2': 0.15},
+            {'codigo': 'IMP-MEMBRANA-TRANSITABLE', 'material_key': 'membrana_transitable', 'descripcion': 'Membrana asfáltica transitable con geotextil', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'IMP-MEMBRANA-NO-TRANSITABLE', 'material_key': 'membrana_no_transitable', 'descripcion': 'Membrana asfáltica no transitable con aluminio', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'IMP-PRIMER-ASFALTICO', 'material_key': 'primer_asfaltico', 'descripcion': 'Primer asfáltico (imprimación)', 'unidad': 'litro', 'coef_por_m2': 0.10},
+            {'codigo': 'IMP-CEMENTO-FLEX', 'material_key': 'cemento_flex', 'descripcion': 'Cementicio flexible bicomponente', 'unidad': 'kg', 'coef_por_m2': 0.08},
+            {'codigo': 'IMP-CINTA-SELLADORA', 'material_key': 'cinta_selladora', 'descripcion': 'Cinta selladora para juntas de membrana', 'unidad': 'ml', 'coef_por_m2': 0.08},
+            {'codigo': 'IMP-PINTURA-ASFALTICA', 'material_key': 'pintura_asfaltica', 'descripcion': 'Pintura asfáltica para fundaciones', 'unidad': 'litro', 'coef_por_m2': 0.06},
+            {'codigo': 'IMP-EMULSION-ASFALTICA', 'material_key': 'emulsion_asfaltica', 'descripcion': 'Emulsión asfáltica en frío', 'unidad': 'litro', 'coef_por_m2': 0.05},
+            {'codigo': 'IMP-POLIURETANO-PROYECTADO', 'material_key': 'pu_proyectado', 'descripcion': 'Poliuretano proyectado (aislación + impermeabilización)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'IMP-XPS-30', 'material_key': 'xps_30', 'descripcion': 'Poliestireno extruido (XPS) 30mm', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            {'codigo': 'IMP-XPS-50', 'material_key': 'xps_50', 'descripcion': 'Poliestireno extruido (XPS) 50mm', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'IMP-GEOMEMBRANA-HDPE', 'material_key': 'geomembrana', 'descripcion': 'Geomembrana HDPE para subsuelos y cisternas', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'IMP-BENTONITA-SODICA', 'material_key': 'bentonita', 'descripcion': 'Lámina de bentonita sódica para impermeabilización bajo tierra', 'unidad': 'm²', 'coef_por_m2': 0.02},
         ],
         'mano_obra': [
-            {'codigo': 'MO-IMP', 'descripcion': 'Oficial aplicador de membranas', 'unidad': 'jornal', 'coef_por_m2': 0.14}
+            {'codigo': 'MO-IMP', 'descripcion': 'Oficial aplicador de membranas e impermeabilizaciones', 'unidad': 'jornal', 'coef_por_m2': 0.14},
+            {'codigo': 'MO-IMP-AYUDANTE', 'descripcion': 'Ayudante de impermeabilizaciones', 'unidad': 'jornal', 'coef_por_m2': 0.10},
         ],
         'equipos': [
             {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios para trabajo en altura', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-SOPLETE-GAS', 'descripcion': 'Soplete a gas para aplicación de membrana asfáltica', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-PISTOLA-AIRLESS', 'descripcion': 'Pistola airless para membrana líquida/pintura asfáltica', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-PROYECTORA-PU', 'descripcion': 'Equipo proyector de poliuretano', 'unidad': 'día', 'dias_por_m2': 0.001, 'min_dias': 1},
         ],
-        'notas': 'Membranas en techos, hidrófugos en muros y fundaciones, aislación térmica/acústica, espuma proyectada.'
+        'notas': 'Tratamientos especiales sobre plateas, tabiques y fachadas. Aislación hidrófuga en sanitarios, balcones, cubiertas. Membranas asfálticas transitables/no transitables, líquidas, primer. Aislación térmica EPS/XPS, acústica, barrera de vapor, babetas, terraza verde. Sellado de fisuras y juntas.'
     },
     'cielorrasos': {
         'nombre': 'Cielorrasos',
