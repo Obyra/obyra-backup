@@ -921,12 +921,48 @@ PRECIO_REFERENCIA = {
     'MAT-LONA-PROTECCION': 4500.0,             # m² - Lona de protección contra polvo y escombros
     'MAT-CONTENEDOR-RESIDUOS': 180000.0,       # mes - Contenedor de residuos peligrosos (amianto, etc.)
     'MAT-AGUA-SUPRESION-POLVO': 8500.0,        # m³ - Agua para supresión de polvo
-    # Seguridad
+    # Seguridad e Higiene
     'MAT-INCENDIO': 35000.0,        # global
     'MAT-ALARMA': 28000.0,          # global
     'MAT-EPP-KIT': 45000.0,         # kit por persona
     'MAT-RED-PROTECCION': 8500.0,   # m2
     'MAT-BARANDA-SEG': 12000.0,     # ml
+    'SEG-CASCO': 8500.0,            'SEG-CHALECO-REFLECTIVO': 5500.0,
+    'SEG-GUANTES-ANTICORTE': 4500.0, 'SEG-GUANTES-LATEX': 8000.0,
+    'SEG-GUANTES-SOLDADOR': 6500.0, 'SEG-BOTIN-SEGURIDAD': 55000.0,
+    'SEG-ARNES-ANTICAIDA': 85000.0, 'SEG-CABO-VIDA': 35000.0,
+    'SEG-LINEA-VIDA': 18000.0,      'SEG-PROTECCION-OCULAR': 5500.0,
+    'SEG-PROTECCION-AUDITIVA': 4500.0, 'SEG-MASCARA-POLVO': 12000.0,
+    'SEG-MASCARA-GASES': 25000.0,   'SEG-CARETA-SOLDADOR': 45000.0,
+    'SEG-RED-HORIZONTAL': 6500.0,   'SEG-TAPA-HUECO': 8000.0,
+    'SEG-MALLA-MEDIA-SOMBRA': 3500.0, 'SEG-CARTEL-OBLIGATORIO': 3500.0,
+    'SEG-CINTA-PELIGRO': 2500.0,    'SEG-CONOS-SENALIZACION': 5500.0,
+    'SEG-BOTIQUIN': 35000.0,        'SEG-MATAFUEGO-ABC': 28000.0,
+    'SEG-CAMILLA-EMERGENCIA': 45000.0, 'SEG-DUCHA-EMERGENCIA': 120000.0,
+    # Consumibles e Insumos
+    'CONS-DISCO-CORTE-115': 1500.0, 'CONS-DISCO-CORTE-230': 3500.0,
+    'CONS-DISCO-DESBASTE': 2200.0,  'CONS-DISCO-DIAMANTADO': 8500.0,
+    'CONS-DISCO-DIAMANTADO-TURBO': 12000.0,
+    'CONS-MECHA-WIDIA-6': 2500.0,   'CONS-MECHA-WIDIA-8': 3200.0,
+    'CONS-MECHA-WIDIA-10': 4000.0,  'CONS-MECHA-ACERO-JUEGO': 12000.0,
+    'CONS-MECHA-SDS-PLUS': 5500.0,
+    'CONS-LIJA-80': 350.0,          'CONS-LIJA-120': 350.0,
+    'CONS-LIJA-220': 400.0,         'CONS-ESPONJA-LIJA': 800.0,
+    'CONS-CINTA-PAPEL-PINTOR': 2500.0, 'CONS-CINTA-DUCTO': 4500.0,
+    'CONS-CINTA-AISLADORA': 1200.0, 'CONS-CINTA-TEFLON': 800.0,
+    'CONS-PRECINTOS-PLASTICOS': 2500.0, 'CONS-TARUGOS-8MM': 3500.0,
+    'CONS-TORNILLOS-SURTIDOS': 5500.0,
+    'CONS-TRAPO-REJILLA': 2500.0,   'CONS-AGUARRAS': 3500.0,
+    'CONS-THINNER': 4500.0,         'CONS-BOLSA-RESIDUOS': 3500.0,
+    'CONS-ACEITE-LUBRICANTE': 5500.0, 'CONS-GRASA-LITIO': 8500.0,
+    # Logística y Depósito
+    'LOG-ESTANTERIA-METALICA': 85000.0, 'LOG-PALLET-MADERA': 8000.0,
+    'LOG-CONTENEDOR-PLASTICO': 12000.0, 'LOG-CANDADO-SEGURIDAD': 8500.0,
+    'LOG-CARRETILLA-OBRA': 45000.0,  'LOG-ZORRA-HIDRAULICA': 350000.0,
+    'LOG-CARRO-PLATAFORMA': 65000.0, 'LOG-BALDE-IZADO': 25000.0,
+    'LOG-LONA-COBERTURA': 2500.0,    'LOG-FILM-STRETCH': 5500.0,
+    'LOG-ZUNCHO-PLASTICO': 4500.0,   'LOG-CARTEL-DEPOSITO': 3500.0,
+    'LOG-PINTURA-DEMARCACION': 8500.0,
     # Herreria
     'MAT-REJAS': 42000.0,           # m2
     'MAT-BARANDA-METAL': 55000.0,   # ml
@@ -1965,22 +2001,116 @@ ETAPA_REGLAS_BASE = {
         'notas': 'Limpieza fina, retiro de residuos, hidrolavado, sellado y entrega de obra.'
     },
     'seguridad': {
-        'nombre': 'Seguridad',
+        'nombre': 'Seguridad e Higiene',
         'materiales': [
+            # --- Sistemas contra incendio ---
             {'codigo': 'MAT-INCENDIO', 'material_key': 'sistema_incendio', 'descripcion': 'Sistema contra incendio (extintores, mangueras, rociadores)', 'unidad': 'global', 'coef_por_m2': 0.008},
             {'codigo': 'MAT-ALARMA', 'material_key': 'alarma', 'descripcion': 'Sistema de alarmas y detección de humo', 'unidad': 'global', 'coef_por_m2': 0.006},
-            {'codigo': 'MAT-EPP-KIT', 'material_key': 'epp_kit', 'descripcion': 'Kit EPP trabajadores (casco, guantes, arnés, botas)', 'unidad': 'kit', 'coef_por_m2': 0.015},
+            # --- EPP por item ---
+            {'codigo': 'MAT-EPP-KIT', 'material_key': 'epp_kit', 'descripcion': 'Kit EPP completo por trabajador', 'unidad': 'kit', 'coef_por_m2': 0.015},
+            {'codigo': 'SEG-CASCO', 'material_key': 'casco', 'descripcion': 'Casco de seguridad con arnés regulable', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            {'codigo': 'SEG-CHALECO-REFLECTIVO', 'material_key': 'chaleco', 'descripcion': 'Chaleco reflectivo de alta visibilidad', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            {'codigo': 'SEG-GUANTES-ANTICORTE', 'material_key': 'guantes_anticorte', 'descripcion': 'Guantes anticorte nivel 5', 'unidad': 'par', 'coef_por_m2': 0.02},
+            {'codigo': 'SEG-GUANTES-LATEX', 'material_key': 'guantes_latex', 'descripcion': 'Guantes de látex/nitrilo descartables', 'unidad': 'caja(100)', 'coef_por_m2': 0.003},
+            {'codigo': 'SEG-GUANTES-SOLDADOR', 'material_key': 'guantes_soldador', 'descripcion': 'Guantes de soldador (cuero descarne)', 'unidad': 'par', 'coef_por_m2': 0.005},
+            {'codigo': 'SEG-BOTIN-SEGURIDAD', 'material_key': 'botin', 'descripcion': 'Botín de seguridad con puntera de acero', 'unidad': 'par', 'coef_por_m2': 0.015},
+            {'codigo': 'SEG-ARNES-ANTICAIDA', 'material_key': 'arnes', 'descripcion': 'Arnés anticaída de cuerpo completo', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'SEG-CABO-VIDA', 'material_key': 'cabo_vida', 'descripcion': 'Cabo de vida con amortiguador de impacto', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'SEG-LINEA-VIDA', 'material_key': 'linea_vida', 'descripcion': 'Línea de vida horizontal (cable acerado)', 'unidad': 'ml', 'coef_por_m2': 0.03},
+            {'codigo': 'SEG-PROTECCION-OCULAR', 'material_key': 'proteccion_ocular', 'descripcion': 'Antiparras/lentes de seguridad', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            {'codigo': 'SEG-PROTECCION-AUDITIVA', 'material_key': 'proteccion_auditiva', 'descripcion': 'Protección auditiva (orejeras/tapones)', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            {'codigo': 'SEG-MASCARA-POLVO', 'material_key': 'mascara_polvo', 'descripcion': 'Máscara respiratoria para polvo (N95)', 'unidad': 'caja(20)', 'coef_por_m2': 0.003},
+            {'codigo': 'SEG-MASCARA-GASES', 'material_key': 'mascara_gases', 'descripcion': 'Máscara respiratoria con filtro para gases/vapores', 'unidad': 'unidad', 'coef_por_m2': 0.003},
+            {'codigo': 'SEG-CARETA-SOLDADOR', 'material_key': 'careta_soldador', 'descripcion': 'Careta de soldador fotosensible', 'unidad': 'unidad', 'coef_por_m2': 0.002},
+            # --- Protecciones colectivas ---
             {'codigo': 'MAT-RED-PROTECCION', 'material_key': 'red_proteccion', 'descripcion': 'Red de protección perimetral', 'unidad': 'm²', 'coef_por_m2': 0.12},
             {'codigo': 'MAT-BARANDA-SEG', 'material_key': 'baranda_seg', 'descripcion': 'Baranda provisoria de seguridad', 'unidad': 'ml', 'coef_por_m2': 0.06},
+            {'codigo': 'SEG-RED-HORIZONTAL', 'material_key': 'red_horizontal', 'descripcion': 'Red de seguridad horizontal (huecos de losa)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'SEG-TAPA-HUECO', 'material_key': 'tapa_hueco', 'descripcion': 'Tapa de madera/metal para huecos de losa', 'unidad': 'unidad', 'coef_por_m2': 0.008},
+            {'codigo': 'SEG-MALLA-MEDIA-SOMBRA', 'material_key': 'media_sombra', 'descripcion': 'Malla media sombra para cerco perimetral', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            # --- Señalización ---
+            {'codigo': 'SEG-CARTEL-OBLIGATORIO', 'material_key': 'cartel_obligatorio', 'descripcion': 'Cartel de señalización obligatorio (uso EPP, peligro, etc.)', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'SEG-CINTA-PELIGRO', 'material_key': 'cinta_peligro', 'descripcion': 'Cinta de peligro/precaución (rollo)', 'unidad': 'rollo', 'coef_por_m2': 0.003},
+            {'codigo': 'SEG-CONOS-SENALIZACION', 'material_key': 'conos', 'descripcion': 'Conos de señalización reflectivos', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            # --- Botiquín y emergencias ---
+            {'codigo': 'SEG-BOTIQUIN', 'material_key': 'botiquin', 'descripcion': 'Botiquín de primeros auxilios equipado', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'SEG-MATAFUEGO-ABC', 'material_key': 'matafuego', 'descripcion': 'Matafuego ABC 5kg', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'SEG-CAMILLA-EMERGENCIA', 'material_key': 'camilla', 'descripcion': 'Camilla de emergencia rígida', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'SEG-DUCHA-EMERGENCIA', 'material_key': 'ducha_emergencia', 'descripcion': 'Ducha y lavaojos de emergencia', 'unidad': 'unidad', 'coef_por_m2': 0.001},
         ],
         'mano_obra': [
-            {'codigo': 'MO-SEG', 'descripcion': 'Técnico instalador de seguridad e higiene', 'unidad': 'jornal', 'coef_por_m2': 0.10}
+            {'codigo': 'MO-SEG', 'descripcion': 'Técnico en seguridad e higiene', 'unidad': 'jornal', 'coef_por_m2': 0.10},
         ],
         'equipos': [
             {'codigo': 'EQ-SEGURIDAD', 'descripcion': 'Herramientas especializadas seguridad', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
             {'codigo': 'EQ-ANDAMIOS', 'descripcion': 'Andamios para colocación de redes y barandas', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'EPP, redes de protección, barandas provisorias, sistema contra incendio, alarmas y detectores.'
+        'notas': 'EPP completo (casco, chaleco, guantes, botín, arnés, protección ocular/auditiva/respiratoria). Protecciones colectivas (redes, barandas, tapas huecos, líneas de vida). Señalización. Contra incendio (matafuegos, alarmas, detectores). Botiquín y emergencias.'
+    },
+    'consumibles-insumos': {
+        'nombre': 'Consumibles e Insumos',
+        'materiales': [
+            # --- Corte y desbaste ---
+            {'codigo': 'CONS-DISCO-CORTE-115', 'material_key': 'disco_corte_115', 'descripcion': 'Disco de corte 115mm (4 1/2") para amoladora', 'unidad': 'unidad', 'coef_por_m2': 0.03},
+            {'codigo': 'CONS-DISCO-CORTE-230', 'material_key': 'disco_corte_230', 'descripcion': 'Disco de corte 230mm (9") para amoladora', 'unidad': 'unidad', 'coef_por_m2': 0.008},
+            {'codigo': 'CONS-DISCO-DESBASTE', 'material_key': 'disco_desbaste', 'descripcion': 'Disco de desbaste 115mm', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            {'codigo': 'CONS-DISCO-DIAMANTADO', 'material_key': 'disco_diamantado', 'descripcion': 'Disco diamantado segmentado 115mm', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'CONS-DISCO-DIAMANTADO-TURBO', 'material_key': 'disco_turbo', 'descripcion': 'Disco diamantado turbo 115mm (corte húmedo/seco)', 'unidad': 'unidad', 'coef_por_m2': 0.003},
+            # --- Mechas y brocas ---
+            {'codigo': 'CONS-MECHA-WIDIA-6', 'material_key': 'mecha_widia_6', 'descripcion': 'Mecha widia 6mm para concreto', 'unidad': 'unidad', 'coef_por_m2': 0.008},
+            {'codigo': 'CONS-MECHA-WIDIA-8', 'material_key': 'mecha_widia_8', 'descripcion': 'Mecha widia 8mm para concreto', 'unidad': 'unidad', 'coef_por_m2': 0.008},
+            {'codigo': 'CONS-MECHA-WIDIA-10', 'material_key': 'mecha_widia_10', 'descripcion': 'Mecha widia 10mm para concreto', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'CONS-MECHA-ACERO-JUEGO', 'material_key': 'mechas_acero', 'descripcion': 'Juego de mechas para acero (1-10mm)', 'unidad': 'juego', 'coef_por_m2': 0.002},
+            {'codigo': 'CONS-MECHA-SDS-PLUS', 'material_key': 'mecha_sds', 'descripcion': 'Mecha SDS Plus para rotomartillo (6-12mm)', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            # --- Lijas y abrasivos ---
+            {'codigo': 'CONS-LIJA-80', 'material_key': 'lija_80', 'descripcion': 'Lija al agua grano 80 (desbaste)', 'unidad': 'pliego', 'coef_por_m2': 0.02},
+            {'codigo': 'CONS-LIJA-120', 'material_key': 'lija_120', 'descripcion': 'Lija al agua grano 120 (intermedio)', 'unidad': 'pliego', 'coef_por_m2': 0.02},
+            {'codigo': 'CONS-LIJA-220', 'material_key': 'lija_220', 'descripcion': 'Lija al agua grano 220 (fino)', 'unidad': 'pliego', 'coef_por_m2': 0.015},
+            {'codigo': 'CONS-ESPONJA-LIJA', 'material_key': 'esponja_lija', 'descripcion': 'Esponja abrasiva (lija flexible)', 'unidad': 'unidad', 'coef_por_m2': 0.01},
+            # --- Cintas y fijaciones ---
+            {'codigo': 'CONS-CINTA-PAPEL-PINTOR', 'material_key': 'cinta_pintor', 'descripcion': 'Cinta de papel de pintor (enmascarar)', 'unidad': 'rollo', 'coef_por_m2': 0.008},
+            {'codigo': 'CONS-CINTA-DUCTO', 'material_key': 'cinta_ducto', 'descripcion': 'Cinta ducto (duct tape)', 'unidad': 'rollo', 'coef_por_m2': 0.003},
+            {'codigo': 'CONS-CINTA-AISLADORA', 'material_key': 'cinta_aisladora', 'descripcion': 'Cinta aisladora eléctrica', 'unidad': 'rollo', 'coef_por_m2': 0.005},
+            {'codigo': 'CONS-CINTA-TEFLON', 'material_key': 'cinta_teflon', 'descripcion': 'Cinta teflón para roscas', 'unidad': 'rollo', 'coef_por_m2': 0.005},
+            {'codigo': 'CONS-PRECINTOS-PLASTICOS', 'material_key': 'precintos', 'descripcion': 'Precintos plásticos (bolsa x100)', 'unidad': 'bolsa', 'coef_por_m2': 0.003},
+            {'codigo': 'CONS-TARUGOS-8MM', 'material_key': 'tarugos_8', 'descripcion': 'Tarugos nylon 8mm (bolsa x100)', 'unidad': 'bolsa', 'coef_por_m2': 0.005},
+            {'codigo': 'CONS-TORNILLOS-SURTIDOS', 'material_key': 'tornillos_surtidos', 'descripcion': 'Tornillos surtidos para madera/chapa (caja)', 'unidad': 'caja', 'coef_por_m2': 0.005},
+            # --- Limpieza y varios ---
+            {'codigo': 'CONS-TRAPO-REJILLA', 'material_key': 'trapo', 'descripcion': 'Trapo rejilla para limpieza', 'unidad': 'kg', 'coef_por_m2': 0.005},
+            {'codigo': 'CONS-AGUARRAS', 'material_key': 'aguarras', 'descripcion': 'Aguarrás mineral', 'unidad': 'litro', 'coef_por_m2': 0.01},
+            {'codigo': 'CONS-THINNER', 'material_key': 'thinner', 'descripcion': 'Thinner para limpieza de herramientas', 'unidad': 'litro', 'coef_por_m2': 0.005},
+            {'codigo': 'CONS-BOLSA-RESIDUOS', 'material_key': 'bolsa_residuos', 'descripcion': 'Bolsa de residuos reforzada (rollo x10)', 'unidad': 'rollo', 'coef_por_m2': 0.003},
+            {'codigo': 'CONS-ACEITE-LUBRICANTE', 'material_key': 'aceite_lubricante', 'descripcion': 'Aceite lubricante multiuso (aerosol)', 'unidad': 'unidad', 'coef_por_m2': 0.002},
+            {'codigo': 'CONS-GRASA-LITIO', 'material_key': 'grasa', 'descripcion': 'Grasa de litio para maquinaria', 'unidad': 'kg', 'coef_por_m2': 0.001},
+        ],
+        'mano_obra': [],
+        'equipos': [],
+        'notas': 'Insumos de consumo diario: discos de corte/desbaste/diamantados, mechas widia/acero/SDS, lijas, cintas (pintor/ducto/aisladora/teflón), precintos, tarugos, tornillos, productos de limpieza y lubricantes.'
+    },
+    'logistica-deposito': {
+        'nombre': 'Logística y Depósito',
+        'materiales': [
+            # --- Almacenamiento ---
+            {'codigo': 'LOG-ESTANTERIA-METALICA', 'material_key': 'estanteria', 'descripcion': 'Estantería metálica para depósito (4 estantes)', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'LOG-PALLET-MADERA', 'material_key': 'pallet', 'descripcion': 'Pallet de madera estándar (1.00x1.20m)', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'LOG-CONTENEDOR-PLASTICO', 'material_key': 'contenedor_plastico', 'descripcion': 'Contenedor plástico apilable para piezas', 'unidad': 'unidad', 'coef_por_m2': 0.003},
+            {'codigo': 'LOG-CANDADO-SEGURIDAD', 'material_key': 'candado', 'descripcion': 'Candado de seguridad para depósito/contenedor', 'unidad': 'unidad', 'coef_por_m2': 0.002},
+            # --- Transporte interno ---
+            {'codigo': 'LOG-CARRETILLA-OBRA', 'material_key': 'carretilla', 'descripcion': 'Carretilla de obra (hormigonera)', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'LOG-ZORRA-HIDRAULICA', 'material_key': 'zorra', 'descripcion': 'Zorra hidráulica para pallets (2500kg)', 'unidad': 'unidad', 'coef_por_m2': 0.0005},
+            {'codigo': 'LOG-CARRO-PLATAFORMA', 'material_key': 'carro', 'descripcion': 'Carro plataforma para transporte de materiales', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'LOG-BALDE-IZADO', 'material_key': 'balde_izado', 'descripcion': 'Balde de izado para grúa/guinche', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            # --- Protección de materiales ---
+            {'codigo': 'LOG-LONA-COBERTURA', 'material_key': 'lona', 'descripcion': 'Lona de cobertura para materiales (m²)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'LOG-FILM-STRETCH', 'material_key': 'film_stretch', 'descripcion': 'Film stretch para embalaje de pallets', 'unidad': 'rollo', 'coef_por_m2': 0.002},
+            {'codigo': 'LOG-ZUNCHO-PLASTICO', 'material_key': 'zuncho', 'descripcion': 'Zuncho plástico para fijación de cargas', 'unidad': 'rollo', 'coef_por_m2': 0.001},
+            # --- Señalización depósito ---
+            {'codigo': 'LOG-CARTEL-DEPOSITO', 'material_key': 'cartel_deposito', 'descripcion': 'Cartelería de depósito (zonas, materiales, peligro)', 'unidad': 'unidad', 'coef_por_m2': 0.003},
+            {'codigo': 'LOG-PINTURA-DEMARCACION', 'material_key': 'pintura_demarcacion', 'descripcion': 'Pintura de demarcación para pisos de depósito', 'unidad': 'litro', 'coef_por_m2': 0.005},
+        ],
+        'mano_obra': [],
+        'equipos': [],
+        'notas': 'Estanterías, pallets, contenedores, carretillas, zorras hidráulicas, carros plataforma. Protección de materiales con lonas, film stretch, zunchos. Señalización de depósito.'
     },
     'herreria-de-obra': {
         'nombre': 'Herrería de Obra',
