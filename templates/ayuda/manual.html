@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Manual de Usuario - OBYRA IA{% endblock %}
+{% block title %}Manual de Usuario - OBYRA{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
@@ -13,18 +13,24 @@
                 </div>
                 <div class="card-body p-0">
                     <nav class="nav flex-column nav-pills">
-                        <a class="nav-link" href="#introduccion"><i class="fas fa-home me-2"></i>Introducción</a>
+                        <a class="nav-link" href="#introduccion"><i class="fas fa-home me-2"></i>Introduccion</a>
                         <a class="nav-link" href="#primeros-pasos"><i class="fas fa-play me-2"></i>Primeros Pasos</a>
                         <a class="nav-link" href="#presupuestos"><i class="fas fa-file-invoice-dollar me-2"></i>Presupuestos</a>
                         <a class="nav-link" href="#obras"><i class="fas fa-hard-hat me-2"></i>Obras</a>
+                        <a class="nav-link" href="#cronograma"><i class="fas fa-calendar-alt me-2"></i>Cronograma</a>
+                        <a class="nav-link" href="#materiales"><i class="fas fa-cubes me-2"></i>Materiales y Stock</a>
                         <a class="nav-link" href="#inventario"><i class="fas fa-boxes me-2"></i>Inventario</a>
                         <a class="nav-link" href="#requerimientos"><i class="fas fa-clipboard-list me-2"></i>Requerimientos</a>
+                        <a class="nav-link" href="#cotizaciones"><i class="fas fa-balance-scale me-2"></i>Cotizaciones</a>
+                        <a class="nav-link" href="#ordenes-compra"><i class="fas fa-file-alt me-2"></i>Ordenes de Compra</a>
+                        <a class="nav-link" href="#proveedores"><i class="fas fa-truck me-2"></i>Proveedores</a>
+                        <a class="nav-link" href="#remitos"><i class="fas fa-receipt me-2"></i>Remitos</a>
                         <a class="nav-link" href="#equipos"><i class="fas fa-users me-2"></i>Equipos</a>
-                        <a class="nav-link" href="#clientes"><i class="fas fa-user-tie me-2"></i>Clientes</a>
+                        <a class="nav-link" href="#fichadas"><i class="fas fa-clock me-2"></i>Fichadas</a>
+                        <a class="nav-link" href="#liquidaciones"><i class="fas fa-money-bill-wave me-2"></i>Liquidaciones</a>
                         <a class="nav-link" href="#reportes"><i class="fas fa-chart-bar me-2"></i>Reportes</a>
                         <a class="nav-link" href="#seguridad"><i class="fas fa-shield-alt me-2"></i>Seguridad</a>
-                        <a class="nav-link" href="#marketplace"><i class="fas fa-store me-2"></i>Marketplace</a>
-                        <a class="nav-link" href="#configuracion"><i class="fas fa-cog me-2"></i>Configuración</a>
+                        <a class="nav-link" href="#configuracion"><i class="fas fa-cog me-2"></i>Configuracion</a>
                         <a class="nav-link" href="#roles"><i class="fas fa-user-tag me-2"></i>Roles y Permisos</a>
                         <a class="nav-link" href="#faq"><i class="fas fa-question-circle me-2"></i>Preguntas Frecuentes</a>
                     </nav>
@@ -36,313 +42,326 @@
         <div class="col-lg-9 col-md-8">
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white">
-                    <h1 class="h3 mb-0">
-                        <i class="fas fa-book me-2"></i>Manual de Usuario - OBYRA IA
-                    </h1>
+                    <h1 class="h3 mb-0"><i class="fas fa-book me-2"></i>Manual de Usuario - OBYRA</h1>
                 </div>
                 <div class="card-body">
-                    <p class="lead text-muted">Plataforma de Gestión Inteligente para Construcción</p>
+                    <p class="lead text-muted">Plataforma de Gestion Inteligente para Construccion</p>
                 </div>
             </div>
 
-            <!-- Introducción -->
+            <!-- 1. Introduccion -->
             <div class="card mb-4" id="introduccion">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-home text-primary me-2"></i>1. Introducción</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-home text-primary me-2"></i>1. Introduccion</h4></div>
                 <div class="card-body">
-                    <h5>¿Qué es OBYRA IA?</h5>
-                    <p>OBYRA IA es una plataforma integral para gestionar proyectos de construcción. Permite:</p>
+                    <h5>Que es OBYRA?</h5>
+                    <p>OBYRA es una plataforma integral para gestionar proyectos de construccion. Permite:</p>
                     <ul>
                         <li><i class="fas fa-robot text-primary me-2"></i>Crear presupuestos con asistencia de Inteligencia Artificial</li>
-                        <li><i class="fas fa-tasks text-primary me-2"></i>Gestionar obras con seguimiento en tiempo real</li>
-                        <li><i class="fas fa-boxes text-primary me-2"></i>Controlar inventario de materiales</li>
-                        <li><i class="fas fa-users text-primary me-2"></i>Coordinar equipos de trabajo</li>
-                        <li><i class="fas fa-chart-line text-primary me-2"></i>Generar reportes y análisis</li>
+                        <li><i class="fas fa-tasks text-primary me-2"></i>Gestionar obras con cronograma y seguimiento en tiempo real</li>
+                        <li><i class="fas fa-boxes text-primary me-2"></i>Controlar inventario de materiales con circuito cerrado de stock</li>
+                        <li><i class="fas fa-shopping-cart text-primary me-2"></i>Circuito de compras: requerimientos, cotizaciones, OC, remitos</li>
+                        <li><i class="fas fa-users text-primary me-2"></i>Coordinar equipos de trabajo con fichadas por geolocalizacion</li>
+                        <li><i class="fas fa-chart-line text-primary me-2"></i>Generar reportes, PDFs y analisis de costos</li>
                     </ul>
                     <div class="alert alert-info">
-                        <i class="fas fa-globe me-2"></i>
-                        <strong>Acceso:</strong>
-                        <a href="https://app.obyra.com.ar" target="_blank">app.obyra.com.ar</a> |
-                        <a href="https://www.obyra.com.ar" target="_blank">www.obyra.com.ar</a>
+                        <i class="fas fa-globe me-2"></i><strong>Acceso:</strong>
+                        <a href="https://app.obyra.com.ar" target="_blank">app.obyra.com.ar</a>
                     </div>
                 </div>
             </div>
 
-            <!-- Primeros Pasos -->
+            <!-- 2. Primeros Pasos -->
             <div class="card mb-4" id="primeros-pasos">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-play text-primary me-2"></i>2. Primeros Pasos</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-play text-primary me-2"></i>2. Primeros Pasos</h4></div>
                 <div class="card-body">
                     <h5><i class="fas fa-user-plus me-2"></i>Registro</h5>
                     <ol>
                         <li>Ingresa a <strong>app.obyra.com.ar</strong></li>
                         <li>Haz clic en <strong>"Crear cuenta"</strong></li>
-                        <li>Completa tus datos (nombre, email, contraseña)</li>
-                        <li>También puedes registrarte con <strong>Google</strong></li>
+                        <li>Completa tus datos (nombre, email, contrasena)</li>
+                        <li>Tambien puedes registrarte con <strong>Google</strong></li>
                     </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-sign-in-alt me-2"></i>Iniciar Sesión</h5>
-                    <ol>
-                        <li>Ingresa tu email y contraseña</li>
-                        <li>Haz clic en <strong>"Ingresar"</strong></li>
-                        <li>Si olvidaste tu contraseña, usa <strong>"¿Olvidaste tu contraseña?"</strong></li>
-                    </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-compass me-2"></i>Navegación Principal</h5>
-                    <p>El menú lateral izquierdo contiene todos los módulos:</p>
+                    <h5 class="mt-4"><i class="fas fa-compass me-2"></i>Menu Principal</h5>
                     <div class="table-responsive">
                         <table class="table table-bordered">
-                            <thead class="table-light">
-                                <tr><th>Icono</th><th>Módulo</th><th>Función</th></tr>
-                            </thead>
+                            <thead class="table-light"><tr><th>Modulo</th><th>Funcion</th></tr></thead>
                             <tbody>
-                                <tr><td><i class="fas fa-chart-pie"></i></td><td>Dashboard</td><td>Vista general y KPIs</td></tr>
-                                <tr><td><i class="fas fa-file-invoice-dollar"></i></td><td>Presupuestos</td><td>Crear y gestionar cotizaciones</td></tr>
-                                <tr><td><i class="fas fa-hard-hat"></i></td><td>Obras</td><td>Gestionar proyectos</td></tr>
-                                <tr><td><i class="fas fa-boxes"></i></td><td>Inventario</td><td>Control de materiales</td></tr>
-                                <tr><td><i class="fas fa-users"></i></td><td>Equipos</td><td>Gestión de personal</td></tr>
-                                <tr><td><i class="fas fa-store"></i></td><td>Marketplace</td><td>Comprar materiales</td></tr>
+                                <tr><td>Dashboard</td><td>Vista general, KPIs y alertas</td></tr>
+                                <tr><td>Presupuestos</td><td>Crear cotizaciones con IA o manual</td></tr>
+                                <tr><td>Obras</td><td>Gestionar proyectos, cronograma, tareas</td></tr>
+                                <tr><td>Inventario</td><td>Stock, deposito, categorias, alertas</td></tr>
+                                <tr><td>Equipos</td><td>Usuarios, maquinaria, asignaciones</td></tr>
+                                <tr><td>Reportes</td><td>Analisis, costos, productividad</td></tr>
+                                <tr><td>Seguridad</td><td>Protocolos, checklists, incidentes</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <!-- Presupuestos -->
+            <!-- 3. Presupuestos -->
             <div class="card mb-4" id="presupuestos">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-file-invoice-dollar text-primary me-2"></i>3. Módulo de Presupuestos</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-file-invoice-dollar text-primary me-2"></i>3. Presupuestos</h4></div>
                 <div class="card-body">
-                    <p>Crear cotizaciones profesionales para tus clientes, con cálculo automático de materiales y mano de obra.</p>
-
-                    <h5><i class="fas fa-robot me-2"></i>Crear Presupuesto con IA (Recomendado)</h5>
+                    <h5><i class="fas fa-robot me-2"></i>Crear con IA (Recomendado)</h5>
                     <ol>
-                        <li>Ve a <strong>Presupuestos → Crear con IA</strong></li>
-                        <li>Describe la obra: tipo de construcción, superficie, ubicación</li>
-                        <li>La IA calculará automáticamente etapas, materiales y costos</li>
-                        <li>Revisa y ajusta los valores</li>
-                        <li>Guarda el presupuesto</li>
+                        <li>Ve a <strong>Presupuestos > Crear con IA</strong></li>
+                        <li>Selecciona etapas de construccion, superficie y tipo de calculo</li>
+                        <li>La IA calcula materiales, mano de obra y equipos automaticamente</li>
+                        <li>Revisa y ajusta los valores, guarda el presupuesto</li>
                     </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-edit me-2"></i>Crear Presupuesto Manual</h5>
+                    <h5 class="mt-4"><i class="fas fa-edit me-2"></i>Crear Manual</h5>
                     <ol>
-                        <li>Ve a <strong>Presupuestos → Crear Manual</strong></li>
-                        <li>Completa cliente, descripción, ubicación</li>
-                        <li>Agrega items con descripción, cantidad, unidad y precio</li>
-                        <li>El sistema calcula subtotales automáticamente</li>
+                        <li>Ve a <strong>Presupuestos > Crear Manual</strong></li>
+                        <li>Completa cliente, descripcion, items con precios</li>
                     </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-tags me-2"></i>Estados del Presupuesto</h5>
-                    <div class="table-responsive">
-                        <table class="table table-bordered">
-                            <tr><td><span class="badge bg-secondary">Borrador</span></td><td>En edición, no enviado</td></tr>
-                            <tr><td><span class="badge bg-info">Enviado</span></td><td>Enviado al cliente, esperando respuesta</td></tr>
-                            <tr><td><span class="badge bg-success">Aprobado</span></td><td>Cliente aceptó, listo para convertir en obra</td></tr>
-                            <tr><td><span class="badge bg-danger">Rechazado</span></td><td>Cliente no aceptó</td></tr>
-                            <tr><td><span class="badge bg-warning">Vencido</span></td><td>Pasó la fecha de vigencia</td></tr>
-                        </table>
-                    </div>
-
-                    <div class="alert alert-success mt-3">
-                        <i class="fas fa-lightbulb me-2"></i>
-                        <strong>Tip:</strong> Cuando el cliente aprueba un presupuesto, usa <strong>"Confirmar como Obra"</strong> para crear automáticamente la obra con todas sus etapas.
-                    </div>
+                    <h5 class="mt-4"><i class="fas fa-file-pdf me-2"></i>Descargar PDF y Enviar</h5>
+                    <p>Desde el detalle del presupuesto podes descargarlo en PDF o enviarlo por email al cliente.</p>
+                    <h5 class="mt-4"><i class="fas fa-check-circle me-2"></i>Confirmar como Obra</h5>
+                    <p>Cuando el cliente aprueba, usa <strong>"Confirmar como Obra"</strong> para crear la obra con todas sus etapas automaticamente.</p>
                 </div>
             </div>
 
-            <!-- Obras -->
+            <!-- 4. Obras -->
             <div class="card mb-4" id="obras">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-hard-hat text-primary me-2"></i>4. Módulo de Obras</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-hard-hat text-primary me-2"></i>4. Obras</h4></div>
                 <div class="card-body">
-                    <p>Gestionar el ciclo completo de un proyecto de construcción: planificación, ejecución y seguimiento.</p>
-
-                    <h5><i class="fas fa-plus-circle me-2"></i>Crear una Obra</h5>
+                    <h5><i class="fas fa-layer-group me-2"></i>Etapas de Construccion</h5>
+                    <p>Cada obra tiene etapas predefinidas (Preliminares, Excavacion, Fundaciones, Estructura, etc.) con tareas asignables.</p>
+                    <h5 class="mt-4"><i class="fas fa-tasks me-2"></i>Tareas</h5>
                     <ol>
-                        <li>Ve a <strong>Obras → Crear Obra</strong></li>
-                        <li>Completa: nombre, cliente, dirección, fecha de inicio</li>
-                        <li>El sistema geolocaliza automáticamente la dirección</li>
+                        <li>Dentro de una etapa, crear tareas con nombre, cantidad y fecha</li>
+                        <li>Asignar operarios a cada tarea</li>
+                        <li>Registrar avances con fotos y porcentaje</li>
                     </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-layer-group me-2"></i>Gestionar Etapas</h5>
-                    <p>Las etapas organizan el trabajo en fases:</p>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <ul class="list-unstyled">
-                                <li><i class="fas fa-check text-success me-2"></i>Cimentación</li>
-                                <li><i class="fas fa-check text-success me-2"></i>Estructura</li>
-                                <li><i class="fas fa-check text-success me-2"></i>Cubierta</li>
-                                <li><i class="fas fa-check text-success me-2"></i>Cerramientos</li>
-                            </ul>
-                        </div>
-                        <div class="col-md-6">
-                            <ul class="list-unstyled">
-                                <li><i class="fas fa-check text-success me-2"></i>Instalaciones eléctricas</li>
-                                <li><i class="fas fa-check text-success me-2"></i>Instalaciones sanitarias</li>
-                                <li><i class="fas fa-check text-success me-2"></i>Terminaciones</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <h5 class="mt-4"><i class="fas fa-tasks me-2"></i>Gestionar Tareas</h5>
-                    <ol>
-                        <li>Dentro de una etapa, haz clic en <strong>"Nueva Tarea"</strong></li>
-                        <li>Completa: nombre, cantidad, responsable, fecha límite</li>
-                        <li>Asigna la tarea a un miembro del equipo</li>
-                    </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-chart-line me-2"></i>Registrar Avances</h5>
-                    <ol>
-                        <li>Abre la tarea</li>
-                        <li>Haz clic en <strong>"Registrar Avance"</strong></li>
-                        <li>Indica porcentaje, horas y sube fotos</li>
-                        <li>El progreso se calcula automáticamente</li>
-                    </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-cloud-sun me-2"></i>Información del Clima</h5>
-                    <p>Cada obra muestra información climática en tiempo real. Haz clic en <strong>"Información del Clima"</strong> para ver el pronóstico de 7 días.</p>
+                    <h5 class="mt-4"><i class="fas fa-chart-line me-2"></i>Progreso y Costos</h5>
+                    <p>El panel de progreso muestra: porcentaje completado, presupuesto vs costo real (materiales + mano de obra + maquinaria).</p>
+                    <h5 class="mt-4"><i class="fas fa-cloud-sun me-2"></i>Clima</h5>
+                    <p>Cada obra muestra el pronostico de 7 dias basado en la geolocalizacion.</p>
                 </div>
             </div>
 
-            <!-- Inventario -->
+            <!-- 5. Cronograma -->
+            <div class="card mb-4" id="cronograma">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-calendar-alt text-primary me-2"></i>5. Cronograma</h4></div>
+                <div class="card-body">
+                    <h5><i class="fas fa-link me-2"></i>Encadenamiento de Etapas</h5>
+                    <p>Las etapas se encadenan automaticamente por niveles. Al editar las fechas de una etapa, las sucesoras se recalculan.</p>
+                    <h5 class="mt-4"><i class="fas fa-calendar-week me-2"></i>Dias Habiles</h5>
+                    <p>El sistema calcula fechas en dias habiles (lunes a viernes). Si una etapa termina un viernes, la siguiente arranca el lunes.</p>
+                    <h5 class="mt-4"><i class="fas fa-edit me-2"></i>Editar Fechas</h5>
+                    <ol>
+                        <li>Haz clic en <strong>"Editar"</strong> en la etapa</li>
+                        <li>Cambia fecha de inicio y/o fin</li>
+                        <li>Las etapas sucesoras se ajustan automaticamente</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 6. Materiales y Stock en Obra -->
+            <div class="card mb-4" id="materiales">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-cubes text-primary me-2"></i>6. Materiales y Stock en Obra</h4></div>
+                <div class="card-body">
+                    <h5><i class="fas fa-eye me-2"></i>Ver Materiales</h5>
+                    <p>En el detalle de obra, la seccion "Materiales" muestra: Planificado, Transferido, Consumido, Restante y Costo.</p>
+                    <h5 class="mt-4"><i class="fas fa-minus-circle me-2"></i>Registrar Consumo</h5>
+                    <ol>
+                        <li>Haz clic en <strong>"Registrar Consumo"</strong></li>
+                        <li>Selecciona materiales y cantidades consumidas</li>
+                        <li>El costo se suma automaticamente al Costo Real de la obra</li>
+                    </ol>
+                    <h5 class="mt-4"><i class="fas fa-dollar-sign me-2"></i>Costo Real</h5>
+                    <p>Se calcula automaticamente: Materiales consumidos + Mano de obra + Maquinaria. Se actualiza con cada consumo o liquidacion.</p>
+                </div>
+            </div>
+
+            <!-- 7. Inventario -->
             <div class="card mb-4" id="inventario">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-boxes text-primary me-2"></i>5. Módulo de Inventario</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-boxes text-primary me-2"></i>7. Inventario</h4></div>
                 <div class="card-body">
-                    <p>Controlar el stock de materiales, herramientas y equipos.</p>
-
-                    <h5><i class="fas fa-plus me-2"></i>Agregar Item</h5>
-                    <ol>
-                        <li>Ve a <strong>Inventario → Nuevo Item</strong></li>
-                        <li>Completa: nombre, categoría, cantidad, precio</li>
-                        <li>Define stock mínimo para alertas</li>
-                    </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-exchange-alt me-2"></i>Movimientos de Stock</h5>
-                    <div class="table-responsive">
-                        <table class="table table-bordered">
-                            <tr><td><strong>Entrada</strong></td><td>Cuando compras o recibes material</td></tr>
-                            <tr><td><strong>Salida</strong></td><td>Cuando usas material en obra</td></tr>
-                            <tr><td><strong>Traslado</strong></td><td>Mover entre almacenes</td></tr>
-                            <tr><td><strong>Ajuste</strong></td><td>Corregir diferencias</td></tr>
-                        </table>
-                    </div>
-
+                    <h5><i class="fas fa-warehouse me-2"></i>Deposito General</h5>
+                    <p>Ve a <strong>Inventario > Deposito</strong> para ver el stock general y trasladar materiales a obras.</p>
+                    <h5 class="mt-4"><i class="fas fa-folder me-2"></i>Categorias</h5>
+                    <p>Los items se organizan por etapas de construccion (34 categorias). Cada categoria muestra la cantidad de articulos.</p>
                     <h5 class="mt-4"><i class="fas fa-bell me-2"></i>Alertas de Stock</h5>
-                    <p>El sistema te avisa cuando un item baja del stock mínimo. Ve a <strong>Inventario → Alertas</strong>.</p>
+                    <p>El sistema avisa cuando un item baja del stock minimo. Ve a <strong>Inventario > Alertas</strong>.</p>
+                    <h5 class="mt-4"><i class="fas fa-chart-area me-2"></i>Analisis y Reportes</h5>
+                    <p>Consumo por periodo, top 10 items consumidos, costo total del inventario.</p>
+                    <h5 class="mt-4"><i class="fas fa-upload me-2"></i>Importar Excel</h5>
+                    <p>Los administradores pueden importar items masivamente desde Excel o cargar items desde la calculadora IA.</p>
                 </div>
             </div>
 
-            <!-- Requerimientos -->
+            <!-- 8. Requerimientos de Compra -->
             <div class="card mb-4" id="requerimientos">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-clipboard-list text-primary me-2"></i>6. Módulo de Requerimientos</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-clipboard-list text-primary me-2"></i>8. Requerimientos de Compra</h4></div>
                 <div class="card-body">
-                    <p>Solicitar compra de materiales cuando faltan en la obra.</p>
-
                     <h5><i class="fas fa-file-alt me-2"></i>Crear Requerimiento</h5>
                     <ol>
-                        <li>Ve a <strong>Requerimientos → Nuevo</strong></li>
-                        <li>Selecciona la obra que necesita el material</li>
-                        <li>Indica qué items necesitas y la prioridad</li>
-                        <li>Envía el requerimiento</li>
+                        <li>Desde la obra o desde <strong>Requerimientos > Nuevo</strong></li>
+                        <li>Selecciona la obra y los materiales que necesitas</li>
+                        <li>El admin puede editar cantidades directamente en el detalle</li>
                     </ol>
-
-                    <h5 class="mt-4"><i class="fas fa-stream me-2"></i>Flujo de Aprobación</h5>
+                    <h5 class="mt-4"><i class="fas fa-stream me-2"></i>Flujo</h5>
                     <div class="d-flex flex-wrap justify-content-center align-items-center gap-2 my-3">
-                        <span class="badge bg-secondary p-2">Pendiente</span>
-                        <i class="fas fa-arrow-right"></i>
-                        <span class="badge bg-success p-2">Aprobado</span>
-                        <i class="fas fa-arrow-right"></i>
-                        <span class="badge bg-info p-2">En proceso</span>
-                        <i class="fas fa-arrow-right"></i>
+                        <span class="badge bg-secondary p-2">Pendiente</span><i class="fas fa-arrow-right"></i>
+                        <span class="badge bg-success p-2">Aprobado</span><i class="fas fa-arrow-right"></i>
+                        <span class="badge bg-info p-2">En proceso</span><i class="fas fa-arrow-right"></i>
                         <span class="badge bg-primary p-2">Completado</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Equipos -->
+            <!-- 9. Cotizaciones -->
+            <div class="card mb-4" id="cotizaciones">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-balance-scale text-primary me-2"></i>9. Cotizaciones de Proveedores</h4></div>
+                <div class="card-body">
+                    <h5><i class="fas fa-plus-circle me-2"></i>Solicitar Cotizaciones</h5>
+                    <ol>
+                        <li>Desde un requerimiento aprobado, haz clic en <strong>"Gestionar Cotizaciones"</strong></li>
+                        <li>Agrega proveedores desde el dropdown o crea uno nuevo</li>
+                        <li>Cada proveedor recibe los items del requerimiento + flete</li>
+                    </ol>
+                    <h5 class="mt-4"><i class="fas fa-edit me-2"></i>Cargar Precios</h5>
+                    <p>Despliega la cotizacion del proveedor, carga precios unitarios, selecciona modalidad (compra/alquiler) y condiciones comerciales.</p>
+                    <h5 class="mt-4"><i class="fas fa-chart-bar me-2"></i>Comparar</h5>
+                    <p>Usa <strong>"Comparativa PDF"</strong> para descargar la tabla comparativa de todos los proveedores con el mejor precio resaltado.</p>
+                    <h5 class="mt-4"><i class="fas fa-trophy me-2"></i>Elegir Ganador</h5>
+                    <p>Selecciona la mejor cotizacion y genera la Orden de Compra automaticamente.</p>
+                    <h5 class="mt-4"><i class="fas fa-file-pdf me-2"></i>PDFs</h5>
+                    <p>Cada cotizacion individual y la comparativa se pueden descargar en PDF.</p>
+                </div>
+            </div>
+
+            <!-- 10. Ordenes de Compra -->
+            <div class="card mb-4" id="ordenes-compra">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-file-alt text-primary me-2"></i>10. Ordenes de Compra</h4></div>
+                <div class="card-body">
+                    <h5><i class="fas fa-plus me-2"></i>Crear OC</h5>
+                    <p>Se genera automaticamente desde una cotizacion elegida, o se puede crear manualmente.</p>
+                    <h5 class="mt-4"><i class="fas fa-inbox me-2"></i>Recepcion</h5>
+                    <ol>
+                        <li>Al recibir los materiales, haz clic en <strong>"Recepcionar"</strong></li>
+                        <li>Confirma las cantidades recibidas</li>
+                        <li>El stock de la obra se actualiza automaticamente con el precio de la OC</li>
+                    </ol>
+                    <h5 class="mt-4"><i class="fas fa-file-pdf me-2"></i>PDF</h5>
+                    <p>Descarga la OC en PDF con datos del proveedor, items, precios y total.</p>
+                </div>
+            </div>
+
+            <!-- 11. Proveedores -->
+            <div class="card mb-4" id="proveedores">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-truck text-primary me-2"></i>11. Proveedores</h4></div>
+                <div class="card-body">
+                    <h5><i class="fas fa-address-book me-2"></i>Ficha del Proveedor</h5>
+                    <p>Cada proveedor tiene: razon social, CUIT, contacto, email, telefono, direccion, tipo y condicion de pago.</p>
+                    <h5 class="mt-4"><i class="fas fa-folder-open me-2"></i>Historial de Cotizaciones</h5>
+                    <p>En la ficha del proveedor se ve el historial completo: cotizaciones ganadas, perdidas y pendientes, con descarga PDF.</p>
+                    <h5 class="mt-4"><i class="fas fa-history me-2"></i>Historial de Precios</h5>
+                    <p>Registro automatico de precios cada vez que se completa una OC.</p>
+                </div>
+            </div>
+
+            <!-- 12. Remitos -->
+            <div class="card mb-4" id="remitos">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-receipt text-primary me-2"></i>12. Remitos</h4></div>
+                <div class="card-body">
+                    <h5><i class="fas fa-plus me-2"></i>Cargar Remito</h5>
+                    <ol>
+                        <li>En la obra, ve a la pestana <strong>REMITOS</strong></li>
+                        <li>Haz clic en <strong>"Cargar Remito"</strong></li>
+                        <li>Opcionalmente, vincula a una OC para pre-llenar los items</li>
+                        <li>El proveedor se autocompleta si vinculaste la OC</li>
+                    </ol>
+                    <h5 class="mt-4"><i class="fas fa-file-pdf me-2"></i>PDF</h5>
+                    <p>Descarga el remito en PDF con items, precios y firmas.</p>
+                </div>
+            </div>
+
+            <!-- 13. Equipos -->
             <div class="card mb-4" id="equipos">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-users text-primary me-2"></i>7. Módulo de Equipos</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-users text-primary me-2"></i>13. Equipos</h4></div>
                 <div class="card-body">
-                    <p>Gestionar maquinaria y el equipo de trabajo.</p>
-
-                    <h5><i class="fas fa-truck me-2"></i>Equipos/Maquinaria</h5>
-                    <p>Registra excavadoras, hormigoneras y otros equipos. Asígnalos a obras específicas.</p>
-
-                    <h5 class="mt-4"><i class="fas fa-user-plus me-2"></i>Usuarios del Sistema</h5>
+                    <h5><i class="fas fa-user-plus me-2"></i>Usuarios</h5>
                     <ol>
-                        <li>Ve a <strong>Equipos → Usuarios</strong></li>
-                        <li>Haz clic en <strong>"Nuevo Usuario"</strong></li>
+                        <li>Ve a <strong>Equipos > Usuarios > Nuevo</strong></li>
                         <li>Completa datos y asigna un rol</li>
-                        <li>El usuario recibe email de invitación</li>
+                        <li>El usuario recibe email de invitacion</li>
                     </ol>
+                    <h5 class="mt-4"><i class="fas fa-cogs me-2"></i>Maquinaria</h5>
+                    <p>Registra equipos (excavadoras, hormigoneras, etc.) con codigo, tipo y costo/hora. Asignalos a obras.</p>
+                    <h5 class="mt-4"><i class="fas fa-user-check me-2"></i>Asignar a Obras</h5>
+                    <p>Desde la obra, pestana EQUIPO, asigna usuarios y maquinaria.</p>
                 </div>
             </div>
 
-            <!-- Clientes -->
-            <div class="card mb-4" id="clientes">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-user-tie text-primary me-2"></i>8. Módulo de Clientes</h4>
-                </div>
+            <!-- 14. Fichadas -->
+            <div class="card mb-4" id="fichadas">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-clock text-primary me-2"></i>14. Fichadas (Control de Asistencia)</h4></div>
                 <div class="card-body">
-                    <p>Mantener una base de datos de tus clientes.</p>
+                    <h5><i class="fas fa-map-marker-alt me-2"></i>Fichar Ingreso/Egreso</h5>
                     <ol>
-                        <li>Ve a <strong>Clientes → Nuevo</strong></li>
-                        <li>Completa: nombre, CUIT/DNI, teléfono, email, dirección</li>
-                        <li>Usa los clientes en presupuestos y obras</li>
+                        <li>El operario entra a <strong>Fichadas</strong> desde el menu</li>
+                        <li>Selecciona la obra y haz clic en <strong>"Fichar Ingreso"</strong> o <strong>"Fichar Egreso"</strong></li>
+                        <li>Se valida la geolocalizacion (debe estar cerca de la obra)</li>
                     </ol>
+                    <h5 class="mt-4"><i class="fas fa-bell me-2"></i>Alertas Automaticas</h5>
+                    <p>Si un operario tiene tareas activas y no ficho:</p>
+                    <ul>
+                        <li><strong>Despues de las 5:00 hs:</strong> alerta de ingreso pendiente</li>
+                        <li><strong>Despues de las 17:00 hs:</strong> alerta de egreso pendiente</li>
+                    </ul>
+                    <p>Las alertas aparecen en el dashboard del admin y como notificacion al operario. Solo lunes a viernes.</p>
+                    <h5 class="mt-4"><i class="fas fa-history me-2"></i>Historial</h5>
+                    <p>Admins pueden ver el historial de fichadas con filtros por obra, usuario y fecha.</p>
                 </div>
             </div>
 
-            <!-- Reportes -->
+            <!-- 15. Liquidaciones -->
+            <div class="card mb-4" id="liquidaciones">
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-money-bill-wave text-primary me-2"></i>15. Liquidaciones de Mano de Obra</h4></div>
+                <div class="card-body">
+                    <h5><i class="fas fa-calculator me-2"></i>Liquidar Jornales</h5>
+                    <p>Desde la obra, generar liquidaciones basadas en las horas fichadas de cada operario.</p>
+                    <h5 class="mt-4"><i class="fas fa-file-pdf me-2"></i>Recibos</h5>
+                    <p>Descargar recibos de pago individuales o la liquidacion completa en PDF.</p>
+                </div>
+            </div>
+
+            <!-- 16. Reportes -->
             <div class="card mb-4" id="reportes">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>9. Módulo de Reportes</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>16. Reportes y Dashboard</h4></div>
                 <div class="card-body">
-                    <h5><i class="fas fa-tachometer-alt me-2"></i>Dashboard Principal</h5>
-                    <p>Vista general con indicadores clave: obras activas, presupuestos pendientes, alertas.</p>
-
-                    <h5 class="mt-4"><i class="fas fa-building me-2"></i>Reporte de Obras</h5>
-                    <p>Estado de cada obra, progreso vs planificado, retrasos detectados.</p>
-
-                    <h5 class="mt-4"><i class="fas fa-dollar-sign me-2"></i>Reporte de Costos</h5>
-                    <p>Presupuesto vs ejecutado, desglose por etapa, rentabilidad.</p>
-
-                    <h5 class="mt-4"><i class="fas fa-warehouse me-2"></i>Reporte de Inventario</h5>
-                    <p>Items con bajo stock, movimientos recientes, valor total.</p>
+                    <h5><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h5>
+                    <p>Vista general con: obras activas, presupuesto total, progreso promedio, alertas (stock bajo, tareas vencidas, fichadas pendientes, sobrecosto, liquidaciones pendientes).</p>
+                    <h5 class="mt-4"><i class="fas fa-exclamation-triangle me-2"></i>Tipos de Alertas</h5>
+                    <ul>
+                        <li><strong>Stock bajo:</strong> items debajo del minimo</li>
+                        <li><strong>Presupuestos por vencer:</strong> fecha de vigencia proxima</li>
+                        <li><strong>Obras demoradas:</strong> pasaron la fecha estimada</li>
+                        <li><strong>Tareas vencidas/en riesgo:</strong> tareas retrasadas o con poco avance</li>
+                        <li><strong>Fichadas pendientes:</strong> operarios sin fichar ingreso/egreso</li>
+                        <li><strong>Sobrecosto:</strong> obras donde el costo real supera el presupuesto</li>
+                        <li><strong>Liquidaciones pendientes:</strong> pagos de MO sin confirmar</li>
+                    </ul>
                 </div>
             </div>
 
-            <!-- Seguridad -->
+            <!-- 17. Seguridad -->
             <div class="card mb-4" id="seguridad">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-shield-alt text-primary me-2"></i>10. Módulo de Seguridad</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-shield-alt text-primary me-2"></i>17. Seguridad e Higiene</h4></div>
                 <div class="card-body">
-                    <p>Gestionar la seguridad e higiene en las obras.</p>
-
                     <div class="row">
                         <div class="col-md-6">
                             <h5><i class="fas fa-clipboard-check me-2"></i>Protocolos</h5>
-                            <p>Crear y asignar protocolos de seguridad a las obras.</p>
-
+                            <p>Crear y asignar protocolos de seguridad a obras.</p>
                             <h5 class="mt-3"><i class="fas fa-list-ul me-2"></i>Checklists</h5>
                             <p>Verificaciones diarias de seguridad.</p>
                         </div>
                         <div class="col-md-6">
                             <h5><i class="fas fa-exclamation-triangle me-2"></i>Incidentes</h5>
-                            <p>Reportar accidentes o incidentes con fotos.</p>
-
+                            <p>Reportar accidentes con fotos y descripcion.</p>
                             <h5 class="mt-3"><i class="fas fa-certificate me-2"></i>Certificaciones</h5>
                             <p>Registrar certificaciones del personal.</p>
                         </div>
@@ -350,167 +369,69 @@
                 </div>
             </div>
 
-            <!-- Marketplace -->
-            <div class="card mb-4" id="marketplace">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-store text-primary me-2"></i>11. Marketplace</h4>
-                </div>
-                <div class="card-body">
-                    <p>Comprar materiales directamente a proveedores.</p>
-
-                    <ol>
-                        <li><strong>Buscar:</strong> Usa el buscador o navega por categorías</li>
-                        <li><strong>Ver producto:</strong> Fotos, descripción, precio, stock</li>
-                        <li><strong>Agregar al carrito:</strong> Selecciona cantidad</li>
-                        <li><strong>Comprar:</strong> Completa datos de envío y confirma</li>
-                        <li><strong>Seguimiento:</strong> Ve el estado en "Mis Órdenes"</li>
-                    </ol>
-                </div>
-            </div>
-
-            <!-- Configuración -->
+            <!-- 18. Configuracion -->
             <div class="card mb-4" id="configuracion">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-cog text-primary me-2"></i>12. Configuración de Cuenta</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-cog text-primary me-2"></i>18. Configuracion</h4></div>
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4">
                             <h5><i class="fas fa-user me-2"></i>Perfil</h5>
-                            <ul class="list-unstyled">
-                                <li>Editar nombre</li>
-                                <li>Cambiar foto</li>
-                                <li>Cambiar contraseña</li>
-                            </ul>
+                            <ul class="list-unstyled"><li>Editar nombre</li><li>Cambiar foto</li><li>Cambiar contrasena</li></ul>
                         </div>
                         <div class="col-md-4">
-                            <h5><i class="fas fa-file-invoice me-2"></i>Facturación</h5>
-                            <ul class="list-unstyled">
-                                <li>CUIT/DNI</li>
-                                <li>Razón social</li>
-                                <li>Condición IVA</li>
-                            </ul>
+                            <h5><i class="fas fa-file-invoice me-2"></i>Facturacion</h5>
+                            <ul class="list-unstyled"><li>CUIT/DNI</li><li>Razon social</li><li>Condicion IVA</li></ul>
                         </div>
                         <div class="col-md-4">
-                            <h5><i class="fas fa-building me-2"></i>Organización</h5>
-                            <ul class="list-unstyled">
-                                <li>Nombre empresa</li>
-                                <li>Logo</li>
-                                <li>Datos de contacto</li>
-                            </ul>
+                            <h5><i class="fas fa-building me-2"></i>Organizacion</h5>
+                            <ul class="list-unstyled"><li>Nombre empresa</li><li>Logo</li><li>Datos de contacto</li></ul>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Roles -->
+            <!-- 19. Roles -->
             <div class="card mb-4" id="roles">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-user-tag text-primary me-2"></i>13. Roles y Permisos</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-user-tag text-primary me-2"></i>19. Roles y Permisos</h4></div>
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-bordered">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Rol</th>
-                                    <th>Descripción</th>
-                                    <th>Acceso</th>
-                                </tr>
-                            </thead>
+                            <thead class="table-light"><tr><th>Rol</th><th>Descripcion</th><th>Acceso</th></tr></thead>
                             <tbody>
-                                <tr>
-                                    <td><span class="badge bg-danger">Administrador</span></td>
-                                    <td>Acceso completo a todo el sistema</td>
-                                    <td>Todo</td>
-                                </tr>
-                                <tr>
-                                    <td><span class="badge bg-primary">Project Manager</span></td>
-                                    <td>Gestiona obras, presupuestos y equipos</td>
-                                    <td>Obras, Presupuestos, Equipos, Reportes</td>
-                                </tr>
-                                <tr>
-                                    <td><span class="badge bg-info">Técnico</span></td>
-                                    <td>Crea presupuestos, ve obras</td>
-                                    <td>Presupuestos, Obras, Inventario</td>
-                                </tr>
-                                <tr>
-                                    <td><span class="badge bg-secondary">Operario</span></td>
-                                    <td>Ve sus tareas, registra avances</td>
-                                    <td>Mis Tareas, Inventario (uso)</td>
-                                </tr>
+                                <tr><td><span class="badge bg-danger">Administrador</span></td><td>Acceso completo</td><td>Todo el sistema</td></tr>
+                                <tr><td><span class="badge bg-primary">Project Manager</span></td><td>Gestiona obras y compras</td><td>Obras, Presupuestos, Compras, Equipos, Reportes</td></tr>
+                                <tr><td><span class="badge bg-info">Tecnico</span></td><td>Crea presupuestos</td><td>Presupuestos, Obras, Inventario</td></tr>
+                                <tr><td><span class="badge bg-secondary">Operario</span></td><td>Ejecuta tareas</td><td>Mis Tareas, Fichadas, Avances</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <!-- FAQ -->
+            <!-- 20. FAQ -->
             <div class="card mb-4" id="faq">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="fas fa-question-circle text-primary me-2"></i>14. Preguntas Frecuentes</h4>
-                </div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-question-circle text-primary me-2"></i>20. Preguntas Frecuentes</h4></div>
                 <div class="card-body">
                     <div class="accordion" id="faqAccordion">
                         <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
-                                    ¿Cómo recupero mi contraseña?
-                                </button>
-                            </h2>
-                            <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body">
-                                    En la pantalla de login, haz clic en "¿Olvidaste tu contraseña?" e ingresa tu email. Recibirás un enlace para crear una nueva.
-                                </div>
-                            </div>
+                            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">Como recupero mi contrasena?</button></h2>
+                            <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body">En la pantalla de login, haz clic en "Olvidaste tu contrasena?" e ingresa tu email.</div></div>
                         </div>
                         <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
-                                    ¿Puedo usar OBYRA en el celular?
-                                </button>
-                            </h2>
-                            <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body">
-                                    Sí, OBYRA es una aplicación web responsiva. También puedes instalarla como app desde el navegador.
-                                </div>
-                            </div>
+                            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">Puedo usar OBYRA en el celular?</button></h2>
+                            <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body">Si, OBYRA es responsiva. Tambien podes instalarla como app desde el navegador.</div></div>
                         </div>
                         <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
-                                    ¿Cómo invito a mi equipo?
-                                </button>
-                            </h2>
-                            <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body">
-                                    Ve a <strong>Equipos → Usuarios → Nuevo Usuario</strong> y completa los datos. El usuario recibirá un email de invitación.
-                                </div>
-                            </div>
+                            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">Como funciona la IA para presupuestos?</button></h2>
+                            <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body">La IA analiza etapas seleccionadas, superficie y tipo de obra para calcular materiales, mano de obra y equipos con precios del mercado argentino (713 precios de referencia, 33 etapas).</div></div>
                         </div>
                         <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
-                                    ¿Cómo funciona la IA para presupuestos?
-                                </button>
-                            </h2>
-                            <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body">
-                                    La IA analiza el tipo de obra y superficie para calcular automáticamente etapas, materiales y costos basándose en datos del mercado argentino.
-                                </div>
-                            </div>
+                            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">Como funciona el circuito de compras?</button></h2>
+                            <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body">Requerimiento > Cotizaciones a proveedores > Comparativa > Elegir ganador > OC > Recepcion > Stock en obra > Consumo > Costo real.</div></div>
                         </div>
                         <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
-                                    ¿Mis datos están seguros?
-                                </button>
-                            </h2>
-                            <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body">
-                                    Sí, OBYRA usa encriptación SSL, autenticación segura y cumple con estándares de seguridad de la industria.
-                                </div>
-                            </div>
+                            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">Mis datos estan seguros?</button></h2>
+                            <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body">Si, OBYRA usa encriptacion SSL, autenticacion segura y backups automaticos.</div></div>
                         </div>
                     </div>
                 </div>
@@ -518,11 +439,9 @@
 
             <!-- Soporte -->
             <div class="card mb-4 border-primary">
-                <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0"><i class="fas fa-headset me-2"></i>Soporte</h4>
-                </div>
+                <div class="card-header bg-primary text-white"><h4 class="mb-0"><i class="fas fa-headset me-2"></i>Soporte</h4></div>
                 <div class="card-body text-center">
-                    <p class="lead">¿Necesitas ayuda?</p>
+                    <p class="lead">Necesitas ayuda?</p>
                     <div class="row justify-content-center">
                         <div class="col-md-4 mb-3">
                             <i class="fas fa-envelope fa-2x text-primary mb-2"></i>
@@ -530,60 +449,37 @@
                         </div>
                         <div class="col-md-4 mb-3">
                             <i class="fab fa-whatsapp fa-2x text-success mb-2"></i>
-                            <p><strong>WhatsApp</strong><br>
-                                <a href="https://wa.me/5491173685175" target="_blank">+54 9 11 7368-5175</a>
-                            </p>
+                            <p><strong>WhatsApp</strong><br><a href="https://wa.me/5491173685175" target="_blank">+54 9 11 7368-5175</a></p>
                         </div>
                         <div class="col-md-4 mb-3">
                             <i class="fas fa-globe fa-2x text-info mb-2"></i>
-                            <p><strong>Web</strong><br>
-                                <a href="https://www.obyra.com.ar" target="_blank">www.obyra.com.ar</a>
-                            </p>
+                            <p><strong>Web</strong><br><a href="https://www.obyra.com.ar" target="_blank">www.obyra.com.ar</a></p>
                         </div>
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 </div>
 
 <style>
-.nav-pills .nav-link {
-    color: #495057;
-    border-radius: 0;
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-}
-.nav-pills .nav-link:hover {
-    background-color: #e9ecef;
-}
-.nav-pills .nav-link.active {
-    background-color: #0d6efd;
-    color: white;
-}
+.nav-pills .nav-link { color: #495057; border-radius: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+.nav-pills .nav-link:hover { background-color: #e9ecef; }
+.nav-pills .nav-link.active { background-color: #0d6efd; color: white; }
 </style>
 
 <script>
-// Resaltar sección activa en el menú al hacer scroll
 document.addEventListener('DOMContentLoaded', function() {
     const sections = document.querySelectorAll('.card[id]');
     const navLinks = document.querySelectorAll('.nav-link');
-
     window.addEventListener('scroll', function() {
         let current = '';
         sections.forEach(section => {
-            const sectionTop = section.offsetTop;
-            if (scrollY >= sectionTop - 100) {
-                current = section.getAttribute('id');
-            }
+            if (scrollY >= section.offsetTop - 100) current = section.getAttribute('id');
         });
-
         navLinks.forEach(link => {
             link.classList.remove('active');
-            if (link.getAttribute('href') === '#' + current) {
-                link.classList.add('active');
-            }
+            if (link.getAttribute('href') === '#' + current) link.classList.add('active');
         });
     });
 });

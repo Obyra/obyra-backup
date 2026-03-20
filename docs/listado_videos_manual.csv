@@ -1,0 +1,45 @@
+N,Modulo,Video,Descripcion,Duracion Estimada,Prioridad
+1,Introduccion,Bienvenida a OBYRA,Que es OBYRA - tour general del sistema y menu principal,2 min,Alta
+2,Primeros Pasos,Registro y primer login,Como crear cuenta - configurar organizacion - navegar el sistema,3 min,Alta
+3,Presupuestos,Crear presupuesto con IA,Seleccionar etapas - superficie - tipo calculo - revisar resultado,4 min,Alta
+4,Presupuestos,Crear presupuesto manual,Agregar items manualmente - calcular subtotales,3 min,Media
+5,Presupuestos,Descargar PDF y enviar al cliente,Descargar PDF - enviar por email - estados del presupuesto,2 min,Alta
+6,Presupuestos,Confirmar como obra,Aprobar presupuesto y crear obra automaticamente con etapas,2 min,Alta
+7,Obras,Detalle de obra,Navegar el detalle: progreso - etapas - materiales - equipo - OC - remitos,3 min,Alta
+8,Obras,Gestionar tareas,Crear tareas dentro de etapas - asignar operarios - registrar avances con fotos,4 min,Alta
+9,Cronograma,Editar fechas y encadenamiento,Editar fechas de etapas - dias habiles - cascadeo automatico,3 min,Alta
+10,Materiales,Stock en obra y consumo,Ver materiales transferidos - registrar consumo - ver costo real,3 min,Alta
+11,Materiales,Registrar consumo batch,Usar boton Registrar Consumo para consumir varios materiales a la vez,2 min,Media
+12,Inventario,Vista general del inventario,Categorias - busqueda - filtros - vista de carpetas,2 min,Alta
+13,Inventario,Deposito general,Ver stock general - trasladar materiales a obras,2 min,Media
+14,Inventario,Alertas de stock,Configurar stock minimo - ver alertas - generar notificaciones,2 min,Media
+15,Inventario,Analisis y reportes,Consumo por periodo - top items - costo total,2 min,Baja
+16,Inventario,Importar items IA,Cargar items desde la calculadora IA al inventario,1 min,Media
+17,Inventario,Limpiar marcas comerciales,Usar boton Limpiar Marcas para quitar nombres de marcas de items,1 min,Baja
+18,Requerimientos,Crear requerimiento de compra,Seleccionar obra - agregar items - enviar solicitud,3 min,Alta
+19,Requerimientos,Aprobar y editar cantidades,Admin aprueba requerimiento - editar cantidades inline,2 min,Media
+20,Cotizaciones,Agregar proveedores a cotizacion,Seleccionar proveedores del dropdown - crear proveedor nuevo inline,2 min,Alta
+21,Cotizaciones,Cargar precios del proveedor,Desplegar cotizacion - cargar precios - modalidad compra/alquiler,3 min,Alta
+22,Cotizaciones,Comparar cotizaciones,Ver comparativa - descargar PDF comparativa - elegir ganador,3 min,Alta
+23,Cotizaciones,Descargar PDF cotizacion individual,Boton PDF por proveedor - misma plantilla que presupuestos,1 min,Media
+24,Ordenes de Compra,Crear OC desde cotizacion,Generar OC automatica desde cotizacion elegida,2 min,Alta
+25,Ordenes de Compra,Recepcionar materiales,Confirmar cantidades recibidas - stock se actualiza automaticamente,3 min,Alta
+26,Ordenes de Compra,Descargar PDF de OC,Boton PDF con datos proveedor - items - total,1 min,Media
+27,Proveedores,Ficha del proveedor,Ver datos - historial de cotizaciones (ganadas/perdidas) - OC - precios,2 min,Media
+28,Proveedores,Crear proveedor,Nuevo proveedor con razon social - CUIT - contacto - tipo,2 min,Media
+29,Remitos,Cargar remito vinculado a OC,Crear remito - vincular a OC para pre-llenar items - guardar,3 min,Alta
+30,Remitos,Descargar PDF de remito,Boton PDF con items - precios - firmas,1 min,Media
+31,Equipos,Gestionar usuarios,Crear usuario - asignar rol - invitar por email,2 min,Alta
+32,Equipos,Gestionar maquinaria,Registrar equipo - codigo - tipo - costo/hora - asignar a obra,2 min,Media
+33,Fichadas,Fichar ingreso y egreso,Operario ficha con geolocalizacion - validacion de distancia,3 min,Alta
+34,Fichadas,Alertas de fichadas pendientes,Como funcionan las alertas automaticas de ingreso/egreso,2 min,Media
+35,Fichadas,Historial de fichadas,Admin ve historial filtrado por obra - usuario - fecha,2 min,Media
+36,Liquidaciones,Liquidar mano de obra,Generar liquidacion desde horas fichadas - confirmar pago,3 min,Alta
+37,Liquidaciones,Descargar recibos PDF,Recibo individual y liquidacion completa en PDF,1 min,Media
+38,Reportes,Dashboard principal,KPIs - alertas por severidad - obras activas - mapa,3 min,Alta
+39,Reportes,Tipos de alertas,Stock bajo - presupuestos vencer - obras demoradas - fichadas - sobrecosto,3 min,Media
+40,Seguridad,Protocolos y checklists,Crear protocolo - asignar a obra - verificaciones diarias,2 min,Media
+41,Seguridad,Reportar incidentes,Cargar incidente con fotos - descripcion - seguimiento,2 min,Media
+42,Configuracion,Perfil y organizacion,Editar datos personales - logo empresa - datos fiscales,2 min,Media
+43,Roles,Roles y permisos,Diferencias entre Admin - PM - Tecnico - Operario,2 min,Alta
+44,Circuito completo,Demo circuito de compras,Requerimiento > Cotizaciones > Comparar > OC > Recepcion > Consumo > Costo,5 min,Alta
