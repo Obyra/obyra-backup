@@ -402,3 +402,125 @@ def generar_oc(rc_id):
     return redirect(url_for('ordenes_compra.crear',
                           requerimiento_id=rc.id,
                           cotizacion_id=elegida.id))
+
+
+# ============================================================
+# PDF: COTIZACIÓN INDIVIDUAL
+# ============================================================
+
+@cotizaciones_bp.route('/<int:id>/pdf')
+@login_required
+def pdf_cotizacion(id):
+    """Genera PDF del presupuesto de un proveedor."""
+    from models.proveedores_oc import CotizacionProveedor
+    from weasyprint import HTML
+    import io, os, base64
+
+    cot = CotizacionProveedor.query.get_or_404(id)
+    if cot.organizacion_id != _get_org_id():
+        flash('Sin acceso.', 'danger')
+        return redirect(url_for('requerimientos.lista'))
+
+    organizacion = cot.organizacion
+    rc = cot.requerimiento
+
+    # Solo items con precio > 0
+    items_con_precio = [i for i in cot.items if i.precio_unitario and float(i.precio_unitario) > 0]
+
+    # Logo
+    logo_base64 = None
+    if organizacion and organizacion.logo_url:
+        try:
+            logo_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+            if os.path.exists(logo_path):
+                with open(logo_path, 'rb') as f:
+                    logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+        except Exception:
+            pass
+
+    html_string = render_template('pdf_cotizacion.html',
+        cot=cot, rc=rc, items=items_con_precio,
+        organizacion=organizacion, logo_base64=logo_base64)
+
+    from flask import send_file
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_string).write_pdf(pdf_buffer, presentational_hints=True)
+    pdf_buffer.seek(0)
+
+    return send_file(pdf_buffer, mimetype='application/pdf', as_attachment=True,
+                     download_name=f'Cotizacion_{cot.proveedor.razon_social}_{rc.numero}.pdf')
+
+
+# ============================================================
+# PDF: COMPARATIVA DE COTIZACIONES
+# ============================================================
+
+@cotizaciones_bp.route('/requerimiento/<int:rc_id>/comparativa-pdf')
+@login_required
+def pdf_comparativa(rc_id):
+    """Genera PDF comparativo de todas las cotizaciones."""
+    from models.inventory import RequerimientoCompra
+    from models.proveedores_oc import CotizacionProveedor
+    from weasyprint import HTML
+    import io, os, base64
+
+    if not _tiene_permiso():
+        flash('Sin permisos.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    rc = RequerimientoCompra.query.get_or_404(rc_id)
+    if rc.organizacion_id != _get_org_id():
+        flash('Sin acceso.', 'danger')
+        return redirect(url_for('requerimientos.lista'))
+
+    cotizaciones = CotizacionProveedor.query.filter_by(
+        requerimiento_id=rc.id
+    ).filter(CotizacionProveedor.estado.in_(['recibida', 'elegida'])).all()
+
+    organizacion = rc.organizacion
+
+    # Construir comparación
+    items_rc = rc.items
+    comparacion = []
+    for rc_item in items_rc:
+        fila = {'descripcion': rc_item.descripcion, 'cantidad': float(rc_item.cantidad),
+                'unidad': rc_item.unidad, 'precios': {}}
+        for cot in cotizaciones:
+            cot_item = next((ci for ci in cot.items if ci.requerimiento_item_id == rc_item.id), None)
+            if cot_item and cot_item.precio_unitario and float(cot_item.precio_unitario) > 0:
+                fila['precios'][cot.id] = {
+                    'precio': float(cot_item.precio_unitario),
+                    'subtotal': float(cot_item.subtotal or 0),
+                    'modalidad': cot_item.modalidad or 'compra'
+                }
+        if fila['precios']:
+            mejor = min(fila['precios'].items(), key=lambda x: x[1]['subtotal'])
+            fila['mejor_cot_id'] = mejor[0]
+            comparacion.append(fila)
+
+    totales = {cot.id: float(cot.total or 0) for cot in cotizaciones}
+    mejor_total = min(totales, key=totales.get) if totales else None
+
+    # Logo
+    logo_base64 = None
+    if organizacion and organizacion.logo_url:
+        try:
+            logo_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+            if os.path.exists(logo_path):
+                with open(logo_path, 'rb') as f:
+                    logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+        except Exception:
+            pass
+
+    html_string = render_template('pdf_comparativa.html',
+        rc=rc, cotizaciones=cotizaciones, comparacion=comparacion,
+        totales=totales, mejor_total=mejor_total,
+        organizacion=organizacion, logo_base64=logo_base64)
+
+    from flask import send_file
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_string).write_pdf(pdf_buffer, presentational_hints=True)
+    pdf_buffer.seek(0)
+
+    return send_file(pdf_buffer, mimetype='application/pdf', as_attachment=True,
+                     download_name=f'Comparativa_{rc.numero}.pdf')

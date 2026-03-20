@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Comparativa de Cotizaciones {{ rc.numero }}</title>
+    <style>
+        @page { size: A4 landscape; margin: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', 'Helvetica', sans-serif; font-size: 7.5pt; color: #2c2c2c; line-height: 1.3; }
+        .header-wrapper { background: #1A374D; padding: 10px 18px; width: 100%; display: table; table-layout: fixed; }
+        .page-content { padding: 8px 10mm 10mm 10mm; }
+        .header-left { display: table-cell; vertical-align: middle; width: 60%; }
+        .header-right { display: table-cell; vertical-align: middle; text-align: right; width: 40%; }
+        .company-name { font-size: 12pt; font-weight: bold; color: white; }
+        .company-logo-img { max-height: 45px; max-width: 130px; margin-right: 10px; vertical-align: middle; }
+        .doc-type { font-size: 9pt; font-weight: bold; color: white; }
+        .doc-numero { font-size: 13pt; font-weight: bold; color: #4CAF50; }
+        .info-bar { background: #f5f5f5; padding: 5px 10px; margin-bottom: 6px; border-radius: 3px; font-size: 7pt; }
+        table.comp-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+        table.comp-table thead { background: #1A374D; }
+        table.comp-table th { padding: 4px 6px; text-align: left; font-size: 6.5pt; font-weight: bold; color: white; text-transform: uppercase; }
+        table.comp-table th.right { text-align: right; }
+        table.comp-table td { padding: 3px 6px; border-bottom: 1px solid #eee; font-size: 7pt; }
+        table.comp-table td.right { text-align: right; }
+        table.comp-table tr:nth-child(even) { background: #fafafa; }
+        .mejor { background: #e8f5e9 !important; font-weight: bold; }
+        .totals-row { background: #f5f5f5; font-weight: bold; }
+        .totals-row td { border-top: 2px solid #4CAF50; font-size: 8pt; }
+        .mejor-total { color: #2e7d32; font-size: 9pt; }
+        .badge-alq { background: #e3f2fd; color: #1565c0; padding: 1px 4px; border-radius: 2px; font-size: 6pt; }
+        .doc-footer { text-align: center; font-size: 6pt; color: #999; margin-top: 10px; padding-top: 6px; border-top: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="header-wrapper">
+        <div class="header-left">
+            {% if logo_base64 %}
+            <img src="data:image/png;base64,{{ logo_base64 }}" class="company-logo-img">
+            {% endif %}
+            <span class="company-name">{{ organizacion.nombre if organizacion else 'OBYRA' }}</span>
+        </div>
+        <div class="header-right">
+            <div class="doc-type">COMPARATIVA DE COTIZACIONES</div>
+            <div class="doc-numero">{{ rc.numero }}</div>
+        </div>
+    </div>
+
+    <div class="page-content">
+        <div class="info-bar">
+            <strong>Requerimiento:</strong> {{ rc.numero }}{% if rc.motivo %} — {{ rc.motivo }}{% endif %}
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            <strong>Obra:</strong> {{ rc.obra.presupuesto.nombre if rc.obra and rc.obra.presupuesto else '-' }}
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            <strong>Proveedores:</strong> {{ cotizaciones|length }}
+        </div>
+
+        <table class="comp-table">
+            <thead>
+                <tr>
+                    <th style="width:25%">Descripcion</th>
+                    <th class="right" style="width:7%">Cant.</th>
+                    <th style="width:5%">Und.</th>
+                    {% for cot in cotizaciones %}
+                    <th class="right" style="width:{{ 60 // cotizaciones|length }}%">
+                        {{ cot.proveedor.razon_social }}<br>
+                        <small style="font-weight:normal; color: #90caf9;">{{ cot.moneda }}</small>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in comparacion %}
+                <tr>
+                    <td><strong>{{ fila.descripcion }}</strong></td>
+                    <td class="right">{{ '{:g}'.format(fila.cantidad) }}</td>
+                    <td>{{ fila.unidad }}</td>
+                    {% for cot in cotizaciones %}
+                    {% if cot.id in fila.precios %}
+                    <td class="right {{ 'mejor' if fila.mejor_cot_id == cot.id else '' }}">
+                        {{ '{:,.2f}'.format(fila.precios[cot.id].subtotal) }}
+                        {% if fila.precios[cot.id].modalidad == 'alquiler' %}
+                        <span class="badge-alq">ALQ</span>
+                        {% endif %}
+                    </td>
+                    {% else %}
+                    <td class="right" style="color:#ccc">-</td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="totals-row">
+                    <td colspan="3" style="text-align:right"><strong>TOTAL:</strong></td>
+                    {% for cot in cotizaciones %}
+                    <td class="right {{ 'mejor-total' if mejor_total == cot.id else '' }}">
+                        {{ cot.moneda }} {{ '{:,.2f}'.format(totales.get(cot.id, 0)) }}
+                        {% if mejor_total == cot.id %} ★{% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+            </tfoot>
+        </table>
+
+        {% if cotizaciones %}
+        <div class="info-bar" style="margin-top:8px">
+            <strong>Condiciones comerciales:</strong><br>
+            {% for cot in cotizaciones %}
+            <div style="margin-top:3px">
+                <strong>{{ cot.proveedor.razon_social }}:</strong>
+                {% if cot.condicion_pago %}Pago: {{ cot.condicion_pago }} | {% endif %}
+                {% if cot.plazo_entrega %}Entrega: {{ cot.plazo_entrega }} | {% endif %}
+                {% if cot.validez %}Validez: {{ cot.validez }}{% endif %}
+                {% if cot.notas %}<br><em>{{ cot.notas }}</em>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="doc-footer">
+            Documento generado por OBYRA | {{ organizacion.nombre if organizacion else '' }} | Comparativa de {{ cotizaciones|length }} proveedores
+        </div>
+    </div>
+</body>
+</html>

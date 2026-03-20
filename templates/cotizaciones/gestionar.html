@@ -46,20 +46,33 @@
         <!-- Columna principal: cotizaciones -->
         <div class="col-lg-8">
             {% if cotizaciones %}
+                <div class="d-flex justify-content-end mb-3">
+                    <a href="{{ url_for('cotizaciones.pdf_comparativa', rc_id=rc.id) }}" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-file-pdf me-1"></i>Comparativa PDF
+                    </a>
+                </div>
                 {% for cot in cotizaciones %}
-                <div class="card mb-4 {% if cot.estado == 'elegida' %}border-success{% elif cot.estado == 'descartada' %}border-danger opacity-75{% endif %}">
-                    <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="card mb-3 {% if cot.estado == 'elegida' %}border-success{% elif cot.estado == 'descartada' %}border-danger opacity-75{% endif %}">
+                    <div class="card-header d-flex justify-content-between align-items-center"
+                         style="cursor:pointer" onclick="toggleCotizacion({{ cot.id }})">
                         <div>
                             <h5 class="mb-0">
+                                <i class="fas fa-chevron-right me-1" id="chevron-{{ cot.id }}"></i>
                                 <i class="fas fa-truck me-1"></i>
                                 {{ cot.proveedor.razon_social }}
                                 {% if cot.proveedor.nombre_fantasia %}
                                 <small class="text-muted">({{ cot.proveedor.nombre_fantasia }})</small>
                                 {% endif %}
+                                {% if cot.total and cot.total|float > 0 %}
+                                <span class="ms-2 fs-6 text-success">{{ cot.moneda }} {{ formatPrecio(cot.total|float) }}</span>
+                                {% endif %}
                             </h5>
                         </div>
-                        <div>
-                            <span class="badge bg-{{ cot.estado_color }} me-2">{{ cot.estado_display }}</span>
+                        <div onclick="event.stopPropagation()">
+                            <span class="badge bg-{{ cot.estado_color }} me-1">{{ cot.estado_display }}</span>
+                            <a href="{{ url_for('cotizaciones.pdf_cotizacion', id=cot.id) }}" class="btn btn-sm btn-outline-success me-1" title="Descargar PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </a>
                             {% if cot.estado == 'borrador' %}
                             <button type="button" class="btn btn-sm btn-outline-danger"
                                     onclick="eliminarCotizacion({{ cot.id }}, '{{ cot.proveedor.razon_social }}')">
@@ -68,7 +81,7 @@
                             {% endif %}
                         </div>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" id="body-cot-{{ cot.id }}" style="display:none">
                         <form method="POST" action="{{ url_for('cotizaciones.cargar_precios', id=cot.id) }}" data-moneda="{{ cot.moneda }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
@@ -413,6 +426,19 @@ function actualizarEquivalentes() {
 cargarTipoCambio();
 
 // ============================================================
+// Toggle cotización plegada/desplegada
+function toggleCotizacion(cotId) {
+    var body = document.getElementById('body-cot-' + cotId);
+    var chevron = document.getElementById('chevron-' + cotId);
+    if (body.style.display === 'none') {
+        body.style.display = '';
+        chevron.classList.replace('fa-chevron-right', 'fa-chevron-down');
+    } else {
+        body.style.display = 'none';
+        chevron.classList.replace('fa-chevron-down', 'fa-chevron-right');
+    }
+}
+
 // Toggle días de alquiler
 function toggleDiasAlquiler(select, itemId) {
     var diasInput = document.getElementById('dias_alq_' + itemId);
