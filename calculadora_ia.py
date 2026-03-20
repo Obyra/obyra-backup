@@ -628,6 +628,28 @@ PRECIO_REFERENCIA = {
     'MAT-YESO-PROY': 6200.0,        # kg yeso proyectado
     'MAT-ENDUIDO': 8500.0,          # kg
     'MAT-GUARDAVIVOS': 1200.0,      # ml
+    # Revoques - Items del pliego
+    'REV-EMPROLIJADO-HV': 8672.0,              # m² - Emprolijado de hormigón visto (CIRC N°4)
+    'REV-COL-MUROS-SUBSUELO': 14030.0,         # m² - Columnas, muros y mampostería perimetral subsuelos: jaharro y enlucido a la cal reforzado
+    'REV-JAHARRO-ENLUCIDO-CAL': 14030.0,       # m² - Jaharro y enlucido a la cal terminado al fieltro
+    'REV-JAHARRO-BAJO-REVEST': 12382.0,        # m² - Jaharro bajo revestimiento (exteriores)
+    'REV-EMPROLIJADO-HV-EXT': 8672.0,          # m² - Emprolijado de hormigón visto (exteriores)
+    # Revoques - Materiales adicionales
+    'MAT-REVOQUE-PREMEZCLADO-GRUESO': 6500.0,  # bolsa(30kg) - Revoque grueso premezclado
+    'MAT-REVOQUE-PREMEZCLADO-FINO': 7200.0,    # bolsa(25kg) - Revoque fino premezclado
+    'MAT-REVOQUE-PROYECTABLE': 8500.0,         # bolsa(30kg) - Revoque proyectable (para máquina)
+    'MAT-HIDRÓFUGO-CERESITA': 4500.0,          # litro - Hidrófugo tipo Ceresita para revoques
+    'MAT-ADITIVO-PLASTICITE': 3800.0,          # litro - Aditivo plastificante para mortero
+    'MAT-MALLA-REVOQUE': 3200.0,               # m² - Malla de fibra de vidrio para refuerzo de revoques
+    'MAT-PERFIL-GUARDAVIVOS': 1500.0,          # ml - Perfil guardavivos de PVC/aluminio
+    'MAT-PERFIL-JUNTA-DILATACION': 2800.0,     # ml - Perfil para junta de dilatación en revoques
+    'MAT-REGLA-REVOQUE': 3500.0,               # ml - Regla de revoque (guía) galvanizada
+    'MAT-LATEX-ADHERENCIA': 5200.0,            # litro - Látex de adherencia (puente de unión)
+    'MAT-AZOTADO-HIDROFUGO': 8500.0,           # bolsa(25kg) - Azotado hidrófugo premezclado
+    # Revoques - Repuestos de maquinaria
+    'MAT-CAMISA-ROTOR-REV': 85000.0,           # juego - Camisa y rotor para revocadora (repuesto)
+    'MAT-MANGUERA-REVOCADORA': 12000.0,        # ml - Manguera de proyección para revocadora
+    'MAT-BOQUILLA-REVOCADORA': 8500.0,         # unidad - Boquilla de proyección (desgaste)
     # Construccion en seco
     'MAT-DURLOCK': 14200.0,         # m2
     'MAT-PERFIL-STEEL': 11500.0,    # ml
@@ -830,6 +852,7 @@ PRECIO_REFERENCIA = {
     'MO-IMP': 44500.0,
     'MO-IMP-AYUDANTE': 32000.0,    # jornal ayudante impermeabilizaciones
     'MO-REV': 41000.0,
+    'MO-REV-MAQUINISTA': 48000.0,  # jornal operador máquina revocadora
     'MO-CIELORRASO': 43000.0,
     'MO-YESERO': 42000.0,
     'MO-CONTRAPISO': 41000.0,
@@ -862,6 +885,18 @@ PRECIO_REFERENCIA = {
     'EQ-HORMIG': 58000.0,           # dia bomba hormigon
     'EQ-VIBRADOR': 15000.0,         # dia vibrador concreto
     'EQ-ANDAMIOS': 27000.0,         # dia
+    # Andamios y acceso - tipos específicos
+    'EQ-ANDAMIO-COLGANTE-ELEC': 65000.0,      # día - Andamio colgante eléctrico (fachadas)
+    'EQ-ANDAMIO-COLGANTE-MANUAL': 35000.0,    # día - Andamio colgante manual (fachadas)
+    'EQ-ANDAMIO-MULTIDIRECCIONAL': 45000.0,   # día - Andamio multidireccional (ringlock/cuplock)
+    'EQ-ANDAMIO-TUBULAR-FACHADA': 32000.0,    # día - Andamio tubular de fachada (con plataformas)
+    # Maquinaria de revoque
+    'EQ-REVOCADORA-PROYECCION': 85000.0,       # día - Máquina revocadora de proyección (PFT/Putzmeister)
+    'EQ-MEZCLADORA-CONTINUA': 45000.0,         # día - Mezcladora continua para premezclados
+    'EQ-FRATACHADORA-ELECTRICA': 18000.0,      # día - Fratachadora eléctrica (alisadora)
+    'EQ-FRATACHADORA-MANUAL': 3500.0,          # día - Fratachín/fratacho manual (herramienta)
+    'EQ-REGLA-VIBRATORIA': 15000.0,            # día - Regla vibratoria para nivelación
+    'EQ-LLANA-MECANICA': 12000.0,              # día - Llana mecánica (helicoptero chico para revoques)
     'EQ-ANDAMIOS-LIV': 19000.0,     # dia
     'EQ-MONTACARGAS': 125000.0,     # dia montacargas/elevador personas
     'EQ-PLUMA': 112000.0,           # dia grua
@@ -1475,34 +1510,80 @@ ETAPA_REGLAS_BASE = {
     'revoque-grueso': {
         'nombre': 'Revoque Grueso',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Cemento Portland', 'unidad': 'bolsa', 'coef_por_m2': 0.22},
             {'codigo': 'MAT-CAL', 'material_key': 'cal', 'descripcion': 'Cal hidráulica', 'unidad': 'bolsa', 'coef_por_m2': 0.15},
             {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena gruesa para jaharro', 'unidad': 'm³', 'coef_por_m2': 0.055},
             {'codigo': 'MAT-HIDROFUGO', 'material_key': 'hidrofugo', 'descripcion': 'Hidrófugo para revoque exterior', 'unidad': 'litros', 'coef_por_m2': 0.05},
+            # --- Del pliego (interiores) ---
+            {'codigo': 'REV-EMPROLIJADO-HV', 'material_key': 'emprolijado_hv', 'descripcion': 'Emprolijado de hormigón visto (CIRC N°4)', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'REV-COL-MUROS-SUBSUELO', 'material_key': 'col_muros_sub', 'descripcion': 'Columnas, muros y mampostería perimetral subsuelos: jaharro y enlucido a la cal reforzado', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            # --- Del pliego (exteriores) ---
+            {'codigo': 'REV-JAHARRO-BAJO-REVEST', 'material_key': 'jaharro_bajo_revest', 'descripcion': 'Jaharro bajo revestimiento (exteriores)', 'unidad': 'm²', 'coef_por_m2': 0.30},
+            {'codigo': 'REV-EMPROLIJADO-HV-EXT', 'material_key': 'emprolijado_hv_ext', 'descripcion': 'Emprolijado de hormigón visto (exteriores)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Premezclados ---
+            {'codigo': 'MAT-REVOQUE-PREMEZCLADO-GRUESO', 'material_key': 'premezclado_grueso', 'descripcion': 'Revoque grueso premezclado (bolsa 30kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.35},
+            {'codigo': 'MAT-REVOQUE-PROYECTABLE', 'material_key': 'revoque_proyectable', 'descripcion': 'Revoque proyectable para máquina (bolsa 30kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.30},
+            {'codigo': 'MAT-AZOTADO-HIDROFUGO', 'material_key': 'azotado_hidrofugo', 'descripcion': 'Azotado hidrófugo premezclado (bolsa 25kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.08},
+            # --- Accesorios ---
+            {'codigo': 'MAT-HIDRÓFUGO-CERESITA', 'material_key': 'hidrofugo_ceresita', 'descripcion': 'Hidrófugo tipo Ceresita para revoques', 'unidad': 'litro', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-ADITIVO-PLASTICITE', 'material_key': 'plasticite', 'descripcion': 'Aditivo plastificante para mortero', 'unidad': 'litro', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-MALLA-REVOQUE', 'material_key': 'malla_revoque', 'descripcion': 'Malla de fibra de vidrio para refuerzo de revoques', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-PERFIL-GUARDAVIVOS', 'material_key': 'guardavivos_perfil', 'descripcion': 'Perfil guardavivos PVC/aluminio', 'unidad': 'ml', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-PERFIL-JUNTA-DILATACION', 'material_key': 'junta_dilatacion_rev', 'descripcion': 'Perfil para junta de dilatación en revoques', 'unidad': 'ml', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-REGLA-REVOQUE', 'material_key': 'regla_revoque', 'descripcion': 'Regla de revoque (guía) galvanizada', 'unidad': 'ml', 'coef_por_m2': 0.12},
+            {'codigo': 'MAT-LATEX-ADHERENCIA', 'material_key': 'latex_adherencia', 'descripcion': 'Látex de adherencia (puente de unión)', 'unidad': 'litro', 'coef_por_m2': 0.04},
+            # --- Repuestos de maquinaria ---
+            {'codigo': 'MAT-CAMISA-ROTOR-REV', 'material_key': 'camisa_rotor', 'descripcion': 'Camisa y rotor para revocadora (repuesto)', 'unidad': 'juego', 'coef_por_m2': 0.0005},
+            {'codigo': 'MAT-MANGUERA-REVOCADORA', 'material_key': 'manguera_revocadora', 'descripcion': 'Manguera de proyección para revocadora', 'unidad': 'ml', 'coef_por_m2': 0.003},
+            {'codigo': 'MAT-BOQUILLA-REVOCADORA', 'material_key': 'boquilla_revocadora', 'descripcion': 'Boquilla de proyección (desgaste)', 'unidad': 'unidad', 'coef_por_m2': 0.001},
         ],
         'mano_obra': [
-            {'codigo': 'MO-REV', 'descripcion': 'Oficial revocador + ayudante', 'unidad': 'jornal', 'coef_por_m2': 0.19}
+            {'codigo': 'MO-REV', 'descripcion': 'Oficial revocador + ayudante', 'unidad': 'jornal', 'coef_por_m2': 0.19},
+            {'codigo': 'MO-REV-MAQUINISTA', 'descripcion': 'Operador de máquina revocadora', 'unidad': 'jornal', 'coef_por_m2': 0.08},
         ],
         'equipos': [
+            # --- Andamios ---
             {'codigo': 'EQ-ANDAMIOS', 'descripcion': 'Andamios tubulares', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-ANDAMIO-COLGANTE-ELEC', 'descripcion': 'Andamio colgante eléctrico (fachadas)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 3},
+            {'codigo': 'EQ-ANDAMIO-COLGANTE-MANUAL', 'descripcion': 'Andamio colgante manual (fachadas)', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 3},
+            {'codigo': 'EQ-ANDAMIO-MULTIDIRECCIONAL', 'descripcion': 'Andamio multidireccional (ringlock/cuplock)', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 5},
+            {'codigo': 'EQ-ANDAMIO-TUBULAR-FACHADA', 'descripcion': 'Andamio tubular de fachada (con plataformas)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 5},
             {'codigo': 'EQ-MONTACARGAS', 'descripcion': 'Montacargas para subir materiales', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            # --- Máquinas de revoque ---
+            {'codigo': 'EQ-REVOCADORA-PROYECCION', 'descripcion': 'Máquina revocadora de proyección (PFT/Putzmeister)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 3},
+            {'codigo': 'EQ-MEZCLADORA-CONTINUA', 'descripcion': 'Mezcladora continua para premezclados', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 2},
+            # --- Fratachadoras y alisadoras ---
+            {'codigo': 'EQ-FRATACHADORA-ELECTRICA', 'descripcion': 'Fratachadora eléctrica (alisadora)', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-FRATACHADORA-MANUAL', 'descripcion': 'Fratachín/fratacho manual', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            {'codigo': 'EQ-REGLA-VIBRATORIA', 'descripcion': 'Regla vibratoria para nivelación de revoques', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-LLANA-MECANICA', 'descripcion': 'Llana mecánica (helicóptero chico)', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Jaharro grueso en paredes interiores y exteriores.'
+        'notas': 'Jaharro grueso interiores/exteriores, emprolijado H° visto, revoques en subsuelos. Premezclados y proyectables con máquina. Andamios colgantes eléctricos/manuales para fachadas. Fratachadoras eléctricas y manuales.'
     },
     'revoque-fino': {
         'nombre': 'Revoque Fino',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-ARENA-FINA', 'material_key': 'arena_fina', 'descripcion': 'Arena fina para revoque fino', 'unidad': 'm³', 'coef_por_m2': 0.025},
             {'codigo': 'MAT-CAL', 'material_key': 'cal', 'descripcion': 'Cal aérea para enlucido', 'unidad': 'bolsa', 'coef_por_m2': 0.12},
             {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Cemento blanco para terminación', 'unidad': 'bolsa', 'coef_por_m2': 0.05},
+            # --- Del pliego ---
+            {'codigo': 'REV-JAHARRO-ENLUCIDO-CAL', 'material_key': 'jaharro_enlucido', 'descripcion': 'Jaharro y enlucido a la cal terminado al fieltro', 'unidad': 'm²', 'coef_por_m2': 0.60},
+            # --- Premezclados ---
+            {'codigo': 'MAT-REVOQUE-PREMEZCLADO-FINO', 'material_key': 'premezclado_fino', 'descripcion': 'Revoque fino premezclado (bolsa 25kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.25},
+            {'codigo': 'MAT-ENDUIDO', 'material_key': 'enduido', 'descripcion': 'Enduido plástico para terminación', 'unidad': 'kg', 'coef_por_m2': 0.30},
+            {'codigo': 'MAT-GUARDAVIVOS', 'material_key': 'guardavivos', 'descripcion': 'Guardavivos de PVC', 'unidad': 'ml', 'coef_por_m2': 0.06},
         ],
         'mano_obra': [
-            {'codigo': 'MO-REV', 'descripcion': 'Oficial revocador fino', 'unidad': 'jornal', 'coef_por_m2': 0.15}
+            {'codigo': 'MO-REV', 'descripcion': 'Oficial revocador fino / enlucidor', 'unidad': 'jornal', 'coef_por_m2': 0.15},
         ],
         'equipos': [
             {'codigo': 'EQ-ANDAMIOS', 'descripcion': 'Andamios para trabajo en altura', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-FRATACHADORA-MANUAL', 'descripcion': 'Fratachín/fratacho manual para terminación', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-FRATACHADORA-ELECTRICA', 'descripcion': 'Fratachadora eléctrica para enlucido', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Revoque fino interior y exterior, jaharro bajo revestimiento.'
+        'notas': 'Jaharro y enlucido a la cal al fieltro, revoque fino premezclado, enduido plástico. Fratachadoras manual y eléctrica.'
     },
     'pisos': {
         'nombre': 'Pisos y Revestimientos',
