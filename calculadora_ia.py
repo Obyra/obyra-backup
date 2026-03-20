@@ -782,6 +782,58 @@ PRECIO_REFERENCIA = {
     'MAT-ADHESIVO-FLEX': 8500.0,               # bolsa(25kg) - Adhesivo flexible para porcellanato gran formato
     'MAT-NIVELADORES-PISO': 3500.0,            # caja - Niveladores (sistema de nivelación para pisos)
     'MAT-CRUCETAS-PISO': 800.0,                # bolsa - Crucetas/separadores para juntas
+    # Revestimientos - Items del pliego
+    'REV-TARQUINI-RODILLADO': 15459.0,         # m² - Revestimiento tipo Tarquini buñado, rodillado y color a definir (incl provisión)
+    'REV-TARQUINI-LLANEADO': 15459.0,          # m² - Revestimiento tipo Tarquini buñado, llaneado y color a definir (incl provisión)
+    'REV-PORCELLANATO-BANOS': 17862.0,         # m² - Colocación porcellanato en baños
+    'REV-PORCELLANATO-OFFICES': 17862.0,       # m² - Colocación porcellanato en offices o cocinas
+    # Porcellanato por medida
+    'MAT-PORCEL-30X30': 18000.0,               # m² - Porcellanato 30x30cm
+    'MAT-PORCEL-45X45': 22000.0,               # m² - Porcellanato 45x45cm
+    'MAT-PORCEL-60X60': 28000.0,               # m² - Porcellanato 60x60cm
+    'MAT-PORCEL-60X120': 42000.0,              # m² - Porcellanato 60x120cm
+    'MAT-PORCEL-80X80': 38000.0,               # m² - Porcellanato 80x80cm
+    'MAT-PORCEL-120X120': 55000.0,             # m² - Porcellanato 120x120cm
+    'MAT-PORCEL-120X260': 85000.0,             # m² - Porcellanato gran formato 120x260cm (slab)
+    'MAT-PORCEL-SIMIL-MADERA': 32000.0,        # m² - Porcellanato símil madera (20x120/23x120)
+    'MAT-PORCEL-SIMIL-MARMOL': 45000.0,        # m² - Porcellanato símil mármol pulido
+    'MAT-PORCEL-SIMIL-CEMENTO': 28000.0,       # m² - Porcellanato símil cemento
+    'MAT-PORCEL-HEXAGONAL': 35000.0,           # m² - Porcellanato hexagonal
+    'MAT-PORCEL-SUBWAY': 22000.0,              # m² - Porcellanato subway/metro (10x20/10x30)
+    # Cerámicos por medida
+    'MAT-CERAM-20X20': 12000.0,                # m² - Cerámico esmaltado 20x20cm
+    'MAT-CERAM-30X30': 14000.0,                # m² - Cerámico esmaltado 30x30cm
+    'MAT-CERAM-30X45': 16000.0,                # m² - Cerámico pared 30x45cm
+    'MAT-CERAM-30X60': 18000.0,                # m² - Cerámico pared 30x60cm
+    'MAT-CERAM-45X45': 15000.0,                # m² - Cerámico piso 45x45cm
+    # Materiales para pegado y junteo
+    'MAT-ADHESIVO-C1': 5500.0,                 # bolsa(25kg) - Adhesivo cementicio C1 (interiores pisos)
+    'MAT-ADHESIVO-C2': 8500.0,                 # bolsa(25kg) - Adhesivo cementicio C2 (exteriores/piscinas)
+    'MAT-ADHESIVO-FLEX-REV': 9500.0,           # bolsa(25kg) - Adhesivo flexible para gran formato
+    'MAT-ADHESIVO-EPOXI': 25000.0,             # kg - Adhesivo epoxi bicomponente (piscinas/industria)
+    'MAT-PASTINA-CEMENTICIA': 4200.0,          # kg - Pastina cementicia (colores estándar)
+    'MAT-PASTINA-EPOXI': 15000.0,              # kg - Pastina epoxi (sanitarios/piscinas)
+    'MAT-PASTINA-PREMIUM': 8500.0,             # kg - Pastina premium antimoho (colores especiales)
+    'MAT-LATEX-CONTACTO-REV': 5500.0,          # litro - Látex de contacto para pegado en revest.
+    # Perfilería y terminaciones de revestimiento
+    'MAT-PERFIL-ALUMINIO-L': 3500.0,           # ml - Perfil L aluminio para bordes
+    'MAT-PERFIL-ALUMINIO-CURVO': 4500.0,       # ml - Perfil aluminio curvo para esquinas
+    'MAT-CENEFA-INOX': 6500.0,                 # ml - Cenefa de acero inoxidable
+    'MAT-LISTELO': 5000.0,                     # ml - Listelo decorativo
+    'MAT-GUARDACANTO-REV': 3200.0,             # ml - Guardacanto para revestimiento
+    # Herramientas y consumibles
+    'MAT-LLANA-DENTADA-8': 2500.0,             # unidad - Llana dentada 8mm (adhesivo C1)
+    'MAT-LLANA-DENTADA-10': 2800.0,            # unidad - Llana dentada 10mm (adhesivo C2/gran formato)
+    'MAT-LLANA-DENTADA-12': 3200.0,            # unidad - Llana dentada 12mm (slab/piedra)
+    'MAT-MARTILLO-GOMA': 3500.0,               # unidad - Martillo de goma para asentar piezas
+    'MAT-ESPATULA-PASTINA': 1500.0,            # unidad - Espátula de goma para pastina
+    'MAT-ESPONJA-FRATACHO': 1200.0,            # unidad - Esponja/fratacho para limpieza de pastina
+    'MAT-BALDE-MEZCLADOR': 2000.0,             # unidad - Balde mezclador con rejilla
+    # Revestimiento texturado tipo Tarquini (sin marca)
+    'MAT-REV-TEXTURADO-GRUESO': 12000.0,       # balde(25kg) - Revestimiento texturado grueso (rodillado)
+    'MAT-REV-TEXTURADO-FINO': 14000.0,         # balde(25kg) - Revestimiento texturado fino (llaneado)
+    'MAT-FIJADOR-TEXTURADO': 5500.0,           # litro - Fijador sellador para base de texturado
+    'MAT-BASE-NIVELADORA': 8500.0,             # bolsa(25kg) - Base niveladora para texturado
     # Zócalos - Items del pliego
     'ZOC-CEMENTO-ALISADO-10': 8983.0,          # ml - Cemento alisado para pintar h:10cm
     'ZOC-PORCELLANATO-10': 5193.0,             # ml - Porcellanato ídem piso h:10cm (solo colocación)
@@ -939,6 +991,7 @@ PRECIO_REFERENCIA = {
     'MO-PISOS': 42500.0,
     'MO-PISOS-AYUDANTE': 32000.0,  # jornal ayudante colocador pisos
     'MO-REVESTIMIENTO': 43500.0,
+    'MO-REVESTIMIENTO-PARED': 44000.0,  # jornal colocador revestimiento pared
     'MO-CARP': 48800.0,
     'MO-PINT': 40500.0,
     'MO-PROVISIONES': 44000.0,
@@ -1036,6 +1089,10 @@ PRECIO_REFERENCIA = {
     'EQ-LLANEADORA-PISOS': 35000.0,            # día - Llaneadora mecánica para pavimentos industriales
     'EQ-PULIDORA-PISOS': 28000.0,              # día - Pulidora de pisos de hormigón/microcemento
     'EQ-ASPIRADORA-PISOS': 12000.0,            # día - Aspiradora industrial para limpieza de pisos
+    # Revestimientos - Maquinaria y herramientas
+    'EQ-MEZCLADOR-ADHESIVO': 8000.0,           # día - Mezclador eléctrico para adhesivo/pastina
+    'EQ-RODILLO-TEXTURADO': 5000.0,            # día - Rodillo texturado para revestimiento tipo Tarquini
+    'EQ-PISTOLA-TEXTURADO': 15000.0,           # día - Pistola de proyección para texturado
     'EQ-SEGURIDAD': 22000.0,        # dia herramientas seguridad
     'EQ-SOPLETE-GAS': 8000.0,       # dia soplete gas para membrana asfáltica
     'EQ-PISTOLA-AIRLESS': 25000.0,  # dia pistola airless para membrana líquida
@@ -1725,19 +1782,62 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-CRUCETAS-PISO', 'material_key': 'crucetas', 'descripcion': 'Crucetas/separadores para juntas', 'unidad': 'bolsa', 'coef_por_m2': 0.015},
             {'codigo': 'MAT-PERFIL-TRANSICION', 'material_key': 'perfil_transicion', 'descripcion': 'Perfil de transición entre pisos', 'unidad': 'ml', 'coef_por_m2': 0.02},
             {'codigo': 'MAT-ZOCALO-SANITARIO', 'material_key': 'zocalo_sanitario', 'descripcion': 'Zócalo sanitario (media caña)', 'unidad': 'ml', 'coef_por_m2': 0.03},
+            # --- Del pliego: revestimientos ---
+            {'codigo': 'REV-TARQUINI-RODILLADO', 'material_key': 'tarquini_rodillado', 'descripcion': 'Revestimiento texturado buñado, rodillado y color a definir (incl provisión)', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'REV-TARQUINI-LLANEADO', 'material_key': 'tarquini_llaneado', 'descripcion': 'Revestimiento texturado buñado, llaneado y color a definir (incl provisión)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'REV-PORCELLANATO-BANOS', 'material_key': 'rev_porcel_banos', 'descripcion': 'Colocación porcellanato en baños (revestimiento)', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'REV-PORCELLANATO-OFFICES', 'material_key': 'rev_porcel_offices', 'descripcion': 'Colocación porcellanato en offices o cocinas (revestimiento)', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            # --- Porcellanato por medida ---
+            {'codigo': 'MAT-PORCEL-30X30', 'material_key': 'porcel_30x30', 'descripcion': 'Porcellanato 30x30cm', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-PORCEL-60X60', 'material_key': 'porcel_60x60', 'descripcion': 'Porcellanato 60x60cm', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-PORCEL-60X120', 'material_key': 'porcel_60x120', 'descripcion': 'Porcellanato 60x120cm', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-PORCEL-120X120', 'material_key': 'porcel_120x120', 'descripcion': 'Porcellanato 120x120cm', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-PORCEL-120X260', 'material_key': 'porcel_slab', 'descripcion': 'Porcellanato gran formato 120x260cm (slab)', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-PORCEL-SIMIL-MADERA', 'material_key': 'porcel_madera', 'descripcion': 'Porcellanato símil madera (20x120/23x120)', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-PORCEL-SIMIL-MARMOL', 'material_key': 'porcel_marmol', 'descripcion': 'Porcellanato símil mármol pulido', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-PORCEL-SUBWAY', 'material_key': 'porcel_subway', 'descripcion': 'Porcellanato subway/metro (10x20/10x30)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Cerámicos por medida ---
+            {'codigo': 'MAT-CERAM-30X45', 'material_key': 'ceram_30x45', 'descripcion': 'Cerámico pared 30x45cm', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-CERAM-30X60', 'material_key': 'ceram_30x60', 'descripcion': 'Cerámico pared 30x60cm', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Adhesivos por clase ---
+            {'codigo': 'MAT-ADHESIVO-C1', 'material_key': 'adhesivo_c1', 'descripcion': 'Adhesivo cementicio C1 (interiores pisos)', 'unidad': 'bolsa(25kg)', 'coef_por_m2': 0.12},
+            {'codigo': 'MAT-ADHESIVO-C2', 'material_key': 'adhesivo_c2', 'descripcion': 'Adhesivo cementicio C2 (exteriores/piscinas)', 'unidad': 'bolsa(25kg)', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-ADHESIVO-EPOXI', 'material_key': 'adhesivo_epoxi', 'descripcion': 'Adhesivo epoxi bicomponente (piscinas/industria)', 'unidad': 'kg', 'coef_por_m2': 0.02},
+            # --- Pastinas por tipo ---
+            {'codigo': 'MAT-PASTINA-CEMENTICIA', 'material_key': 'pastina_cementicia', 'descripcion': 'Pastina cementicia (colores estándar)', 'unidad': 'kg', 'coef_por_m2': 0.60},
+            {'codigo': 'MAT-PASTINA-EPOXI', 'material_key': 'pastina_epoxi_rev', 'descripcion': 'Pastina epoxi (sanitarios/piscinas)', 'unidad': 'kg', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-PASTINA-PREMIUM', 'material_key': 'pastina_premium', 'descripcion': 'Pastina premium antimoho (colores especiales)', 'unidad': 'kg', 'coef_por_m2': 0.08},
+            # --- Perfilería y terminaciones ---
+            {'codigo': 'MAT-PERFIL-ALUMINIO-L', 'material_key': 'perfil_al_l', 'descripcion': 'Perfil L aluminio para bordes de revestimiento', 'unidad': 'ml', 'coef_por_m2': 0.04},
+            {'codigo': 'MAT-PERFIL-ALUMINIO-CURVO', 'material_key': 'perfil_al_curvo', 'descripcion': 'Perfil aluminio curvo para esquinas', 'unidad': 'ml', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-GUARDACANTO-REV', 'material_key': 'guardacanto_rev', 'descripcion': 'Guardacanto para revestimiento', 'unidad': 'ml', 'coef_por_m2': 0.03},
+            # --- Texturado (sin marca) ---
+            {'codigo': 'MAT-REV-TEXTURADO-GRUESO', 'material_key': 'texturado_grueso', 'descripcion': 'Revestimiento texturado grueso (rodillado)', 'unidad': 'balde(25kg)', 'coef_por_m2': 0.015},
+            {'codigo': 'MAT-REV-TEXTURADO-FINO', 'material_key': 'texturado_fino', 'descripcion': 'Revestimiento texturado fino (llaneado)', 'unidad': 'balde(25kg)', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-FIJADOR-TEXTURADO', 'material_key': 'fijador_texturado', 'descripcion': 'Fijador sellador para base de texturado', 'unidad': 'litro', 'coef_por_m2': 0.04},
+            {'codigo': 'MAT-BASE-NIVELADORA', 'material_key': 'base_niveladora', 'descripcion': 'Base niveladora para texturado', 'unidad': 'bolsa(25kg)', 'coef_por_m2': 0.02},
+            # --- Herramientas (consumibles) ---
+            {'codigo': 'MAT-MARTILLO-GOMA', 'material_key': 'martillo_goma', 'descripcion': 'Martillo de goma para asentar piezas', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'MAT-LLANA-DENTADA-10', 'material_key': 'llana_dentada', 'descripcion': 'Llana dentada 10mm (adhesivo C2/gran formato)', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'MAT-ESPATULA-PASTINA', 'material_key': 'espatula_pastina', 'descripcion': 'Espátula de goma para pastina', 'unidad': 'unidad', 'coef_por_m2': 0.001},
+            {'codigo': 'MAT-ESPONJA-FRATACHO', 'material_key': 'esponja_fratacho', 'descripcion': 'Esponja/fratacho para limpieza de pastina', 'unidad': 'unidad', 'coef_por_m2': 0.001},
         ],
         'mano_obra': [
             {'codigo': 'MO-PISOS', 'descripcion': 'Colocador de pisos y revestimientos', 'unidad': 'jornal', 'coef_por_m2': 0.34},
             {'codigo': 'MO-PISOS-AYUDANTE', 'descripcion': 'Ayudante de colocador de pisos', 'unidad': 'jornal', 'coef_por_m2': 0.20},
+            {'codigo': 'MO-REVESTIMIENTO', 'descripcion': 'Colocador de revestimientos de pared', 'unidad': 'jornal', 'coef_por_m2': 0.12},
         ],
         'equipos': [
             {'codigo': 'EQ-CORTADORA-CERAM', 'descripcion': 'Cortadora de cerámicos estándar', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
             {'codigo': 'EQ-CORTADORA-PISO-PORCELLANATO', 'descripcion': 'Cortadora de porcellanato gran formato (húmeda)', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
-            {'codigo': 'EQ-AMOLADORA-PISOS', 'descripcion': 'Amoladora angular para cortes en pisos', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-AMOLADORA-PISOS', 'descripcion': 'Amoladora angular para cortes', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
             {'codigo': 'EQ-VENTOSA-PISOS', 'descripcion': 'Ventosas para manipulación de piezas gran formato', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
             {'codigo': 'EQ-LLANEADORA-PISOS', 'descripcion': 'Llaneadora mecánica para pavimentos industriales', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
             {'codigo': 'EQ-PULIDORA-PISOS', 'descripcion': 'Pulidora de pisos de hormigón/microcemento', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
-            {'codigo': 'EQ-ASPIRADORA-PISOS', 'descripcion': 'Aspiradora industrial para limpieza de pisos', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-ASPIRADORA-PISOS', 'descripcion': 'Aspiradora industrial para limpieza', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-MEZCLADOR-ADHESIVO', 'descripcion': 'Mezclador eléctrico para adhesivo/pastina', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-RODILLO-TEXTURADO', 'descripcion': 'Rodillo texturado para revestimiento', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-PISTOLA-TEXTURADO', 'descripcion': 'Pistola de proyección para texturado', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
         'notas': 'Bloques intertrabados, pavimento H°A° con endurecedor, llaneado mecánico, cemento alisado, escaleras rodilladas. Porcellanato en sanitarios, general, comunes, depósitos. Baldosones vereda, deck hormigón. Zócalos: cemento alisado 10/20cm, porcellanato, MDF prepintado, rampante con buña. Maquinaria: cortadora gran formato, llaneadora, pulidora.'
     },
