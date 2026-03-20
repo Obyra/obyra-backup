@@ -753,6 +753,42 @@ PRECIO_REFERENCIA = {
     'MAT-PORCELLANATO': 28000.0,    # m2
     'MAT-ADHESIVO': 6500.0,         # kg
     'MAT-PASTINA': 4200.0,          # kg
+    # Pisos - Items del pliego
+    'PISO-BLOQUES-INTERTRAB': 30600.0,         # m² - Provisión y colocación bloques intertrabados H° en 4°SS sobre manto arena
+    'PISO-PAVIM-HA-PET': 34775.0,              # m² - Pavimento H°A° según PET c/endurecedor no metálico color negro con vainillas
+    'PISO-LLANEADO-MECANICO': 30913.0,         # m² - Pavimento de rodamiento llaneado mecánico s/PET con endurecedor no metálico
+    'PISO-CEMENTO-ALISADO': 25589.0,           # m² - Cemento alisado con endurecedor no metálico color según DO. Incluye juntas
+    'PISO-ESCALERAS-RODILLADO': 24666.0,       # m² - Escaleras: cemento alisado rodillado con endurecedor metálico color a definir
+    'PISO-PORCELLANATO-SANIT': 17862.0,        # m² - Colocación de porcellanato en locales sanitarios
+    'PISO-PORCELLANATO-GRAL': 17862.0,         # m² - Colocación de porcellanato (general)
+    'PISO-PORCELLANATO-COMUNES': 17862.0,      # m² - Porcellanato en espacios comunes (solo colocación)
+    'PISO-PORCELLANATO-DEPOSITOS': 17862.0,    # m² - Colocación porcellanatos en depósitos o loc. S° según Pl. Locales
+    'PISO-BALDOSONES-VEREDA': 23428.0,         # m² - Provisión y colocación baldosones de vereda reglamentarios. Incluye juntas dilatación
+    'PISO-DECK-HORMIGON': 12029.0,             # m² - Colocación deck de hormigón sobre estructura de apoyo
+    # Pisos - Materiales adicionales
+    'MAT-ENDURECEDOR-NO-METALICO': 12000.0,    # kg - Endurecedor de superficie no metálico (colores)
+    'MAT-ENDURECEDOR-METALICO': 15000.0,       # kg - Endurecedor de superficie metálico
+    'MAT-PORCELLANATO-PREMIUM': 45000.0,       # m² - Porcellanato premium gran formato (60x120/80x80)
+    'MAT-PORCELLANATO-ESTANDAR': 28000.0,      # m² - Porcellanato estándar (60x60)
+    'MAT-PORCELLANATO-ANTIDESLIZANTE': 32000.0,# m² - Porcellanato antideslizante (exteriores/húmedos)
+    'MAT-BALDOSA-VEREDA': 18000.0,             # m² - Baldosón de vereda reglamentario
+    'MAT-BLOQUE-INTERTRABADO': 15000.0,        # m² - Bloque intertrabado de hormigón (adoquín)
+    'MAT-DECK-HORMIGON': 22000.0,              # m² - Deck de hormigón premoldeado
+    'MAT-PISO-VINILICO': 18000.0,              # m² - Piso vinílico (SPC/LVT)
+    'MAT-PISO-PORCELANATO-LIQ': 35000.0,       # m² - Porcelanato líquido (microcemento/epoxi)
+    'MAT-ZOCALO-PORCELLANATO': 8500.0,         # ml - Zócalo de porcellanato
+    'MAT-ZOCALO-SANITARIO': 12000.0,           # ml - Zócalo sanitario (media caña)
+    'MAT-PERFIL-TRANSICION': 5500.0,           # ml - Perfil de transición entre pisos
+    'MAT-ADHESIVO-FLEX': 8500.0,               # bolsa(25kg) - Adhesivo flexible para porcellanato gran formato
+    'MAT-NIVELADORES-PISO': 3500.0,            # caja - Niveladores (sistema de nivelación para pisos)
+    'MAT-CRUCETAS-PISO': 800.0,                # bolsa - Crucetas/separadores para juntas
+    # Zócalos - Items del pliego
+    'ZOC-CEMENTO-ALISADO-10': 8983.0,          # ml - Cemento alisado para pintar h:10cm
+    'ZOC-PORCELLANATO-10': 5193.0,             # ml - Porcellanato ídem piso h:10cm (solo colocación)
+    'ZOC-PORCELLANATO-CANALETA': 5193.0,       # ml - Porcellanato h:10cm con canaleta-desagüe en balcones, terrazas
+    'ZOC-RAMPANTE-BUNA': 9695.0,               # ml - Rampante de cemento alisado reforzado p/pintar con buña S/PET
+    'ZOC-MDF-PREPINTADO': 5155.0,              # ml - Zócalos prepintados MDF (solo colocación - CIRC N°5)
+    'ZOC-CEMENTO-ALISADO-20': 9731.0,          # ml - Cemento alisado para pintar h:20cm
     # Carpinteria
     'MAT-ABERTURAS': 48000.0,       # unidad
     'MAT-PUERTA-PLACA': 85000.0,    # unidad
@@ -901,6 +937,7 @@ PRECIO_REFERENCIA = {
     'MO-CONTRAPISO': 41000.0,
     'MO-CONTRAPISO-SOLADOR': 55000.0, # jornal operador soladora/alisadora
     'MO-PISOS': 42500.0,
+    'MO-PISOS-AYUDANTE': 32000.0,  # jornal ayudante colocador pisos
     'MO-REVESTIMIENTO': 43500.0,
     'MO-CARP': 48800.0,
     'MO-PINT': 40500.0,
@@ -992,6 +1029,13 @@ PRECIO_REFERENCIA = {
     'EQ-ELEVADOR-PLACAS': 15000.0,  # dia elevador de placas para cielorrasos
     'EQ-CORTADORA-CERAM': 12000.0,  # dia cortadora ceramicos
     'EQ-PISTOLA-CLAVOS': 8000.0,    # dia pistola clavos de disparo
+    # Pisos - Maquinaria
+    'EQ-CORTADORA-PISO-PORCELLANATO': 18000.0, # día - Cortadora de porcellanato gran formato (húmeda)
+    'EQ-AMOLADORA-PISOS': 8000.0,              # día - Amoladora angular para cortes en pisos
+    'EQ-VENTOSA-PISOS': 5000.0,                # día - Ventosas para manipulación de piezas gran formato
+    'EQ-LLANEADORA-PISOS': 35000.0,            # día - Llaneadora mecánica para pavimentos industriales
+    'EQ-PULIDORA-PISOS': 28000.0,              # día - Pulidora de pisos de hormigón/microcemento
+    'EQ-ASPIRADORA-PISOS': 12000.0,            # día - Aspiradora industrial para limpieza de pisos
     'EQ-SEGURIDAD': 22000.0,        # dia herramientas seguridad
     'EQ-SOPLETE-GAS': 8000.0,       # dia soplete gas para membrana asfáltica
     'EQ-PISTOLA-AIRLESS': 25000.0,  # dia pistola airless para membrana líquida
@@ -1642,18 +1686,60 @@ ETAPA_REGLAS_BASE = {
     'pisos': {
         'nombre': 'Pisos y Revestimientos',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-PORCELLANATO', 'material_key': 'porcellanato', 'descripcion': 'Porcellanato / cerámico de piso', 'unidad': 'm²', 'coef_por_m2': 1.05},
             {'codigo': 'MAT-CERAMICO-REV', 'material_key': 'ceramico_rev', 'descripcion': 'Cerámico / porcellanato para revestimiento de pared', 'unidad': 'm²', 'coef_por_m2': 0.35},
             {'codigo': 'MAT-ADHESIVO', 'material_key': 'adhesivo', 'descripcion': 'Adhesivo cementicio para pisos y revestimientos', 'unidad': 'kg', 'coef_por_m2': 6.8},
             {'codigo': 'MAT-PASTINA', 'material_key': 'pastina', 'descripcion': 'Pastina para juntas', 'unidad': 'kg', 'coef_por_m2': 0.8},
+            # --- Del pliego: pisos por tipo ---
+            {'codigo': 'PISO-BLOQUES-INTERTRAB', 'material_key': 'bloques_intertrab', 'descripcion': 'Provisión y colocación bloques intertrabados H° en 4°SS sobre manto arena', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'PISO-PAVIM-HA-PET', 'material_key': 'pavim_ha', 'descripcion': 'Pavimento H°A° según PET c/endurecedor no metálico color negro con vainillas', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'PISO-LLANEADO-MECANICO', 'material_key': 'llaneado_mec', 'descripcion': 'Pavimento de rodamiento llaneado mecánico s/PET con endurecedor no metálico', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'PISO-CEMENTO-ALISADO', 'material_key': 'cemento_alisado', 'descripcion': 'Cemento alisado con endurecedor no metálico color según DO. Incluye juntas', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'PISO-ESCALERAS-RODILLADO', 'material_key': 'escaleras_rodillado', 'descripcion': 'Escaleras: cemento alisado rodillado con endurecedor metálico', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            {'codigo': 'PISO-PORCELLANATO-SANIT', 'material_key': 'porcel_sanit', 'descripcion': 'Colocación de porcellanato en locales sanitarios', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'PISO-PORCELLANATO-GRAL', 'material_key': 'porcel_gral', 'descripcion': 'Colocación de porcellanato (general)', 'unidad': 'm²', 'coef_por_m2': 0.20},
+            {'codigo': 'PISO-PORCELLANATO-COMUNES', 'material_key': 'porcel_comunes', 'descripcion': 'Porcellanato en espacios comunes (solo colocación)', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'PISO-PORCELLANATO-DEPOSITOS', 'material_key': 'porcel_depositos', 'descripcion': 'Colocación porcellanatos en depósitos o loc. S° según Pl. Locales', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'PISO-BALDOSONES-VEREDA', 'material_key': 'baldosones', 'descripcion': 'Provisión y colocación baldosones de vereda reglamentarios. Incluye juntas dilatación', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            {'codigo': 'PISO-DECK-HORMIGON', 'material_key': 'deck_hormigon', 'descripcion': 'Colocación deck de hormigón sobre estructura de apoyo', 'unidad': 'm²', 'coef_por_m2': 0.01},
+            # --- Del pliego: zócalos ---
+            {'codigo': 'ZOC-CEMENTO-ALISADO-10', 'material_key': 'zoc_cemento_10', 'descripcion': 'Zócalo cemento alisado para pintar h:10cm', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            {'codigo': 'ZOC-PORCELLANATO-10', 'material_key': 'zoc_porcel_10', 'descripcion': 'Zócalo porcellanato ídem piso h:10cm (solo colocación)', 'unidad': 'ml', 'coef_por_m2': 0.25},
+            {'codigo': 'ZOC-PORCELLANATO-CANALETA', 'material_key': 'zoc_canaleta', 'descripcion': 'Zócalo porcellanato h:10cm con canaleta-desagüe en balcones, terrazas', 'unidad': 'ml', 'coef_por_m2': 0.05},
+            {'codigo': 'ZOC-RAMPANTE-BUNA', 'material_key': 'zoc_rampante', 'descripcion': 'Rampante de cemento alisado reforzado p/pintar con buña S/PET', 'unidad': 'ml', 'coef_por_m2': 0.05},
+            {'codigo': 'ZOC-MDF-PREPINTADO', 'material_key': 'zoc_mdf', 'descripcion': 'Zócalos prepintados MDF (solo colocación - CIRC N°5)', 'unidad': 'ml', 'coef_por_m2': 0.20},
+            {'codigo': 'ZOC-CEMENTO-ALISADO-20', 'material_key': 'zoc_cemento_20', 'descripcion': 'Zócalo cemento alisado para pintar h:20cm', 'unidad': 'ml', 'coef_por_m2': 0.02},
+            # --- Materiales adicionales ---
+            {'codigo': 'MAT-ENDURECEDOR-NO-METALICO', 'material_key': 'endurecedor_no_met', 'descripcion': 'Endurecedor de superficie no metálico (colores)', 'unidad': 'kg', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-ENDURECEDOR-METALICO', 'material_key': 'endurecedor_met', 'descripcion': 'Endurecedor de superficie metálico', 'unidad': 'kg', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-PORCELLANATO-PREMIUM', 'material_key': 'porcel_premium', 'descripcion': 'Porcellanato premium gran formato (60x120/80x80)', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-PORCELLANATO-ANTIDESLIZANTE', 'material_key': 'porcel_antidesliz', 'descripcion': 'Porcellanato antideslizante (exteriores/húmedos)', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-BALDOSA-VEREDA', 'material_key': 'baldosa_vereda', 'descripcion': 'Baldosón de vereda reglamentario', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-BLOQUE-INTERTRABADO', 'material_key': 'bloque_intertrab', 'descripcion': 'Bloque intertrabado de hormigón (adoquín)', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-DECK-HORMIGON', 'material_key': 'mat_deck', 'descripcion': 'Deck de hormigón premoldeado', 'unidad': 'm²', 'coef_por_m2': 0.01},
+            {'codigo': 'MAT-PISO-VINILICO', 'material_key': 'piso_vinilico', 'descripcion': 'Piso vinílico (SPC/LVT)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-PISO-PORCELANATO-LIQ', 'material_key': 'microcemento', 'descripcion': 'Porcelanato líquido (microcemento/epoxi)', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-ADHESIVO-FLEX', 'material_key': 'adhesivo_flex', 'descripcion': 'Adhesivo flexible para porcellanato gran formato (bolsa 25kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.12},
+            {'codigo': 'MAT-NIVELADORES-PISO', 'material_key': 'niveladores', 'descripcion': 'Niveladores (sistema de nivelación para pisos)', 'unidad': 'caja', 'coef_por_m2': 0.015},
+            {'codigo': 'MAT-CRUCETAS-PISO', 'material_key': 'crucetas', 'descripcion': 'Crucetas/separadores para juntas', 'unidad': 'bolsa', 'coef_por_m2': 0.015},
+            {'codigo': 'MAT-PERFIL-TRANSICION', 'material_key': 'perfil_transicion', 'descripcion': 'Perfil de transición entre pisos', 'unidad': 'ml', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-ZOCALO-SANITARIO', 'material_key': 'zocalo_sanitario', 'descripcion': 'Zócalo sanitario (media caña)', 'unidad': 'ml', 'coef_por_m2': 0.03},
         ],
         'mano_obra': [
-            {'codigo': 'MO-PISOS', 'descripcion': 'Colocador de pisos y revestimientos', 'unidad': 'jornal', 'coef_por_m2': 0.34}
+            {'codigo': 'MO-PISOS', 'descripcion': 'Colocador de pisos y revestimientos', 'unidad': 'jornal', 'coef_por_m2': 0.34},
+            {'codigo': 'MO-PISOS-AYUDANTE', 'descripcion': 'Ayudante de colocador de pisos', 'unidad': 'jornal', 'coef_por_m2': 0.20},
         ],
         'equipos': [
-            {'codigo': 'EQ-CORTADORA-CERAM', 'descripcion': 'Cortadora de cerámicos', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            {'codigo': 'EQ-CORTADORA-CERAM', 'descripcion': 'Cortadora de cerámicos estándar', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            {'codigo': 'EQ-CORTADORA-PISO-PORCELLANATO', 'descripcion': 'Cortadora de porcellanato gran formato (húmeda)', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-AMOLADORA-PISOS', 'descripcion': 'Amoladora angular para cortes en pisos', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-VENTOSA-PISOS', 'descripcion': 'Ventosas para manipulación de piezas gran formato', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-LLANEADORA-PISOS', 'descripcion': 'Llaneadora mecánica para pavimentos industriales', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-PULIDORA-PISOS', 'descripcion': 'Pulidora de pisos de hormigón/microcemento', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-ASPIRADORA-PISOS', 'descripcion': 'Aspiradora industrial para limpieza de pisos', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
         ],
-        'notas': 'Pisos cerámicos, porcellanato, zócalos y revestimientos de pared en áreas húmedas.'
+        'notas': 'Bloques intertrabados, pavimento H°A° con endurecedor, llaneado mecánico, cemento alisado, escaleras rodilladas. Porcellanato en sanitarios, general, comunes, depósitos. Baldosones vereda, deck hormigón. Zócalos: cemento alisado 10/20cm, porcellanato, MDF prepintado, rampante con buña. Maquinaria: cortadora gran formato, llaneadora, pulidora.'
     },
     'carpinteria': {
         'nombre': 'Carpintería y Aberturas',
