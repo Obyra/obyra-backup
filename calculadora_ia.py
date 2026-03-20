@@ -473,7 +473,7 @@ PRECIO_REFERENCIA = {
     'EQ-ENCOFRADO-ALQ-EURO': 8268.0,       # m2/dia - Alquiler Euro (USD 6.89)
     'EQ-ENCOFRADO-ALQ-REAP': 8616.0,       # m2/dia - Alquiler c/Reapuntalamiento (USD 7.18)
 
-    # ---- Encofrado: Vigas Sinis-Kaufmann HT20 (precio por unidad) ----
+    # ---- Encofrado: Vigas HT20 (precio por unidad) ----
     'MAT-VIGA-HT20-180': 19200.0,   # unidad - Viga HT20 1.80mt (8.28kg)
     'MAT-VIGA-HT20-210': 22400.0,   # unidad - Viga HT20 2.10mt (9.66kg)
     'MAT-VIGA-HT20-260': 27700.0,   # unidad - Viga HT20 2.60mt (11.96kg)
@@ -595,6 +595,47 @@ PRECIO_REFERENCIA = {
     'MAT-BANO-QUIMICO': 65000.0,    # mes alquiler
     'MAT-CERCO-OBRA': 12000.0,      # ml
     'MAT-CARTEL-OBRA': 85000.0,     # unidad
+    # Preliminares - Organización de Obra (precios por gl, referencia obra grande)
+    'PREL-SEGURIDAD-HIGIENE': 16244428.0,      # gl - Cumplimiento Disposiciones Seguridad e Higiene
+    'PREL-SUPERVISION': 85045062.0,            # gl - Personal de Supervisión, Jefatura, Rep. Técnico
+    'PREL-CONTROL-ACCESOS': 35428608.0,        # gl - Control de Accesos a la Obra
+    'PREL-REPLANTEOS': 21624981.0,             # gl - Replanteos y verificación de medidas y niveles
+    'PREL-AYUDA-GREMIOS': 35982180.0,          # gl - Ayuda de Gremios según Pliego
+    'PREL-OBRADOR': 8745116.0,                 # gl - Obradores para Constructora, DO y Personal Técnico Comitente
+    'PREL-VESTUARIOS-COMEDOR': 5465697.0,      # gl - Instalación de Vestuarios, Baño, Comedor
+    'PREL-DEPOSITOS-OBRADOR': 3279418.0,       # gl - Depósitos de Obrador
+    'PREL-OFICINA-EQUIPADA': 4372558.0,        # gl - Oficina equipada para D.O. y Comitente
+    'PREL-BANO-OBRADOR': 9108656.0,            # gl - Instalación de baño de Obrador
+    'PREL-CERCO-OBRA': 769628.0,               # gl - Cerco de obra (solo mantenimiento)
+    'PREL-CARTEL-OBRA-PROV': 384814.0,         # gl - Cartel de obra (provisión e instalación)
+    'PREL-ILUM-CERCO-CARTEL': 384814.0,        # gl - Iluminación de Cerco y Cartel
+    'PREL-PROTECCIONES-ALTURA': 71389544.0,    # gl - Protecciones y defensas en altura
+    'PREL-TRASLADO-EQUIPOS': 7349606.0,        # gl - Traslado Equipos, Maquinarias, Enseres y volquetes
+    'PREL-MANT-MUROS': 5289688.0,              # gl - Mantenimiento de muros divisorios
+    'PREL-FUERZA-MOTRIZ': 9449786.0,           # gl - Instalación fuerza motriz provisoria para Obrador y Gremios
+    'PREL-ILUM-PROVISORIA': 6299857.0,         # gl - Iluminación provisoria para Obrador y Gremios
+    'PREL-SUMINISTRO-ELECT': 9916453.0,        # gl - Pago suministro eléctrico durante Contrato
+    'PREL-TABLEROS-PROV': 9916453.0,           # gl - Tableros eléctricos provisorios y secundarios
+    'PREL-AGUA-PROVISORIA': 5267242.0,         # gl - Instalación provisoria y pago consumo de Agua de Obra
+    'PREL-CLOACAS-TEMP': 3511495.0,            # gl - Infraestructura temporaria de cloacas
+    'PREL-INTERNET': 1192199.0,                # gl - Instalación de Internet durante Contrato
+    'PREL-OCUPACION-VEREDAS': 7820391.0,       # gl - Ocupación y mantenimiento de veredas
+    'PREL-PERMISOS-CORTES': 5865293.0,         # gl - Tramitación de permisos de cortes de calle y volcamiento de agua
+    'PREL-BOMBA-HORMIGON': 5865293.0,          # gl - Bomba de H° a contramano
+    'PREL-MONTACARGAS': 41715381.0,            # gl - Medios de elevación, montacargas, transporte vertical
+    'PREL-GRUA': 93369413.0,                   # gl - Grúa: provisión, operación y mantenimiento
+    'PREL-LIMPIEZA-EJECUCION': 34945331.0,     # gl - Limpieza durante la ejecución de la obra
+    'PREL-LIMPIEZA-UF': 6166823.0,             # gl - Limpieza final unidades funcionales
+    'PREL-LIMPIEZA-COMUNES': 4625117.0,        # gl - Limpieza final áreas comunes
+    'PREL-DESTAPACION': 1156279.0,             # gl - Destapación y limpieza final de cañerías
+    'PREL-TRAMITACIONES': 12740943.0,          # gl - Tramitaciones varias ante Organismos de Control
+    'PREL-PLANOS-PREVIOS': 44777824.0,         # gl - Confección Planos previos a INICIO de OBRA H°A°
+    'PREL-PLANOS-CONFORME': 13433347.0,        # gl - Confección Planos CONFORME a OBRA H°A°
+    'PREL-DOC-COMPLEMENTARIA': 2283669.0,      # gl - Documentación Complementaria Ejecutiva
+    # Preliminares - Items Complementarios
+    'PREL-SERENO': 22406486.0,                 # gl - Sereno
+    'PREL-VIGILANCIA': 49030663.0,             # gl - Vigilancia diurna y control de accesos
+    'PREL-GRUPO-ELECTROGENO': 9315289.0,       # gl - Grupo Electrógeno (habilitación y mantenimiento)
     # Demoliciones
     'MAT-VOLQUETE': 55000.0,        # unidad (viaje)
     # Seguridad
@@ -1290,11 +1331,53 @@ ETAPA_REGLAS_BASE = {
     'preliminares-obrador': {
         'nombre': 'Preliminares y Obrador',
         'materiales': [
+            # --- Items originales ---
             {'codigo': 'MAT-CONTENEDOR', 'material_key': 'contenedor', 'descripcion': 'Contenedor obrador (alquiler mensual)', 'unidad': 'mes', 'coef_por_m2': 0.006},
             {'codigo': 'MAT-BANO-QUIMICO', 'material_key': 'bano_quimico', 'descripcion': 'Baño químico (alquiler mensual)', 'unidad': 'mes', 'coef_por_m2': 0.004},
             {'codigo': 'MAT-CERCO-OBRA', 'material_key': 'cerco_obra', 'descripcion': 'Cerco perimetral de obra (chapa/madera)', 'unidad': 'ml', 'coef_por_m2': 0.12},
             {'codigo': 'MAT-CARTEL-OBRA', 'material_key': 'cartel_obra', 'descripcion': 'Cartel de obra reglamentario', 'unidad': 'unidades', 'coef_por_m2': 0.002},
             {'codigo': 'MAT-EPP-KIT', 'material_key': 'epp_kit', 'descripcion': 'Kit EPP por trabajador (casco, chaleco, guantes, botas)', 'unidad': 'kit', 'coef_por_m2': 0.02},
+            # --- Organización de Obra (globales, coef=0.001 → qty≈1 para 1000m²) ---
+            {'codigo': 'PREL-SEGURIDAD-HIGIENE', 'material_key': 'seg_higiene', 'descripcion': 'Cumplimiento Disposiciones Seguridad e Higiene según PCG y PET', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-SUPERVISION', 'material_key': 'supervision', 'descripcion': 'Personal de Supervisión, Jefatura de Obra, Representante Técnico', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-CONTROL-ACCESOS', 'material_key': 'control_accesos', 'descripcion': 'Control de Accesos a la Obra - Seguridad de obra', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-REPLANTEOS', 'material_key': 'replanteos', 'descripcion': 'Replanteos y verificación de medidas y niveles', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-AYUDA-GREMIOS', 'material_key': 'ayuda_gremios', 'descripcion': 'Ayuda de Gremios según Pliego', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-OBRADOR', 'material_key': 'obrador', 'descripcion': 'Obradores para Constructora, DO y Personal Técnico Comitente', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-VESTUARIOS-COMEDOR', 'material_key': 'vestuarios_comedor', 'descripcion': 'Instalación de Vestuarios, Baño, Comedor', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-DEPOSITOS-OBRADOR', 'material_key': 'depositos_obrador', 'descripcion': 'Depósitos de Obrador', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-OFICINA-EQUIPADA', 'material_key': 'oficina_equipada', 'descripcion': 'Oficina equipada para D.O. y Comitente', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-BANO-OBRADOR', 'material_key': 'bano_obrador', 'descripcion': 'Instalación de baño de Obrador', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-CERCO-OBRA', 'material_key': 'cerco_obra_mant', 'descripcion': 'Cerco de obra (solo mantenimiento)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-CARTEL-OBRA-PROV', 'material_key': 'cartel_obra_prov', 'descripcion': 'Cartel de obra (provisión e instalación)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-ILUM-CERCO-CARTEL', 'material_key': 'ilum_cerco_cartel', 'descripcion': 'Iluminación de Cerco y Cartel', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-PROTECCIONES-ALTURA', 'material_key': 'protecciones_altura', 'descripcion': 'Protecciones y defensas en altura', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-TRASLADO-EQUIPOS', 'material_key': 'traslado_equipos', 'descripcion': 'Traslado de Equipos, Maquinarias, Enseres y volquetes', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-MANT-MUROS', 'material_key': 'mant_muros', 'descripcion': 'Mantenimiento de muros divisorios', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-FUERZA-MOTRIZ', 'material_key': 'fuerza_motriz', 'descripcion': 'Instalación fuerza motriz provisoria para Obrador y Gremios', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-ILUM-PROVISORIA', 'material_key': 'ilum_provisoria', 'descripcion': 'Iluminación provisoria para Obrador y Gremios', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-SUMINISTRO-ELECT', 'material_key': 'suministro_elect', 'descripcion': 'Pago suministro eléctrico durante el cumplimiento del Contrato', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-TABLEROS-PROV', 'material_key': 'tableros_prov', 'descripcion': 'Tableros eléctricos provisorios y secundarios durante la Obra', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-AGUA-PROVISORIA', 'material_key': 'agua_provisoria', 'descripcion': 'Instalación provisoria y pago consumo de Agua de Obra', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-CLOACAS-TEMP', 'material_key': 'cloacas_temp', 'descripcion': 'Infraestructura temporaria de cloacas', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-INTERNET', 'material_key': 'internet', 'descripcion': 'Instalación de Internet durante el cumplimiento del Contrato', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-OCUPACION-VEREDAS', 'material_key': 'ocupacion_veredas', 'descripcion': 'Ocupación y mantenimiento de veredas', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-PERMISOS-CORTES', 'material_key': 'permisos_cortes', 'descripcion': 'Tramitación de permisos de cortes de calle y volcamiento de agua de napas', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-BOMBA-HORMIGON', 'material_key': 'bomba_hormigon', 'descripcion': 'Bomba de H° a contramano', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-MONTACARGAS', 'material_key': 'montacargas', 'descripcion': 'Medios de elevación: montacargas para materiales y personas, transporte vertical y horizontal', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-GRUA', 'material_key': 'grua', 'descripcion': 'Grúa: provisión, operación y mantenimiento (si la hubiere)', 'unidad': 'gl', 'coef_por_m2': 0.0005},
+            {'codigo': 'PREL-LIMPIEZA-EJECUCION', 'material_key': 'limpieza_ejec', 'descripcion': 'Limpieza durante la ejecución de la obra', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-LIMPIEZA-UF', 'material_key': 'limpieza_uf', 'descripcion': 'Limpieza final para la entrega de unidades funcionales', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-LIMPIEZA-COMUNES', 'material_key': 'limpieza_comunes', 'descripcion': 'Limpieza final para la entrega de áreas comunes', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-DESTAPACION', 'material_key': 'destapacion', 'descripcion': 'Destapación y limpieza final de cañerías', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-TRAMITACIONES', 'material_key': 'tramitaciones', 'descripcion': 'Tramitaciones varias ante Organismos de Control', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-PLANOS-PREVIOS', 'material_key': 'planos_previos', 'descripcion': 'Confección Planos previos a INICIO de OBRA de estructuras de H°A°', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-PLANOS-CONFORME', 'material_key': 'planos_conforme', 'descripcion': 'Confección Planos CONFORME a OBRA de estructuras H°A°', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-DOC-COMPLEMENTARIA', 'material_key': 'doc_complementaria', 'descripcion': 'Documentación Complementaria Ejecutiva', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            # --- Items Complementarios ---
+            {'codigo': 'PREL-SERENO', 'material_key': 'sereno', 'descripcion': 'Sereno', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-VIGILANCIA', 'material_key': 'vigilancia', 'descripcion': 'Vigilancia diurna y control de accesos (empresa especializada)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PREL-GRUPO-ELECTROGENO', 'material_key': 'grupo_electrogeno', 'descripcion': 'Grupo Electrógeno (gastos de habilitación y mantenimiento)', 'unidad': 'gl', 'coef_por_m2': 0.001},
         ],
         'mano_obra': [
             {'codigo': 'MO-PRELIM', 'descripcion': 'Cuadrilla armado de obrador y cerco', 'unidad': 'jornal', 'coef_por_m2': 0.10}
@@ -1303,7 +1386,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora para limpieza de terreno', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
             {'codigo': 'EQ-TOPOGRAFO', 'descripcion': 'Equipo topográfico para replanteo', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Permisos, obrador, cerco de obra, replanteo, servicios provisorios y EPP.'
+        'notas': 'Organización de obra: seguridad e higiene, supervisión, obradores, servicios provisorios, permisos, limpieza, documentación y vigilancia.'
     },
     'demoliciones': {
         'nombre': 'Demoliciones',
