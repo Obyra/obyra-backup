@@ -89,6 +89,7 @@
                                     </thead>
                                     <tbody>
                                         {% for item in cot.items %}
+                                        {% if cot.estado in ('borrador', 'recibida') or (item.precio_unitario and item.precio_unitario|float > 0) %}
                                         <tr>
                                             <td>{{ item.descripcion }}</td>
                                             <td class="text-center">{{ '{:g}'.format(item.cantidad|float) }}</td>
@@ -143,6 +144,7 @@
                                                 {% endif %}
                                             </td>
                                         </tr>
+                                        {% endif %}
                                         {% endfor %}
                                     </tbody>
                                     <tfoot>
