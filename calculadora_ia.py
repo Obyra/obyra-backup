@@ -437,6 +437,25 @@ PRECIO_REFERENCIA = {
     'MAT-PIEDRA': 18200.0,          # m3
     'MAT-TOSCA': 9500.0,            # m3
     'MAT-GEOTEXTIL': 4200.0,        # m2
+    # Movimiento de suelos y excavación - Items detallados
+    'MOVSUE-PERFILADO-MANUAL': 7032.0,         # m² - Perfilado manual del terreno
+    'MOVSUE-RELLENO-SELECCIONADO': 9500.0,     # m³ - Relleno con suelo seleccionado
+    'MOVSUE-RELLENO-TOSCA-COMP': 11200.0,      # m³ - Relleno con tosca compactada por capas
+    'MOVSUE-SUB-BASE-GRANULAR': 13500.0,       # m³ - Sub-base granular (estabilizado)
+    'MOVSUE-NIVELACION-COMPACT': 3800.0,       # m² - Nivelación y compactación mecánica
+    'MOVSUE-ENSAYO-PROCTOR': 45000.0,          # unidad - Ensayo de compactación Proctor
+    'MOVSUE-ENSAYO-DENSIDAD': 35000.0,         # unidad - Ensayo de densidad in-situ
+    'EXCAV-PLATEA': 9618.0,                    # m³ - Excavación de platea
+    'EXCAV-ZAPATAS': 9618.0,                   # m³ - Excavación de zapatas
+    'EXCAV-BASES-POZOS': 9618.0,               # m³ - Excavación de bases y pozos
+    'EXCAV-GENERAL': 9865.0,                   # m³ - Excavación general (incluye retiro de tierra)
+    'EXCAV-HORM-LIMPIEZA': 9865.0,             # m³ - Excavación Hormigón de Limpieza bajo platea
+    'EXCAV-ZANJAS-INST': 8500.0,               # m³ - Excavación de zanjas para instalaciones
+    'EXCAV-CISTERNA': 12000.0,                 # m³ - Excavación de cisternas
+    'EXCAV-EN-ROCA': 35000.0,                  # m³ - Excavación en roca (con martillo)
+    'EXCAV-ENTIBADO': 18000.0,                 # m² - Entibado de excavaciones
+    'EXCAV-TABLESTACADO': 25000.0,             # m² - Tablestacado metálico provisorio
+    'MAT-HORM-LIMPIEZA': 18000.0,              # m³ - Hormigón de limpieza H8
     # Cementos y aglomerantes
     'MAT-CEMENTO': 8500.0,          # bolsa
     'MAT-CAL': 6200.0,              # bolsa
@@ -665,6 +684,7 @@ PRECIO_REFERENCIA = {
     'MO-DEMOL': 44000.0,
     'MO-DEMOL-ESPEC': 58000.0,     # jornal operador especializado demolición
     'MO-MOVSUE': 42000.0,
+    'MO-MOVSUE-PERFILADOR': 38000.0,  # jornal operario perfilador manual
     'MO-APUNT': 46000.0,
     'MO-BOMBEO': 48000.0,
     'MO-FUND': 44500.0,
@@ -696,7 +716,18 @@ PRECIO_REFERENCIA = {
     'EQ-RETRO': 95000.0,            # dia retroexcavadora
     'EQ-PALA-CARGADORA': 110000.0,  # dia
     'EQ-CAMION-VOLC': 85000.0,      # dia
-    'EQ-COMPACTADOR': 45000.0,      # dia
+    'EQ-COMPACTADOR': 45000.0,      # dia vibrocompactador
+    # Movimiento de suelos y excavación - Maquinaria
+    'EQ-EXCAVADORA-HIDRAULICA': 150000.0,      # día - Excavadora hidráulica 20-30tn (Cat 320/Komatsu PC200)
+    'EQ-MOTONIVELADORA': 130000.0,             # día - Motoniveladora para perfilado y nivelación
+    'EQ-RODILLO-COMPACTADOR': 85000.0,         # día - Rodillo compactador autopropulsado liso/pata de cabra
+    'EQ-RODILLO-NEUMATICO': 75000.0,           # día - Rodillo neumático autopropulsado
+    'EQ-VIBROCOMPACTADOR-MANUAL': 25000.0,     # día - Vibrocompactador manual (rana/placa)
+    'EQ-ZANJADORA': 65000.0,                   # día - Zanjadora mecánica para instalaciones
+    'EQ-BOMBA-ACHIQUE': 35000.0,               # día - Bomba de achique para excavaciones con agua
+    'EQ-CAMION-REGADOR': 70000.0,              # día - Camión regador para control de polvo y humectación
+    'EQ-CAMION-BATEA': 95000.0,                # día - Camión batea para transporte de suelo
+    'EQ-TOPOGRAFO-GPS': 95000.0,               # día - Estación total + GPS para replanteo y nivelación
     'EQ-HORMIG': 58000.0,           # dia bomba hormigon
     'EQ-VIBRADOR': 15000.0,         # dia vibrador concreto
     'EQ-ANDAMIOS': 27000.0,         # dia
@@ -1040,19 +1071,43 @@ ETAPA_REGLAS_BASE = {
     'excavacion': {
         'nombre': 'Excavación',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena gruesa para estabilización', 'unidad': 'm³', 'coef_por_m2': 0.04},
             {'codigo': 'MAT-PIEDRA', 'material_key': 'piedra', 'descripcion': 'Piedra partida 3/4"', 'unidad': 'm³', 'coef_por_m2': 0.03},
             {'codigo': 'MAT-GEOTEXTIL', 'material_key': 'geotextil', 'descripcion': 'Geotextil de separación', 'unidad': 'm²', 'coef_por_m2': 0.3},
+            # --- Tipos de excavación (del pliego) ---
+            {'codigo': 'EXCAV-PLATEA', 'material_key': 'excav_platea', 'descripcion': 'Excavación de platea', 'unidad': 'm³', 'coef_por_m2': 0.15},
+            {'codigo': 'EXCAV-ZAPATAS', 'material_key': 'excav_zapatas', 'descripcion': 'Excavación de zapatas', 'unidad': 'm³', 'coef_por_m2': 0.02},
+            {'codigo': 'EXCAV-BASES-POZOS', 'material_key': 'excav_bases_pozos', 'descripcion': 'Excavación de bases y pozos', 'unidad': 'm³', 'coef_por_m2': 0.05},
+            {'codigo': 'EXCAV-GENERAL', 'material_key': 'excav_general', 'descripcion': 'Excavación general (incluye retiro de tierra)', 'unidad': 'm³', 'coef_por_m2': 0.60},
+            {'codigo': 'EXCAV-HORM-LIMPIEZA', 'material_key': 'excav_horm_limpieza', 'descripcion': 'Excavación para Hormigón de Limpieza bajo platea', 'unidad': 'm³', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-HORM-LIMPIEZA', 'material_key': 'horm_limpieza', 'descripcion': 'Hormigón de limpieza H8 bajo platea', 'unidad': 'm³', 'coef_por_m2': 0.02},
+            # --- Excavaciones especiales ---
+            {'codigo': 'EXCAV-ZANJAS-INST', 'material_key': 'excav_zanjas', 'descripcion': 'Excavación de zanjas para instalaciones', 'unidad': 'm³', 'coef_por_m2': 0.04},
+            {'codigo': 'EXCAV-CISTERNA', 'material_key': 'excav_cisterna', 'descripcion': 'Excavación de cisternas', 'unidad': 'm³', 'coef_por_m2': 0.01},
+            {'codigo': 'EXCAV-EN-ROCA', 'material_key': 'excav_roca', 'descripcion': 'Excavación en roca (con martillo hidráulico)', 'unidad': 'm³', 'coef_por_m2': 0.005},
+            # --- Contención ---
+            {'codigo': 'EXCAV-ENTIBADO', 'material_key': 'entibado', 'descripcion': 'Entibado de excavaciones profundas', 'unidad': 'm²', 'coef_por_m2': 0.08},
+            {'codigo': 'EXCAV-TABLESTACADO', 'material_key': 'tablestacado', 'descripcion': 'Tablestacado metálico provisorio', 'unidad': 'm²', 'coef_por_m2': 0.04},
         ],
         'mano_obra': [
-            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla movimiento de suelos', 'unidad': 'jornal', 'coef_por_m2': 0.18}
+            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla de excavación (oficial + ayudantes)', 'unidad': 'jornal', 'coef_por_m2': 0.18},
+            {'codigo': 'MO-MOVSUE-PERFILADOR', 'descripcion': 'Operario perfilador para fondos de excavación', 'unidad': 'jornal', 'coef_por_m2': 0.06},
         ],
         'equipos': [
+            # --- Equipos base ---
             {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora con operador', 'unidad': 'día', 'dias_por_m2': 0.008, 'min_dias': 1},
             {'codigo': 'EQ-CAMION-VOLC', 'descripcion': 'Camión volcador para retiro de suelo', 'unidad': 'día', 'dias_por_m2': 0.006, 'min_dias': 1},
             {'codigo': 'EQ-TOPOGRAFO', 'descripcion': 'Equipo topográfico para replanteo', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            # --- Maquinaria especializada ---
+            {'codigo': 'EQ-EXCAVADORA-HIDRAULICA', 'descripcion': 'Excavadora hidráulica 20-30tn (Cat 320/Komatsu PC200)', 'unidad': 'día', 'dias_por_m2': 0.006, 'min_dias': 1},
+            {'codigo': 'EQ-CAMION-BATEA', 'descripcion': 'Camión batea para transporte de suelo a distancia', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            {'codigo': 'EQ-BOMBA-ACHIQUE', 'descripcion': 'Bomba de achique para excavaciones con agua', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-ZANJADORA', 'descripcion': 'Zanjadora mecánica para zanjas de instalaciones', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-MARTILLO-HIDRAULICO', 'descripcion': 'Martillo hidráulico para excavación en roca', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-TOPOGRAFO-GPS', 'descripcion': 'Estación total + GPS para control de niveles de excavación', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Movimiento de suelos, replanteo y perfilado del terreno.'
+        'notas': 'Excavación de platea, zapatas, bases, pozos y zanjas. Incluye retiro de tierra, hormigón de limpieza, entibado y tablestacado para excavaciones profundas.'
     },
     'fundaciones': {
         'nombre': 'Fundaciones',
@@ -1466,21 +1521,40 @@ ETAPA_REGLAS_BASE = {
     'movimiento-de-suelos': {
         'nombre': 'Movimiento de Suelos',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena para relleno y compactación', 'unidad': 'm³', 'coef_por_m2': 0.06},
             {'codigo': 'MAT-PIEDRA', 'material_key': 'piedra', 'descripcion': 'Piedra partida / tosca para subbase', 'unidad': 'm³', 'coef_por_m2': 0.04},
             {'codigo': 'MAT-TOSCA', 'material_key': 'tosca', 'descripcion': 'Tosca para relleno y compactación', 'unidad': 'm³', 'coef_por_m2': 0.05},
             {'codigo': 'MAT-GEOTEXTIL', 'material_key': 'geotextil', 'descripcion': 'Geotextil de separación y filtro', 'unidad': 'm²', 'coef_por_m2': 0.25},
+            # --- Items del pliego ---
+            {'codigo': 'MOVSUE-PERFILADO-MANUAL', 'material_key': 'perfilado_manual', 'descripcion': 'Perfilado manual del terreno', 'unidad': 'm²', 'coef_por_m2': 0.80},
+            {'codigo': 'MOVSUE-RELLENO-SELECCIONADO', 'material_key': 'relleno_seleccionado', 'descripcion': 'Relleno con suelo seleccionado', 'unidad': 'm³', 'coef_por_m2': 0.08},
+            {'codigo': 'MOVSUE-RELLENO-TOSCA-COMP', 'material_key': 'relleno_tosca_comp', 'descripcion': 'Relleno con tosca compactada por capas', 'unidad': 'm³', 'coef_por_m2': 0.06},
+            {'codigo': 'MOVSUE-SUB-BASE-GRANULAR', 'material_key': 'sub_base_granular', 'descripcion': 'Sub-base granular (estabilizado)', 'unidad': 'm³', 'coef_por_m2': 0.04},
+            {'codigo': 'MOVSUE-NIVELACION-COMPACT', 'material_key': 'nivelacion_compact', 'descripcion': 'Nivelación y compactación mecánica', 'unidad': 'm²', 'coef_por_m2': 1.0},
+            # --- Ensayos de control ---
+            {'codigo': 'MOVSUE-ENSAYO-PROCTOR', 'material_key': 'ensayo_proctor', 'descripcion': 'Ensayo de compactación Proctor', 'unidad': 'unidad', 'coef_por_m2': 0.002},
+            {'codigo': 'MOVSUE-ENSAYO-DENSIDAD', 'material_key': 'ensayo_densidad', 'descripcion': 'Ensayo de densidad in-situ (control de compactación)', 'unidad': 'unidad', 'coef_por_m2': 0.004},
         ],
         'mano_obra': [
-            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla movimiento de suelos', 'unidad': 'jornal', 'coef_por_m2': 0.20}
+            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla movimiento de suelos (oficial + ayudantes)', 'unidad': 'jornal', 'coef_por_m2': 0.20},
+            {'codigo': 'MO-MOVSUE-PERFILADOR', 'descripcion': 'Operario perfilador manual', 'unidad': 'jornal', 'coef_por_m2': 0.08},
         ],
         'equipos': [
+            # --- Equipos base ---
             {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora con operador', 'unidad': 'día', 'dias_por_m2': 0.010, 'min_dias': 1},
             {'codigo': 'EQ-PALA-CARGADORA', 'descripcion': 'Pala cargadora frontal', 'unidad': 'día', 'dias_por_m2': 0.006, 'min_dias': 1},
             {'codigo': 'EQ-CAMION-VOLC', 'descripcion': 'Camión volcador para transporte de suelo', 'unidad': 'día', 'dias_por_m2': 0.008, 'min_dias': 1},
             {'codigo': 'EQ-COMPACTADOR', 'descripcion': 'Compactador vibratorio', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            # --- Maquinaria especializada ---
+            {'codigo': 'EQ-MOTONIVELADORA', 'descripcion': 'Motoniveladora para perfilado y nivelación', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-RODILLO-COMPACTADOR', 'descripcion': 'Rodillo compactador autopropulsado liso/pata de cabra', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-RODILLO-NEUMATICO', 'descripcion': 'Rodillo neumático autopropulsado', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-VIBROCOMPACTADOR-MANUAL', 'descripcion': 'Vibrocompactador manual (rana/placa vibradora)', 'unidad': 'día', 'dias_por_m2': 0.006, 'min_dias': 1},
+            {'codigo': 'EQ-CAMION-REGADOR', 'descripcion': 'Camión regador para humectación y control de polvo', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-TOPOGRAFO-GPS', 'descripcion': 'Estación total + GPS para replanteo y control de niveles', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Excavación masiva, perfilado, rellenos, compactación mecánica y transporte de suelos.'
+        'notas': 'Perfilado manual, rellenos con suelo seleccionado y tosca compactada, sub-base granular, nivelación mecánica, ensayos de compactación Proctor y densidad in-situ.'
     },
     'apuntalamientos': {
         'nombre': 'Apuntalamientos',
