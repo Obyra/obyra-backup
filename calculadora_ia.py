@@ -701,6 +701,24 @@ PRECIO_REFERENCIA = {
     # Cielorrasos
     'MAT-PLACA-YESO-CR': 13800.0,   # m2
     'MAT-PERFILERIA-CR': 7600.0,    # ml
+    # Cielorrasos - Items del pliego
+    'CR-EMPROLIJADO-HV': 8672.0,               # m² - Emprolijado de hormigón visto (cielorrasos)
+    'CR-PLACA-ROCA-YESO': 19491.0,             # m² - Armado de placa de roca de yeso con buña perimetral
+    'CR-PLACA-ROCA-YESO-HUMEDO': 21485.0,      # m² - Placa de roca de yeso con buña perimetral para locales húmedos
+    'CR-CAJONES-PLACA': 19491.0,               # ml - Cajones en placa roca yeso
+    'CR-TRAFOROS-GARGANTAS': 1134138.0,        # gl - Tráforos, gargantas y refuerzos para iluminación, tapas acceso, detección, etc.
+    'CR-TAPAS-INSPECCION': 62089.0,            # unidad - Tapas de inspección del sistema
+    'CR-APLICADO-YESO': 19355.0,               # m² - Aplicado de yeso en ambientes principales
+    'CR-BUNA-PERIMETRAL': 1031.0,              # ml - Buña perimetral sobre cielorrasos aplicados de yeso
+    # Cielorrasos - Items adicionales
+    'MAT-CR-DESMONTABLE-60': 18500.0,          # m² - Cielorraso desmontable 60x60cm (placa mineral)
+    'MAT-CR-PERFIL-T-PRINCIPAL': 4200.0,       # ml - Perfil T principal 24mm (cielorraso desmontable)
+    'MAT-CR-PERFIL-T-SECUNDARIO': 3500.0,      # ml - Perfil T secundario 24mm (travesaño)
+    'MAT-CR-PERFIL-L-PERIMETRAL': 2800.0,      # ml - Perfil L perimetral (angular)
+    'MAT-CR-VARILLA-ROSCADA': 1500.0,          # ml - Varilla roscada galvanizada para suspensión
+    'MAT-CR-CLAVO-DISPARO': 800.0,             # unidad - Clavo de disparo para fijación en losa
+    'MAT-CR-GANCHO-REGULABLE': 1200.0,         # unidad - Gancho regulable para suspensión
+    'MAT-CR-PLACA-VINILICA': 22000.0,          # m² - Placa vinílica para cielorraso (lavable, sanitario)
     # Contrapisos
     'MAT-CONTRAPISO': 9500.0,       # m3
     'MAT-CARPETA': 7800.0,          # m3
@@ -938,6 +956,7 @@ PRECIO_REFERENCIA = {
     'EQ-LIJADORA-ORBITAL': 7500.0,  # dia lijadora orbital para juntas
     'EQ-ELEVADOR-PLACAS': 15000.0,  # dia elevador de placas para cielorrasos
     'EQ-CORTADORA-CERAM': 12000.0,  # dia cortadora ceramicos
+    'EQ-PISTOLA-CLAVOS': 8000.0,    # dia pistola clavos de disparo
     'EQ-SEGURIDAD': 22000.0,        # dia herramientas seguridad
     'EQ-SOPLETE-GAS': 8000.0,       # dia soplete gas para membrana asfáltica
     'EQ-PISTOLA-AIRLESS': 25000.0,  # dia pistola airless para membrana líquida
@@ -2063,19 +2082,42 @@ ETAPA_REGLAS_BASE = {
     'cielorrasos': {
         'nombre': 'Cielorrasos',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-PLACA-YESO-CR', 'material_key': 'placa_yeso_cr', 'descripcion': 'Placas de yeso para cielorraso', 'unidad': 'm²', 'coef_por_m2': 1.05},
             {'codigo': 'MAT-PERFILERIA-CR', 'material_key': 'perfileria_cr', 'descripcion': 'Perfilería suspendida (omega, varillas)', 'unidad': 'ml', 'coef_por_m2': 2.2},
             {'codigo': 'MAT-MASILLA-JUNTA', 'material_key': 'masilla_junta', 'descripcion': 'Masilla para juntas y terminaciones', 'unidad': 'kg', 'coef_por_m2': 0.4},
             {'codigo': 'MAT-TORNILLO-DRYWALL', 'material_key': 'tornillo_drywall', 'descripcion': 'Tornillos para fijación de placas', 'unidad': 'caja', 'coef_por_m2': 0.02},
+            # --- Del pliego ---
+            {'codigo': 'CR-EMPROLIJADO-HV', 'material_key': 'cr_emprolijado', 'descripcion': 'Emprolijado de hormigón visto (cielorrasos)', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'CR-PLACA-ROCA-YESO', 'material_key': 'cr_placa_roca', 'descripcion': 'Armado de placa de roca de yeso con buña perimetral', 'unidad': 'm²', 'coef_por_m2': 0.50},
+            {'codigo': 'CR-PLACA-ROCA-YESO-HUMEDO', 'material_key': 'cr_placa_humedo', 'descripcion': 'Placa de roca de yeso con buña perimetral para locales húmedos', 'unidad': 'm²', 'coef_por_m2': 0.20},
+            {'codigo': 'CR-CAJONES-PLACA', 'material_key': 'cr_cajones', 'descripcion': 'Cajones en placa roca yeso', 'unidad': 'ml', 'coef_por_m2': 0.10},
+            {'codigo': 'CR-TRAFOROS-GARGANTAS', 'material_key': 'cr_traforos', 'descripcion': 'Tráforos, gargantas y refuerzos para iluminación, tapas acceso, detección, etc.', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'CR-TAPAS-INSPECCION', 'material_key': 'cr_tapas', 'descripcion': 'Tapas de inspección del sistema', 'unidad': 'unidad', 'coef_por_m2': 0.03},
+            {'codigo': 'CR-APLICADO-YESO', 'material_key': 'cr_aplicado_yeso', 'descripcion': 'Aplicado de yeso en ambientes principales', 'unidad': 'm²', 'coef_por_m2': 0.60},
+            {'codigo': 'CR-BUNA-PERIMETRAL', 'material_key': 'cr_buna', 'descripcion': 'Buña perimetral sobre cielorrasos aplicados de yeso', 'unidad': 'ml', 'coef_por_m2': 0.50},
+            # --- Cielorraso desmontable ---
+            {'codigo': 'MAT-CR-DESMONTABLE-60', 'material_key': 'cr_desmontable', 'descripcion': 'Cielorraso desmontable 60x60cm (placa mineral)', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-CR-PERFIL-T-PRINCIPAL', 'material_key': 'cr_perfil_t_princ', 'descripcion': 'Perfil T principal 24mm (cielorraso desmontable)', 'unidad': 'ml', 'coef_por_m2': 0.25},
+            {'codigo': 'MAT-CR-PERFIL-T-SECUNDARIO', 'material_key': 'cr_perfil_t_sec', 'descripcion': 'Perfil T secundario 24mm (travesaño)', 'unidad': 'ml', 'coef_por_m2': 0.30},
+            {'codigo': 'MAT-CR-PERFIL-L-PERIMETRAL', 'material_key': 'cr_perfil_l', 'descripcion': 'Perfil L perimetral (angular)', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-CR-PLACA-VINILICA', 'material_key': 'cr_placa_vinilica', 'descripcion': 'Placa vinílica para cielorraso (lavable, sanitario)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Accesorios de suspensión ---
+            {'codigo': 'MAT-CR-VARILLA-ROSCADA', 'material_key': 'cr_varilla', 'descripcion': 'Varilla roscada galvanizada para suspensión', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-CR-CLAVO-DISPARO', 'material_key': 'cr_clavo', 'descripcion': 'Clavo de disparo para fijación en losa', 'unidad': 'unidad', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-CR-GANCHO-REGULABLE', 'material_key': 'cr_gancho', 'descripcion': 'Gancho regulable para suspensión', 'unidad': 'unidad', 'coef_por_m2': 0.06},
         ],
         'mano_obra': [
-            {'codigo': 'MO-CIELORRASO', 'descripcion': 'Oficial cielorrasista', 'unidad': 'jornal', 'coef_por_m2': 0.17}
+            {'codigo': 'MO-CIELORRASO', 'descripcion': 'Oficial cielorrasista', 'unidad': 'jornal', 'coef_por_m2': 0.17},
+            {'codigo': 'MO-YESERO', 'descripcion': 'Yesero para aplicado de yeso', 'unidad': 'jornal', 'coef_por_m2': 0.10},
         ],
         'equipos': [
             {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios y escaleras', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
             {'codigo': 'EQ-ATORNILLADOR', 'descripcion': 'Atornillador eléctrico', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-ELEVADOR-PLACAS', 'descripcion': 'Elevador de placas para cielorrasos', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-PISTOLA-CLAVOS', 'descripcion': 'Pistola de clavos de disparo (fijación en losa)', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Cielorrasos aplicados de yeso, suspendidos de Durlock y desmontables.'
+        'notas': 'Emprolijado H° visto, placa roca yeso (estándar y húmedos), cajones, tráforos/gargantas para iluminación, tapas inspección, aplicado de yeso, buña perimetral. Cielorraso desmontable (placa mineral, vinílica). Suspensión con varilla roscada y ganchos regulables.'
     },
     'yeseria-enlucidos': {
         'nombre': 'Yesería y Enlucidos',
