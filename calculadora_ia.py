@@ -931,6 +931,63 @@ PRECIO_REFERENCIA = {
     'MAT-REJAS': 42000.0,           # m2
     'MAT-BARANDA-METAL': 55000.0,   # ml
     'MAT-PORTON': 250000.0,         # unidad
+    # Yesería - Items del pliego
+    'YES-ENLUCIDO-PROY': 17976.0,              # m² - Enlucido de yeso proyectado
+    'YES-CANTONERAS-METALICAS': 3427.0,        # ml - Cantoneras metálicas
+    'MAT-YESO-PROYECTABLE-BOLSA': 6500.0,      # bolsa(40kg) - Yeso proyectable
+    'MAT-YESO-MANUAL-BOLSA': 5500.0,           # bolsa(40kg) - Yeso para aplicación manual
+    'MAT-CANTONERA-GALV': 1800.0,              # ml - Cantonera galvanizada
+    'MAT-CANTONERA-PVC': 1200.0,               # ml - Cantonera PVC curva
+    'MAT-ENDUIDO-INTERIOR': 8500.0,            # balde(15kg) - Enduido plástico interior
+    'MAT-ENDUIDO-EXTERIOR': 12000.0,           # balde(15kg) - Enduido exterior fachadas
+    'MAT-LIJA-YESO': 350.0,                    # pliego - Lija grano 120-180
+    # Provisiones y colocaciones - del pliego
+    'PROV-PERFIL-HIERRO-L': 1663412.0,         # gl
+    'PROV-PERFIL-ACERO-SOLIAS': 10467905.0,    # gl
+    'PROV-GUARDACANTOS-ALU': 3775468.0,        # gl
+    'PROV-GUARDACANTOS-ARISTAS': 13683291.0,   # gl
+    'PROV-TAPAS-HORMIGON': 2622948.0,          # gl
+    'PROV-BOCAS-ATAQUE': 31036.0,              # unidad
+    'PROV-TOPES-ESTACIONAMIENTO': 10799.0,     # unidad
+    'PROV-ACCESORIOS-BANOS': 17730.0,          # unidad
+    'PROV-BANERAS': 10047111.0,                # gl
+    'PROV-SELLADO-BANERAS': 220184.0,          # gl
+    'PROV-SELLADO-BUNAS': 10073475.0,          # gl
+    'PROV-SELLADO-ACUSTICO': 16380477.0,       # gl
+    'PROV-SELLADORES-PET': 290277.0,           # gl
+    'PROV-ESCALERAS-MARINERAS': 142816.0,      # gl
+    'PROV-PLATABANDAS': 2429984.0,             # gl
+    'PROV-REJAS-CONDUCTOS': 4710634.0,         # gl
+    'PROV-TAPAS-CONEXIONES': 167707.0,         # gl
+    'PROV-PREMARCOS-PUERTAS': 34904330.0,      # gl
+    'PROV-UMBRALES-ASCENSOR': 4065398.0,       # gl
+    'PROV-ESCALERAS-BAJORECORRIDO': 200856.0,  # gl
+    'PROV-BASE-RESORTE-ASCENSOR': 115393.0,    # gl
+    'PROV-DEFENSAS-ENTRADA': 225136.0,         # gl
+    'PROV-INSERTOS-SILLETERO': 241639.0,       # gl
+    'PROV-MENSULAS-BAJOMESADAS': 12995.0,      # unidad
+    'PROV-BICICLETERO': 172694.0,              # gl
+    'PROV-PARRILLA': 320151.0,                 # gl
+    'PROV-PERGOLA': 1653862.0,                 # gl
+    'PROV-HIERRO-ANGULO-RAMPA': 588969.0,      # gl
+    # Items complementarios de obra
+    'ICOMP-CIERRES-CORTAFUEGO': 15011838.0,    # gl
+    'ICOMP-LIMPIEZA-DESAGUES': 2268276.0,      # gl
+    'ICOMP-CANTEROS-EXTERIORES': 1254763.0,    # gl
+    'ICOMP-ESCALONES-DESNIVELES': 75040.0,     # gl
+    'ICOMP-CORDONES-VEREDAS': 344326.0,        # gl
+    'ICOMP-GABINETES-GAS': 2039762.0,          # gl
+    'ICOMP-BASES-ANTIVIBRATORIAS': 606767.0,   # gl
+    'ICOMP-BUNA-CIELORRASO': 2578.0,           # ml
+    'ICOMP-BASES-AZOTEA': 1985148.0,           # gl
+    'ICOMP-BASES-AIRE-ACOND': 2419807.0,       # gl
+    'ICOMP-PROTECCIONES-ENTREGA': 15071357.0,  # gl
+    'ICOMP-CAMARA-TRANSFORMADORA': 21130138.0, # gl
+    'ICOMP-JUNTA-DILATACION-AZ': 983058.0,     # gl
+    'ICOMP-GUARDAGANADO': 231122.0,            # gl
+    'ICOMP-BUNAS-MEDIANERAS': 14499608.0,      # gl
+    # Equipos adicionales
+    'EQ-TALADRO-PERCUTOR': 12000.0,            # día - Taladro percutor para fijaciones en H°
     # Limpieza
     'MAT-LIMPIEZA': 3500.0,         # kit
     'MAT-CONTENEDOR-RES': 25000.0,  # mes alquiler
@@ -986,6 +1043,7 @@ PRECIO_REFERENCIA = {
     'MO-REV-MAQUINISTA': 48000.0,  # jornal operador máquina revocadora
     'MO-CIELORRASO': 43000.0,
     'MO-YESERO': 42000.0,
+    'MO-YESERO-AYUDANTE': 32000.0, # jornal ayudante yesero
     'MO-CONTRAPISO': 41000.0,
     'MO-CONTRAPISO-SOLADOR': 55000.0, # jornal operador soladora/alisadora
     'MO-PISOS': 42500.0,
@@ -2343,19 +2401,33 @@ ETAPA_REGLAS_BASE = {
     'yeseria-enlucidos': {
         'nombre': 'Yesería y Enlucidos',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-YESO-PROY', 'material_key': 'yeso_proyectado', 'descripcion': 'Yeso proyectado / enlucido de yeso', 'unidad': 'kg', 'coef_por_m2': 4.5},
             {'codigo': 'MAT-YESO', 'material_key': 'yeso', 'descripcion': 'Yeso París para reparaciones', 'unidad': 'kg', 'coef_por_m2': 1.0},
             {'codigo': 'MAT-ENDUIDO', 'material_key': 'enduido', 'descripcion': 'Enduido plástico para terminación', 'unidad': 'kg', 'coef_por_m2': 0.8},
             {'codigo': 'MAT-GUARDAVIVOS', 'material_key': 'guardavivos', 'descripcion': 'Guardavivos de PVC/aluminio', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            # --- Del pliego ---
+            {'codigo': 'YES-ENLUCIDO-PROY', 'material_key': 'enlucido_proy', 'descripcion': 'Enlucido de yeso proyectado', 'unidad': 'm²', 'coef_por_m2': 0.80},
+            {'codigo': 'YES-CANTONERAS-METALICAS', 'material_key': 'cantoneras_met', 'descripcion': 'Cantoneras metálicas', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            # --- Materiales adicionales ---
+            {'codigo': 'MAT-YESO-PROYECTABLE-BOLSA', 'material_key': 'yeso_proy_bolsa', 'descripcion': 'Yeso proyectable (bolsa 40kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.12},
+            {'codigo': 'MAT-YESO-MANUAL-BOLSA', 'material_key': 'yeso_manual', 'descripcion': 'Yeso para aplicación manual (bolsa 40kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-CANTONERA-GALV', 'material_key': 'cantonera_galv', 'descripcion': 'Cantonera galvanizada para esquinas', 'unidad': 'ml', 'coef_por_m2': 0.10},
+            {'codigo': 'MAT-CANTONERA-PVC', 'material_key': 'cantonera_pvc', 'descripcion': 'Cantonera PVC para esquinas curvas', 'unidad': 'ml', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-ENDUIDO-INTERIOR', 'material_key': 'enduido_int', 'descripcion': 'Enduido plástico interior (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.025},
+            {'codigo': 'MAT-ENDUIDO-EXTERIOR', 'material_key': 'enduido_ext', 'descripcion': 'Enduido exterior para fachadas (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-LIJA-YESO', 'material_key': 'lija_yeso', 'descripcion': 'Lija para yeso/enduido (grano 120-180)', 'unidad': 'pliego', 'coef_por_m2': 0.05},
         ],
         'mano_obra': [
-            {'codigo': 'MO-YESERO', 'descripcion': 'Yesero proyectista', 'unidad': 'jornal', 'coef_por_m2': 0.14}
+            {'codigo': 'MO-YESERO', 'descripcion': 'Yesero proyectista', 'unidad': 'jornal', 'coef_por_m2': 0.14},
+            {'codigo': 'MO-YESERO-AYUDANTE', 'descripcion': 'Ayudante de yesero', 'unidad': 'jornal', 'coef_por_m2': 0.10},
         ],
         'equipos': [
             {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Proyectora de yeso', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
             {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios livianos y escaleras', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-LIJADORA-ORBITAL', 'descripcion': 'Lijadora orbital para yeso/enduido', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
         ],
-        'notas': 'Enlucido de yeso proyectado en paredes y cielorrasos, enduido, cantoneras y guardavivos.'
+        'notas': 'Enlucido de yeso proyectado, cantoneras metálicas y PVC, enduido interior/exterior, lijado y terminación.'
     },
     'contrapisos-carpetas': {
         'nombre': 'Contrapisos y Carpetas',
@@ -2414,8 +2486,84 @@ ETAPA_REGLAS_BASE = {
         ],
         'notas': 'Contrapisos H°A° para subsuelos con malla SIMA, H° pobre, alivianado perlita/arcilla, cascote. Carpetas: nivelación, monolítica, protección, bajo techado, subsuelos. Maquinaria: soladora láser, alisadora helicóptero/doble, fratasadora, regla vibratoria, cortadora juntas.'
     },
-    # 'revestimientos' → fusionado en 'pisos' como "Pisos y Revestimientos"
-    # 'provisiones-colocaciones' → fusionado en 'instalaciones-sanitarias' como "Inst. Sanitarias y Provisiones"
+    'provisiones-colocaciones': {
+        'nombre': 'Provisiones y Colocaciones',
+        'materiales': [
+            # --- Del pliego: herrería y perfilería ---
+            {'codigo': 'PROV-PERFIL-HIERRO-L', 'material_key': 'perfil_hierro_l', 'descripcion': 'Provisión y colocación de perfil de hierro L 1 1/4" en cantos vivos h=1.20m', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-PERFIL-ACERO-SOLIAS', 'material_key': 'perfil_acero_solias', 'descripcion': 'Provisión y colocación de perfil de acero 1° en solías, umbrales y flejes', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-GUARDACANTOS-ALU', 'material_key': 'guardacantos_alu', 'descripcion': 'Provisión y colocación de guardacantos y/o solías aluminio', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-GUARDACANTOS-ARISTAS', 'material_key': 'guardacantos_aristas', 'descripcion': 'Provisión y colocación de guardacantos en Al en aristas salientes', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-TAPAS-HORMIGON', 'material_key': 'tapas_hormigon', 'descripcion': 'Provisión y colocación de tapas de hormigón s/PET', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            # --- Del pliego: equipamiento ---
+            {'codigo': 'PROV-BOCAS-ATAQUE', 'material_key': 'bocas_ataque', 'descripcion': 'Provisión y colocación bocas de ataque', 'unidad': 'unidad', 'coef_por_m2': 0.005},
+            {'codigo': 'PROV-TOPES-ESTACIONAMIENTO', 'material_key': 'topes_estac', 'descripcion': 'Provisión y colocación de topes de estacionamiento', 'unidad': 'unidad', 'coef_por_m2': 0.01},
+            {'codigo': 'PROV-ACCESORIOS-BANOS', 'material_key': 'accesorios_banos', 'descripcion': 'Colocación de accesorios de baños', 'unidad': 'unidad', 'coef_por_m2': 0.02},
+            {'codigo': 'PROV-BANERAS', 'material_key': 'baneras', 'descripcion': 'Colocación de bañeras', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            # --- Del pliego: sellados ---
+            {'codigo': 'PROV-SELLADO-BANERAS', 'material_key': 'sellado_baneras', 'descripcion': 'Sellado perimetral de bañeras c/revestimiento', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-SELLADO-BUNAS', 'material_key': 'sellado_bunas', 'descripcion': 'Sellados en encuentros de buñas, carpinterías y varios', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-SELLADO-ACUSTICO', 'material_key': 'sellado_acustico', 'descripcion': 'Sellados en placas asegurando hermeticidad acústica', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-SELLADORES-PET', 'material_key': 'selladores_pet', 'descripcion': 'Selladores según PET', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            # --- Del pliego: amures y fijaciones ---
+            {'codigo': 'PROV-ESCALERAS-MARINERAS', 'material_key': 'escaleras_marineras', 'descripcion': 'Colocaciones y/o amures de escaleras marineras, ménsulas para termotanques', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-PLATABANDAS', 'material_key': 'platabandas', 'descripcion': 'Provisión y colocación de platabandas para fijación de barandas y pasamanos', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-REJAS-CONDUCTOS', 'material_key': 'rejas_conductos', 'descripcion': 'Provisión y colocación de rejas en conductos evacuación de humos y rejillas', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-TAPAS-CONEXIONES', 'material_key': 'tapas_conexiones', 'descripcion': 'Provisión y amure de tapas de conexiones, pozos bombeo, tapas cámaras', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-PREMARCOS-PUERTAS', 'material_key': 'premarcos', 'descripcion': 'Amure de premarcos, marcos de puertas, carpinterías de plenos, generales', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-UMBRALES-ASCENSOR', 'material_key': 'umbrales_ascensor', 'descripcion': 'Amure de umbrales y marcos de puertas de ascensor', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-ESCALERAS-BAJORECORRIDO', 'material_key': 'escaleras_bajorec', 'descripcion': 'Amure de escaleras y divisores de bajorecorridos y ganchos para montaje', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-BASE-RESORTE-ASCENSOR', 'material_key': 'base_resorte', 'descripcion': 'Ejecución de base para resorte y amure en bajo recorrido de ascensores', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-DEFENSAS-ENTRADA', 'material_key': 'defensas_entrada', 'descripcion': 'Provisión e instalación de defensas altura mín 1.20m, protección entradas', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-INSERTOS-SILLETERO', 'material_key': 'insertos_silletero', 'descripcion': 'Insertos para silletero o mudanzas en azotea', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-MENSULAS-BAJOMESADAS', 'material_key': 'mensulas_bajomesadas', 'descripcion': 'Provisión y colocación de ménsulas bajomesadas', 'unidad': 'unidad', 'coef_por_m2': 0.015},
+            {'codigo': 'PROV-BICICLETERO', 'material_key': 'bicicletero', 'descripcion': 'Previsión para colgar bicicletas', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-PARRILLA', 'material_key': 'parrilla', 'descripcion': 'Amure y ayuda de gremio de parrilla', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-PERGOLA', 'material_key': 'pergola', 'descripcion': 'Amure y ayuda de gremio de pérgola', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'PROV-HIERRO-ANGULO-RAMPA', 'material_key': 'hierro_angulo_rampa', 'descripcion': 'Hierro ángulo en cantos vivos de banquinas en rampa vehicular (1 3/16")', 'unidad': 'gl', 'coef_por_m2': 0.001},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-PROVISIONES', 'descripcion': 'Oficial albañil para provisiones y colocaciones', 'unidad': 'jornal', 'coef_por_m2': 0.15},
+            {'codigo': 'MO-HERR', 'descripcion': 'Herrero para amures y fijaciones metálicas', 'unidad': 'jornal', 'coef_por_m2': 0.08},
+        ],
+        'equipos': [
+            {'codigo': 'EQ-SOLDADORA', 'descripcion': 'Soldadora eléctrica para amures metálicos', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-AMOLADORA', 'descripcion': 'Amoladora angular para cortes', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-TALADRO-PERCUTOR', 'descripcion': 'Taladro percutor para fijaciones en H°', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-PISTOLA-CLAVOS', 'descripcion': 'Pistola de clavos de disparo', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+        ],
+        'notas': 'Perfiles de hierro y acero en cantos vivos, guardacantos aluminio, tapas H°, bocas ataque, topes estacionamiento, accesorios baños, bañeras. Sellados perimetrales, acústicos y según PET. Amures de premarcos, escaleras marineras, platabandas, rejas, tapas, umbrales ascensor, defensas, ménsulas.'
+    },
+    'items-complementarios': {
+        'nombre': 'Items Complementarios de Obra',
+        'materiales': [
+            # --- Del pliego: cierre y terminación ---
+            {'codigo': 'ICOMP-CIERRES-CORTAFUEGO', 'material_key': 'cierres_cortafuego', 'descripcion': 'Provisión y colocación de cierres cortafuegos en plenos', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-LIMPIEZA-DESAGUES', 'material_key': 'limpieza_desagues', 'descripcion': 'Limpieza integral y prueba de desagües cloacales y pluviales al final', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-CANTEROS-EXTERIORES', 'material_key': 'canteros_ext', 'descripcion': 'Ejecución de canteros áreas exteriores / provisión y colocación alcorques', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-ESCALONES-DESNIVELES', 'material_key': 'escalones_desniveles', 'descripcion': 'Escalones, desniveles en mampostería planta baja, canaletas y varios', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-CORDONES-VEREDAS', 'material_key': 'cordones_veredas', 'descripcion': 'Nivelación y reparación de cordones o ejecución nuevo en veredas. Rebajes de cordón', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-GABINETES-GAS', 'material_key': 'gabinetes_gas', 'descripcion': 'Ejecución gabinetes reguladores de gas con puerta reglamentaria', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-BASES-ANTIVIBRATORIAS', 'material_key': 'bases_antivib', 'descripcion': 'Equipos ventilación subsuelo: ejecución de bases / bases antivibratorias', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-BUNA-CIELORRASO', 'material_key': 'buna_cielorraso', 'descripcion': 'Buña Z en cielorrasos de placa de yeso', 'unidad': 'ml', 'coef_por_m2': 0.10},
+            {'codigo': 'ICOMP-BASES-AZOTEA', 'material_key': 'bases_azotea', 'descripcion': 'Bases para equipos en azotea y varios', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-BASES-AIRE-ACOND', 'material_key': 'bases_aire', 'descripcion': 'Bases de equipos de aire acondicionado y ventilaciones', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-PROTECCIONES-ENTREGA', 'material_key': 'protecciones_entrega', 'descripcion': 'Provisión y colocación de protecciones para terminaciones hasta entrega obra', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-CAMARA-TRANSFORMADORA', 'material_key': 'camara_transf', 'descripcion': 'Ejecución de obra civil de cámara transformadora (incluye provisión herrerías)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-JUNTA-DILATACION-AZ', 'material_key': 'junta_dilatacion_az', 'descripcion': 'Junta de dilatación de 1° Piso a AZ (en encuentro tabiques y pisos)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-GUARDAGANADO', 'material_key': 'guardaganado', 'descripcion': 'Provisión de guardaganado', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'ICOMP-BUNAS-MEDIANERAS', 'material_key': 'bunas_medianeras', 'descripcion': 'Buñas en medianeras, coincidente con lomo de losa y fondo de viga', 'unidad': 'gl', 'coef_por_m2': 0.001},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-PROVISIONES', 'descripcion': 'Oficial albañil para items complementarios', 'unidad': 'jornal', 'coef_por_m2': 0.10},
+            {'codigo': 'MO-HERR', 'descripcion': 'Herrero para trabajos complementarios', 'unidad': 'jornal', 'coef_por_m2': 0.05},
+        ],
+        'equipos': [
+            {'codigo': 'EQ-SOLDADORA', 'descripcion': 'Soldadora eléctrica', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-AMOLADORA', 'descripcion': 'Amoladora angular', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+        ],
+        'notas': 'Cierres cortafuego, limpieza desagües, canteros exteriores, escalones, cordones veredas, gabinetes gas, bases antivibratorias/azotea/aire acondicionado, buñas, protecciones entrega, cámara transformadora, juntas dilatación.'
+    },
 }
 
 STAGE_CALC_CACHE: Dict[str, Any] = {}
