@@ -294,6 +294,44 @@ def api_buscar():
     return jsonify([p.to_dict() for p in proveedores])
 
 
+@proveedores_oc_bp.route('/api/crear-rapido', methods=['POST'])
+@login_required
+def api_crear_rapido():
+    """Crear un proveedor rápido desde cotizaciones u OC."""
+    from models.proveedores_oc import ProveedorOC
+
+    org_id = _get_org_id()
+    if not org_id:
+        return jsonify({'ok': False, 'error': 'Sin organización'}), 400
+
+    data = request.get_json()
+    razon_social = (data.get('razon_social') or '').strip()
+    if not razon_social:
+        return jsonify({'ok': False, 'error': 'Razón social es obligatoria'}), 400
+
+    try:
+        prov = ProveedorOC(
+            organizacion_id=org_id,
+            razon_social=razon_social,
+            cuit=(data.get('cuit') or '').strip() or None,
+            email=(data.get('email') or '').strip() or None,
+            telefono=(data.get('telefono') or '').strip() or None,
+            activo=True
+        )
+        db.session.add(prov)
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'id': prov.id,
+            'razon_social': prov.razon_social,
+            'cuit': prov.cuit or ''
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @proveedores_oc_bp.route('/api/<int:id>')
 @login_required
 def api_detalle(id):

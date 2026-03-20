@@ -53,9 +53,16 @@ def gestionar(rc_id):
     recibidas = sum(1 for c in cotizaciones if c.estado in ('recibida', 'elegida'))
     elegida = next((c for c in cotizaciones if c.estado == 'elegida'), None)
 
+    # Proveedores disponibles para el dropdown
+    from models.proveedores_oc import ProveedorOC
+    proveedores_disponibles = ProveedorOC.query.filter_by(
+        organizacion_id=org_id, activo=True
+    ).order_by(ProveedorOC.razon_social).all()
+
     return render_template('cotizaciones/gestionar.html',
                          rc=rc, cotizaciones=cotizaciones,
-                         recibidas=recibidas, elegida=elegida)
+                         recibidas=recibidas, elegida=elegida,
+                         proveedores_disponibles=proveedores_disponibles)
 
 
 # ============================================================

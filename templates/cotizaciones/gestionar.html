@@ -209,27 +209,48 @@
                     <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Agregar Proveedor</h5>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('cotizaciones.agregar_proveedor', rc_id=rc.id) }}">
+                    <form method="POST" action="{{ url_for('cotizaciones.agregar_proveedor', rc_id=rc.id) }}" id="formAgregarProv">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="proveedor_oc_id" id="proveedorOcId">
-                        <div class="mb-3 position-relative">
-                            <label class="form-label">Buscar proveedor</label>
-                            <input type="text" class="form-control" id="proveedorInput"
-                                   placeholder="Escribir nombre o CUIT..." autocomplete="off">
-                            <div id="proveedorDropdown" class="dropdown-menu w-100" style="display:none; max-height:200px; overflow-y:auto; position:absolute; z-index:1000;"></div>
+                        <div class="mb-3">
+                            <label class="form-label">Seleccionar proveedor</label>
+                            <select class="form-select" id="selectProveedor" onchange="seleccionarProveedor(this)">
+                                <option value="">-- Elegir proveedor --</option>
+                                {% for p in proveedores_disponibles %}
+                                <option value="{{ p.id }}" data-nombre="{{ p.razon_social }}">{{ p.razon_social }}{% if p.cuit %} ({{ p.cuit }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        <div id="proveedorSeleccionado" style="display:none" class="mb-3">
-                            <div class="alert alert-info py-2 mb-0 d-flex justify-content-between align-items-center">
-                                <span id="proveedorNombre"></span>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="limpiarProveedor()">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
+                        <div class="mb-3">
+                            <input type="text" class="form-control form-control-sm" id="filtroProveedor"
+                                   placeholder="Filtrar por nombre o CUIT..." oninput="filtrarProveedores(this.value)">
                         </div>
-                        <button type="submit" class="btn btn-primary w-100" id="btnAgregar" disabled>
+                        <button type="submit" class="btn btn-success w-100 mb-2" id="btnAgregar" disabled>
                             <i class="fas fa-plus me-1"></i>Agregar
                         </button>
                     </form>
+                    <hr>
+                    <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="mostrarFormNuevo()">
+                        <i class="fas fa-user-plus me-1"></i>Crear proveedor nuevo
+                    </button>
+                    <!-- Form crear proveedor nuevo inline -->
+                    <div id="formNuevoProveedor" style="display:none" class="mt-3">
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" id="nuevoRazonSocial" placeholder="Razón social *">
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" id="nuevoCuit" placeholder="CUIT (opcional)">
+                        </div>
+                        <div class="mb-2">
+                            <input type="email" class="form-control form-control-sm" id="nuevoEmail" placeholder="Email (opcional)">
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" id="nuevoTelefono" placeholder="Teléfono (opcional)">
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm w-100" onclick="crearProveedor()">
+                            <i class="fas fa-save me-1"></i>Guardar y agregar
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -367,67 +388,66 @@ function actualizarEquivalentes() {
 cargarTipoCambio();
 
 // ============================================================
-// Autocomplete proveedor
-// ============================================================
-(function() {
-    var input = document.getElementById('proveedorInput');
-    var dropdown = document.getElementById('proveedorDropdown');
-    var hiddenId = document.getElementById('proveedorOcId');
-    var selDiv = document.getElementById('proveedorSeleccionado');
-    var nombreSpan = document.getElementById('proveedorNombre');
-    var btnAgregar = document.getElementById('btnAgregar');
-    var timer = null;
+// Seleccionar proveedor del dropdown
+function seleccionarProveedor(select) {
+    document.getElementById('proveedorOcId').value = select.value;
+    document.getElementById('btnAgregar').disabled = !select.value;
+}
 
-    input.addEventListener('input', function() {
-        clearTimeout(timer);
-        var q = this.value.trim();
-        if (q.length < 2) { dropdown.style.display = 'none'; return; }
+// Filtrar opciones del select
+function filtrarProveedores(texto) {
+    var select = document.getElementById('selectProveedor');
+    var filtro = texto.toLowerCase();
+    for (var i = 1; i < select.options.length; i++) {
+        var opt = select.options[i];
+        opt.style.display = opt.text.toLowerCase().includes(filtro) ? '' : 'none';
+    }
+}
 
-        timer = setTimeout(function() {
-            fetch('/proveedores-oc/api/buscar?q=' + encodeURIComponent(q))
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (!data.length) {
-                    dropdown.innerHTML = '<div class="dropdown-item text-muted">Sin resultados</div>';
-                } else {
-                    dropdown.innerHTML = data.map(function(p) {
-                        return '<a class="dropdown-item" href="#" data-id="' + p.id + '" data-nombre="' + (p.razon_social || '') + '">' +
-                            '<strong>' + (p.razon_social || '') + '</strong>' +
-                            (p.cuit ? ' <small class="text-muted">CUIT: ' + p.cuit + '</small>' : '') +
-                            '</a>';
-                    }).join('');
-                }
-                dropdown.style.display = 'block';
-            });
-        }, 300);
-    });
+// Mostrar form para crear proveedor nuevo
+function mostrarFormNuevo() {
+    var form = document.getElementById('formNuevoProveedor');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
 
-    dropdown.addEventListener('click', function(e) {
-        e.preventDefault();
-        var item = e.target.closest('[data-id]');
-        if (!item) return;
+// Crear proveedor nuevo via API y agregarlo directamente
+async function crearProveedor() {
+    var razon = document.getElementById('nuevoRazonSocial').value.trim();
+    if (!razon) { alert('La razón social es obligatoria'); return; }
 
-        hiddenId.value = item.dataset.id;
-        nombreSpan.textContent = item.dataset.nombre;
-        input.style.display = 'none';
-        selDiv.style.display = 'block';
-        dropdown.style.display = 'none';
-        btnAgregar.disabled = false;
-    });
-
-    document.addEventListener('click', function(e) {
-        if (!dropdown.contains(e.target) && e.target !== input) {
-            dropdown.style.display = 'none';
+    try {
+        var resp = await fetch('/proveedores-oc/api/crear-rapido', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+            body: JSON.stringify({
+                razon_social: razon,
+                cuit: document.getElementById('nuevoCuit').value.trim(),
+                email: document.getElementById('nuevoEmail').value.trim(),
+                telefono: document.getElementById('nuevoTelefono').value.trim()
+            })
+        });
+        var data = await resp.json();
+        if (data.ok) {
+            // Agregar al select y seleccionarlo
+            var select = document.getElementById('selectProveedor');
+            var opt = new Option(data.razon_social + (data.cuit ? ' (' + data.cuit + ')' : ''), data.id);
+            select.add(opt);
+            select.value = data.id;
+            seleccionarProveedor(select);
+            // Limpiar form y ocultarlo
+            document.getElementById('formNuevoProveedor').style.display = 'none';
+            document.getElementById('nuevoRazonSocial').value = '';
+            document.getElementById('nuevoCuit').value = '';
+            document.getElementById('nuevoEmail').value = '';
+            document.getElementById('nuevoTelefono').value = '';
+            // Submit automático
+            document.getElementById('formAgregarProv').submit();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo crear'));
         }
-    });
-})();
-
-function limpiarProveedor() {
-    document.getElementById('proveedorOcId').value = '';
-    document.getElementById('proveedorInput').style.display = 'block';
-    document.getElementById('proveedorInput').value = '';
-    document.getElementById('proveedorSeleccionado').style.display = 'none';
-    document.getElementById('btnAgregar').disabled = true;
+    } catch(e) {
+        alert('Error de conexión');
+    }
 }
 
 // ============================================================
