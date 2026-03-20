@@ -2548,16 +2548,20 @@ def seed_items_ia():
                 db.session.flush()
             cat_map[etapa_nombre] = cat.id
 
-        # Crear items
+        # Cargar todos los códigos existentes en UNA sola query
+        codigos_existentes = set(
+            r[0] for r in db.session.query(ItemInventario.codigo)
+            .filter_by(organizacion_id=org_id)
+            .filter(ItemInventario.codigo.in_(list(items_data.keys())))
+            .all()
+        )
+
+        # Crear items nuevos en batch
         creados = 0
-        omitidos = 0
+        omitidos = len(codigos_existentes)
 
         for codigo, data in sorted(items_data.items()):
-            existing = ItemInventario.query.filter_by(
-                codigo=codigo, organizacion_id=org_id
-            ).first()
-            if existing:
-                omitidos += 1
+            if codigo in codigos_existentes:
                 continue
 
             item = ItemInventario(
@@ -2574,6 +2578,10 @@ def seed_items_ia():
             )
             db.session.add(item)
             creados += 1
+
+            # Commit cada 50 items para evitar timeout
+            if creados % 50 == 0:
+                db.session.flush()
 
         db.session.commit()
 
