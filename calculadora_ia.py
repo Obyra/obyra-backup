@@ -703,6 +703,15 @@ PRECIO_REFERENCIA = {
     'EQ-APUNTALAMIENTO': 32000.0,   # dia puntales
     'EQ-BOMBEO': 65000.0,           # dia wellpoints
     'EQ-GENERADOR': 55000.0,        # dia grupo electrogeno
+    # Depresión de Napa - Items detallados (precios por gl, referencia obra grande)
+    'DNAPA-INST-POZOS': 13086576.0,            # gl - Instalación de pozos de bombeo
+    'DNAPA-BOMBAS-CANALIZ': 13086576.0,        # gl - Bombas y canalizaciones según pliego
+    'DNAPA-INST-ELECTRICA': 6543288.0,         # gl - Instalación eléctrica para depresión de napa
+    'DNAPA-OPERACION-MANT': 17413589.0,        # gl - Operación y mantenimiento durante ejecución de estructura
+    'DNAPA-ENERGIA-ELECTROGENO': 9329462.0,    # gl - Provisión energía eléctrica por grupo electrógeno
+    'DNAPA-BOMBEO-DEFINITIVO': 9814932.0,      # gl - Instalación de bombeo definitivo según pliego
+    'DNAPA-RED-DEPRESORA': 2944880.0,          # gl - Red depresora de napa
+    'DNAPA-RETIRO-CEGADO': 1962586.0,          # gl - Retiro y cegado de perforaciones
     'EQ-ATORNILLADOR': 8500.0,      # dia
     'EQ-CORTADORA-CERAM': 12000.0,  # dia cortadora ceramicos
     'EQ-SEGURIDAD': 22000.0,        # dia herramientas seguridad
@@ -1441,7 +1450,17 @@ ETAPA_REGLAS_BASE = {
     'depresion-de-napa': {
         'nombre': 'Depresión de Napa / Bombeo',
         'materiales': [
+            # --- Items originales ---
             {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena para filtros de wellpoints', 'unidad': 'm³', 'coef_por_m2': 0.01},
+            # --- Items detallados del pliego (globales) ---
+            {'codigo': 'DNAPA-INST-POZOS', 'material_key': 'inst_pozos', 'descripcion': 'Instalación de pozos de bombeo', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'DNAPA-BOMBAS-CANALIZ', 'material_key': 'bombas_canaliz', 'descripcion': 'Bombas y canalizaciones según pliego', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'DNAPA-INST-ELECTRICA', 'material_key': 'inst_electrica_napa', 'descripcion': 'Instalación eléctrica para depresión de napa', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'DNAPA-OPERACION-MANT', 'material_key': 'operacion_mant_napa', 'descripcion': 'Operación y mantenimiento de la instalación durante ejecución de la estructura', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'DNAPA-ENERGIA-ELECTROGENO', 'material_key': 'energia_electrogeno', 'descripcion': 'Provisión de energía eléctrica por grupo electrógeno para operación del bombeo', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'DNAPA-BOMBEO-DEFINITIVO', 'material_key': 'bombeo_definitivo', 'descripcion': 'Instalación de bombeo definitivo según pliego', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'DNAPA-RED-DEPRESORA', 'material_key': 'red_depresora', 'descripcion': 'Red depresora de napa', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'DNAPA-RETIRO-CEGADO', 'material_key': 'retiro_cegado', 'descripcion': 'Retiro y cegado de perforaciones', 'unidad': 'gl', 'coef_por_m2': 0.001},
         ],
         'mano_obra': [
             {'codigo': 'MO-BOMBEO', 'descripcion': 'Operación de equipos de bombeo', 'unidad': 'jornal', 'coef_por_m2': 0.08}
@@ -1450,7 +1469,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'EQ-BOMBEO', 'descripcion': 'Equipo de wellpoints y bombas sumergibles', 'unidad': 'día', 'dias_por_m2': 0.012, 'min_dias': 5},
             {'codigo': 'EQ-GENERADOR', 'descripcion': 'Grupo electrógeno para bombeo continuo', 'unidad': 'día', 'dias_por_m2': 0.012, 'min_dias': 5},
         ],
-        'notas': 'Instalación de pozos, bombas, grupo electrógeno y mantenimiento para control de nivel freático.'
+        'notas': 'Instalación de pozos, bombas, canalizaciones, grupo electrógeno, operación/mantenimiento, bombeo definitivo y retiro de perforaciones.'
     },
     'construccion-en-seco': {
         'nombre': 'Construcción en Seco',
