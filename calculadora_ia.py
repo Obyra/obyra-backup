@@ -638,6 +638,14 @@ PRECIO_REFERENCIA = {
     'PREL-GRUPO-ELECTROGENO': 9315289.0,       # gl - Grupo Electrógeno (habilitación y mantenimiento)
     # Demoliciones
     'MAT-VOLQUETE': 55000.0,        # unidad (viaje)
+    'DEMOL-CORTE-CANALETAS': 33993.0,          # ml - Cortes de canaletas en medianeras de mampostería
+    'DEMOL-PICADO-REVOQUES': 1517648.0,        # gl - Picado de revoques excedentes en muros medianeros
+    # Demoliciones - Materiales adicionales
+    'MAT-DISCO-DIAMANTE': 85000.0,             # unidad - Disco diamantado para corte de H°A°
+    'MAT-MECHA-SACATESTIGO': 120000.0,         # unidad - Mecha para sacatestigos (diámetros varios)
+    'MAT-LONA-PROTECCION': 4500.0,             # m² - Lona de protección contra polvo y escombros
+    'MAT-CONTENEDOR-RESIDUOS': 180000.0,       # mes - Contenedor de residuos peligrosos (amianto, etc.)
+    'MAT-AGUA-SUPRESION-POLVO': 8500.0,        # m³ - Agua para supresión de polvo
     # Seguridad
     'MAT-INCENDIO': 35000.0,        # global
     'MAT-ALARMA': 28000.0,          # global
@@ -655,6 +663,7 @@ PRECIO_REFERENCIA = {
     # ====================== MANO DE OBRA ======================
     'MO-PRELIM': 38000.0,           # jornal
     'MO-DEMOL': 44000.0,
+    'MO-DEMOL-ESPEC': 58000.0,     # jornal operador especializado demolición
     'MO-MOVSUE': 42000.0,
     'MO-APUNT': 46000.0,
     'MO-BOMBEO': 48000.0,
@@ -699,7 +708,22 @@ PRECIO_REFERENCIA = {
     'EQ-ELEVADOR': 78500.0,         # dia elevador cristales
     'EQ-ELEVADOR-PERS': 95000.0,    # dia plataforma elevadora personas
     'EQ-HIDROLAVADORA': 15500.0,    # dia
-    'EQ-DEMOLICION': 85000.0,       # dia martillo + mini
+    'EQ-DEMOLICION': 85000.0,       # dia martillo neumático + miniretro
+    # Demoliciones - Maquinaria especializada
+    'EQ-ROBOT-DEMOLICION': 350000.0,           # día - Robot de demolición controlado (Brokk/Husqvarna DXR)
+    'EQ-MARTILLO-HIDRAULICO': 120000.0,        # día - Martillo hidráulico sobre excavadora (para H°A°)
+    'EQ-MARTILLO-ELECTRICO': 35000.0,          # día - Martillo eléctrico demoledor (Hilti/Bosch 15-30kg)
+    'EQ-SACATESTIGOS': 65000.0,                # día - Sacatestigos con corona diamantada (Ø50-300mm)
+    'EQ-CORTADORA-MURO': 95000.0,             # día - Cortadora de muros con disco diamantado
+    'EQ-CORTADORA-PISO': 75000.0,              # día - Cortadora de piso de hormigón (junta/corte recto)
+    'EQ-CIZALLA-HIDRAULICA': 145000.0,         # día - Cizalla hidráulica para corte de hierro/acero
+    'EQ-PINZA-DEMOLICION': 180000.0,           # día - Pinza de demolición sobre excavadora
+    'EQ-PULVERIZADOR': 160000.0,               # día - Pulverizador de hormigón (crusher) sobre excavadora
+    'EQ-MINIRETRO-DEMOL': 95000.0,             # día - Miniretroexcavadora para demolición interior
+    'EQ-MINICARGADORA-DEMOL': 85000.0,         # día - Minicargadora (Bobcat) con implementos de demolición
+    'EQ-ASPIRADORA-INDUSTRIAL': 25000.0,       # día - Aspiradora industrial para polvo de demolición
+    'EQ-SISTEMA-RIEGO-POLVO': 15000.0,         # día - Sistema de riego/nebulización para control de polvo
+    'EQ-CONTENEDOR-ESCOMBROS': 45000.0,        # día - Contenedor roll-off para escombros (6-10m³)
     'EQ-APUNTALAMIENTO': 32000.0,   # dia puntales
     'EQ-BOMBEO': 65000.0,           # dia wellpoints
     'EQ-GENERADOR': 55000.0,        # dia grupo electrogeno
@@ -1400,17 +1424,44 @@ ETAPA_REGLAS_BASE = {
     'demoliciones': {
         'nombre': 'Demoliciones',
         'materiales': [
+            # --- Items originales ---
             {'codigo': 'MAT-VOLQUETE', 'material_key': 'volquete', 'descripcion': 'Volquete para retiro de escombros', 'unidad': 'viaje', 'coef_por_m2': 0.02},
+            # --- Items del pliego ---
+            {'codigo': 'DEMOL-CORTE-CANALETAS', 'material_key': 'corte_canaletas', 'descripcion': 'Cortes de canaletas en medianeras de mampostería', 'unidad': 'ml', 'coef_por_m2': 0.15},
+            {'codigo': 'DEMOL-PICADO-REVOQUES', 'material_key': 'picado_revoques', 'descripcion': 'Picado de revoques excedentes en muros medianeros', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            # --- Insumos de demolición ---
+            {'codigo': 'MAT-DISCO-DIAMANTE', 'material_key': 'disco_diamante', 'descripcion': 'Disco diamantado para corte de H°A°', 'unidad': 'unidad', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-MECHA-SACATESTIGO', 'material_key': 'mecha_sacatestigo', 'descripcion': 'Mecha para sacatestigos (diámetros varios)', 'unidad': 'unidad', 'coef_por_m2': 0.003},
+            {'codigo': 'MAT-LONA-PROTECCION', 'material_key': 'lona_proteccion', 'descripcion': 'Lona de protección contra polvo y escombros', 'unidad': 'm²', 'coef_por_m2': 0.30},
+            {'codigo': 'MAT-CONTENEDOR-RESIDUOS', 'material_key': 'contenedor_residuos', 'descripcion': 'Contenedor de residuos peligrosos (amianto, etc.)', 'unidad': 'mes', 'coef_por_m2': 0.002},
+            {'codigo': 'MAT-AGUA-SUPRESION-POLVO', 'material_key': 'agua_supresion', 'descripcion': 'Agua para supresión de polvo', 'unidad': 'm³', 'coef_por_m2': 0.01},
         ],
         'mano_obra': [
-            {'codigo': 'MO-DEMOL', 'descripcion': 'Cuadrilla de demolición', 'unidad': 'jornal', 'coef_por_m2': 0.15}
+            {'codigo': 'MO-DEMOL', 'descripcion': 'Cuadrilla de demolición (oficial + ayudantes)', 'unidad': 'jornal', 'coef_por_m2': 0.15},
+            {'codigo': 'MO-DEMOL-ESPEC', 'descripcion': 'Operador especializado de maquinaria de demolición', 'unidad': 'jornal', 'coef_por_m2': 0.06},
         ],
         'equipos': [
+            # --- Equipos base ---
             {'codigo': 'EQ-DEMOLICION', 'descripcion': 'Martillo neumático y miniretro', 'unidad': 'día', 'dias_por_m2': 0.006, 'min_dias': 1},
             {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora para demolición', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
             {'codigo': 'EQ-CAMION-VOLC', 'descripcion': 'Camión volcador para retiro de escombros', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            # --- Maquinaria especializada (según tipo de obra) ---
+            {'codigo': 'EQ-ROBOT-DEMOLICION', 'descripcion': 'Robot de demolición controlado (Brokk/Husqvarna DXR) - obra premium', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 2},
+            {'codigo': 'EQ-MARTILLO-HIDRAULICO', 'descripcion': 'Martillo hidráulico sobre excavadora (para H°A°)', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            {'codigo': 'EQ-MARTILLO-ELECTRICO', 'descripcion': 'Martillo eléctrico demoledor (15-30kg)', 'unidad': 'día', 'dias_por_m2': 0.008, 'min_dias': 1},
+            {'codigo': 'EQ-SACATESTIGOS', 'descripcion': 'Sacatestigos con corona diamantada (Ø50-300mm)', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-CORTADORA-MURO', 'descripcion': 'Cortadora de muros con disco diamantado', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-CORTADORA-PISO', 'descripcion': 'Cortadora de piso de hormigón (junta/corte recto)', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-CIZALLA-HIDRAULICA', 'descripcion': 'Cizalla hidráulica para corte de hierro/acero estructural', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-PINZA-DEMOLICION', 'descripcion': 'Pinza de demolición sobre excavadora', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-PULVERIZADOR', 'descripcion': 'Pulverizador de hormigón (crusher) sobre excavadora', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-MINIRETRO-DEMOL', 'descripcion': 'Miniretroexcavadora para demolición interior (espacios confinados)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-MINICARGADORA-DEMOL', 'descripcion': 'Minicargadora (Bobcat) con implementos de demolición', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-ASPIRADORA-INDUSTRIAL', 'descripcion': 'Aspiradora industrial para polvo de demolición', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            {'codigo': 'EQ-SISTEMA-RIEGO-POLVO', 'descripcion': 'Sistema de riego/nebulización para control de polvo', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
+            {'codigo': 'EQ-CONTENEDOR-ESCOMBROS', 'descripcion': 'Contenedor roll-off para escombros (6-10m³)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
         ],
-        'notas': 'Demolición de estructuras existentes, picados, cortes y retiro de escombros.'
+        'notas': 'Demolición de estructuras existentes, picados, cortes de canaletas en medianeras, retiro de escombros. Incluye maquinaria especializada: robot de demolición, sacatestigos, cortadoras, cizallas hidráulicas, pinzas y pulverizadores.'
     },
     'movimiento-de-suelos': {
         'nombre': 'Movimiento de Suelos',
