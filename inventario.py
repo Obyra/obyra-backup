@@ -288,8 +288,9 @@ def lista():
     # Debug log
     current_app.logger.info(f"[INVENTARIO] org_id={org_id}, user.organizacion_id={current_user.organizacion_id}")
 
-    # Query base - usar outerjoin para incluir items aunque la categoría no exista
-    query = ItemInventario.query.outerjoin(ItemInventario.categoria)
+    # Query base - eager load categoría para evitar N+1 queries
+    from sqlalchemy.orm import joinedload
+    query = ItemInventario.query.options(joinedload(ItemInventario.categoria))
 
     # Filtrar por organización del usuario
     if org_id:

@@ -1138,29 +1138,9 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-HIERRO12', 'material_key': 'hierro_12', 'descripcion': 'Barra de acero 12mm (armadura principal)', 'unidad': 'kg', 'coef_por_m2': 3.0},
             {'codigo': 'MAT-MALLA-SIMA', 'material_key': 'malla_sima', 'descripcion': 'Malla electrosoldada SIMA', 'unidad': 'm²', 'coef_por_m2': 0.3},
             {'codigo': 'MAT-ALAMBRE-ATAR', 'material_key': 'alambre_atar', 'descripcion': 'Alambre de atar N°16', 'unidad': 'kg', 'coef_por_m2': 0.20},
-            {'codigo': 'MAT-MADERA-ENCOFRADO', 'material_key': 'madera_encofrado', 'descripcion': 'Madera/fenólico para encofrado', 'unidad': 'm²', 'coef_por_m2': 0.12},
-            {'codigo': 'MAT-FENOLICO', 'material_key': 'fenolico', 'descripcion': 'Placa fenólica para encofrado', 'unidad': 'm²', 'coef_por_m2': 0.06},
-            # Encofrado: Vigas HT20
-            {'codigo': 'MAT-VIGA-HT20-360', 'descripcion': 'Viga Sinis-Kaufmann HT20 3.60mt', 'unidad': 'unidades', 'coef_por_m2': 0.04},
-            {'codigo': 'MAT-VIGA-HT20-290', 'descripcion': 'Viga Sinis-Kaufmann HT20 2.90mt', 'unidad': 'unidades', 'coef_por_m2': 0.03},
-            # Encofrado: Tableros
-            {'codigo': 'MAT-TABLERO-TRICAPA-100', 'descripcion': 'Tablero Kaufmann K1 2.00x1.00mt 18mm (40 usos)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
-            {'codigo': 'MAT-TABLERO-FENOLICO-MARRON', 'descripcion': 'Tablero Fenólico Encomax Marrón HP 2.44x1.22mt 18mm', 'unidad': 'unidades', 'coef_por_m2': 0.01},
-            # Encofrado: Accesorios
-            {'codigo': 'MAT-CABEZAL-FIJO-CT', 'descripcion': 'Cabezal Sinis Fijo con Traba', 'unidad': 'unidades', 'coef_por_m2': 0.06},
-            {'codigo': 'MAT-CABEZAL-INTERMEDIO', 'descripcion': 'Cabezal Sinis Intermedio sin Traba', 'unidad': 'unidades', 'coef_por_m2': 0.04},
-            {'codigo': 'MAT-CABEZAL-FONDO-VIGA', 'descripcion': 'Cabezal Sinis Fondo de Viga', 'unidad': 'unidades', 'coef_por_m2': 0.02},
-            {'codigo': 'MAT-TRIPODE-UNIV', 'descripcion': 'Trípode Universal con Ajuste por Traba', 'unidad': 'unidades', 'coef_por_m2': 0.02},
-            {'codigo': 'MAT-ANGULO-SINIS-A25', 'descripcion': 'Ángulo Sinis A25 con Traba', 'unidad': 'unidades', 'coef_por_m2': 0.02},
-            {'codigo': 'MAT-EXTENSOR-PUNTAL-075', 'descripcion': 'Extensor Puntal 0.75mt', 'unidad': 'unidades', 'coef_por_m2': 0.02},
-            # Seguridad encofrado
-            {'codigo': 'MAT-POSTE-BARANDA-H20', 'descripcion': 'Poste Baranda de Protección H20', 'unidad': 'unidades', 'coef_por_m2': 0.01},
-            {'codigo': 'MAT-BASE-BARANDA-H20', 'descripcion': 'Base baranda protección H20', 'unidad': 'unidades', 'coef_por_m2': 0.01},
-            {'codigo': 'MAT-BARANDA-SINIS-SAFE', 'descripcion': 'Baranda De Seguridad Sinis Safe', 'unidad': 'unidades', 'coef_por_m2': 0.005},
         ],
         'mano_obra': [
             {'codigo': 'MO-ESTR', 'descripcion': 'Cuadrilla de estructura (oficial + ayudante)', 'unidad': 'jornal', 'coef_por_m2': 0.28},
-            {'codigo': 'MO-ESTR-ENCOFRADOR', 'descripcion': 'Encofrador especializado', 'unidad': 'jornal', 'coef_por_m2': 0.12},
         ],
         'equipos': [
             {'codigo': 'EQ-PLUMA', 'descripcion': 'Grúa pluma para elevación de materiales', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
@@ -1168,9 +1148,69 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'EQ-HORMIG', 'descripcion': 'Bomba de hormigón', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
             {'codigo': 'EQ-VIBRADOR', 'descripcion': 'Vibrador de concreto', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
             {'codigo': 'EQ-GUINCHE', 'descripcion': 'Guinche de carga para obra en altura', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
-            {'codigo': 'EQ-ENCOFRADO-PEP15-GALV', 'descripcion': 'Encofrado c/Puntales PEP 15 Galvanizado (Esp. 15/20cm, H. 3.00mt)', 'unidad': 'm²', 'dias_por_m2': 0.01, 'min_dias': 1},
         ],
-        'notas': 'Columnas, vigas, losas, tabiques de H°A° y escaleras. Incluye sistema de encofrado completo (vigas HT20, tableros, cabezales, puntales).'
+        'notas': 'Columnas, vigas, losas, tabiques de H°A° y escaleras. Hormigón, hierro y armaduras.'
+    },
+    'encofrados': {
+        'nombre': 'Encofrados',
+        'materiales': [
+            # --- Madera y fenólico ---
+            {'codigo': 'MAT-MADERA-ENCOFRADO', 'material_key': 'madera_encofrado', 'descripcion': 'Madera para encofrado', 'unidad': 'm²', 'coef_por_m2': 0.12},
+            {'codigo': 'MAT-FENOLICO', 'material_key': 'fenolico', 'descripcion': 'Placa fenólica para encofrado', 'unidad': 'm²', 'coef_por_m2': 0.06},
+            # --- Vigas HT20 (sin marca) ---
+            {'codigo': 'MAT-VIGA-HT20-180', 'material_key': 'viga_ht20_180', 'descripcion': 'Viga HT20 1.80mt (8.28kg)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-VIGA-HT20-210', 'material_key': 'viga_ht20_210', 'descripcion': 'Viga HT20 2.10mt (9.66kg)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-VIGA-HT20-260', 'material_key': 'viga_ht20_260', 'descripcion': 'Viga HT20 2.60mt (11.96kg)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-VIGA-HT20-290', 'material_key': 'viga_ht20_290', 'descripcion': 'Viga HT20 2.90mt (13.34kg)', 'unidad': 'unidades', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-VIGA-HT20-330', 'material_key': 'viga_ht20_330', 'descripcion': 'Viga HT20 3.30mt (15.18kg)', 'unidad': 'unidades', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-VIGA-HT20-360', 'material_key': 'viga_ht20_360', 'descripcion': 'Viga HT20 3.60mt (16.56kg)', 'unidad': 'unidades', 'coef_por_m2': 0.04},
+            {'codigo': 'MAT-VIGA-HT20-390', 'material_key': 'viga_ht20_390', 'descripcion': 'Viga HT20 3.90mt (17.94kg)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-VIGA-HT20-450', 'material_key': 'viga_ht20_450', 'descripcion': 'Viga HT20 4.50mt (20.70kg)', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            {'codigo': 'MAT-VIGA-HT20-490', 'material_key': 'viga_ht20_490', 'descripcion': 'Viga HT20 4.90mt (22.54kg)', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            # --- Tableros Tricapa (sin marca) ---
+            {'codigo': 'MAT-TABLERO-TRICAPA-050', 'material_key': 'tablero_tricapa_050', 'descripcion': 'Tablero Tricapa 2.00x0.50mt 18mm (40 usos)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-TABLERO-TRICAPA-100', 'material_key': 'tablero_tricapa_100', 'descripcion': 'Tablero Tricapa 2.00x1.00mt 18mm (40 usos)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-TABLERO-TRIPLY-050', 'material_key': 'tablero_triply_050', 'descripcion': 'Tablero Triply Tricapa 2.00x0.50mt 18mm (40 usos)', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            # --- Tableros Fenólicos (sin marca) ---
+            {'codigo': 'MAT-TABLERO-FENOLICO-ESPEJO', 'material_key': 'tablero_fen_espejo', 'descripcion': 'Tablero Fenólico Vista Espejo PP 2.44x1.22mt 18mm', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            {'codigo': 'MAT-TABLERO-FENOLICO-MARRON', 'material_key': 'tablero_fen_marron', 'descripcion': 'Tablero Fenólico Marrón High Performance 2.44x1.22mt 18mm', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            # --- Puntales y extensores ---
+            {'codigo': 'MAT-EXTENSOR-PUNTAL-050', 'material_key': 'extensor_050', 'descripcion': 'Extensor Puntal 0.50mt (500mm)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-EXTENSOR-PUNTAL-075', 'material_key': 'extensor_075', 'descripcion': 'Extensor Puntal 0.75mt (750mm)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-EXTENSOR-PUNTAL-100', 'material_key': 'extensor_100', 'descripcion': 'Extensor Puntal 1.00mt (1000mm)', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            # --- Cabezales y accesorios ---
+            {'codigo': 'MAT-CABEZAL-INTERMEDIO', 'material_key': 'cabezal_intermedio', 'descripcion': 'Cabezal Intermedio sin Traba (1.50kg)', 'unidad': 'unidades', 'coef_por_m2': 0.04},
+            {'codigo': 'MAT-CABEZAL-FIJO-ST', 'material_key': 'cabezal_fijo_st', 'descripcion': 'Cabezal Fijo sin Traba (3.20kg)', 'unidad': 'unidades', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-CABEZAL-FIJO-CT', 'material_key': 'cabezal_fijo_ct', 'descripcion': 'Cabezal Fijo con Traba (3.20kg)', 'unidad': 'unidades', 'coef_por_m2': 0.06},
+            {'codigo': 'MAT-CABEZAL-FONDO-VIGA', 'material_key': 'cabezal_fondo_viga', 'descripcion': 'Cabezal Fondo de Viga', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-TRIPODE-UNIV', 'material_key': 'tripode_univ', 'descripcion': 'Trípode Universal con Ajuste por Traba (10kg)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-ANGULO-SINIS-25', 'material_key': 'angulo_25', 'descripcion': 'Ángulo 25 sin Traba', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-ANGULO-SINIS-A25', 'material_key': 'angulo_a25', 'descripcion': 'Ángulo A25 con Traba', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            # --- Seguridad de encofrado ---
+            {'codigo': 'MAT-POSTE-BARANDA-H20', 'material_key': 'poste_baranda', 'descripcion': 'Poste Baranda de Protección H20', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            {'codigo': 'MAT-BASE-BARANDA-H20', 'material_key': 'base_baranda', 'descripcion': 'Base Baranda de Protección H20', 'unidad': 'unidades', 'coef_por_m2': 0.01},
+            {'codigo': 'MAT-BARANDA-SINIS-SAFE', 'material_key': 'baranda_safe', 'descripcion': 'Baranda de Seguridad Safe', 'unidad': 'unidades', 'coef_por_m2': 0.005},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-ESTR-ENCOFRADOR', 'descripcion': 'Encofrador especializado', 'unidad': 'jornal', 'coef_por_m2': 0.12},
+        ],
+        'equipos': [
+            # --- Sistemas de encofrado completos (compra) ---
+            {'codigo': 'EQ-ENCOFRADO-PEP15-ELEC', 'descripcion': 'Encofrado c/Puntales PEP 15 Eléctrico', 'unidad': 'm²', 'dias_por_m2': 0.01, 'min_dias': 1},
+            {'codigo': 'EQ-ENCOFRADO-PEP15-GALV', 'descripcion': 'Encofrado c/Puntales PEP 15 Galvanizado', 'unidad': 'm²', 'dias_por_m2': 0.01, 'min_dias': 1},
+            {'codigo': 'EQ-ENCOFRADO-PEP15-INOX', 'descripcion': 'Encofrado c/Puntales PEP 15 Inox', 'unidad': 'm²', 'dias_por_m2': 0.01, 'min_dias': 1},
+            {'codigo': 'EQ-ENCOFRADO-PEP30', 'descripcion': 'Encofrado c/Puntales PEP 30', 'unidad': 'm²', 'dias_por_m2': 0.01, 'min_dias': 1},
+            {'codigo': 'EQ-ENCOFRADO-EURO', 'descripcion': 'Encofrado c/Puntales Euro', 'unidad': 'm²', 'dias_por_m2': 0.01, 'min_dias': 1},
+            {'codigo': 'EQ-ENCOFRADO-PEP15-REAP', 'descripcion': 'Encofrado c/Puntales PEP 15 Galv c/Reapuntalamiento', 'unidad': 'm²', 'dias_por_m2': 0.01, 'min_dias': 1},
+            # --- Alquiler de encofrado ---
+            {'codigo': 'EQ-ENCOFRADO-ALQ-PEP15-ELEC', 'descripcion': 'Alquiler Encofrado PEP 15 Eléctrico', 'unidad': 'm²/día', 'dias_por_m2': 0.01, 'min_dias': 5},
+            {'codigo': 'EQ-ENCOFRADO-ALQ-PEP15-GALV', 'descripcion': 'Alquiler Encofrado PEP 15 Galvanizado', 'unidad': 'm²/día', 'dias_por_m2': 0.01, 'min_dias': 5},
+            {'codigo': 'EQ-ENCOFRADO-ALQ-PEP15-INOX', 'descripcion': 'Alquiler Encofrado PEP 15 Inox', 'unidad': 'm²/día', 'dias_por_m2': 0.01, 'min_dias': 5},
+            {'codigo': 'EQ-ENCOFRADO-ALQ-PEP30', 'descripcion': 'Alquiler Encofrado PEP 30', 'unidad': 'm²/día', 'dias_por_m2': 0.01, 'min_dias': 5},
+            {'codigo': 'EQ-ENCOFRADO-ALQ-EURO', 'descripcion': 'Alquiler Encofrado Euro', 'unidad': 'm²/día', 'dias_por_m2': 0.01, 'min_dias': 5},
+            {'codigo': 'EQ-ENCOFRADO-ALQ-REAP', 'descripcion': 'Alquiler Encofrado c/Reapuntalamiento', 'unidad': 'm²/día', 'dias_por_m2': 0.01, 'min_dias': 5},
+        ],
+        'notas': 'Sistemas de encofrado: vigas HT20, tableros tricapa y fenólicos, puntales PEP, cabezales, trípodes, extensores. Incluye opciones de compra y alquiler, y seguridad (barandas H20).'
     },
     'mamposteria': {
         'nombre': 'Mampostería',
