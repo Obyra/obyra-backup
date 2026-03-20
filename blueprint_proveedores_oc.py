@@ -167,8 +167,15 @@ def detalle(id):
     # Historial de precios
     precios = prov.historial_precios.limit(50).all()
 
+    # Historial de cotizaciones (ganadas, perdidas, todas)
+    from models.proveedores_oc import CotizacionProveedor
+    cotizaciones = CotizacionProveedor.query.filter_by(
+        proveedor_id=prov.id
+    ).order_by(CotizacionProveedor.created_at.desc()).all()
+
     return render_template('proveedores_oc/detalle.html',
-                         proveedor=prov, ordenes=ordenes, precios=precios)
+                         proveedor=prov, ordenes=ordenes, precios=precios,
+                         cotizaciones=cotizaciones)
 
 
 # ============================================================

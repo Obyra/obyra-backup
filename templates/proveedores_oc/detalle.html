@@ -213,5 +213,93 @@
             </div>
         </div>
     </div>
+
+    <!-- Historial de Cotizaciones -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-folder-open me-2"></i>Historial de Cotizaciones</h5>
+                    <span class="badge bg-light text-dark">{{ cotizaciones|length }} cotizaciones</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if cotizaciones %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Requerimiento</th>
+                                    <th>Obra</th>
+                                    <th>Fecha</th>
+                                    <th>Moneda</th>
+                                    <th class="text-end">Total</th>
+                                    <th>Estado</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cot in cotizaciones %}
+                                <tr>
+                                    <td>
+                                        {% if cot.requerimiento %}
+                                        <a href="{{ url_for('cotizaciones.gestionar', rc_id=cot.requerimiento.id) }}">
+                                            {{ cot.requerimiento.numero }}
+                                        </a>
+                                        {% if cot.requerimiento.motivo %}
+                                        <small class="text-muted d-block">{{ cot.requerimiento.motivo[:50] }}</small>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if cot.requerimiento and cot.requerimiento.obra %}
+                                        {{ cot.requerimiento.obra.presupuesto.nombre if cot.requerimiento.obra.presupuesto else '-' }}
+                                        {% else %}-{% endif %}
+                                    </td>
+                                    <td>{{ cot.created_at.strftime('%d/%m/%Y') if cot.created_at else '-' }}</td>
+                                    <td>{{ cot.moneda }}</td>
+                                    <td class="text-end">
+                                        {% if cot.total and cot.total|float > 0 %}
+                                        <strong>{{ '{:,.2f}'.format(cot.total|float) }}</strong>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if cot.estado == 'elegida' %}
+                                        <span class="badge bg-success"><i class="fas fa-trophy me-1"></i>Ganada</span>
+                                        {% elif cot.estado == 'descartada' %}
+                                        <span class="badge bg-danger"><i class="fas fa-times me-1"></i>Perdida</span>
+                                        {% elif cot.estado == 'recibida' %}
+                                        <span class="badge bg-info">Recibida</span>
+                                        {% elif cot.estado == 'borrador' %}
+                                        <span class="badge bg-secondary">Borrador</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ cot.estado }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if cot.total and cot.total|float > 0 %}
+                                        <a href="{{ url_for('cotizaciones.pdf_cotizacion', id=cot.id) }}" class="btn btn-sm btn-outline-success" title="Descargar PDF">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-folder-open fa-2x text-muted mb-2"></i>
+                        <p class="text-muted mb-0">Sin cotizaciones registradas</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
