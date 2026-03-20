@@ -678,6 +678,31 @@ PRECIO_REFERENCIA = {
     # Limpieza
     'MAT-LIMPIEZA': 3500.0,         # kit
     'MAT-CONTENEDOR-RES': 25000.0,  # mes alquiler
+    # Items complementarios de estructura/fundaciones
+    'COMP-TANQUE-INCENDIO': 648787.0,          # m³ - Tanque de incendio
+    'COMP-TANQUE-RESERVA': 623132.0,           # m³ - Tanque de reserva
+    'COMP-TANQUE-RALENTIZACION': 619298.0,     # m³ - Tanque de ralentización
+    'COMP-POZOS-BOMBEO-TANQUES': 632577.0,     # m³ - Provisión y ejecución de pozos de bombeo y tanques complementarios
+    'COMP-PISCINA-GUNITADO': 600262.0,         # m³ - Piscina en planta azotea (gunitado)
+    'COMP-HORM-LIMPIEZA-PLATEA': 209424.0,     # m³ - Hormigón de limpieza bajo platea
+    'COMP-ENSAYOS-HORMIGON': 20633902.0,       # gl - Ensayos de hormigón (probetas, rotura, certificación)
+    'COMP-POLIETILENO-200': 5166.0,            # m² - Polietileno 200 micrones entre terreno y estructura (tabiques submurales)
+    'COMP-INSERTOS-METALICOS': 793454.0,       # m² - Colocación de insertos metálicos previstos en hormigón (silletero azotea, etc.)
+    # Items complementarios adicionales (experiencia de obra)
+    'COMP-JUNTAS-DILATACION': 18500.0,         # ml - Juntas de dilatación en hormigón
+    'COMP-WATERSTOP': 12000.0,                 # ml - Waterstop PVC para juntas de hormigón
+    'COMP-ADITIVO-PLASTIFICANTE': 4500.0,      # litro - Aditivo plastificante para hormigón
+    'COMP-ADITIVO-ACELERANTE': 5200.0,         # litro - Aditivo acelerante de fragüe
+    'COMP-ADITIVO-HIDRÓFUGO': 6800.0,          # litro - Aditivo hidrófugo para hormigón
+    'COMP-FIBRA-POLIPROPILENO': 3500.0,        # kg - Fibra de polipropileno para hormigón
+    'COMP-CURADO-HORMIGON': 4200.0,            # litro - Membrana de curado para hormigón
+    'COMP-DESMOLDANTE': 3800.0,                # litro - Desmoldante para encofrado
+    'COMP-ANCLAJES-QUIMICOS': 15000.0,         # unidad - Anclajes químicos para fijación en hormigón
+    'COMP-PASATUBOS-PVC': 2500.0,              # unidad - Pasatubos PVC para cruces de instalaciones en H°
+    'COMP-SELLADOR-POLIURETANO': 8500.0,       # cartucho - Sellador poliuretánico para juntas
+    'COMP-BARRAS-ROSCADAS': 4200.0,            # ml - Barras roscadas galvanizadas para anclajes
+    'COMP-GROUT-CEMENTICIO': 12000.0,          # kg - Grout cementicio de alta resistencia (bases de equipos)
+    'COMP-MORTERO-NIVELACION': 8500.0,         # kg - Mortero autonivelante para pisos técnicos
 
     # ====================== MANO DE OBRA ======================
     'MO-PRELIM': 38000.0,           # jornal
@@ -1112,12 +1137,21 @@ ETAPA_REGLAS_BASE = {
     'fundaciones': {
         'nombre': 'Fundaciones',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-HORMIGON', 'material_key': 'hormigon', 'descripcion': 'Hormigón elaborado H21', 'unidad': 'm³', 'coef_por_m2': 0.12},
             {'codigo': 'MAT-HIERRO8', 'material_key': 'hierro_8', 'descripcion': 'Barra de acero 8mm', 'unidad': 'kg', 'coef_por_m2': 2.9},
             {'codigo': 'MAT-HIERRO12', 'material_key': 'hierro_12', 'descripcion': 'Barra de acero 12mm', 'unidad': 'kg', 'coef_por_m2': 1.8},
             {'codigo': 'MAT-ALAMBRE-ATAR', 'material_key': 'alambre_atar', 'descripcion': 'Alambre de atar N°16', 'unidad': 'kg', 'coef_por_m2': 0.15},
             {'codigo': 'MAT-MADERA-ENCOFRADO', 'material_key': 'madera_encofrado', 'descripcion': 'Madera para encofrado de fundaciones', 'unidad': 'm²', 'coef_por_m2': 0.08},
             {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Cemento Portland', 'unidad': 'bolsa', 'coef_por_m2': 0.32},
+            # --- Items complementarios ---
+            {'codigo': 'COMP-HORM-LIMPIEZA-PLATEA', 'material_key': 'horm_limpieza_platea', 'descripcion': 'Hormigón de limpieza bajo platea', 'unidad': 'm³', 'coef_por_m2': 0.02},
+            {'codigo': 'COMP-POLIETILENO-200', 'material_key': 'polietileno_200', 'descripcion': 'Polietileno 200 micrones entre terreno y estructura (tabiques submurales)', 'unidad': 'm²', 'coef_por_m2': 1.0},
+            {'codigo': 'COMP-ENSAYOS-HORMIGON', 'material_key': 'ensayos_hormigon', 'descripcion': 'Ensayos de hormigón (probetas, rotura, certificación)', 'unidad': 'gl', 'coef_por_m2': 0.001},
+            {'codigo': 'COMP-WATERSTOP', 'material_key': 'waterstop', 'descripcion': 'Waterstop PVC para juntas de hormigón', 'unidad': 'ml', 'coef_por_m2': 0.08},
+            {'codigo': 'COMP-ADITIVO-HIDRÓFUGO', 'material_key': 'aditivo_hidrofugo', 'descripcion': 'Aditivo hidrófugo para hormigón', 'unidad': 'litro', 'coef_por_m2': 0.05},
+            {'codigo': 'COMP-CURADO-HORMIGON', 'material_key': 'curado_hormigon', 'descripcion': 'Membrana de curado para hormigón', 'unidad': 'litro', 'coef_por_m2': 0.04},
+            {'codigo': 'COMP-PASATUBOS-PVC', 'material_key': 'pasatubos', 'descripcion': 'Pasatubos PVC para cruces de instalaciones en H°', 'unidad': 'unidad', 'coef_por_m2': 0.03},
         ],
         'mano_obra': [
             {'codigo': 'MO-FUND', 'descripcion': 'Cuadrilla de fundaciones (oficial + ayudante)', 'unidad': 'jornal', 'coef_por_m2': 0.22},
@@ -1127,17 +1161,36 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'EQ-HORMIG', 'descripcion': 'Bomba de hormigón', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
             {'codigo': 'EQ-VIBRADOR', 'descripcion': 'Vibrador de concreto', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
         ],
-        'notas': 'Zapatas, vigas de fundación, plateas y hormigonados primarios.'
+        'notas': 'Zapatas, vigas de fundación, plateas, hormigón de limpieza, polietileno, waterstop y ensayos.'
     },
     'estructura': {
         'nombre': 'Estructura',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-HORMIGON', 'material_key': 'hormigon', 'descripcion': 'Hormigón elaborado H25/H30', 'unidad': 'm³', 'coef_por_m2': 0.15},
             {'codigo': 'MAT-HIERRO8', 'material_key': 'hierro_8', 'descripcion': 'Barra de acero 8mm (estribos)', 'unidad': 'kg', 'coef_por_m2': 2.5},
             {'codigo': 'MAT-HIERRO10', 'material_key': 'hierro_10', 'descripcion': 'Barra de acero 10mm', 'unidad': 'kg', 'coef_por_m2': 2.0},
             {'codigo': 'MAT-HIERRO12', 'material_key': 'hierro_12', 'descripcion': 'Barra de acero 12mm (armadura principal)', 'unidad': 'kg', 'coef_por_m2': 3.0},
             {'codigo': 'MAT-MALLA-SIMA', 'material_key': 'malla_sima', 'descripcion': 'Malla electrosoldada SIMA', 'unidad': 'm²', 'coef_por_m2': 0.3},
             {'codigo': 'MAT-ALAMBRE-ATAR', 'material_key': 'alambre_atar', 'descripcion': 'Alambre de atar N°16', 'unidad': 'kg', 'coef_por_m2': 0.20},
+            # --- Items complementarios del pliego ---
+            {'codigo': 'COMP-TANQUE-INCENDIO', 'material_key': 'tanque_incendio', 'descripcion': 'Tanque de incendio', 'unidad': 'm³', 'coef_por_m2': 0.01},
+            {'codigo': 'COMP-TANQUE-RESERVA', 'material_key': 'tanque_reserva', 'descripcion': 'Tanque de reserva', 'unidad': 'm³', 'coef_por_m2': 0.015},
+            {'codigo': 'COMP-TANQUE-RALENTIZACION', 'material_key': 'tanque_ralentizacion', 'descripcion': 'Tanque de ralentización', 'unidad': 'm³', 'coef_por_m2': 0.005},
+            {'codigo': 'COMP-POZOS-BOMBEO-TANQUES', 'material_key': 'pozos_bombeo_tanques', 'descripcion': 'Provisión y ejecución de pozos de bombeo y tanques complementarios de instalaciones', 'unidad': 'm³', 'coef_por_m2': 0.002},
+            {'codigo': 'COMP-PISCINA-GUNITADO', 'material_key': 'piscina_gunitado', 'descripcion': 'Piscina en planta azotea (gunitado)', 'unidad': 'm³', 'coef_por_m2': 0.003},
+            {'codigo': 'COMP-INSERTOS-METALICOS', 'material_key': 'insertos_metalicos', 'descripcion': 'Colocación de insertos metálicos previstos en hormigón (silletero azotea, etc.)', 'unidad': 'm²', 'coef_por_m2': 0.005},
+            # --- Aditivos y complementos de hormigón ---
+            {'codigo': 'COMP-ADITIVO-PLASTIFICANTE', 'material_key': 'aditivo_plastificante', 'descripcion': 'Aditivo plastificante para hormigón', 'unidad': 'litro', 'coef_por_m2': 0.08},
+            {'codigo': 'COMP-ADITIVO-ACELERANTE', 'material_key': 'aditivo_acelerante', 'descripcion': 'Aditivo acelerante de fragüe', 'unidad': 'litro', 'coef_por_m2': 0.03},
+            {'codigo': 'COMP-FIBRA-POLIPROPILENO', 'material_key': 'fibra_polipropileno', 'descripcion': 'Fibra de polipropileno para hormigón', 'unidad': 'kg', 'coef_por_m2': 0.02},
+            {'codigo': 'COMP-DESMOLDANTE', 'material_key': 'desmoldante', 'descripcion': 'Desmoldante para encofrado', 'unidad': 'litro', 'coef_por_m2': 0.04},
+            {'codigo': 'COMP-JUNTAS-DILATACION', 'material_key': 'juntas_dilatacion', 'descripcion': 'Juntas de dilatación en hormigón', 'unidad': 'ml', 'coef_por_m2': 0.02},
+            {'codigo': 'COMP-ANCLAJES-QUIMICOS', 'material_key': 'anclajes_quimicos', 'descripcion': 'Anclajes químicos para fijación en hormigón', 'unidad': 'unidad', 'coef_por_m2': 0.01},
+            {'codigo': 'COMP-BARRAS-ROSCADAS', 'material_key': 'barras_roscadas', 'descripcion': 'Barras roscadas galvanizadas para anclajes', 'unidad': 'ml', 'coef_por_m2': 0.01},
+            {'codigo': 'COMP-GROUT-CEMENTICIO', 'material_key': 'grout_cementicio', 'descripcion': 'Grout cementicio de alta resistencia (bases de equipos)', 'unidad': 'kg', 'coef_por_m2': 0.005},
+            {'codigo': 'COMP-SELLADOR-POLIURETANO', 'material_key': 'sellador_poliuretano', 'descripcion': 'Sellador poliuretánico para juntas estructurales', 'unidad': 'cartucho', 'coef_por_m2': 0.008},
+            {'codigo': 'COMP-MORTERO-NIVELACION', 'material_key': 'mortero_nivelacion', 'descripcion': 'Mortero autonivelante para pisos técnicos', 'unidad': 'kg', 'coef_por_m2': 0.01},
         ],
         'mano_obra': [
             {'codigo': 'MO-ESTR', 'descripcion': 'Cuadrilla de estructura (oficial + ayudante)', 'unidad': 'jornal', 'coef_por_m2': 0.28},
@@ -1149,7 +1202,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'EQ-VIBRADOR', 'descripcion': 'Vibrador de concreto', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
             {'codigo': 'EQ-GUINCHE', 'descripcion': 'Guinche de carga para obra en altura', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
         ],
-        'notas': 'Columnas, vigas, losas, tabiques de H°A° y escaleras. Hormigón, hierro y armaduras.'
+        'notas': 'Columnas, vigas, losas, tabiques de H°A° y escaleras. Incluye tanques (incendio, reserva, ralentización), piscina gunitado, aditivos, insertos metálicos y complementos de hormigón.'
     },
     'encofrados': {
         'nombre': 'Encofrados',
