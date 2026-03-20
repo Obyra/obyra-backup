@@ -722,6 +722,31 @@ PRECIO_REFERENCIA = {
     # Contrapisos
     'MAT-CONTRAPISO': 9500.0,       # m3
     'MAT-CARPETA': 7800.0,          # m3
+    # Contrapisos y carpetas - Items del pliego
+    'CP-5SS-MALLA-SIMA': 46694.0,              # m² - Contrapiso 5°SS H°A° sobre terreno, malla SIMA sup e inf Ø8 c/15
+    'CP-4SS-MALLA-SIMA': 46694.0,              # m² - Contrapiso 4°SS H°A° con y sin pendiente, malla SIMA Ø8c/15 (bajo piso)
+    'CP-H21-15CM-MALLA': 23550.0,              # m² - Contrapiso H°A° H21 esp 15cm con y sin pendiente, malla SIMA Ø4.2c/15
+    'CP-SOBRE-CASCOTE': 18209.0,               # m² - Contrapiso sobre terreno compactado H° de cascote
+    'CP-HORM-POBRE-PET': 10472.0,              # m² - Contrapiso de hormigón pobre s/PET
+    'CP-HORM-POBRE-CANALETAS': 10472.0,        # m² - Contrapiso H° pobre sobre losa con canaletas de drenaje s/PET
+    'CP-ALIVIANADO-ISOCRET': 20884.0,          # m² - Contrapiso alivianado (tipo Isocret d=350) con pendiente para azotea
+    'CP-BABETAS': 4177.0,                      # ml - Babetas
+    'CP-CARPETA-NIVELACION': 6600.0,           # m² - Carpeta de nivelación tradicional
+    'CP-CARPETA-MONOLITICA': 10133.0,          # m² - Carpeta monolítica (marca y tipo a definir por DDO)
+    'CP-CARPETA-BAJO-TECHADO': 6600.0,         # m² - Carpeta de nivelación bajo techado, azoteas y balcones con pendiente
+    'CP-CARPETA-PROTECCION': 8016.0,           # m² - Carpeta de protección sobre techados / aislaciones
+    'CP-CARPETAS-SS': 6600.0,                  # m² - Carpetas en subsuelos
+    # Contrapisos - Materiales adicionales
+    'MAT-HORMIGON-CASCOTE': 15000.0,           # m³ - Hormigón de cascote para contrapiso
+    'MAT-ISOCRET-PERLITA': 18500.0,            # m³ - Hormigón alivianado tipo Isocret (perlita expandida)
+    'MAT-ARCILLA-EXPANDIDA': 12000.0,          # m³ - Arcilla expandida para contrapiso alivianado
+    'MAT-FILM-POLIETILENO': 1200.0,            # m² - Film de polietileno 200 micrones (barrera humedad)
+    'MAT-JUNTA-DILATACION-CP': 2500.0,         # ml - Junta de dilatación para contrapisos
+    'MAT-FIBRA-PP-CONTRAPISO': 3200.0,         # kg - Fibra de polipropileno para contrapisos
+    'MAT-ADITIVO-CURADO-CP': 4500.0,           # litro - Aditivo de curado para carpetas
+    'MAT-ENDURECEDOR-SUPERFICIE': 8500.0,      # kg - Endurecedor de superficie para pisos industriales
+    'MAT-AUTONIVELANTE': 12000.0,              # bolsa(25kg) - Mortero autonivelante para carpetas
+    'MAT-PASTINA-EPOXI-CP': 15000.0,           # kg - Pastina epoxi para juntas de contrapiso industrial
     # Pisos y revestimientos
     'MAT-REVESTIMIENTO': 18500.0,   # m2 ceramico/porcellanato
     'MAT-CERAMICO-REV': 19200.0,    # m2 ceramico pared
@@ -874,6 +899,7 @@ PRECIO_REFERENCIA = {
     'MO-CIELORRASO': 43000.0,
     'MO-YESERO': 42000.0,
     'MO-CONTRAPISO': 41000.0,
+    'MO-CONTRAPISO-SOLADOR': 55000.0, # jornal operador soladora/alisadora
     'MO-PISOS': 42500.0,
     'MO-REVESTIMIENTO': 43500.0,
     'MO-CARP': 48800.0,
@@ -923,6 +949,15 @@ PRECIO_REFERENCIA = {
     'EQ-ELEVADOR': 78500.0,         # dia elevador cristales
     'EQ-ELEVADOR-PERS': 95000.0,    # dia plataforma elevadora personas
     'EQ-HIDROLAVADORA': 15500.0,    # dia
+    # Contrapisos y carpetas - Maquinaria
+    'EQ-ALISADORA-HELICOPTERO': 45000.0,       # día - Alisadora mecánica helicóptero (power trowel)
+    'EQ-ALISADORA-DOBLE': 75000.0,             # día - Alisadora mecánica doble (ride-on)
+    'EQ-SOLADORA-LASER': 120000.0,             # día - Soladora láser para pisos industriales
+    'EQ-REGLA-VIBRATORIA-CP': 18000.0,         # día - Regla vibratoria para nivelación de contrapisos
+    'EQ-CORTADORA-JUNTAS': 25000.0,            # día - Cortadora de juntas para contrapiso (disco diamantado)
+    'EQ-BOMBA-MEZCLA': 35000.0,                # día - Bomba de mezcla para contrapiso/carpeta
+    'EQ-NIVEL-LASER-CP': 15000.0,              # día - Nivel láser rotativo para nivelación
+    'EQ-FRATASADORA-MECANICA': 22000.0,        # día - Fratasadora mecánica para carpetas
     'EQ-DEMOLICION': 85000.0,       # dia martillo neumático + miniretro
     # Demoliciones - Maquinaria especializada
     'EQ-ROBOT-DEMOLICION': 350000.0,           # día - Robot de demolición controlado (Brokk/Husqvarna DXR)
@@ -2139,20 +2174,59 @@ ETAPA_REGLAS_BASE = {
     'contrapisos-carpetas': {
         'nombre': 'Contrapisos y Carpetas',
         'materiales': [
+            # --- Materiales base ---
             {'codigo': 'MAT-CONTRAPISO', 'material_key': 'contrapiso', 'descripcion': 'Hormigón pobre para contrapiso', 'unidad': 'm³', 'coef_por_m2': 0.08},
             {'codigo': 'MAT-CARPETA', 'material_key': 'carpeta', 'descripcion': 'Mortero para carpeta de nivelación', 'unidad': 'm³', 'coef_por_m2': 0.03},
             {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena para mezcla', 'unidad': 'm³', 'coef_por_m2': 0.04},
             {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Cemento Portland', 'unidad': 'bolsa', 'coef_por_m2': 0.15},
             {'codigo': 'MAT-POLIESTIRENO', 'material_key': 'poliestireno', 'descripcion': 'Poliestireno expandido para aislación bajo contrapiso', 'unidad': 'm²', 'coef_por_m2': 0.3},
             {'codigo': 'MAT-MALLA-SIMA', 'material_key': 'malla_sima', 'descripcion': 'Malla electrosoldada para contrapiso', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            # --- Del pliego: contrapisos por tipo ---
+            {'codigo': 'CP-5SS-MALLA-SIMA', 'material_key': 'cp_5ss', 'descripcion': 'Contrapiso 5°SS H°A° sobre terreno, malla SIMA sup e inf Ø8 c/15', 'unidad': 'm²', 'coef_por_m2': 0.03},
+            {'codigo': 'CP-4SS-MALLA-SIMA', 'material_key': 'cp_4ss', 'descripcion': 'Contrapiso 4°SS H°A° con y sin pendiente, malla SIMA Ø8c/15 (bajo piso)', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'CP-H21-15CM-MALLA', 'material_key': 'cp_h21', 'descripcion': 'Contrapiso H°A° H21 esp 15cm con y sin pendiente, malla SIMA Ø4.2c/15', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            {'codigo': 'CP-SOBRE-CASCOTE', 'material_key': 'cp_cascote', 'descripcion': 'Contrapiso sobre terreno compactado H° de cascote', 'unidad': 'm²', 'coef_por_m2': 0.02},
+            {'codigo': 'CP-HORM-POBRE-PET', 'material_key': 'cp_pobre', 'descripcion': 'Contrapiso de hormigón pobre s/PET', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'CP-HORM-POBRE-CANALETAS', 'material_key': 'cp_canaletas', 'descripcion': 'Contrapiso H° pobre sobre losa con canaletas de drenaje s/PET', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'CP-ALIVIANADO-ISOCRET', 'material_key': 'cp_alivianado', 'descripcion': 'Contrapiso alivianado (perlita expandida d=350) con pendiente azotea', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            # --- Del pliego: carpetas por tipo ---
+            {'codigo': 'CP-CARPETA-NIVELACION', 'material_key': 'carpeta_nivelacion', 'descripcion': 'Carpeta de nivelación tradicional', 'unidad': 'm²', 'coef_por_m2': 0.30},
+            {'codigo': 'CP-CARPETA-MONOLITICA', 'material_key': 'carpeta_monolitica', 'descripcion': 'Carpeta monolítica', 'unidad': 'm²', 'coef_por_m2': 0.20},
+            {'codigo': 'CP-CARPETA-BAJO-TECHADO', 'material_key': 'carpeta_techado', 'descripcion': 'Carpeta de nivelación bajo techado, azoteas y balcones con pendiente', 'unidad': 'm²', 'coef_por_m2': 0.10},
+            {'codigo': 'CP-CARPETA-PROTECCION', 'material_key': 'carpeta_proteccion', 'descripcion': 'Carpeta de protección sobre techados / aislaciones', 'unidad': 'm²', 'coef_por_m2': 0.15},
+            {'codigo': 'CP-CARPETAS-SS', 'material_key': 'carpetas_ss', 'descripcion': 'Carpetas en subsuelos', 'unidad': 'm²', 'coef_por_m2': 0.05},
+            {'codigo': 'CP-BABETAS', 'material_key': 'cp_babetas', 'descripcion': 'Babetas', 'unidad': 'ml', 'coef_por_m2': 0.10},
+            # --- Materiales adicionales ---
+            {'codigo': 'MAT-HORMIGON-CASCOTE', 'material_key': 'horm_cascote', 'descripcion': 'Hormigón de cascote para contrapiso', 'unidad': 'm³', 'coef_por_m2': 0.04},
+            {'codigo': 'MAT-ISOCRET-PERLITA', 'material_key': 'isocret', 'descripcion': 'Hormigón alivianado (perlita expandida)', 'unidad': 'm³', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-ARCILLA-EXPANDIDA', 'material_key': 'arcilla_expandida', 'descripcion': 'Arcilla expandida para contrapiso alivianado', 'unidad': 'm³', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-FILM-POLIETILENO', 'material_key': 'film_polietileno', 'descripcion': 'Film de polietileno 200 micrones (barrera humedad)', 'unidad': 'm²', 'coef_por_m2': 0.80},
+            {'codigo': 'MAT-JUNTA-DILATACION-CP', 'material_key': 'junta_cp', 'descripcion': 'Junta de dilatación para contrapisos', 'unidad': 'ml', 'coef_por_m2': 0.04},
+            {'codigo': 'MAT-FIBRA-PP-CONTRAPISO', 'material_key': 'fibra_pp_cp', 'descripcion': 'Fibra de polipropileno para contrapisos', 'unidad': 'kg', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-ADITIVO-CURADO-CP', 'material_key': 'curado_cp', 'descripcion': 'Aditivo de curado para carpetas', 'unidad': 'litro', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-ENDURECEDOR-SUPERFICIE', 'material_key': 'endurecedor', 'descripcion': 'Endurecedor de superficie para pisos industriales', 'unidad': 'kg', 'coef_por_m2': 0.01},
+            {'codigo': 'MAT-AUTONIVELANTE', 'material_key': 'autonivelante', 'descripcion': 'Mortero autonivelante para carpetas (bolsa 25kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.05},
+            {'codigo': 'MAT-PASTINA-EPOXI-CP', 'material_key': 'pastina_epoxi', 'descripcion': 'Pastina epoxi para juntas de contrapiso industrial', 'unidad': 'kg', 'coef_por_m2': 0.005},
         ],
         'mano_obra': [
-            {'codigo': 'MO-CONTRAPISO', 'descripcion': 'Oficial albañil + ayudante', 'unidad': 'jornal', 'coef_por_m2': 0.18}
+            {'codigo': 'MO-CONTRAPISO', 'descripcion': 'Oficial albañil + ayudante (contrapisos)', 'unidad': 'jornal', 'coef_por_m2': 0.18},
+            {'codigo': 'MO-CONTRAPISO-SOLADOR', 'descripcion': 'Operador de soladora láser / alisadora', 'unidad': 'jornal', 'coef_por_m2': 0.06},
         ],
         'equipos': [
+            # --- Mezcla y bombeo ---
             {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Mezcladora / hormigonera', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-BOMBA-MEZCLA', 'descripcion': 'Bomba de mezcla para contrapiso/carpeta', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            # --- Alisadoras y soladoras ---
+            {'codigo': 'EQ-ALISADORA-HELICOPTERO', 'descripcion': 'Alisadora mecánica helicóptero (power trowel)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1},
+            {'codigo': 'EQ-ALISADORA-DOBLE', 'descripcion': 'Alisadora mecánica doble (ride-on) para grandes superficies', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-SOLADORA-LASER', 'descripcion': 'Soladora láser para pisos industriales', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 2},
+            {'codigo': 'EQ-FRATASADORA-MECANICA', 'descripcion': 'Fratasadora mecánica para carpetas', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            # --- Nivelación y corte ---
+            {'codigo': 'EQ-REGLA-VIBRATORIA-CP', 'descripcion': 'Regla vibratoria para nivelación de contrapisos', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-CORTADORA-JUNTAS', 'descripcion': 'Cortadora de juntas para contrapiso (disco diamantado)', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            {'codigo': 'EQ-NIVEL-LASER-CP', 'descripcion': 'Nivel láser rotativo para nivelación', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
         ],
-        'notas': 'Contrapiso de hormigón, carpeta de cemento alisado con pendientes, aislación.'
+        'notas': 'Contrapisos H°A° para subsuelos con malla SIMA, H° pobre, alivianado perlita/arcilla, cascote. Carpetas: nivelación, monolítica, protección, bajo techado, subsuelos. Maquinaria: soladora láser, alisadora helicóptero/doble, fratasadora, regla vibratoria, cortadora juntas.'
     },
     # 'revestimientos' → fusionado en 'pisos' como "Pisos y Revestimientos"
     # 'provisiones-colocaciones' → fusionado en 'instalaciones-sanitarias' como "Inst. Sanitarias y Provisiones"
