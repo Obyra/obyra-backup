@@ -891,7 +891,7 @@ PRECIO_REFERENCIA = {
     'EQ-ANDAMIO-MULTIDIRECCIONAL': 45000.0,   # día - Andamio multidireccional (ringlock/cuplock)
     'EQ-ANDAMIO-TUBULAR-FACHADA': 32000.0,    # día - Andamio tubular de fachada (con plataformas)
     # Maquinaria de revoque
-    'EQ-REVOCADORA-PROYECCION': 85000.0,       # día - Máquina revocadora de proyección (PFT/Putzmeister)
+    'EQ-REVOCADORA-PROYECCION': 85000.0,       # día - Máquina revocadora de proyección
     'EQ-MEZCLADORA-CONTINUA': 45000.0,         # día - Mezcladora continua para premezclados
     'EQ-FRATACHADORA-ELECTRICA': 18000.0,      # día - Fratachadora eléctrica (alisadora)
     'EQ-FRATACHADORA-MANUAL': 3500.0,          # día - Fratachín/fratacho manual (herramienta)
@@ -1551,7 +1551,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'EQ-ANDAMIO-TUBULAR-FACHADA', 'descripcion': 'Andamio tubular de fachada (con plataformas)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 5},
             {'codigo': 'EQ-MONTACARGAS', 'descripcion': 'Montacargas para subir materiales', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
             # --- Máquinas de revoque ---
-            {'codigo': 'EQ-REVOCADORA-PROYECCION', 'descripcion': 'Máquina revocadora de proyección (PFT/Putzmeister)', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 3},
+            {'codigo': 'EQ-REVOCADORA-PROYECCION', 'descripcion': 'Máquina revocadora de proyección', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 3},
             {'codigo': 'EQ-MEZCLADORA-CONTINUA', 'descripcion': 'Mezcladora continua para premezclados', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 2},
             # --- Fratachadoras y alisadoras ---
             {'codigo': 'EQ-FRATACHADORA-ELECTRICA', 'descripcion': 'Fratachadora eléctrica (alisadora)', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
