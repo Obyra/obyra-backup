@@ -191,9 +191,16 @@ def detalle(id):
         activo=True
     ).order_by(ProveedorOC.razon_social).all()
 
+    # Admin/PM puede editar cantidades si no está completado ni cancelado
+    puede_editar_items = (
+        current_user.rol in ('administrador', 'admin', 'project_manager')
+        or current_user.is_super_admin
+    ) and requerimiento.estado not in ('completado', 'cancelado')
+
     return render_template('requerimientos/detalle.html',
                           requerimiento=requerimiento,
-                          proveedores=proveedores)
+                          proveedores=proveedores,
+                          puede_editar_items=puede_editar_items)
 
 
 @requerimientos_bp.route('/<int:id>/aprobar', methods=['POST'])
@@ -759,3 +766,47 @@ def _notificar_cambio_estado(requerimiento, nuevo_estado):
 
     except Exception as e:
         current_app.logger.error(f"Error notificando cambio estado: {e}")
+
+
+# ============================================================
+# API: EDITAR CANTIDAD DE ITEM
+# ============================================================
+
+@requerimientos_bp.route('/api/item/<int:item_id>/cantidad', methods=['POST'])
+@login_required
+def api_editar_cantidad_item(item_id):
+    """Permite a admin/PM editar la cantidad de un item del requerimiento."""
+    from models.inventory import RequerimientoCompraItem, RequerimientoCompra
+
+    item = RequerimientoCompraItem.query.get_or_404(item_id)
+    requerimiento = RequerimientoCompra.query.get(item.requerimiento_id)
+
+    if not requerimiento or requerimiento.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+
+    # Solo admin/PM pueden editar
+    es_admin = current_user.rol in ('administrador', 'admin', 'project_manager') or current_user.is_super_admin
+    if not es_admin:
+        return jsonify({'ok': False, 'error': 'Solo administradores pueden editar cantidades'}), 403
+
+    # No editar si completado o cancelado
+    if requerimiento.estado in ('completado', 'cancelado'):
+        return jsonify({'ok': False, 'error': f'No se puede editar en estado {requerimiento.estado}'}), 400
+
+    data = request.get_json()
+    nueva_cantidad = data.get('cantidad')
+
+    if nueva_cantidad is None or nueva_cantidad < 0:
+        return jsonify({'ok': False, 'error': 'Cantidad inválida'}), 400
+
+    try:
+        item.cantidad = float(nueva_cantidad)
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'item_id': item.id,
+            'cantidad': float(item.cantidad)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
