@@ -2671,7 +2671,8 @@ def limpiar_marca_item(nombre):
     import re
     # Marcas comunes de construcción en Argentina
     marcas = [
-        'Sinis-Kaufmann', 'Sinis Kaufmann', 'Kaufmann', 'Sinis',
+        'Sinis-Kaufmann', 'Sinis Kaufmann', 'Kaufmann', 'Sinis', 'Encomax',
+        'Brokk', 'Husqvarna', 'Hilti', 'Putzmeister', 'PFT', 'Atrim',
         'Klaukol', 'Weber', 'Loma Negra', 'Acindar', 'Siderar', 'Ternium',
         'Isover', 'Durlock', 'Knauf', 'Tigre', 'Amanco', 'Rotoplas',
         'Cerro Negro', 'Ctibor', 'Fanelli', 'FV', 'Griferia FV',

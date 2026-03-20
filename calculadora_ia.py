@@ -504,13 +504,13 @@ PRECIO_REFERENCIA = {
     'MAT-VIGA-HT20-490': 52300.0,   # unidad - Viga HT20 4.90mt (22.54kg)
 
     # ---- Encofrado: Tableros Tricapa 18mm ----
-    'MAT-TABLERO-TRICAPA-050': 28800.0,  # unidad - Kaufmann K1 2.00x0.50mt 18mm (40 usos)
-    'MAT-TABLERO-TRICAPA-100': 48000.0,  # unidad - Kaufmann K1 2.00x1.00mt 18mm (40 usos)
-    'MAT-TABLERO-TRIPLY-050': 26400.0,   # unidad - Encomax Triply Tricapa 2.00x0.50mt 18mm (40 usos)
+    'MAT-TABLERO-TRICAPA-050': 28800.0,  # unidad - Tablero Tricapa 2.00x0.50mt 18mm (40 usos)
+    'MAT-TABLERO-TRICAPA-100': 48000.0,  # unidad - Tablero Tricapa 2.00x1.00mt 18mm (40 usos)
+    'MAT-TABLERO-TRIPLY-050': 26400.0,   # unidad - Tablero Triply Tricapa 2.00x0.50mt 18mm (40 usos)
 
     # ---- Encofrado: Tableros Fenólicos 18mm ----
-    'MAT-TABLERO-FENOLICO-ESPEJO': 52800.0,  # unidad - Encomax Vista Espejo PP 2.44x1.22mt 18mm
-    'MAT-TABLERO-FENOLICO-MARRON': 48000.0,  # unidad - Encomax Marrón High Performance 2.44x1.22mt 18mm
+    'MAT-TABLERO-FENOLICO-ESPEJO': 52800.0,  # unidad - Tablero Fenólico Vista Espejo PP 2.44x1.22mt 18mm
+    'MAT-TABLERO-FENOLICO-MARRON': 48000.0,  # unidad - Tablero Fenólico Marrón High Performance 2.44x1.22mt 18mm
 
     # ---- Encofrado: Puntales y Extensores ----
     'MAT-EXTENSOR-PUNTAL-050': 12000.0,  # unidad - Extensor Puntal 0.50mt (500mm)
@@ -519,17 +519,17 @@ PRECIO_REFERENCIA = {
 
     # ---- Encofrado: Accesorios ----
     'MAT-TRIPODE-UNIV': 36000.0,          # unidad - Trípode Universal con Ajuste por Traba (10kg)
-    'MAT-CABEZAL-INTERMEDIO': 9600.0,     # unidad - Cabezal Sinis Intermedio sin Traba (1.50kg)
-    'MAT-CABEZAL-FIJO-ST': 14400.0,       # unidad - Cabezal Sinis Fijo sin Traba (3.20kg)
-    'MAT-CABEZAL-FIJO-CT': 16800.0,       # unidad - Cabezal Sinis Fijo con Traba (3.20kg)
-    'MAT-CABEZAL-FONDO-VIGA': 18000.0,    # unidad - Cabezal Sinis Fondo de Viga
-    'MAT-ANGULO-SINIS-25': 8400.0,        # unidad - Ángulo Sinis 25 - Sin Traba
-    'MAT-ANGULO-SINIS-A25': 9600.0,       # unidad - Ángulo Sinis A25 - con Traba
+    'MAT-CABEZAL-INTERMEDIO': 9600.0,     # unidad - Cabezal Intermedio sin Traba (1.50kg)
+    'MAT-CABEZAL-FIJO-ST': 14400.0,       # unidad - Cabezal Fijo sin Traba (3.20kg)
+    'MAT-CABEZAL-FIJO-CT': 16800.0,       # unidad - Cabezal Fijo con Traba (3.20kg)
+    'MAT-CABEZAL-FONDO-VIGA': 18000.0,    # unidad - Cabezal Fondo de Viga
+    'MAT-ANGULO-SINIS-25': 8400.0,        # unidad - Ángulo 25 - Sin Traba
+    'MAT-ANGULO-SINIS-A25': 9600.0,       # unidad - Ángulo A25 - con Traba
 
     # ---- Encofrado: Seguridad ----
     'MAT-POSTE-BARANDA-H20': 14400.0,     # unidad - Poste Baranda de Protección H20
     'MAT-BASE-BARANDA-H20': 9600.0,       # unidad - Base baranda protección H20
-    'MAT-BARANDA-SINIS-SAFE': 21600.0,    # unidad - Baranda De Seguridad Sinis Safe
+    'MAT-BARANDA-SINIS-SAFE': 21600.0,    # unidad - Baranda de Seguridad Safe
     # Impermeabilizacion y aislacion
     'MAT-IMPER': 15700.0,           # m2 membrana asfaltica
     'MAT-MEMBRANA-IMP': 15700.0,    # m2

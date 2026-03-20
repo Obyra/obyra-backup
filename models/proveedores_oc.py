@@ -239,6 +239,10 @@ class CotizacionProveedorItem(db.Model):
     # Referencia a inventario
     item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
 
+    # Modalidad: compra o alquiler
+    modalidad = db.Column(db.String(20), default='compra')  # 'compra' o 'alquiler'
+    dias_alquiler = db.Column(db.Integer, nullable=True)  # días de alquiler (si aplica)
+
     # Observaciones del proveedor
     notas = db.Column(db.Text)
 
@@ -251,7 +255,12 @@ class CotizacionProveedorItem(db.Model):
         return f'<CotizacionProveedorItem {self.descripcion}>'
 
     def recalcular_subtotal(self):
-        self.subtotal = float(self.precio_unitario or 0) * float(self.cantidad or 0)
+        precio = float(self.precio_unitario or 0)
+        cant = float(self.cantidad or 0)
+        if self.modalidad == 'alquiler' and self.dias_alquiler:
+            self.subtotal = precio * cant * int(self.dias_alquiler)
+        else:
+            self.subtotal = precio * cant
 
     def to_dict(self):
         return {

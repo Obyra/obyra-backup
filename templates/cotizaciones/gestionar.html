@@ -77,13 +77,14 @@
                                 <table class="table table-sm table-hover">
                                     <thead>
                                         <tr>
-                                            <th style="width:28%">Descripcion</th>
-                                            <th style="width:8%">Cant.</th>
-                                            <th style="width:8%">Unidad</th>
-                                            <th style="width:16%">Precio Unit.</th>
-                                            <th style="width:16%">Subtotal</th>
-                                            <th style="width:14%">Equivalente</th>
-                                            <th style="width:10%">Notas</th>
+                                            <th style="width:24%">Descripcion</th>
+                                            <th style="width:7%">Cant.</th>
+                                            <th style="width:6%">Unidad</th>
+                                            <th style="width:12%">Modalidad</th>
+                                            <th style="width:13%">Precio Unit.</th>
+                                            <th style="width:13%">Subtotal</th>
+                                            <th style="width:12%">Equivalente</th>
+                                            <th style="width:8%">Notas</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -94,11 +95,33 @@
                                             <td>{{ item.unidad }}</td>
                                             <td>
                                                 {% if cot.estado in ('borrador', 'recibida') %}
+                                                <select class="form-select form-select-sm" name="modalidad_{{ item.id }}" onchange="toggleDiasAlquiler(this, {{ item.id }})">
+                                                    <option value="compra" {{ 'selected' if (item.modalidad or 'compra') == 'compra' }}>Compra</option>
+                                                    <option value="alquiler" {{ 'selected' if item.modalidad == 'alquiler' }}>Alquiler</option>
+                                                </select>
+                                                <input type="number" min="1" class="form-control form-control-sm mt-1"
+                                                       name="dias_alquiler_{{ item.id }}" placeholder="Días"
+                                                       value="{{ item.dias_alquiler or '' }}"
+                                                       id="dias_alq_{{ item.id }}"
+                                                       style="display:{{ 'block' if item.modalidad == 'alquiler' else 'none' }}">
+                                                {% else %}
+                                                <span class="badge {{ 'bg-info' if item.modalidad == 'alquiler' else 'bg-secondary' }}">
+                                                    {{ (item.modalidad or 'compra')|title }}
+                                                </span>
+                                                {% if item.modalidad == 'alquiler' and item.dias_alquiler %}
+                                                <small class="d-block text-muted">{{ item.dias_alquiler }} días</small>
+                                                {% endif %}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if cot.estado in ('borrador', 'recibida') %}
                                                 <input type="number" step="0.01" min="0"
                                                        class="form-control form-control-sm precio-input"
                                                        name="precio_{{ item.id }}"
                                                        value="{{ '{:g}'.format(item.precio_unitario|float) }}"
-                                                       data-cantidad="{{ item.cantidad|float }}">
+                                                       data-cantidad="{{ item.cantidad|float }}"
+                                                       data-modalidad="{{ item.modalidad or 'compra' }}"
+                                                       data-dias="{{ item.dias_alquiler or 0 }}">
                                                 {% else %}
                                                 <strong>{{ cot.moneda }} {{ formatPrecio(item.precio_unitario|float) }}</strong>
                                                 {% endif %}
@@ -388,6 +411,15 @@ function actualizarEquivalentes() {
 cargarTipoCambio();
 
 // ============================================================
+// Toggle días de alquiler
+function toggleDiasAlquiler(select, itemId) {
+    var diasInput = document.getElementById('dias_alq_' + itemId);
+    if (diasInput) {
+        diasInput.style.display = select.value === 'alquiler' ? 'block' : 'none';
+        if (select.value !== 'alquiler') diasInput.value = '';
+    }
+}
+
 // Seleccionar proveedor del dropdown
 function seleccionarProveedor(select) {
     document.getElementById('proveedorOcId').value = select.value;

@@ -1240,6 +1240,22 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Cotizaciones proveedor migration skipped: {e}")
 
+    # Modalidad compra/alquiler en cotizacion_proveedor_items
+    try:
+        db.session.execute(text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name='cotizacion_proveedor_items' AND column_name='modalidad') THEN
+                ALTER TABLE cotizacion_proveedor_items ADD COLUMN modalidad VARCHAR(20) DEFAULT 'compra';
+                ALTER TABLE cotizacion_proveedor_items ADD COLUMN dias_alquiler INTEGER;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] Cotizaciones modalidad compra/alquiler migration applied")
+    except Exception as e:
+        print(f"[WARN] Cotizaciones modalidad migration skipped: {e}")
+
     # Remitos + Stock Obra tables
     try:
         remitos_sql = """

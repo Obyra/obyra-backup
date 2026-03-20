@@ -180,8 +180,15 @@ def cargar_precios(id):
                 precio = 0
 
             item.precio_unitario = precio
-            item.subtotal = precio * float(item.cantidad or 0)
             item.notas = nota_item or None
+
+            # Modalidad compra/alquiler
+            modalidad = request.form.get(f'modalidad_{item.id}', 'compra')
+            item.modalidad = modalidad
+            dias_alq = request.form.get(f'dias_alquiler_{item.id}', '').strip()
+            item.dias_alquiler = int(dias_alq) if dias_alq and modalidad == 'alquiler' else None
+
+            item.recalcular_subtotal()
 
             if precio > 0:
                 tiene_precios = True
