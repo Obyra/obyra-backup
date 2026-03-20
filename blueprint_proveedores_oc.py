@@ -160,18 +160,28 @@ def detalle(id):
         return redirect(url_for('proveedores_oc.lista'))
 
     # OC vinculadas
-    ordenes = OrdenCompra.query.filter_by(
-        proveedor_oc_id=prov.id
-    ).order_by(OrdenCompra.created_at.desc()).all()
+    try:
+        ordenes = OrdenCompra.query.filter_by(
+            proveedor_oc_id=prov.id
+        ).order_by(OrdenCompra.created_at.desc()).all()
+    except Exception:
+        ordenes = []
 
     # Historial de precios
-    precios = prov.historial_precios.limit(50).all()
+    try:
+        precios = prov.historial_precios.limit(50).all()
+    except Exception:
+        precios = []
 
     # Historial de cotizaciones (ganadas, perdidas, todas)
-    from models.proveedores_oc import CotizacionProveedor
-    cotizaciones = CotizacionProveedor.query.filter_by(
-        proveedor_id=prov.id
-    ).order_by(CotizacionProveedor.created_at.desc()).all()
+    cotizaciones = []
+    try:
+        from models.proveedores_oc import CotizacionProveedor
+        cotizaciones = CotizacionProveedor.query.filter_by(
+            proveedor_id=prov.id
+        ).order_by(CotizacionProveedor.created_at.desc()).all()
+    except Exception:
+        pass
 
     return render_template('proveedores_oc/detalle.html',
                          proveedor=prov, ordenes=ordenes, precios=precios,
