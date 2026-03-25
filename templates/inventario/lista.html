@@ -686,7 +686,7 @@ function abrirModalIngreso(itemId, itemNombre, stockActual) {
     document.getElementById('ingreso_stock_actual').textContent = stockActual;
 
     const formIngreso = document.getElementById('formIngreso');
-    formIngreso.action = `/inventario/registrar_movimiento/${itemId}`;
+    formIngreso.action = `/inventario/${itemId}/movimiento`;
 
     document.getElementById('ingreso_cantidad').value = '';
     document.getElementById('ingreso_precio').value = '';

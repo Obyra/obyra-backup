@@ -1804,7 +1804,8 @@ with app.app_context():
                         try:
                             iid = item.id
                             # Limpiar TODAS las tablas con FK a items_inventario via SQL directo
-                            tablas_fk_directa = [
+                            # Limpiar FKs: DELETE de tablas relacionadas
+                            for tbl_col in [
                                 'movimientos_inventario:item_id',
                                 'uso_inventario:item_id',
                                 'stock_ubicacion:item_inventario_id',
@@ -1814,26 +1815,30 @@ with app.app_context():
                                 'movimientos_stock_obra:item_inventario_id',
                                 'global_material_usage:item_inventario_id',
                                 'item_categorias_adicionales:item_id',
-                            ]
-                            for tabla_col in tablas_fk_directa:
-                                tabla, col = tabla_col.split(':')
-                                db.session.execute(text(
-                                    f"DELETE FROM {tabla} WHERE {col} = :iid"
-                                ), {'iid': iid})
+                            ]:
+                                tbl, col = tbl_col.split(':')
+                                try:
+                                    db.session.execute(text(
+                                        f"DELETE FROM {tbl} WHERE {col} = :iid"
+                                    ), {'iid': iid})
+                                except Exception:
+                                    pass  # tabla puede no existir
 
-                            # Desvincular FKs nullable (no borrar, solo poner NULL)
-                            tablas_fk_nullable = [
+                            # Desvincular FKs nullable (SET NULL)
+                            for tbl_col in [
                                 'items_cotizacion:item_inventario_id',
                                 'items_presupuesto:item_inventario_id',
                                 'requerimiento_compra_items:item_inventario_id',
                                 'orden_compra_items:item_inventario_id',
                                 'remito_items:item_inventario_id',
-                            ]
-                            for tabla_col in tablas_fk_nullable:
-                                tabla, col = tabla_col.split(':')
-                                db.session.execute(text(
-                                    f"UPDATE {tabla} SET {col} = NULL WHERE {col} = :iid"
-                                ), {'iid': iid})
+                            ]:
+                                tbl, col = tbl_col.split(':')
+                                try:
+                                    db.session.execute(text(
+                                        f"UPDATE {tbl} SET {col} = NULL WHERE {col} = :iid"
+                                    ), {'iid': iid})
+                                except Exception:
+                                    pass  # tabla puede no existir
 
                             db.session.delete(item)
                             total_eliminados += 1
