@@ -1660,21 +1660,26 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
 
-    # Migración: asegurar is_super_admin para emails legacy (antes estaban hardcodeados)
+    # Migración: solo admin@obyra.com debe ser super admin
     try:
-        legacy_admin_emails = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
-        updated_admins = Usuario.query.filter(
-            Usuario.email.in_(legacy_admin_emails),
-            Usuario.is_super_admin.is_(False)
+        # Quitar super_admin de todos los que NO sean admin@obyra.com
+        non_admin_supers = Usuario.query.filter(
+            Usuario.is_super_admin.is_(True),
+            Usuario.email != 'admin@obyra.com'
         ).all()
-        for u in updated_admins:
-            u.is_super_admin = True
-        if updated_admins:
+        for u in non_admin_supers:
+            u.is_super_admin = False
+        # Asegurar que admin@obyra.com SÍ sea super admin
+        admin_user = Usuario.query.filter_by(email='admin@obyra.com').first()
+        if admin_user and not admin_user.is_super_admin:
+            admin_user.is_super_admin = True
+        if non_admin_supers or (admin_user and not admin_user.is_super_admin):
             db.session.commit()
-            print(f'[ADMIN] Migrado is_super_admin para {len(updated_admins)} usuarios legacy')
+            if non_admin_supers:
+                print(f'[ADMIN] Removido is_super_admin de {len(non_admin_supers)} usuarios: {[u.email for u in non_admin_supers]}')
     except Exception as e:
         db.session.rollback()
-        print(f"[WARN] Error migrando super admins legacy: {e}")
+        print(f"[WARN] Error ajustando super admins: {e}")
 
     # Migración: crear índices en organizacion_id para queries multi-tenant
     try:
