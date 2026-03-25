@@ -1748,6 +1748,66 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error agregando CASCADE deletes: {e}")
 
+    # Migración: eliminar items duplicados "(u)" y reclasificar encofrados
+    try:
+        from models import ItemInventario, InventoryCategory, MovimientoInventario, UsoInventario
+        from sqlalchemy import or_
+
+        # Para cada organización, buscar y eliminar duplicados "(u)"
+        orgs_con_items = db.session.query(ItemInventario.organizacion_id).distinct().all()
+        total_eliminados = 0
+        total_reclasificados = 0
+
+        for (org_id_val,) in orgs_con_items:
+            # --- Paso 1: Eliminar duplicados "(u)" ---
+            items_u = ItemInventario.query.filter(
+                ItemInventario.organizacion_id == org_id_val,
+                ItemInventario.nombre.like('% (u)')
+            ).all()
+
+            for item_u in items_u:
+                nombre_original = item_u.nombre.rsplit(' (u)', 1)[0].strip()
+                # Verificar que existe el item original
+                original = ItemInventario.query.filter(
+                    ItemInventario.organizacion_id == org_id_val,
+                    ItemInventario.nombre == nombre_original
+                ).first()
+                if original:
+                    # Eliminar el duplicado y sus relaciones
+                    MovimientoInventario.query.filter_by(item_id=item_u.id).delete()
+                    UsoInventario.query.filter_by(item_id=item_u.id).delete()
+                    db.session.delete(item_u)
+                    total_eliminados += 1
+
+            # --- Paso 2: Reclasificar encofrados ---
+            cat_encofrados = InventoryCategory.query.filter(
+                InventoryCategory.company_id == org_id_val,
+                InventoryCategory.nombre == 'Encofrados'
+            ).first()
+
+            if cat_encofrados:
+                keywords = ['viga h20', 'viga ht20', 'puntal', 'cabezal', 'tripode',
+                           'trípode', 'fork', 'gato regulable', 'mensula', 'ménsula',
+                           'tensor', 'panel encofrado', 'tablero encofrado', 'placa encofrado']
+                filtros = [ItemInventario.nombre.ilike(f'%{kw}%') for kw in keywords]
+
+                items_encofrado = ItemInventario.query.filter(
+                    ItemInventario.organizacion_id == org_id_val,
+                    or_(*filtros),
+                    ItemInventario.categoria_id != cat_encofrados.id
+                ).all()
+
+                for item in items_encofrado:
+                    item.categoria_id = cat_encofrados.id
+                    total_reclasificados += 1
+
+        if total_eliminados or total_reclasificados:
+            db.session.commit()
+            print(f'[INVENTARIO] Limpieza: {total_eliminados} duplicados eliminados, {total_reclasificados} items reclasificados a Encofrados')
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error en limpieza de inventario: {e}")
+
     # Runtime migrations removed in Phase 4 - now using Alembic migrations
     # See: MIGRATIONS_GUIDE.md
 
