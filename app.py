@@ -1765,12 +1765,14 @@ with app.app_context():
             'Viga H20 3.30mt' -> 'viga h20 330'
             """
             n = nombre.lower().strip()
-            n = n.replace('ht20', 'h20')  # HT20 = H20
+            n = n.replace('ht20', 'h20')
             n = n.replace('(u)', '').strip()
-            n = _re.sub(r'\(.*?\)', '', n).strip()  # quitar paréntesis
+            n = _re.sub(r'\(.*?\)', '', n).strip()
             n = n.replace('mt', '').replace(' m', '').replace(',', '').replace('.', '')
             n = _re.sub(r'\s+', ' ', n).strip()
             return n
+
+        print('[INVENTARIO] Iniciando limpieza de duplicados semánticos...')
 
         for (org_id_val,) in orgs_con_items:
             # --- Paso 1: Eliminar duplicados semánticos ---
@@ -1799,10 +1801,31 @@ with app.app_context():
                         continue
                     # Solo eliminar si no tiene stock real
                     if not item.stock_actual or float(item.stock_actual) == 0:
-                        MovimientoInventario.query.filter_by(item_id=item.id).delete()
-                        UsoInventario.query.filter_by(item_id=item.id).delete()
-                        db.session.delete(item)
-                        total_eliminados += 1
+                        try:
+                            # Limpiar TODAS las relaciones FK que apuntan a este item
+                            MovimientoInventario.query.filter_by(item_id=item.id).delete()
+                            UsoInventario.query.filter_by(item_id=item.id).delete()
+                            from models.inventory import StockUbicacion, StockObra, ReservaStock
+                            StockUbicacion.query.filter_by(item_inventario_id=item.id).delete()
+                            StockObra.query.filter_by(item_inventario_id=item.id).delete()
+                            ReservaStock.query.filter_by(item_inventario_id=item.id).delete()
+                            # Limpiar tabla many-to-many de categorías adicionales
+                            db.session.execute(text(
+                                "DELETE FROM item_categorias_adicionales WHERE item_id = :iid"
+                            ), {'iid': item.id})
+                            # Desvincular de cotizaciones y presupuestos (FK nullable)
+                            db.session.execute(text(
+                                "UPDATE items_cotizacion SET item_inventario_id = NULL WHERE item_inventario_id = :iid"
+                            ), {'iid': item.id})
+                            db.session.execute(text(
+                                "UPDATE items_presupuesto SET item_inventario_id = NULL WHERE item_inventario_id = :iid"
+                            ), {'iid': item.id})
+                            db.session.delete(item)
+                            total_eliminados += 1
+                            print(f'  [DEL] {item.codigo} "{item.nombre}" (duplicado de {mantener.codigo})')
+                        except Exception as del_err:
+                            db.session.rollback()
+                            print(f'  [SKIP] No se pudo eliminar {item.codigo}: {del_err}')
 
             # --- Paso 2: Reclasificar encofrados ---
             cat_encofrados = InventoryCategory.query.filter(
