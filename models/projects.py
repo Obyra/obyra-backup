@@ -31,7 +31,7 @@ class Obra(db.Model):
     costo_real = db.Column(db.Numeric(15, 2), default=0)
     progreso = db.Column(db.Integer, default=0)  # Porcentaje de avance
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
-    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)  # Nuevo: relación con tabla clientes
 
     # Datos de cliente adicionales (según especificaciones) - LEGACY, mantener por compatibilidad
@@ -290,8 +290,8 @@ class TareaMiembro(db.Model):
     __tablename__ = "tarea_miembros"
 
     id = db.Column(db.Integer, primary_key=True)
-    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas_etapa.id"), index=True, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), index=True, nullable=False)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas_etapa.id", ondelete='CASCADE'), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete='CASCADE'), index=True, nullable=False)
     cuota_objetivo = db.Column(db.Numeric)
 
     # Relaciones
@@ -430,8 +430,8 @@ class TareaResponsables(db.Model):
     __tablename__ = 'tarea_responsables'
 
     id = db.Column(db.Integer, primary_key=True)
-    tarea_id = db.Column(db.Integer, db.ForeignKey('tareas_etapa.id'), index=True, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), index=True, nullable=False)
+    tarea_id = db.Column(db.Integer, db.ForeignKey('tareas_etapa.id', ondelete='CASCADE'), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='CASCADE'), index=True, nullable=False)
     cuota_planificada = db.Column(db.Numeric)  # opcional para futuras funcionalidades
 
     # Relaciones

@@ -245,7 +245,7 @@ class ItemInventario(db.Model):
     # factor_conversion: para convertir m² a unidades (ej: 0.0225 para cerámico 15x15)
     factor_conversion = db.Column(db.Numeric(10, 6), nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
-    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
 
     # Relaciones
     categoria = db.relationship('InventoryCategory', backref='items_inventario')

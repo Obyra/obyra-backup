@@ -2310,7 +2310,15 @@ def trasladar(id):
 def api_stock_en_obras(item_id):
     """Obtiene el stock de un item en todas las obras"""
     try:
-        item = ItemInventario.query.get_or_404(item_id)
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'success': False, 'message': 'Sin organización activa'}), 403
+
+        # Verificar que el item pertenece a la organización del usuario
+        item = ItemInventario.query.filter_by(
+            id=item_id,
+            organizacion_id=org_id
+        ).first_or_404()
 
         # Obtener stock en obras
         stocks = StockObra.query.filter_by(item_inventario_id=item_id).all()
@@ -2341,7 +2349,15 @@ def api_stock_en_obras(item_id):
 def api_traslados_item(item_id):
     """Obtiene el historial de traslados de un item desde la tabla stock_obra"""
     try:
-        item = ItemInventario.query.get_or_404(item_id)
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'success': False, 'message': 'Sin organización activa'}), 403
+
+        # Verificar que el item pertenece a la organización del usuario
+        item = ItemInventario.query.filter_by(
+            id=item_id,
+            organizacion_id=org_id
+        ).first_or_404()
 
         # Obtener traslados desde stock_obra (datos reales)
         stocks = StockObra.query.filter_by(item_inventario_id=item_id).all()

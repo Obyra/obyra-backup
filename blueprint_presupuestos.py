@@ -2140,14 +2140,14 @@ def eliminar(id):
             current_app.logger.warning('No se pudo obtener organización activa')
             return jsonify({'error': 'Sin organización activa'}), 400
 
-        presupuesto = Presupuesto.query.get(id)
+        # Query atómica: filtrar por ID + org_id en una sola consulta (previene IDOR)
+        presupuesto = Presupuesto.query.filter_by(
+            id=id,
+            organizacion_id=org_id
+        ).first()
         if not presupuesto:
-            current_app.logger.warning(f'Presupuesto {id} no encontrado')
+            current_app.logger.warning(f'Presupuesto {id} no encontrado o sin autorización')
             return jsonify({'error': 'Presupuesto no encontrado'}), 404
-
-        if presupuesto.organizacion_id != org_id:
-            current_app.logger.warning(f'Usuario sin autorización para presupuesto {id}')
-            return jsonify({'error': 'No autorizado'}), 403
 
         # Verificar si el presupuesto está confirmado como obra
         if presupuesto.confirmado_como_obra:

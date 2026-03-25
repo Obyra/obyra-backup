@@ -1660,6 +1660,89 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
 
+    # Migración: asegurar is_super_admin para emails legacy (antes estaban hardcodeados)
+    try:
+        legacy_admin_emails = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
+        updated_admins = Usuario.query.filter(
+            Usuario.email.in_(legacy_admin_emails),
+            Usuario.is_super_admin.is_(False)
+        ).all()
+        for u in updated_admins:
+            u.is_super_admin = True
+        if updated_admins:
+            db.session.commit()
+            print(f'[ADMIN] Migrado is_super_admin para {len(updated_admins)} usuarios legacy')
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error migrando super admins legacy: {e}")
+
+    # Migración: crear índices en organizacion_id para queries multi-tenant
+    try:
+        index_sql = """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_items_inventario_org_id') THEN
+                CREATE INDEX ix_items_inventario_org_id ON items_inventario(organizacion_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_presupuestos_org_id') THEN
+                CREATE INDEX ix_presupuestos_org_id ON presupuestos(organizacion_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_obras_org_id') THEN
+                CREATE INDEX ix_obras_org_id ON obras(organizacion_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_clientes_org_id') THEN
+                CREATE INDEX ix_clientes_org_id ON clientes(organizacion_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_proveedores_org_id') THEN
+                CREATE INDEX ix_proveedores_org_id ON proveedores(organizacion_id);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(index_sql))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error creando índices org_id: {e}")
+
+    # Migración: agregar CASCADE DELETE a FKs huérfanas (tarea_miembros, tarea_responsables)
+    try:
+        cascade_sql = """
+        DO $$ BEGIN
+            -- tarea_miembros.tarea_id CASCADE
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                       WHERE constraint_name = 'tarea_miembros_tarea_id_fkey' AND table_name = 'tarea_miembros') THEN
+                ALTER TABLE tarea_miembros DROP CONSTRAINT tarea_miembros_tarea_id_fkey;
+                ALTER TABLE tarea_miembros ADD CONSTRAINT tarea_miembros_tarea_id_fkey
+                    FOREIGN KEY (tarea_id) REFERENCES tareas_etapa(id) ON DELETE CASCADE;
+            END IF;
+            -- tarea_miembros.user_id CASCADE
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                       WHERE constraint_name = 'tarea_miembros_user_id_fkey' AND table_name = 'tarea_miembros') THEN
+                ALTER TABLE tarea_miembros DROP CONSTRAINT tarea_miembros_user_id_fkey;
+                ALTER TABLE tarea_miembros ADD CONSTRAINT tarea_miembros_user_id_fkey
+                    FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE;
+            END IF;
+            -- tarea_responsables.tarea_id CASCADE
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                       WHERE constraint_name = 'tarea_responsables_tarea_id_fkey' AND table_name = 'tarea_responsables') THEN
+                ALTER TABLE tarea_responsables DROP CONSTRAINT tarea_responsables_tarea_id_fkey;
+                ALTER TABLE tarea_responsables ADD CONSTRAINT tarea_responsables_tarea_id_fkey
+                    FOREIGN KEY (tarea_id) REFERENCES tareas_etapa(id) ON DELETE CASCADE;
+            END IF;
+            -- tarea_responsables.user_id CASCADE
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                       WHERE constraint_name = 'tarea_responsables_user_id_fkey' AND table_name = 'tarea_responsables') THEN
+                ALTER TABLE tarea_responsables DROP CONSTRAINT tarea_responsables_user_id_fkey;
+                ALTER TABLE tarea_responsables ADD CONSTRAINT tarea_responsables_user_id_fkey
+                    FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE;
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(cascade_sql))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error agregando CASCADE deletes: {e}")
+
     # Runtime migrations removed in Phase 4 - now using Alembic migrations
     # See: MIGRATIONS_GUIDE.md
 

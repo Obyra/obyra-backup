@@ -379,14 +379,7 @@ class Usuario(UserMixin, db.Model):
 
     def es_admin_completo(self):
         """Verifica si el usuario es administrador con acceso completo sin restricciones de plan"""
-        # Usar el flag is_super_admin en lugar de emails hardcodeados
-        if self.is_super_admin:
-            return True
-
-        # Mantener compatibilidad temporal con emails legacy
-        # TODO: Remover después de migrar todos los usuarios
-        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
-        return self.email in emails_admin_completo
+        return self.is_super_admin
 
     def es_admin(self):
         """Verifica si el usuario es admin de su organización o super admin."""

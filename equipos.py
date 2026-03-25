@@ -821,6 +821,19 @@ def usuarios_cambiar_rol(uid):
     if current_user.role not in ['admin', 'pm']:
         return jsonify(ok=False, error="Sin permisos"), 403
 
+    # Verificar que el usuario pertenece a la misma organización
+    membership = get_current_membership()
+    if not membership:
+        return jsonify(ok=False, error="Sin organización activa"), 403
+
+    target_membership = OrgMembership.query.filter_by(
+        user_id=uid,
+        org_id=membership.org_id,
+        status='active'
+    ).first()
+    if not target_membership:
+        return jsonify(ok=False, error="Usuario no encontrado en tu organización"), 404
+
     u = Usuario.query.get_or_404(uid)
     u.role = request.form.get('role', 'operario')
     db.session.commit()
@@ -833,6 +846,19 @@ def usuarios_editar(uid):
     # Verificar permisos admin/pm
     if current_user.role not in ['admin', 'pm']:
         return jsonify(ok=False, error="Sin permisos"), 403
+
+    # Verificar que el usuario pertenece a la misma organización
+    membership = get_current_membership()
+    if not membership:
+        return jsonify(ok=False, error="Sin organización activa"), 403
+
+    target_membership = OrgMembership.query.filter_by(
+        user_id=uid,
+        org_id=membership.org_id,
+        status='active'
+    ).first()
+    if not target_membership:
+        return jsonify(ok=False, error="Usuario no encontrado en tu organización"), 404
 
     u = Usuario.query.get_or_404(uid)
     f = request.form

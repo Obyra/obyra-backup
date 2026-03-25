@@ -454,34 +454,70 @@
             return;
         }
 
-        let html = '';
+        // Limpiar lista existente
+        lista.innerHTML = '';
+
+        const iconos = {
+            'requerimiento_compra': 'fas fa-shopping-cart text-warning',
+            'requerimiento_estado': 'fas fa-info-circle text-info',
+            'stock_bajo': 'fas fa-exclamation-triangle text-danger',
+            'tarea_asignada': 'fas fa-tasks text-primary'
+        };
+
         notifs.forEach(n => {
-            const iconos = {
-                'requerimiento_compra': 'fas fa-shopping-cart text-warning',
-                'requerimiento_estado': 'fas fa-info-circle text-info',
-                'stock_bajo': 'fas fa-exclamation-triangle text-danger',
-                'tarea_asignada': 'fas fa-tasks text-primary'
-            };
             const icono = iconos[n.tipo] || 'fas fa-bell text-secondary';
             const bgClass = n.leida ? '' : 'bg-light';
             const fecha = n.fecha_creacion ? new Date(n.fecha_creacion).toLocaleDateString() : '';
 
-            html += `
-                <li>
-                    <a class="dropdown-item py-2 ${bgClass}" href="${n.url || '#'}" onclick="marcarLeida(${n.id}, event)">
-                        <div class="d-flex align-items-start">
-                            <i class="${icono} me-2 mt-1"></i>
-                            <div class="flex-grow-1">
-                                <div class="small fw-semibold">${n.titulo}</div>
-                                ${n.mensaje ? `<div class="small text-muted">${n.mensaje.substring(0, 60)}...</div>` : ''}
-                                <div class="small text-muted">${fecha}</div>
-                            </div>
-                            ${!n.leida ? '<span class="badge bg-primary rounded-pill ms-auto align-self-center" style="font-size:0.5rem">●</span>' : ''}
-                        </div>
-                    </a>
-                </li>`;
+            // Construir elementos DOM de forma segura (previene XSS)
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.className = `dropdown-item py-2 ${bgClass}`;
+            a.href = n.url || '#';
+            a.dataset.notifId = n.id;
+            a.addEventListener('click', function(event) { marcarLeida(n.id, event); });
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'd-flex align-items-start';
+
+            const icon = document.createElement('i');
+            icon.className = `${icono} me-2 mt-1`;
+            wrapper.appendChild(icon);
+
+            const content = document.createElement('div');
+            content.className = 'flex-grow-1';
+
+            const titulo = document.createElement('div');
+            titulo.className = 'small fw-semibold';
+            titulo.textContent = n.titulo || '';
+            content.appendChild(titulo);
+
+            if (n.mensaje) {
+                const msg = document.createElement('div');
+                msg.className = 'small text-muted';
+                msg.textContent = n.mensaje.substring(0, 60) + '...';
+                content.appendChild(msg);
+            }
+
+            const fechaEl = document.createElement('div');
+            fechaEl.className = 'small text-muted';
+            fechaEl.textContent = fecha;
+            content.appendChild(fechaEl);
+
+            wrapper.appendChild(content);
+
+            if (!n.leida) {
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-primary rounded-pill ms-auto align-self-center';
+                badge.style.fontSize = '0.5rem';
+                badge.textContent = '\u25CF';
+                wrapper.appendChild(badge);
+            }
+
+            a.appendChild(wrapper);
+            li.appendChild(a);
+            lista.appendChild(li);
         });
-        lista.innerHTML = html;
     }
 
     function getCsrfToken() {
