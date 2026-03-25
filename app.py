@@ -1802,24 +1802,39 @@ with app.app_context():
                     # Solo eliminar si no tiene stock real
                     if not item.stock_actual or float(item.stock_actual) == 0:
                         try:
-                            # Limpiar TODAS las relaciones FK que apuntan a este item
-                            MovimientoInventario.query.filter_by(item_id=item.id).delete()
-                            UsoInventario.query.filter_by(item_id=item.id).delete()
-                            from models.inventory import StockUbicacion, StockObra, ReservaStock
-                            StockUbicacion.query.filter_by(item_inventario_id=item.id).delete()
-                            StockObra.query.filter_by(item_inventario_id=item.id).delete()
-                            ReservaStock.query.filter_by(item_inventario_id=item.id).delete()
-                            # Limpiar tabla many-to-many de categorías adicionales
-                            db.session.execute(text(
-                                "DELETE FROM item_categorias_adicionales WHERE item_id = :iid"
-                            ), {'iid': item.id})
-                            # Desvincular de cotizaciones y presupuestos (FK nullable)
-                            db.session.execute(text(
-                                "UPDATE items_cotizacion SET item_inventario_id = NULL WHERE item_inventario_id = :iid"
-                            ), {'iid': item.id})
-                            db.session.execute(text(
-                                "UPDATE items_presupuesto SET item_inventario_id = NULL WHERE item_inventario_id = :iid"
-                            ), {'iid': item.id})
+                            iid = item.id
+                            # Limpiar TODAS las tablas con FK a items_inventario via SQL directo
+                            tablas_fk_directa = [
+                                'movimientos_inventario:item_id',
+                                'uso_inventario:item_id',
+                                'stock_ubicacion:item_inventario_id',
+                                'stock_obra:item_inventario_id',
+                                'reservas_stock:item_inventario_id',
+                                'movimientos_stock:item_inventario_id',
+                                'movimientos_stock_obra:item_inventario_id',
+                                'global_material_usage:item_inventario_id',
+                                'item_categorias_adicionales:item_id',
+                            ]
+                            for tabla_col in tablas_fk_directa:
+                                tabla, col = tabla_col.split(':')
+                                db.session.execute(text(
+                                    f"DELETE FROM {tabla} WHERE {col} = :iid"
+                                ), {'iid': iid})
+
+                            # Desvincular FKs nullable (no borrar, solo poner NULL)
+                            tablas_fk_nullable = [
+                                'items_cotizacion:item_inventario_id',
+                                'items_presupuesto:item_inventario_id',
+                                'requerimiento_compra_items:item_inventario_id',
+                                'orden_compra_items:item_inventario_id',
+                                'remito_items:item_inventario_id',
+                            ]
+                            for tabla_col in tablas_fk_nullable:
+                                tabla, col = tabla_col.split(':')
+                                db.session.execute(text(
+                                    f"UPDATE {tabla} SET {col} = NULL WHERE {col} = :iid"
+                                ), {'iid': iid})
+
                             db.session.delete(item)
                             total_eliminados += 1
                             print(f'  [DEL] {item.codigo} "{item.nombre}" (duplicado de {mantener.codigo})')
