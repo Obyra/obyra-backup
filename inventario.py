@@ -889,6 +889,7 @@ def registrar_movimiento(id):
     tipo = request.form.get('tipo')
     cantidad = request.form.get('cantidad')
     precio_unitario_raw = request.form.get('precio_unitario', '0')
+    moneda = request.form.get('moneda', 'ARS')
     motivo = request.form.get('motivo')
     observaciones = request.form.get('observaciones')
 
@@ -899,6 +900,25 @@ def registrar_movimiento(id):
     try:
         cantidad = float(cantidad)
         precio_unitario = float(precio_unitario_raw) if precio_unitario_raw else 0
+        precio_unitario_usd = 0
+
+        # Si el precio es en USD, convertir a ARS y guardar ambos
+        if moneda == 'USD' and precio_unitario > 0:
+            precio_unitario_usd = precio_unitario
+            # Obtener cotización del dólar
+            from models import Organizacion
+            org = Organizacion.query.get(org_id)
+            tasa_usd = float(getattr(org, 'tasa_usd', 0) or 0)
+            if tasa_usd <= 0:
+                # Fallback: buscar de presupuestos recientes
+                from models.budgets import Presupuesto
+                ultimo = Presupuesto.query.filter(
+                    Presupuesto.organizacion_id == org_id,
+                    Presupuesto.tasa_usd_venta.isnot(None)
+                ).order_by(Presupuesto.fecha_creacion.desc()).first()
+                tasa_usd = float(ultimo.tasa_usd_venta) if ultimo and ultimo.tasa_usd_venta else 1200
+            precio_unitario = precio_unitario_usd * tasa_usd
+            observaciones = f"[USD {precio_unitario_usd:.2f} x {tasa_usd:.0f}] {observaciones or ''}"
         
         if cantidad <= 0:
             flash('La cantidad debe ser mayor a cero.', 'danger')
@@ -926,10 +946,15 @@ def registrar_movimiento(id):
 
         if tipo == 'entrada':
             item.stock_actual = stock_previo + cantidad
-            # Actualizar precio promedio
+            # Actualizar precio promedio ARS
             if precio_unitario > 0 and item.stock_actual > 0:
                 total_valor = stock_previo * precio_prev + cantidad * precio_unitario
                 item.precio_promedio = total_valor / float(item.stock_actual)
+            # Actualizar precio promedio USD si aplica
+            if precio_unitario_usd > 0 and item.stock_actual > 0:
+                precio_prev_usd = float(item.precio_promedio_usd or 0)
+                total_valor_usd = stock_previo * precio_prev_usd + cantidad * precio_unitario_usd
+                item.precio_promedio_usd = total_valor_usd / float(item.stock_actual)
         elif tipo == 'salida':
             item.stock_actual = stock_previo - cantidad
         elif tipo == 'ajuste':

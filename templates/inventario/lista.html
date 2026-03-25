@@ -447,7 +447,10 @@
                     <div class="mb-3">
                         <label for="ingreso_precio" class="form-label">Precio unitario (opcional)</label>
                         <div class="input-group">
-                            <span class="input-group-text">$</span>
+                            <select class="form-select" id="ingreso_moneda" name="moneda" style="max-width: 90px;">
+                                <option value="ARS" selected>ARS</option>
+                                <option value="USD">USD</option>
+                            </select>
                             <input type="number" class="form-control" id="ingreso_precio" name="precio_unitario"
                                    min="0" step="any" value="0">
                         </div>
