@@ -888,17 +888,17 @@ def registrar_movimiento(id):
 
     tipo = request.form.get('tipo')
     cantidad = request.form.get('cantidad')
-    precio_unitario = request.form.get('precio_unitario', 0)
+    precio_unitario_raw = request.form.get('precio_unitario', '0')
     motivo = request.form.get('motivo')
     observaciones = request.form.get('observaciones')
-    
+
     if not all([tipo, cantidad]):
         flash('Tipo y cantidad son obligatorios.', 'danger')
         return redirect(url_for('inventario.detalle', id=id))
-    
+
     try:
         cantidad = float(cantidad)
-        precio_unitario = float(precio_unitario)
+        precio_unitario = float(precio_unitario_raw) if precio_unitario_raw else 0
         
         if cantidad <= 0:
             flash('La cantidad debe ser mayor a cero.', 'danger')
@@ -920,15 +920,18 @@ def registrar_movimiento(id):
             usuario_id=current_user.id
         )
         
-        # Actualizar stock
+        # Actualizar stock (asegurar que no sean None)
+        stock_previo = float(item.stock_actual or 0)
+        precio_prev = float(item.precio_promedio or 0)
+
         if tipo == 'entrada':
-            item.stock_actual += cantidad
+            item.stock_actual = stock_previo + cantidad
             # Actualizar precio promedio
-            if precio_unitario > 0:
-                total_valor = (item.stock_actual - cantidad) * item.precio_promedio + cantidad * precio_unitario
-                item.precio_promedio = total_valor / item.stock_actual
+            if precio_unitario > 0 and item.stock_actual > 0:
+                total_valor = stock_previo * precio_prev + cantidad * precio_unitario
+                item.precio_promedio = total_valor / float(item.stock_actual)
         elif tipo == 'salida':
-            item.stock_actual -= cantidad
+            item.stock_actual = stock_previo - cantidad
         elif tipo == 'ajuste':
             # Validaciones mejoradas para ajustes
             if not motivo or motivo.strip() == '':
@@ -978,8 +981,9 @@ def registrar_movimiento(id):
         flash('Cantidad y precio deben ser números válidos.', 'danger')
     except Exception as e:
         db.session.rollback()
-        flash('Error al registrar el movimiento.', 'danger')
-    
+        current_app.logger.error(f"Error al registrar movimiento para item {id}: {e}", exc_info=True)
+        flash(f'Error al registrar el movimiento: {str(e)[:200]}', 'danger')
+
     return redirect(url_for('inventario.detalle', id=id))
 
 @inventario_bp.route('/uso-obra', methods=['GET', 'POST'])
