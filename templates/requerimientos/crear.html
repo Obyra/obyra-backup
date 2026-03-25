@@ -193,7 +193,10 @@
                 <div class="mb-3">
                     <label for="itemCosto" class="form-label">Costo estimado unitario (opcional)</label>
                     <div class="input-group">
-                        <span class="input-group-text">$</span>
+                        <select class="form-select" id="itemCostoMoneda" style="max-width: 90px;">
+                            <option value="ARS" selected>ARS</option>
+                            <option value="USD">USD</option>
+                        </select>
                         <input type="number" class="form-control" id="itemCosto" step="0.01" min="0">
                     </div>
                 </div>
@@ -218,8 +221,11 @@
 let items = [];
 let itemIdCounter = 0;
 
-// Inicializar Select2 con AJAX para búsqueda de items
-$(document).ready(function() {
+// Inicializar Select2 cuando el modal se abre (necesario para modales Bootstrap)
+let select2Initialized = false;
+$('#modalAgregarItem').on('shown.bs.modal', function() {
+    if (select2Initialized) return;
+    select2Initialized = true;
     $('#itemInventarioSelect').select2({
         theme: 'bootstrap-5',
         placeholder: 'Buscar artículo...',
@@ -373,6 +379,7 @@ function agregarItem() {
         cantidad_planificada: 0,
         cantidad_actual_obra: 0,
         costo_estimado: parseFloat(document.getElementById('itemCosto').value) || null,
+        moneda_costo: document.getElementById('itemCostoMoneda').value,
         notas: document.getElementById('itemNotas').value.trim(),
         tipo: document.getElementById('itemTipo').value
     };
@@ -409,7 +416,7 @@ function renderItems() {
                     <small class="text-muted">
                         <span class="badge bg-secondary me-1">${item.tipo}</span>
                         ${item.codigo ? `<span class="me-2">Cod: ${item.codigo}</span>` : ''}
-                        ${item.costo_estimado ? `<span class="text-success">$${item.costo_estimado.toFixed(2)} c/u</span>` : ''}
+                        ${item.costo_estimado ? `<span class="text-success">${item.moneda_costo || 'ARS'} $${item.costo_estimado.toFixed(2)} c/u</span>` : ''}
                     </small>
                     ${item.notas ? `<p class="mb-0 mt-1 small text-muted">${item.notas}</p>` : ''}
                 </div>

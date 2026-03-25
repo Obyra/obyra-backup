@@ -578,9 +578,11 @@ def api_materiales_obra(obra_id):
     """Retorna los materiales de una obra con su estado de stock"""
     from models.projects import Obra
 
+    from services.memberships import get_current_org_id
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     obra = Obra.query.filter_by(
         id=obra_id,
-        organizacion_id=current_user.organizacion_id
+        organizacion_id=org_id
     ).first_or_404()
 
     materiales = _obtener_materiales_obra(obra)
