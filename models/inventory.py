@@ -217,7 +217,7 @@ class ItemInventario(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=True)
-    codigo = db.Column(db.String(50), unique=True, nullable=False)
+    codigo = db.Column(db.String(50), nullable=False)  # unique per-org, ver __table_args__
     nombre = db.Column(db.String(200), nullable=False)  # Nombre genérico del artículo
     descripcion = db.Column(db.Text)
     unidad = db.Column(db.String(20), nullable=False)
@@ -256,6 +256,10 @@ class ItemInventario(db.Model):
     movimientos = db.relationship('MovimientoInventario', back_populates='item', lazy='dynamic')
     usos = db.relationship('UsoInventario', back_populates='item', lazy='dynamic')
     proveedor = db.relationship('Proveedor', backref='items_inventario')
+
+    __table_args__ = (
+        db.UniqueConstraint('organizacion_id', 'codigo', name='uq_item_inventario_org_codigo'),
+    )
 
     def __repr__(self):
         return f'<ItemInventario {self.codigo} - {self.nombre}>'

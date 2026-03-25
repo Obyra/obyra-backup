@@ -99,7 +99,17 @@ class Presupuesto(db.Model):
     subtotal_mano_obra = db.Column(db.Numeric(15, 2), default=0)
     subtotal_equipos = db.Column(db.Numeric(15, 2), default=0)
     total_sin_iva = db.Column(db.Numeric(15, 2), default=0)
+    IVA_VALIDOS = [Decimal('0'), Decimal('10.5'), Decimal('21'), Decimal('27')]
     iva_porcentaje = db.Column(db.Numeric(5, 2), default=21)  # Default IVA Argentina
+
+    @staticmethod
+    def validar_iva(valor):
+        """Valida que el IVA sea un porcentaje válido en Argentina."""
+        try:
+            v = Decimal(str(valor))
+        except Exception:
+            return False
+        return v >= Decimal('0') and v <= Decimal('100')
     total_con_iva = db.Column(db.Numeric(15, 2), default=0)
     observaciones = db.Column(db.Text)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)

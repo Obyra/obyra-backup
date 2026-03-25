@@ -193,7 +193,7 @@ def detalle(id):
 
     # Admin/PM puede editar cantidades si no está completado ni cancelado
     puede_editar_items = (
-        current_user.rol in ('administrador', 'admin', 'project_manager')
+        current_user.role in ('admin', 'pm')
         or current_user.is_super_admin
     ) and requerimiento.estado not in ('completado', 'cancelado')
 
@@ -210,7 +210,7 @@ def aprobar(id):
     from models.inventory import RequerimientoCompra
 
     # Solo administradores pueden aprobar
-    if current_user.rol not in ['administrador', 'admin']:
+    if current_user.role not in ['admin']:
         flash('No tiene permisos para aprobar requerimientos', 'danger')
         return redirect(url_for('requerimientos.detalle', id=id))
 
@@ -241,7 +241,7 @@ def rechazar(id):
     from models.inventory import RequerimientoCompra
 
     # Solo administradores pueden rechazar
-    if current_user.rol not in ['administrador', 'admin']:
+    if current_user.role not in ['admin']:
         flash('No tiene permisos para rechazar requerimientos', 'danger')
         return redirect(url_for('requerimientos.detalle', id=id))
 
@@ -275,7 +275,7 @@ def marcar_en_proceso(id):
     """Marcar requerimiento como en proceso de compra"""
     from models.inventory import RequerimientoCompra
 
-    if current_user.rol not in ['administrador', 'admin']:
+    if current_user.role not in ['admin']:
         flash('No tiene permisos para esta acción', 'danger')
         return redirect(url_for('requerimientos.detalle', id=id))
 
@@ -303,7 +303,7 @@ def completar(id):
     """Marcar requerimiento como completado"""
     from models.inventory import RequerimientoCompra
 
-    if current_user.rol not in ['administrador', 'admin']:
+    if current_user.role not in ['admin']:
         flash('No tiene permisos para esta acción', 'danger')
         return redirect(url_for('requerimientos.detalle', id=id))
 
@@ -338,7 +338,7 @@ def eliminar(id):
     ).first_or_404()
 
     # Solo el solicitante o admin puede eliminar
-    es_admin = current_user.rol in ['administrador', 'admin']
+    es_admin = current_user.role in ['admin']
     es_solicitante = requerimiento.solicitante_id == current_user.id
     if not (es_admin or es_solicitante):
         flash('No tiene permisos para eliminar este requerimiento', 'danger')
@@ -406,7 +406,7 @@ def cancelar(id):
     ).first_or_404()
 
     # Solo el solicitante o admin puede cancelar
-    if requerimiento.solicitante_id != current_user.id and current_user.rol not in ['administrador', 'admin']:
+    if requerimiento.solicitante_id != current_user.id and current_user.role not in ['admin']:
         flash('No tiene permisos para cancelar este requerimiento', 'danger')
         return redirect(url_for('requerimientos.detalle', id=id))
 
@@ -431,7 +431,7 @@ def cargar_precios(id):
     """Cargar precios reales de compra para los items del requerimiento"""
     from models.inventory import RequerimientoCompra, RequerimientoCompraItem
 
-    if current_user.rol not in ['administrador', 'admin']:
+    if current_user.role not in ['admin']:
         flash('No tiene permisos para esta acción', 'danger')
         return redirect(url_for('requerimientos.detalle', id=id))
 
@@ -785,7 +785,7 @@ def api_editar_cantidad_item(item_id):
         return jsonify({'ok': False, 'error': 'No autorizado'}), 403
 
     # Solo admin/PM pueden editar
-    es_admin = current_user.rol in ('administrador', 'admin', 'project_manager') or current_user.is_super_admin
+    es_admin = current_user.role in ('admin', 'pm') or current_user.is_super_admin
     if not es_admin:
         return jsonify({'ok': False, 'error': 'Solo administradores pueden editar cantidades'}), 403
 

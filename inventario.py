@@ -660,7 +660,7 @@ def categorias_adicionales(id):
     item = ItemInventario.query.get_or_404(id)
     org_id = get_current_org_id() or current_user.organizacion_id
 
-    if current_user.rol not in ('administrador', 'tecnico'):
+    if current_user.role not in ('admin', 'pm'):
         return jsonify(ok=False, error='Sin permisos'), 403
 
     data = request.get_json(silent=True)
@@ -745,7 +745,7 @@ def reclasificar_encofrados():
 @login_required
 def mover_categoria_bulk():
     """Mover múltiples items a otra categoría."""
-    if current_user.rol != 'administrador':
+    if current_user.role != 'admin':
         return jsonify(ok=False, error='Sin permisos'), 403
 
     data = request.get_json(silent=True)
@@ -776,7 +776,7 @@ def mover_categoria_bulk():
 @login_required
 def eliminar_bulk():
     """Eliminar múltiples items."""
-    if current_user.rol != 'administrador':
+    if current_user.role != 'admin':
         return jsonify(ok=False, error='Sin permisos'), 403
 
     data = request.get_json(silent=True)
@@ -806,7 +806,7 @@ def eliminar_bulk():
 @login_required
 def eliminar(id):
     """Elimina (desactiva) un item de inventario."""
-    if current_user.rol not in ['administrador']:
+    if current_user.role not in ['admin']:
         flash('No tienes permisos para eliminar items de inventario.', 'danger')
         return redirect(url_for('inventario.lista'))
 
@@ -2489,7 +2489,7 @@ def alertas_stock():
 @login_required
 def seed_items_ia():
     """Carga items de la calculadora IA al inventario de la organización."""
-    if current_user.rol != 'administrador':
+    if current_user.role != 'admin':
         return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
 
     org_id = get_current_org_id() or current_user.organizacion_id
@@ -2621,7 +2621,7 @@ def seed_items_ia():
 def seed_constructoras():
     """Carga datos hardcodeados de constructoras de referencia (Cortes y Sistemas).
     No requiere upload de archivos - los datos ya están en el código."""
-    if current_user.rol != 'administrador':
+    if current_user.role != 'admin':
         return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
 
     org_id = get_current_org_id() or current_user.organizacion_id

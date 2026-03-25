@@ -122,7 +122,7 @@ def create_custom_event():
     """
     try:
         # Verificar permisos
-        if current_user.rol not in ['administrador']:
+        if current_user.role not in ['admin']:
             return jsonify({'error': 'Sin permisos para crear eventos personalizados'}), 403
         
         data = request.get_json()

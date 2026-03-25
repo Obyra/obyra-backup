@@ -1708,6 +1708,27 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error creando índices org_id: {e}")
 
+    # Migración: cambiar unique constraint de codigo global a per-org
+    try:
+        uq_sql = """
+        DO $$ BEGIN
+            -- Eliminar unique global si existe
+            IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'items_inventario_codigo_key') THEN
+                ALTER TABLE items_inventario DROP CONSTRAINT items_inventario_codigo_key;
+            END IF;
+            -- Crear unique per-org si no existe
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_item_inventario_org_codigo') THEN
+                ALTER TABLE items_inventario ADD CONSTRAINT uq_item_inventario_org_codigo
+                    UNIQUE (organizacion_id, codigo);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(uq_sql))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error migrando unique constraint items: {e}")
+
     # Migración: agregar CASCADE DELETE a FKs huérfanas (tarea_miembros, tarea_responsables)
     try:
         cascade_sql = """

@@ -26,7 +26,7 @@ def requires_role(*roles):
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
                 return _login_redirect()
-            if current_user.rol not in roles and not current_user.es_admin():
+            if current_user.role not in roles and not current_user.es_admin():
                 flash('No tienes permisos para esta acción.', 'danger')
                 return redirect(url_for('equipos_new.lista'))
             return f(*args, **kwargs)
