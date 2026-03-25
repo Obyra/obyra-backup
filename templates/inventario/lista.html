@@ -400,6 +400,9 @@
                     <input type="hidden" id="accion_item_codigo">
                     <input type="hidden" id="accion_item_stock">
 
+                    <button type="button" class="list-group-item list-group-item-action" onclick="ejecutarAccion('ingreso')">
+                        <i class="fas fa-plus-circle text-success me-2"></i>Ingreso de stock
+                    </button>
                     <button type="button" class="list-group-item list-group-item-action" onclick="ejecutarAccion('uso')">
                         <i class="fas fa-wrench text-primary me-2"></i>Dar de baja por uso
                     </button>
@@ -416,6 +419,50 @@
                     {% endif %}
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Ingreso de Stock -->
+<div class="modal fade" id="modalIngreso" tabindex="-1" aria-labelledby="modalIngresoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalIngresoLabel"><i class="fas fa-plus-circle me-2"></i>Ingreso de Stock</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formIngreso" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="tipo" value="entrada">
+                <input type="hidden" id="ingreso_item_id" name="item_id">
+                <div class="modal-body">
+                    <p class="mb-2">Item: <strong id="ingreso_item_nombre"></strong></p>
+                    <p class="mb-3 text-muted">Stock actual: <span id="ingreso_stock_actual"></span></p>
+
+                    <div class="mb-3">
+                        <label for="ingreso_cantidad" class="form-label">Cantidad a ingresar *</label>
+                        <input type="number" class="form-control" id="ingreso_cantidad" name="cantidad"
+                               min="0.001" step="any" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ingreso_precio" class="form-label">Precio unitario (opcional)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" id="ingreso_precio" name="precio_unitario"
+                                   min="0" step="any" value="0">
+                        </div>
+                        <small class="text-muted">Si se carga, actualiza el precio promedio del item</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ingreso_observaciones" class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="ingreso_observaciones" name="observaciones" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-plus me-1"></i>Registrar Ingreso</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -613,6 +660,9 @@ function ejecutarAccion(accion) {
     // Ejecutar acción correspondiente
     setTimeout(() => {
         switch(accion) {
+            case 'ingreso':
+                abrirModalIngreso(itemId, itemNombre, stockActual);
+                break;
             case 'uso':
                 abrirModalBaja(itemId, itemNombre, 'uso');
                 break;
@@ -627,6 +677,23 @@ function ejecutarAccion(accion) {
                 break;
         }
     }, 300);
+}
+
+// Modal de ingreso de stock
+function abrirModalIngreso(itemId, itemNombre, stockActual) {
+    document.getElementById('ingreso_item_id').value = itemId;
+    document.getElementById('ingreso_item_nombre').textContent = itemNombre;
+    document.getElementById('ingreso_stock_actual').textContent = stockActual;
+
+    const formIngreso = document.getElementById('formIngreso');
+    formIngreso.action = `/inventario/registrar_movimiento/${itemId}`;
+
+    document.getElementById('ingreso_cantidad').value = '';
+    document.getElementById('ingreso_precio').value = '';
+    document.getElementById('ingreso_observaciones').value = '';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalIngreso'));
+    modal.show();
 }
 
 // Modal de baja

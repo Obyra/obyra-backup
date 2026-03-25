@@ -1748,43 +1748,60 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error agregando CASCADE deletes: {e}")
 
-    # Migración: eliminar items duplicados (por nombre exacto) y reclasificar encofrados
+    # Migración: eliminar items duplicados y reclasificar encofrados
     try:
         from models import ItemInventario, InventoryCategory, MovimientoInventario, UsoInventario
         from sqlalchemy import or_, func as sa_func
+        import re as _re
 
         orgs_con_items = db.session.query(ItemInventario.organizacion_id).distinct().all()
         total_eliminados = 0
         total_reclasificados = 0
 
+        def _normalizar_nombre(nombre):
+            """Normaliza nombres para detectar duplicados semánticos.
+            'Viga Ht20 330' -> 'viga h20 330'
+            'Viga H20 3,30 m' -> 'viga h20 330'
+            'Viga H20 3.30mt' -> 'viga h20 330'
+            """
+            n = nombre.lower().strip()
+            n = n.replace('ht20', 'h20')  # HT20 = H20
+            n = n.replace('(u)', '').strip()
+            n = _re.sub(r'\(.*?\)', '', n).strip()  # quitar paréntesis
+            n = n.replace('mt', '').replace(' m', '').replace(',', '').replace('.', '')
+            n = _re.sub(r'\s+', ' ', n).strip()
+            return n
+
         for (org_id_val,) in orgs_con_items:
-            # --- Paso 1: Eliminar duplicados por nombre exacto ---
-            # Buscar nombres que aparecen más de una vez en la misma org
-            dupes = db.session.query(
-                ItemInventario.nombre,
-                sa_func.count(ItemInventario.id).label('cnt')
-            ).filter(
+            # --- Paso 1: Eliminar duplicados semánticos ---
+            all_items = ItemInventario.query.filter(
                 ItemInventario.organizacion_id == org_id_val
-            ).group_by(
-                ItemInventario.nombre
-            ).having(
-                sa_func.count(ItemInventario.id) > 1
-            ).all()
+            ).order_by(ItemInventario.id.asc()).all()
 
-            for nombre_dup, cnt in dupes:
-                # Obtener todos los items con ese nombre, ordenar por id (quedarse con el más viejo)
-                items_dup = ItemInventario.query.filter(
-                    ItemInventario.organizacion_id == org_id_val,
-                    ItemInventario.nombre == nombre_dup
-                ).order_by(ItemInventario.id.asc()).all()
+            # Agrupar por nombre normalizado
+            grupos = {}
+            for item in all_items:
+                key = _normalizar_nombre(item.nombre)
+                if key not in grupos:
+                    grupos[key] = []
+                grupos[key].append(item)
 
-                # Mantener el primero, eliminar el resto
-                for item_extra in items_dup[1:]:
+            for key, items in grupos.items():
+                if len(items) <= 1:
+                    continue
+                # Priorizar: items INV-* sobre MAT-*, el de menor id como fallback
+                items_inv = [i for i in items if i.codigo.startswith('INV-')]
+                items_mat = [i for i in items if i.codigo.startswith('MAT-')]
+                # Conservar el INV si existe, si no el primero
+                mantener = items_inv[0] if items_inv else items[0]
+                for item in items:
+                    if item.id == mantener.id:
+                        continue
                     # Solo eliminar si no tiene stock real
-                    if not item_extra.stock_actual or float(item_extra.stock_actual) == 0:
-                        MovimientoInventario.query.filter_by(item_id=item_extra.id).delete()
-                        UsoInventario.query.filter_by(item_id=item_extra.id).delete()
-                        db.session.delete(item_extra)
+                    if not item.stock_actual or float(item.stock_actual) == 0:
+                        MovimientoInventario.query.filter_by(item_id=item.id).delete()
+                        UsoInventario.query.filter_by(item_id=item.id).delete()
+                        db.session.delete(item)
                         total_eliminados += 1
 
             # --- Paso 2: Reclasificar encofrados ---
