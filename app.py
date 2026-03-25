@@ -1750,20 +1750,11 @@ with app.app_context():
 
     # Migración: eliminar items duplicados y reclasificar encofrados
     try:
-        from models import ItemInventario, InventoryCategory, MovimientoInventario, UsoInventario
-        from sqlalchemy import or_, func as sa_func
+        from models import ItemInventario, InventoryCategory
+        from sqlalchemy import or_
         import re as _re
 
-        orgs_con_items = db.session.query(ItemInventario.organizacion_id).distinct().all()
-        total_eliminados = 0
-        total_reclasificados = 0
-
         def _normalizar_nombre(nombre):
-            """Normaliza nombres para detectar duplicados semánticos.
-            'Viga Ht20 330' -> 'viga h20 330'
-            'Viga H20 3,30 m' -> 'viga h20 330'
-            'Viga H20 3.30mt' -> 'viga h20 330'
-            """
             n = nombre.lower().strip()
             n = n.replace('ht20', 'h20')
             n = n.replace('(u)', '').strip()
@@ -1774,13 +1765,15 @@ with app.app_context():
 
         print('[INVENTARIO] Iniciando limpieza de duplicados semánticos...')
 
+        # Paso 1: Identificar IDs a eliminar (sin tocar DB aún)
+        orgs_con_items = db.session.query(ItemInventario.organizacion_id).distinct().all()
+        ids_a_eliminar = []
+
         for (org_id_val,) in orgs_con_items:
-            # --- Paso 1: Eliminar duplicados semánticos ---
             all_items = ItemInventario.query.filter(
                 ItemInventario.organizacion_id == org_id_val
             ).order_by(ItemInventario.id.asc()).all()
 
-            # Agrupar por nombre normalizado
             grupos = {}
             for item in all_items:
                 key = _normalizar_nombre(item.nombre)
@@ -1788,90 +1781,77 @@ with app.app_context():
                     grupos[key] = []
                 grupos[key].append(item)
 
-            for key, items in grupos.items():
-                if len(items) <= 1:
+            for key, items_grupo in grupos.items():
+                if len(items_grupo) <= 1:
                     continue
-                # Priorizar: items INV-* sobre MAT-*, el de menor id como fallback
-                items_inv = [i for i in items if i.codigo.startswith('INV-')]
-                items_mat = [i for i in items if i.codigo.startswith('MAT-')]
-                # Conservar el INV si existe, si no el primero
-                mantener = items_inv[0] if items_inv else items[0]
-                for item in items:
+                items_inv = [i for i in items_grupo if i.codigo.startswith('INV-')]
+                mantener = items_inv[0] if items_inv else items_grupo[0]
+                for item in items_grupo:
                     if item.id == mantener.id:
                         continue
-                    # Solo eliminar si no tiene stock real
                     if not item.stock_actual or float(item.stock_actual) == 0:
-                        try:
-                            iid = item.id
-                            # Limpiar TODAS las tablas con FK a items_inventario via SQL directo
-                            # Limpiar FKs: DELETE de tablas relacionadas
-                            for tbl_col in [
-                                'movimientos_inventario:item_id',
-                                'uso_inventario:item_id',
-                                'stock_ubicacion:item_inventario_id',
-                                'stock_obra:item_inventario_id',
-                                'reservas_stock:item_inventario_id',
-                                'movimientos_stock:item_inventario_id',
-                                'movimientos_stock_obra:item_inventario_id',
-                                'global_material_usage:item_inventario_id',
-                                'item_categorias_adicionales:item_id',
-                            ]:
-                                tbl, col = tbl_col.split(':')
-                                try:
-                                    db.session.execute(text(
-                                        f"DELETE FROM {tbl} WHERE {col} = :iid"
-                                    ), {'iid': iid})
-                                except Exception:
-                                    pass  # tabla puede no existir
+                        ids_a_eliminar.append((item.id, item.codigo, item.nombre, mantener.codigo))
 
-                            # Desvincular FKs nullable (SET NULL)
-                            for tbl_col in [
-                                'items_cotizacion:item_inventario_id',
-                                'items_presupuesto:item_inventario_id',
-                                'requerimiento_compra_items:item_inventario_id',
-                                'orden_compra_items:item_inventario_id',
-                                'remito_items:item_inventario_id',
-                            ]:
-                                tbl, col = tbl_col.split(':')
-                                try:
-                                    db.session.execute(text(
-                                        f"UPDATE {tbl} SET {col} = NULL WHERE {col} = :iid"
-                                    ), {'iid': iid})
-                                except Exception:
-                                    pass  # tabla puede no existir
+        # Paso 2: Eliminar duplicados uno por uno con SAVEPOINT
+        total_eliminados = 0
+        for iid, codigo, nombre, mantener_cod in ids_a_eliminar:
+            try:
+                # Usar conexión raw para SAVEPOINT correcto
+                cleanup_sql = """
+                DO $$ BEGIN
+                    -- Limpiar FKs directas
+                    DELETE FROM movimientos_inventario WHERE item_id = {iid};
+                    DELETE FROM uso_inventario WHERE item_id = {iid};
+                    BEGIN DELETE FROM stock_ubicacion WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN DELETE FROM stock_obra WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN DELETE FROM reservas_stock WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN DELETE FROM movimientos_stock WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN DELETE FROM movimientos_stock_obra WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN DELETE FROM global_material_usage WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN DELETE FROM item_categorias_adicionales WHERE item_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    -- Desvincular FKs nullable
+                    BEGIN UPDATE items_cotizacion SET item_inventario_id = NULL WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN UPDATE items_presupuesto SET item_inventario_id = NULL WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN UPDATE requerimiento_compra_items SET item_inventario_id = NULL WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN UPDATE orden_compra_items SET item_inventario_id = NULL WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    BEGIN UPDATE remito_items SET item_inventario_id = NULL WHERE item_inventario_id = {iid}; EXCEPTION WHEN undefined_table THEN NULL; END;
+                    -- Eliminar el item
+                    DELETE FROM items_inventario WHERE id = {iid};
+                END $$;
+                """.replace('{iid}', str(int(iid)))
+                db.session.execute(text(cleanup_sql))
+                db.session.commit()
+                total_eliminados += 1
+                print(f'  [DEL] {codigo} "{nombre}" (duplicado de {mantener_cod})')
+            except Exception as del_err:
+                db.session.rollback()
+                print(f'  [SKIP] {codigo}: {del_err}')
 
-                            db.session.delete(item)
-                            total_eliminados += 1
-                            print(f'  [DEL] {item.codigo} "{item.nombre}" (duplicado de {mantener.codigo})')
-                        except Exception as del_err:
-                            db.session.rollback()
-                            print(f'  [SKIP] No se pudo eliminar {item.codigo}: {del_err}')
-
-            # --- Paso 2: Reclasificar encofrados ---
+        # Paso 3: Reclasificar encofrados
+        total_reclasificados = 0
+        for (org_id_val,) in orgs_con_items:
             cat_encofrados = InventoryCategory.query.filter(
                 InventoryCategory.company_id == org_id_val,
                 InventoryCategory.nombre == 'Encofrados'
             ).first()
-
             if cat_encofrados:
                 keywords = ['viga h20', 'viga ht20', 'puntal', 'cabezal', 'tripode',
                            'trípode', 'fork', 'gato regulable', 'mensula', 'ménsula',
                            'tensor', 'panel encofrado', 'tablero encofrado', 'placa encofrado']
                 filtros = [ItemInventario.nombre.ilike(f'%{kw}%') for kw in keywords]
-
                 items_encofrado = ItemInventario.query.filter(
                     ItemInventario.organizacion_id == org_id_val,
                     or_(*filtros),
                     ItemInventario.categoria_id != cat_encofrados.id
                 ).all()
-
                 for item in items_encofrado:
                     item.categoria_id = cat_encofrados.id
                     total_reclasificados += 1
 
-        if total_eliminados or total_reclasificados:
+        if total_reclasificados:
             db.session.commit()
-            print(f'[INVENTARIO] Limpieza: {total_eliminados} duplicados eliminados, {total_reclasificados} items reclasificados a Encofrados')
+
+        print(f'[INVENTARIO] Limpieza: {total_eliminados} duplicados eliminados, {total_reclasificados} reclasificados a Encofrados')
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Error en limpieza de inventario: {e}")
