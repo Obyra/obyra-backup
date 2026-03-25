@@ -1194,10 +1194,14 @@ def invitar_usuario():
             flash('Por favor, ingresa un email válido.', 'danger')
             return render_template('auth/invitar.html')
 
-        # Re-verificar límite antes de crear
-        if org and not org.puede_agregar_usuario():
-            flash(f'Límite de usuarios alcanzado. Actualiza tu plan para continuar.', 'warning')
-            return redirect(url_for('planes.mostrar_planes'))
+        # Re-verificar límite con lock transaccional para evitar race conditions
+        if org:
+            from models import Organizacion
+            org_locked = Organizacion.query.filter_by(id=org.id).with_for_update().first()
+            if org_locked and not org_locked.puede_agregar_usuario():
+                db.session.rollback()
+                flash(f'Límite de usuarios alcanzado. Actualiza tu plan para continuar.', 'warning')
+                return redirect(url_for('planes.mostrar_planes'))
 
         usuario_existente = Usuario.query.filter_by(email=email.lower()).first()
         if usuario_existente:

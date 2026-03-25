@@ -485,10 +485,14 @@ def lista():
 
 @obras_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
-def verificar_limite_obras(org_id):
-    """Verifica si la organización puede crear más obras según su plan."""
+def verificar_limite_obras(org_id, lock=False):
+    """Verifica si la organización puede crear más obras según su plan.
+    Si lock=True, usa SELECT FOR UPDATE para evitar race conditions."""
     from models import Organizacion
-    org = Organizacion.query.get(org_id)
+    if lock:
+        org = Organizacion.query.filter_by(id=org_id).with_for_update().first()
+    else:
+        org = Organizacion.query.get(org_id)
     if not org:
         return False, "No se encontró la organización."
     limite = org.max_obras or 1
@@ -508,7 +512,9 @@ def crear():
 
     # Verificar límite de obras del plan
     org_id = get_current_org_id()
-    puede_crear, mensaje_obras = verificar_limite_obras(org_id)
+    # En POST usar lock transaccional para evitar race conditions
+    use_lock = request.method == 'POST'
+    puede_crear, mensaje_obras = verificar_limite_obras(org_id, lock=use_lock)
     if not puede_crear:
         flash(mensaje_obras, 'warning')
         return redirect(url_for('obras.lista'))
@@ -1128,7 +1134,8 @@ def editar(id):
         flash('No tienes permisos para editar obras.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
 
-    obra = Obra.query.get_or_404(id)
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
 
     nuevo_estado = request.form.get('estado', obra.estado)
     if nuevo_estado == 'pausada' and not obra.puede_ser_pausada_por(current_user):
@@ -1259,7 +1266,8 @@ def agregar_etapas(id):
         flash('No tienes permisos para gestionar etapas.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
 
-    obra = Obra.query.get_or_404(id)
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
     etapas_json = request.form.getlist('etapas[]')
 
     if not etapas_json:
@@ -1428,7 +1436,8 @@ def agregar_etapa(id):
         flash('No tienes permisos para agregar etapas.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
 
-    obra = Obra.query.get_or_404(id)
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
     nombre = request.form.get('nombre')
     descripcion = request.form.get('descripcion')
 
@@ -4364,7 +4373,8 @@ def actualizar_progreso_automatico(id):
         flash('No tienes permisos para actualizar el progreso.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
 
-    obra = Obra.query.get_or_404(id)
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
 
     try:
         progreso_anterior = obra.progreso
@@ -5220,7 +5230,8 @@ def cambiar_nivel_etapa(etapa_id):
 @login_required
 def gantt_data(id):
     """Retorna datos de etapas en formato compatible con frappe-gantt."""
-    obra = Obra.query.get_or_404(id)
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
     etapas = (
         EtapaObra.query
         .filter_by(obra_id=id)

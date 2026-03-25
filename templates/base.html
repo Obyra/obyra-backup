@@ -326,7 +326,7 @@
                             </a></li>
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}" onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage({type:'LOGOUT'})}">
                                 <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
                             </a></li>
                         </ul>

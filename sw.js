@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v4.9.0';  // Feat: categorías inventario alineadas a etapas de obra
+const CACHE_VERSION = 'v5.0.0';  // Security: limpieza de cache en logout (multi-tenant isolation)
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
@@ -391,6 +391,18 @@ self.addEventListener('message', (event) => {
         case 'FORCE_SYNC':
             syncPendingOperations();
             break;
+
+        case 'LOGOUT':
+            // Limpiar caches de datos al cerrar sesión (aislamiento multi-tenant)
+            Promise.all([
+                caches.delete(DATA_CACHE),
+                caches.delete(DYNAMIC_CACHE),
+            ]).then(() => {
+                console.log('[SW] Caches de datos limpiados por logout');
+                // Limpiar IndexedDB de sync queue
+                clearSyncQueue();
+            });
+            break;
     }
 });
 
@@ -481,6 +493,17 @@ async function getSyncQueue() {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
+}
+
+async function clearSyncQueue() {
+    try {
+        const db = await openSyncDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
+        console.log('[SW] Sync queue limpiada');
+    } catch (e) {
+        console.warn('[SW] Error limpiando sync queue:', e);
+    }
 }
 
 async function removeFromSyncQueue(id) {
