@@ -1748,36 +1748,44 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error agregando CASCADE deletes: {e}")
 
-    # Migración: eliminar items duplicados "(u)" y reclasificar encofrados
+    # Migración: eliminar items duplicados (por nombre exacto) y reclasificar encofrados
     try:
         from models import ItemInventario, InventoryCategory, MovimientoInventario, UsoInventario
-        from sqlalchemy import or_
+        from sqlalchemy import or_, func as sa_func
 
-        # Para cada organización, buscar y eliminar duplicados "(u)"
         orgs_con_items = db.session.query(ItemInventario.organizacion_id).distinct().all()
         total_eliminados = 0
         total_reclasificados = 0
 
         for (org_id_val,) in orgs_con_items:
-            # --- Paso 1: Eliminar duplicados "(u)" ---
-            items_u = ItemInventario.query.filter(
-                ItemInventario.organizacion_id == org_id_val,
-                ItemInventario.nombre.like('% (u)')
+            # --- Paso 1: Eliminar duplicados por nombre exacto ---
+            # Buscar nombres que aparecen más de una vez en la misma org
+            dupes = db.session.query(
+                ItemInventario.nombre,
+                sa_func.count(ItemInventario.id).label('cnt')
+            ).filter(
+                ItemInventario.organizacion_id == org_id_val
+            ).group_by(
+                ItemInventario.nombre
+            ).having(
+                sa_func.count(ItemInventario.id) > 1
             ).all()
 
-            for item_u in items_u:
-                nombre_original = item_u.nombre.rsplit(' (u)', 1)[0].strip()
-                # Verificar que existe el item original
-                original = ItemInventario.query.filter(
+            for nombre_dup, cnt in dupes:
+                # Obtener todos los items con ese nombre, ordenar por id (quedarse con el más viejo)
+                items_dup = ItemInventario.query.filter(
                     ItemInventario.organizacion_id == org_id_val,
-                    ItemInventario.nombre == nombre_original
-                ).first()
-                if original:
-                    # Eliminar el duplicado y sus relaciones
-                    MovimientoInventario.query.filter_by(item_id=item_u.id).delete()
-                    UsoInventario.query.filter_by(item_id=item_u.id).delete()
-                    db.session.delete(item_u)
-                    total_eliminados += 1
+                    ItemInventario.nombre == nombre_dup
+                ).order_by(ItemInventario.id.asc()).all()
+
+                # Mantener el primero, eliminar el resto
+                for item_extra in items_dup[1:]:
+                    # Solo eliminar si no tiene stock real
+                    if not item_extra.stock_actual or float(item_extra.stock_actual) == 0:
+                        MovimientoInventario.query.filter_by(item_id=item_extra.id).delete()
+                        UsoInventario.query.filter_by(item_id=item_extra.id).delete()
+                        db.session.delete(item_extra)
+                        total_eliminados += 1
 
             # --- Paso 2: Reclasificar encofrados ---
             cat_encofrados = InventoryCategory.query.filter(
