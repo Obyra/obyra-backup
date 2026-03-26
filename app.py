@@ -1660,120 +1660,23 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
 
-    # Migración: solo admin@obyra.com debe ser super admin
+    # Guard permanente: asegurar que solo admin@obyra.com sea super admin
     try:
-        # Quitar super_admin de todos los que NO sean admin@obyra.com
-        non_admin_supers = Usuario.query.filter(
-            Usuario.is_super_admin.is_(True),
-            Usuario.email != 'admin@obyra.com'
-        ).all()
-        for u in non_admin_supers:
-            u.is_super_admin = False
-        # Asegurar que admin@obyra.com SÍ sea super admin
         admin_user = Usuario.query.filter_by(email='admin@obyra.com').first()
         if admin_user and not admin_user.is_super_admin:
             admin_user.is_super_admin = True
-        if non_admin_supers or (admin_user and not admin_user.is_super_admin):
             db.session.commit()
-            if non_admin_supers:
-                print(f'[ADMIN] Removido is_super_admin de {len(non_admin_supers)} usuarios: {[u.email for u in non_admin_supers]}')
     except Exception as e:
         db.session.rollback()
-        print(f"[WARN] Error ajustando super admins: {e}")
 
-    # Migración: crear índices en organizacion_id para queries multi-tenant
-    try:
-        index_sql = """
-        DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_items_inventario_org_id') THEN
-                CREATE INDEX ix_items_inventario_org_id ON items_inventario(organizacion_id);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_presupuestos_org_id') THEN
-                CREATE INDEX ix_presupuestos_org_id ON presupuestos(organizacion_id);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_obras_org_id') THEN
-                CREATE INDEX ix_obras_org_id ON obras(organizacion_id);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_clientes_org_id') THEN
-                CREATE INDEX ix_clientes_org_id ON clientes(organizacion_id);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_proveedores_org_id') THEN
-                CREATE INDEX ix_proveedores_org_id ON proveedores(organizacion_id);
-            END IF;
-        END $$;
-        """
-        db.session.execute(text(index_sql))
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f"[WARN] Error creando índices org_id: {e}")
-
-    # Migración: cambiar unique constraint de codigo global a per-org
-    try:
-        uq_sql = """
-        DO $$ BEGIN
-            -- Eliminar unique global si existe
-            IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'items_inventario_codigo_key') THEN
-                ALTER TABLE items_inventario DROP CONSTRAINT items_inventario_codigo_key;
-            END IF;
-            -- Crear unique per-org si no existe
-            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_item_inventario_org_codigo') THEN
-                ALTER TABLE items_inventario ADD CONSTRAINT uq_item_inventario_org_codigo
-                    UNIQUE (organizacion_id, codigo);
-            END IF;
-        END $$;
-        """
-        db.session.execute(text(uq_sql))
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f"[WARN] Error migrando unique constraint items: {e}")
-
-    # Migración: agregar CASCADE DELETE a FKs huérfanas (tarea_miembros, tarea_responsables)
-    try:
-        cascade_sql = """
-        DO $$ BEGIN
-            -- tarea_miembros.tarea_id CASCADE
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                       WHERE constraint_name = 'tarea_miembros_tarea_id_fkey' AND table_name = 'tarea_miembros') THEN
-                ALTER TABLE tarea_miembros DROP CONSTRAINT tarea_miembros_tarea_id_fkey;
-                ALTER TABLE tarea_miembros ADD CONSTRAINT tarea_miembros_tarea_id_fkey
-                    FOREIGN KEY (tarea_id) REFERENCES tareas_etapa(id) ON DELETE CASCADE;
-            END IF;
-            -- tarea_miembros.user_id CASCADE
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                       WHERE constraint_name = 'tarea_miembros_user_id_fkey' AND table_name = 'tarea_miembros') THEN
-                ALTER TABLE tarea_miembros DROP CONSTRAINT tarea_miembros_user_id_fkey;
-                ALTER TABLE tarea_miembros ADD CONSTRAINT tarea_miembros_user_id_fkey
-                    FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE;
-            END IF;
-            -- tarea_responsables.tarea_id CASCADE
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                       WHERE constraint_name = 'tarea_responsables_tarea_id_fkey' AND table_name = 'tarea_responsables') THEN
-                ALTER TABLE tarea_responsables DROP CONSTRAINT tarea_responsables_tarea_id_fkey;
-                ALTER TABLE tarea_responsables ADD CONSTRAINT tarea_responsables_tarea_id_fkey
-                    FOREIGN KEY (tarea_id) REFERENCES tareas_etapa(id) ON DELETE CASCADE;
-            END IF;
-            -- tarea_responsables.user_id CASCADE
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                       WHERE constraint_name = 'tarea_responsables_user_id_fkey' AND table_name = 'tarea_responsables') THEN
-                ALTER TABLE tarea_responsables DROP CONSTRAINT tarea_responsables_user_id_fkey;
-                ALTER TABLE tarea_responsables ADD CONSTRAINT tarea_responsables_user_id_fkey
-                    FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE;
-            END IF;
-        END $$;
-        """
-        db.session.execute(text(cascade_sql))
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f"[WARN] Error agregando CASCADE deletes: {e}")
-
-    # Migración de duplicados y reclasificación — COMPLETADA y desactivada
-    # Los duplicados fueron limpiados manualmente. La reclasificación a Encofrados ya se ejecutó.
-
-    # Runtime migrations removed in Phase 4 - now using Alembic migrations
-    # See: MIGRATIONS_GUIDE.md
+    # Migraciones runtime completadas y removidas (2026-03-25):
+    # - Índices organizacion_id: ya creados en producción
+    # - Unique constraint (org_id, codigo) en items: ya aplicado
+    # - CASCADE DELETE en tarea_miembros/tarea_responsables: ya aplicado
+    # - Limpieza de duplicados inventario: completada manualmente
+    # - Reclasificación encofrados: completada
+    # Los modelos tienen las definiciones correctas (index=True, ondelete='CASCADE', etc.)
+    # Si se necesita recrear la DB, SQLAlchemy create_all() aplica todo desde los modelos.
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
