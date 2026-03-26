@@ -428,12 +428,10 @@ def lista():
 
     obras = None
     if org_id:
-        query = Obra.query.filter(Obra.organizacion_id == org_id)
-        # Filtrar obras eliminadas (soft delete) si el campo activo existe
-        try:
-            query = query.filter(db.or_(Obra.activo == True, Obra.activo.is_(None)))
-        except Exception:
-            pass
+        query = Obra.query.filter(
+            Obra.organizacion_id == org_id,
+            Obra.estado != 'cancelada'  # Excluir obras eliminadas (soft delete)
+        )
 
         if not mostrar_borradores:
             query = query.filter(obras_visibles_clause(Obra))
