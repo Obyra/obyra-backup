@@ -119,18 +119,19 @@
     <div class="row mb-4">
         <div class="col-lg-7 mb-3">
             <div class="card border-0 shadow-sm h-100">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-fire text-warning me-2"></i>Burn Rate (Gastos Mensuales)</h5>
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-fire text-warning me-2"></i>Burn Rate (Gastos Mensuales)</h6>
+                    <span class="badge bg-warning bg-opacity-10 text-warning">Tendencia</span>
                 </div>
-                <div class="card-body">
-                    <canvas id="chartBurnRate" height="220"></canvas>
+                <div class="card-body" style="height:280px;">
+                    <canvas id="chartBurnRate"></canvas>
                 </div>
             </div>
         </div>
         <div class="col-lg-5 mb-3">
             <div class="card border-0 shadow-sm h-100">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-chart-pie text-primary me-2"></i>Desglose por Categoría</h5>
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-chart-pie text-primary me-2"></i>Desglose por Categoría</h6>
                 </div>
                 <div class="card-body d-flex align-items-center justify-content-center">
                     {% if costos_por_categoria %}
@@ -552,6 +553,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function fmtMoney(v) { return '$' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v); }
 
     // Burn Rate (línea mensual)
+    // Burn Rate — Gastos mensuales con gradiente
     {% if costos_por_mes %}
     (function() {
         var ctx = document.getElementById('chartBurnRate');
@@ -561,6 +563,12 @@ document.addEventListener('DOMContentLoaded', function() {
         labels.push('{{ datos.display | e }}');
         valores.push({{ datos.ars | round(0) }});
         {% endfor %}
+
+        var ctxCanvas = ctx.getContext('2d');
+        var grad = ctxCanvas.createLinearGradient(0, 0, 0, 300);
+        grad.addColorStop(0, 'rgba(251, 191, 36, 0.4)');
+        grad.addColorStop(1, 'rgba(251, 191, 36, 0.02)');
+
         new Chart(ctx, {
             type: 'line',
             data: {
@@ -568,38 +576,89 @@ document.addEventListener('DOMContentLoaded', function() {
                 datasets: [{
                     label: 'Gasto Mensual',
                     data: valores,
-                    borderColor: '#ffc107',
-                    backgroundColor: '#ffc10720',
-                    fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#ffc107', borderWidth: 2
+                    borderColor: '#f59e0b',
+                    backgroundColor: grad,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#f59e0b',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 7,
+                    borderWidth: 3
                 }]
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return 'Gasto: ' + fmtMoney(ctx.raw); } } } },
-                scales: { y: { beginAtZero: true, ticks: { callback: fmtMoney, font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } }
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyFont: { size: 12 },
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: { label: function(c) { return '  Gasto: ' + fmtMoney(c.raw); } }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: fmtMoney, font: { size: 11 }, color: '#64748b' } },
+                    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b' } }
+                }
             }
         });
     })();
     {% endif %}
 
-    // Desglose por categoría (donut)
+    // Desglose por categoría (donut moderno)
     {% if costos_por_categoria %}
     (function() {
         var ctx = document.getElementById('chartCategoria');
         if (!ctx) return;
         var labels = [], valores = [];
-        var colores = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#0dcaf0', '#fd7e14', '#6f42c1', '#20c997', '#d63384', '#6c757d'];
+        var colores = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4',
+            '#f97316', '#8b5cf6', '#14b8a6', '#ec4899', '#6b7280',
+            '#84cc16', '#e11d48', '#0ea5e9', '#a855f7', '#64748b'
+        ];
         {% for cat, datos in costos_por_categoria.items() %}
         labels.push('{{ cat | e }}');
         valores.push({{ datos.ars | round(0) }});
         {% endfor %}
         new Chart(ctx, {
             type: 'doughnut',
-            data: { labels: labels, datasets: [{ data: valores, backgroundColor: colores.slice(0, labels.length), borderWidth: 2 }] },
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: valores,
+                    backgroundColor: colores.slice(0, labels.length),
+                    borderWidth: 0,
+                    hoverOffset: 8,
+                    borderRadius: 3,
+                }]
+            },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
-                    tooltip: { callbacks: { label: function(ctx) { var t = ctx.dataset.data.reduce(function(a,b){return a+b},0); return ctx.label+': '+fmtMoney(ctx.raw)+' ('+(t>0?((ctx.raw/t)*100).toFixed(1):0)+'%)'; } } }
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 12, boxHeight: 12, borderRadius: 3, useBorderRadius: true, font: { size: 11 }, padding: 12 }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(c) {
+                                var t = c.dataset.data.reduce(function(a,b){return a+b},0);
+                                var pct = t > 0 ? ((c.raw/t)*100).toFixed(1) : 0;
+                                return '  ' + c.label + ': ' + fmtMoney(c.raw) + ' (' + pct + '%)';
+                            }
+                        }
+                    }
                 }
             }
         });
