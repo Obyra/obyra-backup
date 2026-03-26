@@ -1686,6 +1686,21 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error creando campos de descuento: {e}")
 
+    # Migración: campo activo en obras (para soft delete)
+    try:
+        db.session.execute(text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='obras' AND column_name='activo') THEN
+                ALTER TABLE obras ADD COLUMN activo BOOLEAN DEFAULT TRUE;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error creando campo activo en obras: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado
