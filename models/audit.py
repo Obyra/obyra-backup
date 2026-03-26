@@ -3,7 +3,7 @@ Audit Log - Registro de cambios en el sistema
 Permite rastrear quién cambió qué y cuándo.
 """
 from datetime import datetime
-from app import db
+from extensions import db
 
 
 class AuditLog(db.Model):
