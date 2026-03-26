@@ -1669,6 +1669,23 @@ with app.app_context():
     except Exception as e:
         db.session.rollback()
 
+    # Migración: campos de descuento en organizaciones
+    try:
+        db.session.execute(text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='descuento_porcentaje') THEN
+                ALTER TABLE organizaciones ADD COLUMN descuento_porcentaje INTEGER DEFAULT 0;
+                ALTER TABLE organizaciones ADD COLUMN descuento_meses INTEGER DEFAULT 0;
+                ALTER TABLE organizaciones ADD COLUMN descuento_inicio TIMESTAMP;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error creando campos de descuento: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado

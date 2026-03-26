@@ -130,29 +130,40 @@ def mostrar_planes():
     # Obtener cotización actual
     cotizacion = obtener_cotizacion_bna()
 
-    # Calcular precios en ARS para cada plan
+    # Calcular precios en ARS para cada plan (con descuento si aplica)
+    org = current_user.organizacion if current_user.is_authenticated else None
+    descuento_info = org.info_descuento() if org else None
+
     planes_con_precios = {}
     for key, plan in PLANES_CONFIG.items():
         if key == 'prueba':
-            continue  # No mostrar plan de prueba en la selección
-        precio_ars = plan['precio_usd'] * Decimal(str(cotizacion['value']))
+            continue
+        precio_base_usd = plan['precio_usd']
+        # Aplicar descuento si la org tiene uno activo
+        if org and org.descuento_activo():
+            precio_final_usd = org.precio_con_descuento(precio_base_usd)
+        else:
+            precio_final_usd = precio_base_usd
+        precio_ars = precio_final_usd * Decimal(str(cotizacion['value']))
         planes_con_precios[key] = {
             **plan,
             'precio_ars': float(precio_ars.quantize(Decimal('0.01'))),
-            'precio_usd': float(plan['precio_usd'])
+            'precio_usd': float(precio_final_usd),
+            'precio_original_usd': float(precio_base_usd),
+            'tiene_descuento': float(precio_final_usd) < float(precio_base_usd),
         }
 
     # Obtener plan actual de la organización del usuario
     plan_actual = None
     org_info = None
-    if current_user.is_authenticated and current_user.organizacion:
-        org = current_user.organizacion
+    if current_user.is_authenticated and org:
         plan_actual = org.plan_tipo or 'prueba'
         org_info = {
             'nombre': org.nombre,
             'plan_tipo': plan_actual,
             'max_usuarios': org.max_usuarios or 5,
-            'usuarios_actuales': org.usuarios_activos_count
+            'usuarios_actuales': org.usuarios_activos_count,
+            'descuento': descuento_info,
         }
 
     return render_template('planes/planes.html',
@@ -265,7 +276,14 @@ def pago_mercadopago(plan):
 
     plan_info = PLANES_CONFIG[plan]
     cotizacion = obtener_cotizacion_bna()
-    precio_ars = float(plan_info['precio_usd'] * Decimal(str(cotizacion['value'])))
+    precio_base_usd = plan_info['precio_usd']
+    # Aplicar descuento si la org tiene uno activo
+    org = current_user.organizacion
+    if org and org.descuento_activo():
+        precio_usd = org.precio_con_descuento(precio_base_usd)
+    else:
+        precio_usd = precio_base_usd
+    precio_ars = float(precio_usd * Decimal(str(cotizacion['value'])))
 
     # Inicializar SDK
     sdk = mercadopago.SDK(mp_access_token)

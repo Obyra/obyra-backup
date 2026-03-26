@@ -196,6 +196,46 @@ def activar_plan(org_id):
     return redirect(url_for('superadmin.panel'))
 
 
+@superadmin_bp.route('/descuento/<int:org_id>', methods=['POST'])
+@login_required
+@require_super_admin
+def asignar_descuento(org_id):
+    """Asignar o modificar descuento a una organización."""
+    org = Organizacion.query.get_or_404(org_id)
+
+    porcentaje = int(request.form.get('descuento_porcentaje', 0))
+    meses = int(request.form.get('descuento_meses', 0))
+
+    if porcentaje not in [0, 10, 20, 30, 40, 50]:
+        flash('Porcentaje de descuento no válido. Use 0, 10, 20, 30, 40 o 50.', 'danger')
+        return redirect(url_for('superadmin.ver_organizacion', org_id=org_id))
+
+    if porcentaje == 0 or meses == 0:
+        # Quitar descuento
+        org.descuento_porcentaje = 0
+        org.descuento_meses = 0
+        org.descuento_inicio = None
+        db.session.commit()
+        flash(f'Descuento removido para {org.nombre}.', 'info')
+    else:
+        org.descuento_porcentaje = porcentaje
+        org.descuento_meses = meses
+        org.descuento_inicio = datetime.utcnow()
+        db.session.commit()
+
+        try:
+            from models.audit import registrar_audit
+            registrar_audit('descuento', 'organizacion', org_id,
+                           f'Descuento {porcentaje}% por {meses} meses a {org.nombre}')
+            db.session.commit()
+        except Exception:
+            pass
+
+        flash(f'Descuento de {porcentaje}% por {meses} meses asignado a {org.nombre}.', 'success')
+
+    return redirect(url_for('superadmin.ver_organizacion', org_id=org_id))
+
+
 @superadmin_bp.route('/api/stats')
 @login_required
 @require_super_admin

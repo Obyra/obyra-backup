@@ -36,6 +36,11 @@ class Organizacion(db.Model):
     fecha_inicio_plan = db.Column(db.DateTime)  # Fecha de inicio del plan pago
     fecha_fin_plan = db.Column(db.DateTime)  # Fecha de vencimiento del plan
 
+    # Descuentos (asignados por super admin)
+    descuento_porcentaje = db.Column(db.Integer, default=0)  # 0, 10, 20, 30, 40, 50
+    descuento_meses = db.Column(db.Integer, default=0)  # Duración del descuento en meses
+    descuento_inicio = db.Column(db.DateTime)  # Fecha desde que aplica el descuento
+
     # Relaciones
     usuarios = db.relationship(
         'Usuario',
@@ -96,14 +101,50 @@ class Organizacion(db.Model):
         max_u = self.max_usuarios or 5
         return max(0, max_u - self.usuarios_activos_count)
 
+    def descuento_activo(self):
+        """Verifica si el descuento está vigente."""
+        if not self.descuento_porcentaje or self.descuento_porcentaje <= 0:
+            return False
+        if not self.descuento_inicio or not self.descuento_meses:
+            return False
+        from datetime import datetime, timedelta
+        fin_descuento = self.descuento_inicio + timedelta(days=self.descuento_meses * 30)
+        return datetime.utcnow() <= fin_descuento
+
+    def precio_con_descuento(self, precio_base):
+        """Calcula precio con descuento si está activo."""
+        from decimal import Decimal
+        if self.descuento_activo():
+            factor = Decimal('1') - Decimal(str(self.descuento_porcentaje)) / Decimal('100')
+            return precio_base * factor
+        return precio_base
+
+    def info_descuento(self):
+        """Retorna info del descuento para mostrar en UI."""
+        if not self.descuento_porcentaje or self.descuento_porcentaje <= 0:
+            return None
+        from datetime import timedelta
+        fin = self.descuento_inicio + timedelta(days=self.descuento_meses * 30) if self.descuento_inicio else None
+        return {
+            'porcentaje': self.descuento_porcentaje,
+            'meses': self.descuento_meses,
+            'inicio': self.descuento_inicio,
+            'fin': fin,
+            'activo': self.descuento_activo(),
+        }
+
     def plan_info(self):
         """Retorna información del plan actual"""
         from planes import PLANES_CONFIG
         plan = PLANES_CONFIG.get(self.plan_tipo, PLANES_CONFIG['prueba'])
+        precio_base = plan['precio_usd']
+        precio_final = self.precio_con_descuento(precio_base)
         return {
             'tipo': self.plan_tipo,
             'nombre': plan['nombre'],
-            'precio_usd': plan['precio_usd'],
+            'precio_usd': precio_base,
+            'precio_con_descuento': precio_final,
+            'descuento': self.info_descuento(),
             'max_usuarios': self.max_usuarios or plan['max_usuarios'],
             'usuarios_actuales': self.usuarios_activos_count,
             'usuarios_disponibles': self.usuarios_disponibles(),

@@ -27,6 +27,81 @@
         </div>
     </div>
 
+    <!-- Plan y Descuento -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <strong><i class="fas fa-crown me-2"></i>Plan Actual</strong>
+                </div>
+                <div class="card-body">
+                    <p><strong>Plan:</strong> <span class="badge bg-info fs-6">{{ org.plan_tipo or 'prueba' }}</span></p>
+                    <p><strong>Usuarios:</strong> {{ org.max_usuarios or 5 }} máx</p>
+                    <p><strong>Obras:</strong> {{ org.max_obras or 1 }} máx</p>
+                    {% if org.fecha_fin_plan %}
+                    <p><strong>Vence:</strong> {{ org.fecha_fin_plan.strftime('%d/%m/%Y') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <strong><i class="fas fa-tag me-2"></i>Descuento</strong>
+                </div>
+                <div class="card-body">
+                    {% if org.descuento_porcentaje and org.descuento_porcentaje > 0 %}
+                        <p>
+                            <span class="badge bg-success fs-6">{{ org.descuento_porcentaje }}% OFF</span>
+                            por {{ org.descuento_meses }} meses
+                            {% if org.descuento_activo() %}
+                                <span class="badge bg-success">ACTIVO</span>
+                            {% else %}
+                                <span class="badge bg-secondary">VENCIDO</span>
+                            {% endif %}
+                        </p>
+                        {% if org.descuento_inicio %}
+                        <p class="small text-muted">Desde: {{ org.descuento_inicio.strftime('%d/%m/%Y') }}</p>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted">Sin descuento asignado</p>
+                    {% endif %}
+
+                    <hr>
+                    <form method="POST" action="{{ url_for('superadmin.asignar_descuento', org_id=org.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-5">
+                                <label class="form-label small">Descuento</label>
+                                <select name="descuento_porcentaje" class="form-select form-select-sm">
+                                    <option value="0">Sin descuento</option>
+                                    <option value="10" {{ 'selected' if org.descuento_porcentaje == 10 }}>10%</option>
+                                    <option value="20" {{ 'selected' if org.descuento_porcentaje == 20 }}>20%</option>
+                                    <option value="30" {{ 'selected' if org.descuento_porcentaje == 30 }}>30%</option>
+                                    <option value="40" {{ 'selected' if org.descuento_porcentaje == 40 }}>40%</option>
+                                    <option value="50" {{ 'selected' if org.descuento_porcentaje == 50 }}>50%</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small">Meses</label>
+                                <select name="descuento_meses" class="form-select form-select-sm">
+                                    {% for m in range(1, 13) %}
+                                    <option value="{{ m }}" {{ 'selected' if org.descuento_meses == m }}>{{ m }} mes{{ 'es' if m > 1 }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <button type="submit" class="btn btn-warning btn-sm w-100">
+                                    <i class="fas fa-save me-1"></i>Aplicar
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Usuarios -->
     <div class="row mb-4">
         <div class="col-12">
