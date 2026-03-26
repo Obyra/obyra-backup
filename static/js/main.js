@@ -126,7 +126,7 @@ function initializeNotifications() {
             if (alert.classList.contains('show')) {
                 bootstrap.Alert.getOrCreateInstance(alert).close();
             }
-        }, 5000);
+        }, 8000);
     });
     
     // Notificaciones de stock bajo
@@ -508,7 +508,7 @@ function showNotification(message, type = 'info') {
         if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
         }
-    }, 5000);
+    }, 8000);
 }
 
 function getIconForType(type) {

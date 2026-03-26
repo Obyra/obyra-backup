@@ -37,6 +37,8 @@ def lista():
     estado = request.args.get('estado', '')
     prioridad = request.args.get('prioridad', '')
     obra_id = request.args.get('obra_id', type=int)
+    page = request.args.get('page', 1, type=int)
+    per_page = 25
 
     query = RequerimientoCompra.query.filter_by(organizacion_id=org_id)
 
@@ -53,7 +55,9 @@ def lista():
         RequerimientoCompra.fecha_solicitud.desc()
     )
 
-    requerimientos = query.all()
+    total = query.count()
+    total_pages = (total + per_page - 1) // per_page
+    requerimientos = query.offset((page - 1) * per_page).limit(per_page).all()
 
     # Obtener obras para filtro
     obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
@@ -74,7 +78,9 @@ def lista():
                           prioridad_filtro=prioridad,
                           obra_id_filtro=obra_id,
                           conteos=conteos_dict,
-                          today=date.today())
+                          today=date.today(),
+                          page=page,
+                          total_pages=total_pages)
 
 
 @requerimientos_bp.route('/nuevo', methods=['GET', 'POST'])
