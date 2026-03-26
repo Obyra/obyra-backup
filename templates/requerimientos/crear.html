@@ -346,7 +346,10 @@ function agregarMaterialDesdeObra(mat) {
     renderItems();
 }
 
+let editandoItemId = null;  // null = agregando nuevo, number = editando existente
+
 function mostrarModalAgregarItem() {
+    editandoItemId = null;
     // Limpiar formulario
     document.getElementById('itemInventarioSelect').value = '';
     document.getElementById('itemDescripcion').value = '';
@@ -354,7 +357,39 @@ function mostrarModalAgregarItem() {
     document.getElementById('itemUnidad').value = 'unidad';
     document.getElementById('itemTipo').value = 'material';
     document.getElementById('itemCosto').value = '';
+    document.getElementById('itemCostoMoneda').value = 'ARS';
     document.getElementById('itemNotas').value = '';
+
+    // Cambiar título del modal
+    document.querySelector('#modalAgregarItem .modal-title').innerHTML =
+        '<i class="fas fa-plus me-2"></i>Agregar Item';
+    document.querySelector('#modalAgregarItem .btn-primary').innerHTML =
+        '<i class="fas fa-plus me-1"></i> Agregar';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalAgregarItem'));
+    modal.show();
+}
+
+function editarItem(itemId) {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+
+    editandoItemId = itemId;
+
+    // Cargar datos del item en el formulario
+    document.getElementById('itemDescripcion').value = item.descripcion || '';
+    document.getElementById('itemCantidad').value = item.cantidad || 1;
+    document.getElementById('itemUnidad').value = item.unidad || 'unidad';
+    document.getElementById('itemTipo').value = item.tipo || 'material';
+    document.getElementById('itemCosto').value = item.costo_estimado || '';
+    document.getElementById('itemCostoMoneda').value = item.moneda_costo || 'ARS';
+    document.getElementById('itemNotas').value = item.notas || '';
+
+    // Cambiar título del modal
+    document.querySelector('#modalAgregarItem .modal-title').innerHTML =
+        '<i class="fas fa-pen me-2"></i>Editar Item';
+    document.querySelector('#modalAgregarItem .btn-primary').innerHTML =
+        '<i class="fas fa-save me-1"></i> Guardar';
 
     const modal = new bootstrap.Modal(document.getElementById('modalAgregarItem'));
     modal.show();
@@ -376,22 +411,38 @@ function agregarItem() {
     const selectInv = document.getElementById('itemInventarioSelect');
     const itemInventarioId = selectInv.value ? parseInt(selectInv.value) : null;
 
-    const item = {
-        id: ++itemIdCounter,
-        item_inventario_id: itemInventarioId,
-        descripcion: descripcion,
-        codigo: '',
-        cantidad: cantidad,
-        unidad: document.getElementById('itemUnidad').value,
-        cantidad_planificada: 0,
-        cantidad_actual_obra: 0,
-        costo_estimado: parseFloat(document.getElementById('itemCosto').value) || null,
-        moneda_costo: document.getElementById('itemCostoMoneda').value,
-        notas: document.getElementById('itemNotas').value.trim(),
-        tipo: document.getElementById('itemTipo').value
-    };
+    if (editandoItemId !== null) {
+        // Modo edición: actualizar item existente
+        const idx = items.findIndex(i => i.id === editandoItemId);
+        if (idx !== -1) {
+            items[idx].descripcion = descripcion;
+            items[idx].cantidad = cantidad;
+            items[idx].unidad = document.getElementById('itemUnidad').value;
+            items[idx].costo_estimado = parseFloat(document.getElementById('itemCosto').value) || null;
+            items[idx].moneda_costo = document.getElementById('itemCostoMoneda').value;
+            items[idx].notas = document.getElementById('itemNotas').value.trim();
+            items[idx].tipo = document.getElementById('itemTipo').value;
+        }
+        editandoItemId = null;
+    } else {
+        // Modo agregar: crear nuevo item
+        const item = {
+            id: ++itemIdCounter,
+            item_inventario_id: itemInventarioId,
+            descripcion: descripcion,
+            codigo: '',
+            cantidad: cantidad,
+            unidad: document.getElementById('itemUnidad').value,
+            cantidad_planificada: 0,
+            cantidad_actual_obra: 0,
+            costo_estimado: parseFloat(document.getElementById('itemCosto').value) || null,
+            moneda_costo: document.getElementById('itemCostoMoneda').value,
+            notas: document.getElementById('itemNotas').value.trim(),
+            tipo: document.getElementById('itemTipo').value
+        };
+        items.push(item);
+    }
 
-    items.push(item);
     renderItems();
 
     // Cerrar modal
@@ -427,9 +478,14 @@ function renderItems() {
                     </small>
                     ${item.notas ? `<p class="mb-0 mt-1 small text-muted">${item.notas}</p>` : ''}
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="eliminarItem(${item.id})">
-                    <i class="fas fa-trash"></i>
-                </button>
+                <div class="d-flex flex-column gap-1 ms-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="editarItem(${item.id})" title="Editar">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarItem(${item.id})" title="Eliminar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
         `).join('');
     }
