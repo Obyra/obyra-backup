@@ -133,25 +133,41 @@ def calcular_horas_fichadas_operario(obra_id, operario_id, desde, hasta):
     total_segundos = 0
     desglose = []
     for dia, fichs in sorted(por_dia.items()):
-        # Emparejar ingreso/egreso
+        # Emparejar ingreso/egreso por timestamp (no por índice posicional)
+        # Ordenar cronológicamente
+        fichs_sorted = sorted(fichs, key=lambda f: f.fecha_hora)
         segundos_dia = 0
-        ingresos = [f for f in fichs if f.tipo == 'ingreso']
-        egresos = [f for f in fichs if f.tipo == 'egreso']
+        primer_ingreso = None
+        ultimo_egreso = None
+        egresos_usados = set()
 
-        for i, ing in enumerate(ingresos):
-            # Buscar el egreso correspondiente
-            egr = egresos[i] if i < len(egresos) else None
-            if egr:
-                diff = (egr.fecha_hora - ing.fecha_hora).total_seconds()
-                if diff > 0:
+        ingresos = [f for f in fichs_sorted if f.tipo == 'ingreso']
+        egresos = [f for f in fichs_sorted if f.tipo == 'egreso']
+
+        for ing in ingresos:
+            if not primer_ingreso:
+                primer_ingreso = ing
+            # Buscar el egreso más cercano POSTERIOR a este ingreso que no esté usado
+            mejor_egr = None
+            for egr in egresos:
+                if egr.id in egresos_usados:
+                    continue
+                if egr.fecha_hora > ing.fecha_hora:
+                    mejor_egr = egr
+                    break  # El primero posterior es el más cercano (ya están ordenados)
+            if mejor_egr:
+                egresos_usados.add(mejor_egr.id)
+                diff = (mejor_egr.fecha_hora - ing.fecha_hora).total_seconds()
+                if 0 < diff <= 86400:  # Máximo 24hs por par (previene errores)
                     segundos_dia += diff
+                    ultimo_egreso = mejor_egr
 
         total_segundos += segundos_dia
         horas_dia = round(segundos_dia / 3600, 2)
 
         if horas_dia > 0 or fichs:
-            ingreso_str = ingresos[0].fecha_hora.strftime('%H:%M') if ingresos else '-'
-            egreso_str = egresos[-1].fecha_hora.strftime('%H:%M') if egresos else '-'
+            ingreso_str = primer_ingreso.fecha_hora.strftime('%H:%M') if primer_ingreso else '-'
+            egreso_str = ultimo_egreso.fecha_hora.strftime('%H:%M') if ultimo_egreso else '-'
             desglose.append({
                 'fecha': dia.isoformat(),
                 'ingreso': ingreso_str,

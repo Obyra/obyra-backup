@@ -2,6 +2,23 @@
 Blueprint de Presupuestos - Gestión de presupuestos y cotizaciones
 """
 import os
+
+
+def _d(val, default=0):
+    """Convierte valor a Decimal de forma segura (para cálculos financieros)."""
+    if val is None:
+        return Decimal(str(default))
+    try:
+        return Decimal(str(val))
+    except (InvalidOperation, ValueError):
+        return Decimal(str(default))
+
+
+def _f(val):
+    """Convierte Decimal a float para serialización JSON."""
+    if val is None:
+        return 0
+    return float(val)
 from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app, abort, send_file)
 from flask_login import login_required, current_user
@@ -853,22 +870,22 @@ def detalle(id):
                     key = f'_item_{item.id}'
                 if key in grupos:
                     g = grupos[key]
-                    g['cantidad'] += float(item.cantidad or 0)
-                    g['total'] += float(item.total or 0)
-                    g['total_ars'] += float(item.total_ars or item.total or 0)
-                    g['total_currency'] += float(item.total_currency or 0)
+                    g['cantidad'] += _d(item.cantidad)
+                    g['total'] += _d(item.total)
+                    g['total_ars'] += _d(item.total_ars or item.total)
+                    g['total_currency'] += _d(item.total_currency)
                 else:
                     grupos[key] = {
                         'id': item.id,
                         'descripcion': item.descripcion,
                         'unidad': item.unidad,
-                        'cantidad': float(item.cantidad or 0),
-                        'precio_unitario': float(item.precio_unitario or 0),
-                        'total': float(item.total or 0),
-                        'price_unit_ars': float(item.price_unit_ars or item.precio_unitario or 0),
-                        'total_ars': float(item.total_ars or item.total or 0),
-                        'price_unit_currency': float(item.price_unit_currency or 0),
-                        'total_currency': float(item.total_currency or 0),
+                        'cantidad': _d(item.cantidad),
+                        'precio_unitario': _d(item.precio_unitario),
+                        'total': _d(item.total),
+                        'price_unit_ars': _d(item.price_unit_ars or item.precio_unitario),
+                        'total_ars': _d(item.total_ars or item.total),
+                        'price_unit_currency': _d(item.price_unit_currency),
+                        'total_currency': _d(item.total_currency),
                         'currency': getattr(item, 'currency', 'ARS'),
                         'origen': item.origen,
                         'tipo': item.tipo,
@@ -900,18 +917,18 @@ def detalle(id):
             if etapa not in ia_por_etapa_ordenado:
                 ia_por_etapa_ordenado[etapa] = items_etapa
 
-        # Calcular subtotales por etapa (items ya consolidados, valores son float)
+        # Calcular subtotales por etapa usando Decimal
         subtotales_por_etapa = {}
         for etapa_nombre, items_etapa in ia_por_etapa_ordenado.items():
-            subtotal_etapa = 0.0
-            subtotal_etapa_usd = 0.0
+            subtotal_etapa = Decimal('0')
+            subtotal_etapa_usd = Decimal('0')
             for tipo in ['materiales', 'mano_obra', 'equipos', 'herramientas']:
                 for item in items_etapa[tipo]:
-                    subtotal_etapa += float(item.total or 0)
-                    subtotal_etapa_usd += float(item.total_currency or 0)
+                    subtotal_etapa += _d(item.total)
+                    subtotal_etapa_usd += _d(item.total_currency)
             subtotales_por_etapa[etapa_nombre] = {
-                'total': subtotal_etapa,
-                'total_usd': subtotal_etapa_usd
+                'total': _f(subtotal_etapa),
+                'total_usd': _f(subtotal_etapa_usd)
             }
 
         # Calcular totales de IA
@@ -2049,18 +2066,18 @@ def editar_item(id):
         # Devolver totales actualizados
         return jsonify({
             'exito': True,
-            'nuevo_total': float(item.total),
-            'price_unit_ars': float(item.price_unit_ars) if item.price_unit_ars else None,
-            'total_ars': float(item.total_ars) if item.total_ars else None,
-            'price_unit_usd': float(item.price_unit_currency) if item.price_unit_currency else None,
-            'total_usd': float(item.total_currency) if item.total_currency else None,
+            'nuevo_total': _f(item.total),
+            'price_unit_ars': _f(item.price_unit_ars) if item.price_unit_ars else None,
+            'total_ars': _f(item.total_ars) if item.total_ars else None,
+            'price_unit_usd': _f(item.price_unit_currency) if item.price_unit_currency else None,
+            'total_usd': _f(item.total_currency) if item.total_currency else None,
             'currency': item.currency,
-            'subtotal_materiales': float(presupuesto.subtotal_materiales),
-            'subtotal_mano_obra': float(presupuesto.subtotal_mano_obra),
-            'subtotal_equipos': float(presupuesto.subtotal_equipos),
-            'total_sin_iva': float(presupuesto.total_sin_iva),
-            'iva_monto': float(presupuesto.total_con_iva - presupuesto.total_sin_iva),
-            'total_con_iva': float(presupuesto.total_con_iva)
+            'subtotal_materiales': _f(presupuesto.subtotal_materiales),
+            'subtotal_mano_obra': _f(presupuesto.subtotal_mano_obra),
+            'subtotal_equipos': _f(presupuesto.subtotal_equipos),
+            'total_sin_iva': _f(presupuesto.total_sin_iva),
+            'iva_monto': _f(_d(presupuesto.total_con_iva) - _d(presupuesto.total_sin_iva)),
+            'total_con_iva': _f(presupuesto.total_con_iva)
         })
 
     except Exception as e:
