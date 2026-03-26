@@ -1794,15 +1794,51 @@ def confirmar_como_obra(id):
 
         db.session.commit()
 
-        # Asignar niveles de encadenamiento por defecto a las etapas
+        # Asignar niveles de encadenamiento, dependencias y fechas
         try:
-            from services.dependency_service import asignar_niveles_por_defecto
+            from services.dependency_service import (
+                asignar_niveles_por_defecto,
+                generar_dependencias_desde_niveles,
+                propagar_fechas_obra,
+            )
+            from datetime import timedelta as td
+
+            # 1. Asignar niveles de encadenamiento
             asignadas = asignar_niveles_por_defecto(obra.id)
             if asignadas:
-                db.session.commit()
-                current_app.logger.info(f"Asignados niveles de encadenamiento a {asignadas} etapas de obra {obra.id}")
+                db.session.flush()
+                current_app.logger.info(f"Niveles asignados a {asignadas} etapas de obra {obra.id}")
+
+            # 2. Generar dependencias FS entre niveles
+            deps_creadas = generar_dependencias_desde_niveles(obra.id)
+            if deps_creadas:
+                db.session.flush()
+                current_app.logger.info(f"Creadas {deps_creadas} dependencias para obra {obra.id}")
+
+            # 3. Asignar fecha de inicio a la primera etapa (fecha_inicio de la obra o hoy)
+            from models.projects import EtapaObra as EO
+            primera_etapa = EO.query.filter_by(obra_id=obra.id).order_by(
+                EO.nivel_encadenamiento.asc().nullslast(), EO.orden
+            ).first()
+            if primera_etapa and not primera_etapa.fecha_inicio_estimada:
+                fecha_inicio = obra.fecha_inicio or date.today()
+                primera_etapa.fecha_inicio_estimada = fecha_inicio
+                primera_etapa.fecha_fin_estimada = fecha_inicio + td(days=14)  # 2 semanas default
+                db.session.flush()
+
+            # 4. Propagar fechas a todas las etapas sucesoras
+            modificadas = propagar_fechas_obra(obra.id, force_cascade=True)
+            db.session.commit()
+            if modificadas:
+                current_app.logger.info(f"Fechas propagadas a {len(modificadas)} etapas de obra {obra.id}")
+
         except Exception as e_dep:
-            current_app.logger.warning(f"No se pudieron asignar niveles de dependencias: {e_dep}")
+            db.session.rollback()
+            current_app.logger.warning(f"Error en encadenamiento de etapas: {e_dep}")
+            try:
+                db.session.commit()  # Commit lo que se pueda
+            except Exception:
+                pass
 
         current_app.logger.info(f"Presupuesto {presupuesto.numero} confirmado como obra {obra.id}")
 
