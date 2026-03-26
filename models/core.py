@@ -162,9 +162,15 @@ class Usuario(UserMixin, db.Model):
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
     # Sistema de roles unificado: admin, pm, tecnico, operario
-    # El campo 'rol' está DEPRECATED - usar siempre 'role'
-    rol = db.Column(db.String(50), nullable=True)  # DEPRECATED: mantener por compatibilidad temporal
-    role = db.Column(db.String(20), nullable=False, default='operario')  # Roles: admin, pm, tecnico, operario
+    rol = db.Column(db.String(50), nullable=True)  # DEPRECATED: sincronizado desde role
+    role = db.Column(db.String(20), nullable=False, default='operario')
+
+    _ROLE_TO_ROL = {'admin': 'administrador', 'pm': 'tecnico', 'tecnico': 'tecnico', 'operario': 'operario'}
+
+    @staticmethod
+    def _sync_rol_from_role(role_value):
+        """Convierte role unificado al rol legacy para compatibilidad."""
+        return Usuario._ROLE_TO_ROL.get(role_value, role_value)
     puede_pausar_obras = db.Column(db.Boolean, default=False)  # Permiso especial para pausar obras
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False)  # Super administrador con acceso total al sistema
     activo = db.Column(db.Boolean, default=True)
