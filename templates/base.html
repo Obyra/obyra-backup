@@ -530,6 +530,33 @@
         return meta ? meta.getAttribute('content') : '';
     }
 
+    // Interceptor global: agregar CSRF token a todos los fetch POST/PUT/DELETE
+    (function() {
+        var originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            options = options || {};
+            var method = (options.method || 'GET').toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD') {
+                var token = getCsrfToken();
+                if (token) {
+                    options.headers = options.headers || {};
+                    // Si headers es un Headers object, usar set
+                    if (options.headers instanceof Headers) {
+                        if (!options.headers.has('X-CSRFToken')) {
+                            options.headers.set('X-CSRFToken', token);
+                        }
+                    } else {
+                        // Si es un objeto plano
+                        if (!options.headers['X-CSRFToken']) {
+                            options.headers['X-CSRFToken'] = token;
+                        }
+                    }
+                }
+            }
+            return originalFetch.call(this, url, options);
+        };
+    })();
+
     function marcarLeida(id, e) {
         // Prevenir navegacion inmediata para que el fetch termine
         if (e) e.preventDefault();

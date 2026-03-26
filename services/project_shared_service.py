@@ -488,12 +488,12 @@ class ProjectSharedService:
                 total_liquidado = sum(float(l.monto_total or 0) for l in liq_all)
                 total_pagado_mo = sum(
                     float(item.monto or 0)
-                    for l in liq_all for item in l.items.all()
+                    for l in liq_all for item in l.items
                     if item.estado == 'pagado'
                 )
                 total_pendiente_mo = sum(
                     float(item.monto or 0)
-                    for l in liq_all for item in l.items.all()
+                    for l in liq_all for item in l.items
                     if item.estado == 'pendiente'
                 )
                 # Horas totales fichadas

@@ -554,9 +554,11 @@ def registrar_pago_item(item_id, metodo_pago, fecha_pago=None, comprobante_url=N
 
 
 def obtener_liquidaciones_obra(obra_id):
-    """Obtiene todas las liquidaciones de una obra."""
+    """Obtiene todas las liquidaciones de una obra con items precargados (evita N+1)."""
+    from sqlalchemy.orm import selectinload
     return (
         LiquidacionMO.query
+        .options(selectinload(LiquidacionMO.items))
         .filter_by(obra_id=obra_id)
         .order_by(LiquidacionMO.created_at.desc())
         .all()

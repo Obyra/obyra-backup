@@ -77,7 +77,8 @@
                                 {% for mat in materiales_obra %}
                                     {% if mat.deficit > 0 %}
                                     <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                                            onclick="agregarMaterialDesdeObra({{ mat|tojson|safe }})">
+                                            onclick="agregarMaterialDesdeObra(JSON.parse(this.dataset.mat))"
+                                            data-mat="{{ mat|tojson|e }}">
                                         <div>
                                             <strong>{{ mat.descripcion }}</strong>
                                             <small class="text-muted d-block">{{ mat.codigo }}</small>

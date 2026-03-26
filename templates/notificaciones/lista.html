@@ -114,14 +114,16 @@
 
 {% block scripts %}
 <script>
+const _csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
 function marcarLeidaPage(id) {
-    fetch(`/notificaciones/api/marcar-leida/${id}`, { method: 'POST' })
+    fetch(`/notificaciones/api/marcar-leida/${id}`, { method: 'POST', headers: {'X-CSRFToken': _csrf} })
         .then(() => location.reload())
         .catch(err => alert('Error: ' + err));
 }
 
 function marcarTodasLeidasPage() {
-    fetch('/notificaciones/api/marcar-todas-leidas', { method: 'POST' })
+    fetch('/notificaciones/api/marcar-todas-leidas', { method: 'POST', headers: {'X-CSRFToken': _csrf} })
         .then(() => location.reload())
         .catch(err => alert('Error: ' + err));
 }
@@ -129,7 +131,7 @@ function marcarTodasLeidasPage() {
 function eliminarNotif(id) {
     if (!confirm('Desea eliminar esta notificacion?')) return;
 
-    fetch(`/notificaciones/api/eliminar/${id}`, { method: 'DELETE' })
+    fetch(`/notificaciones/api/eliminar/${id}`, { method: 'DELETE', headers: {'X-CSRFToken': _csrf} })
         .then(() => location.reload())
         .catch(err => alert('Error: ' + err));
 }
