@@ -266,7 +266,11 @@ class ItemInventario(db.Model):
 
     @property
     def necesita_reposicion(self):
-        return self.stock_actual <= self.stock_minimo
+        """Solo marca como stock bajo si tiene un mínimo definido > 0."""
+        min_stock = float(self.stock_minimo or 0)
+        if min_stock <= 0:
+            return False
+        return float(self.stock_actual or 0) <= min_stock
 
     @property
     def presentaciones_lista(self):

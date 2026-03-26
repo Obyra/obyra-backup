@@ -809,8 +809,10 @@ def reporte_obras():
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
 
-    # Base query con filtro de organización
+    # Base query con filtro de organización (excluir canceladas/eliminadas)
     query = Obra.query.filter(Obra.organizacion_id == org_id)
+    if not estado:
+        query = query.filter(Obra.estado != 'cancelada')
 
     if estado:
         query = query.filter(Obra.estado == estado)
