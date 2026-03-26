@@ -428,7 +428,7 @@ def lista():
 
     obras = None
     if org_id:
-        query = Obra.query.filter(Obra.organizacion_id == org_id)
+        query = Obra.query.filter(Obra.organizacion_id == org_id, Obra.activo == True)
 
         if not mostrar_borradores:
             query = query.filter(obras_visibles_clause(Obra))
@@ -4176,131 +4176,36 @@ def eliminar_obra(obra_id):
         flash('No tienes permisos para eliminar obras.', 'danger')
         return redirect(url_for('obras.lista'))
 
-    obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first_or_404()
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.filter_by(id=obra_id, organizacion_id=org_id).first_or_404()
     nombre_obra = obra.nombre
 
     try:
-        # Desasociar presupuestos de la obra pero mantenerlos ocultos
-        # NO revertir confirmado_como_obra para que no vuelvan a aparecer en el módulo de presupuestos
-        from models.budgets import Presupuesto
-        presupuestos_asociados = Presupuesto.query.filter_by(obra_id=obra_id).all()
-        for presupuesto in presupuestos_asociados:
-            # Mantener confirmado_como_obra = True para que siga oculto
-            # Solo desasociar la obra
-            presupuesto.obra_id = None
-            # Mantener el estado como 'confirmado' para que no aparezca en la lista de presupuestos
-
-        # Eliminar todas las relaciones con la obra en orden inverso de dependencias
-
-        # 1. Primero, desasociar items_presupuesto que referencian a las etapas de esta obra
-        from models.budgets import ItemPresupuesto
-        for etapa in obra.etapas:
-            # Poner etapa_id = NULL en items que referencian esta etapa
-            ItemPresupuesto.query.filter_by(etapa_id=etapa.id).update({ItemPresupuesto.etapa_id: None})
-
-        # Helper: verificar si una tabla existe antes de intentar borrar
-        def _tabla_existe(nombre_tabla):
-            r = db.session.execute(db.text(
-                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
-                "WHERE table_schema='public' AND table_name = :tbl)"
-            ), {"tbl": nombre_tabla})
-            return r.scalar()
-
-        # 2. Eliminar dependencias de tareas y luego las tareas de cada etapa
-        for etapa in obra.etapas:
-            tareas_etapa = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
-            for tarea in tareas_etapa:
-                for sub_table in ['tarea_miembros', 'tarea_avances']:
-                    if _tabla_existe(sub_table):
-                        db.session.execute(db.text(f"DELETE FROM {sub_table} WHERE tarea_id = :tid"), {"tid": tarea.id})
-            TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
-
-        # 3. Eliminar etapas
-        EtapaObra.query.filter_by(obra_id=obra_id).delete()
-
-        # 4. Eliminar asignaciones
-        AsignacionObra.query.filter_by(obra_id=obra_id).delete()
-
-        # 5. Eliminar otras relaciones — solo si la tabla existe en la BD
-        # Formato: (tabla, condicion_sql, [tablas_requeridas_en_subquery])
-        # IMPORTANTE: tablas hijas ANTES que sus padres
-        _optional_deletes = [
-            # --- Hijos de ordenes_compra (OC) ---
-            ("historial_precios_proveedor",
-             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
-             ["ordenes_compra"]),
-            ("movimientos_caja",
-             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
-             ["ordenes_compra"]),
-            ("recepcion_oc_items",
-             "recepcion_id IN (SELECT r.id FROM recepciones_oc r JOIN ordenes_compra oc ON r.orden_compra_id = oc.id WHERE oc.obra_id = :obra_id)",
-             ["recepciones_oc", "ordenes_compra"]),
-            ("recepciones_oc",
-             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
-             ["ordenes_compra"]),
-            ("orden_compra_items",
-             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
-             ["ordenes_compra"]),
-            ("ordenes_compra", "obra_id = :obra_id"),
-            # --- Hijos de requerimientos_compra (RC) ---
-            ("cotizacion_proveedor_items",
-             "cotizacion_id IN (SELECT c.id FROM cotizaciones_proveedor c JOIN requerimientos_compra rc ON c.requerimiento_id = rc.id WHERE rc.obra_id = :obra_id)",
-             ["cotizaciones_proveedor", "requerimientos_compra"]),
-            ("cotizaciones_proveedor",
-             "requerimiento_id IN (SELECT id FROM requerimientos_compra WHERE obra_id = :obra_id)",
-             ["requerimientos_compra"]),
-            ("requerimiento_compra_items",
-             "requerimiento_id IN (SELECT id FROM requerimientos_compra WHERE obra_id = :obra_id)",
-             ["requerimientos_compra"]),
-            ("requerimientos_compra", "obra_id = :obra_id"),
-            # --- Hijos de checklists_seguridad ---
-            ("items_checklist", "checklist_id IN (SELECT id FROM checklists_seguridad WHERE obra_id = :obra_id)", ["checklists_seguridad"]),
-            # --- Hijos de documentos_obra ---
-            ("versiones_documento", "documento_id IN (SELECT id FROM documentos_obra WHERE obra_id = :obra_id)", ["documentos_obra"]),
-            ("permisos_documento", "documento_id IN (SELECT id FROM documentos_obra WHERE obra_id = :obra_id)", ["documentos_obra"]),
-            # --- Hijos de work_certifications ---
-            ("work_certification_items", "certificacion_id IN (SELECT id FROM work_certifications WHERE obra_id = :obra_id)", ["work_certifications"]),
-            # --- Tablas padre con obra_id directo ---
-            ("fichadas", "obra_id = :obra_id"),
-            ("work_payments", "obra_id = :obra_id"),
-            ("work_certifications", "obra_id = :obra_id"),
-            ("certificaciones_avance", "obra_id = :obra_id"),
-            ("documentos_obra", "obra_id = :obra_id"),
-            ("incidentes_seguridad", "obra_id = :obra_id"),
-            ("checklists_seguridad", "obra_id = :obra_id"),
-            ("auditorias_seguridad", "obra_id = :obra_id"),
-            ("configuraciones_inteligentes", "obra_id = :obra_id"),
-            ("obra_miembros", "obra_id = :obra_id"),
-            ("uso_inventario", "obra_id = :obra_id"),
-            ("events", "project_id = :obra_id"),
-            ("equipment_assignment", "project_id = :obra_id"),
-            ("equipment_usage", "project_id = :obra_id"),
-            ("stock_movement", "project_id = :obra_id"),
-            ("stock_reservation", "project_id = :obra_id"),
-            # --- stock_obra y sus hijos ---
-            ("movimientos_stock_obra", "stock_obra_id IN (SELECT id FROM stock_obra WHERE obra_id = :obra_id)", ["stock_obra"]),
-            ("stock_obra", "obra_id = :obra_id"),
-        ]
-        for entry in _optional_deletes:
-            table, condition = entry[0], entry[1]
-            deps = entry[2] if len(entry) > 2 else []
-            if _tabla_existe(table) and all(_tabla_existe(d) for d in deps):
-                db.session.execute(db.text(f"DELETE FROM {table} WHERE {condition}"), {"obra_id": obra_id})
-
-        # 6. Finalmente eliminar la obra
-        db.session.delete(obra)
+        # Soft delete: marcar como inactiva y cancelada (no borrar datos)
+        obra.activo = False
+        obra.estado = 'cancelada'
         db.session.commit()
 
+        try:
+            from models.audit import registrar_audit
+            registrar_audit('eliminar', 'obra', obra_id, f'Obra "{nombre_obra}" eliminada (soft delete)')
+            db.session.commit()
+        except Exception:
+            pass
+
         log_data_deletion('Obra', obra_id, current_user.email)
-        current_app.logger.warning(f'Obra eliminada: {obra_id} - {nombre_obra} por usuario {current_user.email}')
-
+        current_app.logger.warning(f'Obra soft-deleted: {obra_id} - {nombre_obra} por usuario {current_user.email}')
         flash(f'La obra "{nombre_obra}" ha sido eliminada exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f'Error al eliminar obra {obra_id}: {str(e)}', exc_info=True)
-        flash(f'Error al eliminar la obra: {str(e)}', 'danger')
+        return redirect(url_for('obras.lista'))
 
-    return redirect(url_for('obras.lista'))
+    except Exception as e_soft:
+        db.session.rollback()
+        current_app.logger.error(f'Error en soft delete de obra {obra_id}: {e_soft}')
+        flash(f'Error al eliminar la obra: {str(e_soft)}', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+    # Hard delete legacy code removed — soft delete handles everything above
+    # For full cascade deletion code, see git history before this commit
 
 
 @obras_bp.route('/super-admin/reiniciar-sistema', methods=['POST'])

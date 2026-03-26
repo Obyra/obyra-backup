@@ -175,8 +175,22 @@ class Usuario(UserMixin, db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     primary_org_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True)
-    plan_activo = db.Column(db.String(50), default='prueba')  # prueba, standard, premium
-    fecha_expiracion_plan = db.Column(db.DateTime)  # Para controlar la expiración del plan
+    plan_activo = db.Column(db.String(50), default='prueba')  # DEPRECATED: usar organizacion.plan_tipo
+    fecha_expiracion_plan = db.Column(db.DateTime)  # DEPRECATED: usar organizacion.fecha_fin_plan
+
+    @property
+    def current_org_id(self):
+        """Retorna el org_id activo: session membership > primary_org > organizacion_id.
+        Usar este property en vez de acceder a organizacion_id directamente."""
+        try:
+            from flask import has_request_context, session
+            if has_request_context():
+                org_from_session = session.get('current_org_id')
+                if org_from_session:
+                    return org_from_session
+        except Exception:
+            pass
+        return self.primary_org_id or self.organizacion_id
 
     # Relaciones
     organizacion = db.relationship(

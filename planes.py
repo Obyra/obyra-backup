@@ -372,10 +372,11 @@ def pago_exitoso():
                 org.max_usuarios = plan_info['max_usuarios']
                 org.max_obras = plan_info.get('max_obras', 3)
                 org.fecha_inicio_plan = datetime.utcnow()
-                org.fecha_fin_plan = datetime.utcnow() + timedelta(days=30)  # 1 mes
+                duracion = plan_info.get('duracion_dias', 365)
+                org.fecha_fin_plan = datetime.utcnow() + timedelta(days=duracion)
                 db.session.commit()
 
-                flash(f'Pago exitoso! Tu plan {plan_info["nombre"]} ha sido activado.', 'success')
+                flash(f'Pago exitoso! Tu plan {plan_info["nombre"]} ha sido activado por {duracion} días.', 'success')
             else:
                 flash('Pago recibido. Contactanos para activar tu plan.', 'info')
         except Exception as e:
@@ -438,9 +439,10 @@ def webhook_mercadopago():
                         user.organizacion.max_usuarios = plan_info['max_usuarios']
                         user.organizacion.max_obras = plan_info.get('max_obras', 3)
                         user.organizacion.fecha_inicio_plan = datetime.utcnow()
-                        user.organizacion.fecha_fin_plan = datetime.utcnow() + timedelta(days=30)
+                        duracion = plan_info.get('duracion_dias', 365)
+                        user.organizacion.fecha_fin_plan = datetime.utcnow() + timedelta(days=duracion)
                         db.session.commit()
-                        print(f"Plan {plan_tipo} activado para usuario {user_id}")
+                        print(f"Plan {plan_tipo} activado para usuario {user_id} por {duracion} días")
 
         except Exception as e:
             print(f"Error procesando webhook MP: {e}")
