@@ -677,8 +677,8 @@ function fmtMoney(v) {
     var ctx = document.getElementById('chartCategoriaInv');
     if (!ctx) return;
     var labels = [], valores = [];
-    {% for cat, datos in por_categoria|dictsort(by='value', reverse=true) %}
-    {% if datos.valor_ars > 0 and loop.index <= 10 %}
+    {% for cat, datos in por_categoria.items() %}
+    {% if datos.valor_ars > 0 %}
     labels.push('{{ cat|e }}');
     valores.push({{ datos.valor_ars|round(0) }});
     {% endif %}
