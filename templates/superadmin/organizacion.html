@@ -115,6 +115,7 @@
                             <tr>
                                 <th>Nombre</th>
                                 <th>Email</th>
+                                <th>Teléfono</th>
                                 <th>Rol</th>
                                 <th>Estado</th>
                             </tr>
@@ -122,10 +123,11 @@
                         <tbody>
                             {% for usuario in usuarios %}
                             <tr>
-                                <td>{{ usuario.nombre or 'Sin nombre' }}</td>
-                                <td>{{ usuario.email }}</td>
+                                <td>{{ usuario.nombre or 'Sin nombre' }} {{ usuario.apellido or '' }}</td>
+                                <td><small>{{ usuario.email }}</small></td>
+                                <td><small>{{ usuario.telefono or '-' }}</small></td>
                                 <td>
-                                    <span class="badge bg-secondary">{{ usuario.rol or usuario.role or 'Sin rol' }}</span>
+                                    <span class="badge bg-secondary">{{ usuario.role or usuario.rol or 'Sin rol' }}</span>
                                     {% if usuario.is_super_admin %}
                                     <span class="badge bg-danger">Super Admin</span>
                                     {% endif %}
@@ -139,7 +141,7 @@
                                 </td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="4" class="text-center text-muted">Sin usuarios</td></tr>
+                            <tr><td colspan="5" class="text-center text-muted">Sin usuarios</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
