@@ -4,7 +4,7 @@ from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc
 from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
-                   AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario,
+                   AsignacionObra, UsoInventario, MovimientoInventario,
                    Organizacion, OrgMembership, ItemPresupuesto, EtapaObra,
                    TareaPlanSemanal, TareaAvanceSemanal)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia, limpiar_alertas_presupuestos_confirmados
@@ -1400,7 +1400,8 @@ def reporte_inventario():
     ).filter(ItemInventario.organizacion_id == org_id)
 
     if tipo:
-        query = query.join(CategoriaInventario).filter(CategoriaInventario.tipo == tipo)
+        from models.inventory import InventoryCategory as IC
+        query = query.join(IC, ItemInventario.categoria_id == IC.id).filter(IC.nombre.ilike(f'%{tipo}%'))
 
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
@@ -2073,7 +2074,8 @@ def exportar_inventario_pdf():
     ).filter(ItemInventario.organizacion_id == org_id)
 
     if tipo:
-        query = query.join(CategoriaInventario).filter(CategoriaInventario.tipo == tipo)
+        from models.inventory import InventoryCategory as IC
+        query = query.join(IC, ItemInventario.categoria_id == IC.id).filter(IC.nombre.ilike(f'%{tipo}%'))
 
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)

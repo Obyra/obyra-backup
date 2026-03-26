@@ -6,7 +6,6 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import json
 import os
 import requests
-import logging
 from app import db
 from extensions import limiter, csrf
 from sqlalchemy import text, func

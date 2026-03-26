@@ -20,7 +20,7 @@ from app import db
 from extensions import csrf
 from models import (
     ItemInventario,
-    CategoriaInventario,
+    # CategoriaInventario removed - using InventoryCategory
     MovimientoInventario,
     UsoInventario,
     Obra,

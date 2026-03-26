@@ -169,6 +169,9 @@ from models.utils import (
     ConsultaAgente,
 )
 
+# Audit log
+from models.audit import AuditLog, registrar_audit
+
 
 def seed_default_role_permissions():
     """Seed permisos por defecto para roles"""
