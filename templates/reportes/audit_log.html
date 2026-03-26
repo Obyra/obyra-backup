@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Registro de Auditoría - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="fas fa-history me-2"></i>Registro de Auditoría</h3>
+        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Acción</label>
+                    <select name="accion" class="form-select">
+                        <option value="">Todas</option>
+                        <option value="login" {{ 'selected' if request.args.get('accion') == 'login' }}>Login</option>
+                        <option value="logout" {{ 'selected' if request.args.get('accion') == 'logout' }}>Logout</option>
+                        <option value="crear" {{ 'selected' if request.args.get('accion') == 'crear' }}>Crear</option>
+                        <option value="editar" {{ 'selected' if request.args.get('accion') == 'editar' }}>Editar</option>
+                        <option value="eliminar" {{ 'selected' if request.args.get('accion') == 'eliminar' }}>Eliminar</option>
+                        <option value="cambiar_rol" {{ 'selected' if request.args.get('accion') == 'cambiar_rol' }}>Cambiar rol</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Entidad</label>
+                    <select name="entidad" class="form-select">
+                        <option value="">Todas</option>
+                        <option value="usuario" {{ 'selected' if request.args.get('entidad') == 'usuario' }}>Usuario</option>
+                        <option value="obra" {{ 'selected' if request.args.get('entidad') == 'obra' }}>Obra</option>
+                        <option value="presupuesto" {{ 'selected' if request.args.get('entidad') == 'presupuesto' }}>Presupuesto</option>
+                        <option value="requerimiento" {{ 'selected' if request.args.get('entidad') == 'requerimiento' }}>Requerimiento</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Desde</label>
+                    <input type="date" name="desde" class="form-control" value="{{ request.args.get('desde', '') }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Hasta</label>
+                    <input type="date" name="hasta" class="form-control" value="{{ request.args.get('hasta', '') }}">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-1"></i>Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de registros -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Fecha/Hora</th>
+                            <th>Usuario</th>
+                            <th>Acción</th>
+                            <th>Entidad</th>
+                            <th>Detalle</th>
+                            <th>IP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td class="text-nowrap">
+                                <small>{{ log.timestamp.strftime('%d/%m/%Y %H:%M') if log.timestamp else '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ log.user_email or '-' }}</small>
+                            </td>
+                            <td>
+                                {% if log.accion == 'login' %}
+                                    <span class="badge bg-info">Login</span>
+                                {% elif log.accion == 'logout' %}
+                                    <span class="badge bg-secondary">Logout</span>
+                                {% elif log.accion == 'crear' %}
+                                    <span class="badge bg-success">Crear</span>
+                                {% elif log.accion == 'editar' %}
+                                    <span class="badge bg-warning text-dark">Editar</span>
+                                {% elif log.accion == 'eliminar' %}
+                                    <span class="badge bg-danger">Eliminar</span>
+                                {% elif log.accion == 'cambiar_rol' %}
+                                    <span class="badge bg-purple" style="background-color:#6f42c1">Cambiar rol</span>
+                                {% else %}
+                                    <span class="badge bg-dark">{{ log.accion }}</span>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ log.entidad }}</small></td>
+                            <td><small>{{ log.detalle or '-' }}</small></td>
+                            <td><small class="text-muted">{{ log.ip_address or '-' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                No hay registros de auditoría
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% if total_pages > 1 %}
+        <div class="card-footer d-flex justify-content-center">
+            <nav>
+                <ul class="pagination mb-0">
+                    {% for p in range(1, total_pages + 1) %}
+                    <li class="page-item {{ 'active' if p == page }}">
+                        <a class="page-link" href="?page={{ p }}&accion={{ request.args.get('accion', '') }}&entidad={{ request.args.get('entidad', '') }}&desde={{ request.args.get('desde', '') }}&hasta={{ request.args.get('hasta', '') }}">{{ p }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

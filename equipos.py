@@ -276,6 +276,12 @@ def usuarios_nuevo():
                 upsert_user_module(user.id, module, view, edit)
 
         db.session.commit()
+        try:
+            from models.audit import registrar_audit
+            registrar_audit('crear', 'usuario', user.id, f'Usuario creado: {user.email} (rol: {user.role})')
+            db.session.commit()
+        except Exception:
+            pass
         send_new_member_invitation(user, membership, temp_password)
         flash('Usuario creado exitosamente y se envió un email de bienvenida.', 'success')
         return redirect(url_for('auth.usuarios_admin'))
@@ -835,7 +841,14 @@ def usuarios_cambiar_rol(uid):
         return jsonify(ok=False, error="Usuario no encontrado en tu organización"), 404
 
     u = Usuario.query.get_or_404(uid)
+    old_role = u.role
     u.role = request.form.get('role', 'operario')
+    try:
+        from models.audit import registrar_audit
+        registrar_audit('cambiar_rol', 'usuario', uid,
+                       f'Rol cambiado: {old_role} → {u.role} ({u.email})')
+    except Exception:
+        pass
     db.session.commit()
     return jsonify(ok=True)
 

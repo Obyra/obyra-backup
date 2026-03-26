@@ -152,6 +152,12 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
     login_user(usuario, remember=remember)
     log_login_attempt(normalized_email, True)
     current_app.logger.info(f'Login exitoso: {normalized_email} desde {request.remote_addr}')
+    try:
+        from models.audit import registrar_audit
+        registrar_audit('login', 'usuario', usuario.id, f'Login: {normalized_email}')
+        db.session.commit()
+    except Exception:
+        pass
     return True, usuario
 
 def _resolve_dashboard_url() -> str:
@@ -466,6 +472,12 @@ def reset_password(token: str):
 @login_required
 def logout():
     user_email = current_user.email
+    try:
+        from models.audit import registrar_audit
+        registrar_audit('logout', 'usuario', current_user.id, f'Logout: {user_email}')
+        db.session.commit()
+    except Exception:
+        pass
     logout_user()
     log_logout(user_email)
     current_app.logger.info(f'Logout: {user_email}')

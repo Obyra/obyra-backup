@@ -593,6 +593,12 @@ def crear():
         try:
             db.session.add(nueva_obra)
             db.session.commit()
+            try:
+                from models.audit import registrar_audit
+                registrar_audit('crear', 'obra', nueva_obra.id, f'Obra creada: {nombre}')
+                db.session.commit()
+            except Exception:
+                pass
             log_data_modification('Obra', nueva_obra.id, 'Creada', current_user.email)
             current_app.logger.info(f'Obra creada: {nueva_obra.id} - {nombre} por usuario {current_user.email}')
             flash(f'Obra "{nombre}" creada exitosamente.', 'success')

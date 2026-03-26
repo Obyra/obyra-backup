@@ -384,6 +384,11 @@ def eliminar(id):
 
         # Eliminar el requerimiento
         db.session.delete(requerimiento)
+        try:
+            from models.audit import registrar_audit
+            registrar_audit('eliminar', 'requerimiento', id, f'Requerimiento {numero} eliminado')
+        except Exception:
+            pass
         db.session.commit()
 
         flash(f'Requerimiento {numero} eliminado', 'info')

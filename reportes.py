@@ -28,6 +28,55 @@ except Exception:  # pragma: no cover - fallback for dev environments
 
 reportes_bp = Blueprint('reportes', __name__)
 
+
+@reportes_bp.route('/audit-log')
+@login_required
+def audit_log():
+    """Vista del registro de auditoría — solo admin."""
+    if current_user.role not in ('admin',) and not current_user.is_super_admin:
+        flash('No tienes permisos para ver el registro de auditoría.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    from models.audit import AuditLog
+    from datetime import datetime as dt
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+
+    query = AuditLog.query
+    if not current_user.is_super_admin:
+        query = query.filter_by(organizacion_id=org_id)
+
+    # Filtros
+    accion = request.args.get('accion', '')
+    entidad = request.args.get('entidad', '')
+    desde = request.args.get('desde', '')
+    hasta = request.args.get('hasta', '')
+
+    if accion:
+        query = query.filter_by(accion=accion)
+    if entidad:
+        query = query.filter_by(entidad=entidad)
+    if desde:
+        try:
+            query = query.filter(AuditLog.timestamp >= dt.strptime(desde, '%Y-%m-%d'))
+        except ValueError:
+            pass
+    if hasta:
+        try:
+            query = query.filter(AuditLog.timestamp <= dt.strptime(hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+        except ValueError:
+            pass
+
+    total = query.count()
+    total_pages = (total + per_page - 1) // per_page
+    logs = query.order_by(AuditLog.timestamp.desc()).offset((page - 1) * per_page).limit(per_page).all()
+
+    return render_template('reportes/audit_log.html',
+                           logs=logs, page=page, total_pages=total_pages)
+
+
 # ============================================================================
 # Mapeo de categorías de inventario legacy → nombres alineados a etapas de obra
 # ============================================================================

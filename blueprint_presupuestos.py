@@ -2177,6 +2177,11 @@ def eliminar(id):
 
         # Marcar como eliminado en lugar de borrar
         presupuesto.estado = 'eliminado'
+        try:
+            from models.audit import registrar_audit
+            registrar_audit('eliminar', 'presupuesto', id, f'Presupuesto {presupuesto.numero} eliminado')
+        except Exception:
+            pass
         db.session.commit()
 
         current_app.logger.info(f'Presupuesto {presupuesto.numero} eliminado correctamente')
