@@ -102,6 +102,28 @@
                                     {% endif %}
                                 </td>
                             </tr>
+                            <tr>
+                                <th>Presentaciones</th>
+                                <td>
+                                    <div id="presentacionesLista">
+                                    {% if item.presentaciones %}
+                                        {% for p in item.presentaciones|from_json %}
+                                        <span class="badge bg-outline-secondary border me-1 mb-1">
+                                            {{ p.name }} ({{ p.size }} {{ item.unidad }})
+                                            {% if p.price %} - ${{ p.price }}{% endif %}
+                                        </span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted small">Sin presentaciones</span>
+                                    {% endif %}
+                                    </div>
+                                    {% if current_user.role in ('admin', 'pm') %}
+                                    <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="abrirModalPresentaciones()">
+                                        <i class="fas fa-box me-1"></i>Gestionar
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
                             {% if item.descripcion %}
                             <tr>
                                 <th>Descripción</th>
@@ -517,4 +539,105 @@ function quitarCatAdicional(catId) {
 }
 </script>
 {% endif %}
+
+<!-- Modal Gestionar Presentaciones -->
+<div class="modal fade" id="modalPresentaciones" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-box me-2"></i>Presentaciones / Packs</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Definí las presentaciones de compra de este item (ej: bolsa de 50kg, balde de 20L)</p>
+                <div id="presentacionesFormList"></div>
+                <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="agregarFilaPresentacion()">
+                    <i class="fas fa-plus me-1"></i>Agregar presentación
+                </button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarPresentaciones()">
+                    <i class="fas fa-save me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let presentacionesActuales = {{ (item.presentaciones or '[]')|safe }};
+
+function abrirModalPresentaciones() {
+    const list = document.getElementById('presentacionesFormList');
+    list.innerHTML = '';
+    if (presentacionesActuales.length === 0) {
+        agregarFilaPresentacion();
+    } else {
+        presentacionesActuales.forEach(function(p) {
+            agregarFilaPresentacion(p.name, p.size, p.price);
+        });
+    }
+    new bootstrap.Modal(document.getElementById('modalPresentaciones')).show();
+}
+
+function agregarFilaPresentacion(name, size, price) {
+    const list = document.getElementById('presentacionesFormList');
+    const row = document.createElement('div');
+    row.className = 'row g-2 mb-2 align-items-center pres-row';
+    row.innerHTML = `
+        <div class="col-4">
+            <input type="text" class="form-control form-control-sm pres-name" placeholder="Nombre (ej: Bolsa)" value="${name || ''}">
+        </div>
+        <div class="col-3">
+            <div class="input-group input-group-sm">
+                <input type="number" class="form-control pres-size" placeholder="Cant" step="any" min="0.01" value="${size || ''}">
+                <span class="input-group-text">{{ item.unidad or 'u' }}</span>
+            </div>
+        </div>
+        <div class="col-3">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text">$</span>
+                <input type="number" class="form-control pres-price" placeholder="Precio" step="any" min="0" value="${price || ''}">
+            </div>
+        </div>
+        <div class="col-2">
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('.pres-row').remove()">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `;
+    list.appendChild(row);
+}
+
+function guardarPresentaciones() {
+    const rows = document.querySelectorAll('.pres-row');
+    const presentaciones = [];
+    rows.forEach(function(row) {
+        const name = row.querySelector('.pres-name').value.trim();
+        const size = parseFloat(row.querySelector('.pres-size').value);
+        const price = parseFloat(row.querySelector('.pres-price').value) || null;
+        if (name && size > 0) {
+            presentaciones.push({ name: name, size: size, price: price });
+        }
+    });
+
+    fetch('/inventario/{{ item.id }}/presentaciones', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ presentaciones: presentaciones })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            presentacionesActuales = data.presentaciones;
+            bootstrap.Modal.getInstance(document.getElementById('modalPresentaciones')).hide();
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Error desconocido'));
+        }
+    })
+    .catch(err => alert('Error: ' + err.message));
+}
+</script>
 {% endblock %}

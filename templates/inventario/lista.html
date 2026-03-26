@@ -294,7 +294,9 @@
                                     {% if current_user.rol in ['administrador', 'tecnico'] %}
                                     <button type="button" class="btn btn-secondary btn-sm"
                                             title="Baja, traslado, eliminar"
-                                            onclick="abrirModalAcciones('{{ item.id }}', '{{ item.nombre }}', '{{ item.codigo }}', {{ item.stock_actual|float }})">
+                                            data-unidad="{{ item.unidad or 'unidad' }}"
+                                            data-presentaciones="{{ item.presentaciones or '[]' }}"
+                                            onclick="abrirModalAcciones('{{ item.id }}', '{{ item.nombre }}', '{{ item.codigo }}', {{ item.stock_actual|float }}, this.dataset.unidad, this.dataset.presentaciones)">
                                         <i class="fas fa-cog me-1"></i>Acciones
                                     </button>
                                     {% endif %}
@@ -439,10 +441,17 @@
                     <p class="mb-2">Item: <strong id="ingreso_item_nombre"></strong></p>
                     <p class="mb-3 text-muted">Stock actual: <span id="ingreso_stock_actual"></span></p>
 
+                    <div class="mb-3" id="ingreso_presentacion_div" style="display:none">
+                        <label class="form-label">Presentación</label>
+                        <select class="form-select" id="ingreso_presentacion" name="presentacion" onchange="actualizarConversion()">
+                            <option value="">Unidad base</option>
+                        </select>
+                    </div>
                     <div class="mb-3">
-                        <label for="ingreso_cantidad" class="form-label">Cantidad a ingresar *</label>
+                        <label for="ingreso_cantidad" class="form-label" id="ingreso_cantidad_label">Cantidad a ingresar *</label>
                         <input type="number" class="form-control" id="ingreso_cantidad" name="cantidad"
-                               min="0.001" step="any" required>
+                               min="0.001" step="any" required oninput="actualizarConversion()">
+                        <small class="text-info" id="ingreso_cantidad_convertida" style="display:none"></small>
                     </div>
                     <div class="mb-3">
                         <label for="ingreso_precio" class="form-label">Precio unitario (opcional)</label>
@@ -635,12 +644,18 @@
 
 {% block scripts %}
 <script>
+// Datos del item para pasar entre modales
+let _itemUnidad = 'unidad';
+let _itemPresentaciones = [];
+
 // Modal de acciones
-function abrirModalAcciones(itemId, itemNombre, itemCodigo, stockActual) {
+function abrirModalAcciones(itemId, itemNombre, itemCodigo, stockActual, unidad, presentacionesJson) {
     document.getElementById('accion_item_id').value = itemId;
     document.getElementById('accion_item_nombre').value = itemNombre;
     document.getElementById('accion_item_codigo').value = itemCodigo;
     document.getElementById('accion_item_stock').value = stockActual;
+    _itemUnidad = unidad || 'unidad';
+    try { _itemPresentaciones = JSON.parse(presentacionesJson || '[]'); } catch(e) { _itemPresentaciones = []; }
 
     // Actualizar título del modal
     document.getElementById('modalAccionesLabel').innerHTML =
@@ -686,7 +701,7 @@ function ejecutarAccion(accion) {
 function abrirModalIngreso(itemId, itemNombre, stockActual) {
     document.getElementById('ingreso_item_id').value = itemId;
     document.getElementById('ingreso_item_nombre').textContent = itemNombre;
-    document.getElementById('ingreso_stock_actual').textContent = stockActual;
+    document.getElementById('ingreso_stock_actual').textContent = stockActual + ' ' + _itemUnidad;
 
     const formIngreso = document.getElementById('formIngreso');
     formIngreso.action = `/inventario/${itemId}/movimiento`;
@@ -695,8 +710,52 @@ function abrirModalIngreso(itemId, itemNombre, stockActual) {
     document.getElementById('ingreso_precio').value = '';
     document.getElementById('ingreso_observaciones').value = '';
 
+    // Mostrar/ocultar selector de presentación
+    const presDiv = document.getElementById('ingreso_presentacion_div');
+    const presSelect = document.getElementById('ingreso_presentacion');
+    const cantLabel = document.getElementById('ingreso_cantidad_label');
+    const cantConvertida = document.getElementById('ingreso_cantidad_convertida');
+
+    if (_itemPresentaciones && _itemPresentaciones.length > 0) {
+        presDiv.style.display = 'block';
+        presSelect.innerHTML = '<option value="">Unidad base (' + _itemUnidad + ')</option>';
+        _itemPresentaciones.forEach(function(p) {
+            presSelect.innerHTML += '<option value="' + p.size + '" data-name="' + (p.name || '') + '">' +
+                (p.name || ('Pack de ' + p.size)) + ' (' + p.size + ' ' + _itemUnidad + ')' +
+                (p.price ? ' - $' + p.price : '') + '</option>';
+        });
+        cantLabel.textContent = 'Cantidad *';
+    } else {
+        presDiv.style.display = 'none';
+        cantLabel.textContent = 'Cantidad a ingresar (' + _itemUnidad + ') *';
+    }
+    cantConvertida.style.display = 'none';
+
     const modal = new bootstrap.Modal(document.getElementById('modalIngreso'));
     modal.show();
+}
+
+function actualizarConversion() {
+    const presSelect = document.getElementById('ingreso_presentacion');
+    const cantInput = document.getElementById('ingreso_cantidad');
+    const cantConvertida = document.getElementById('ingreso_cantidad_convertida');
+    const cantLabel = document.getElementById('ingreso_cantidad_label');
+
+    const packSize = parseFloat(presSelect.value);
+    if (packSize > 0) {
+        cantLabel.textContent = 'Cantidad de packs *';
+        const cant = parseFloat(cantInput.value) || 0;
+        if (cant > 0) {
+            const total = cant * packSize;
+            cantConvertida.style.display = 'block';
+            cantConvertida.textContent = '= ' + total.toFixed(2) + ' ' + _itemUnidad + ' en unidad base';
+        } else {
+            cantConvertida.style.display = 'none';
+        }
+    } else {
+        cantLabel.textContent = 'Cantidad a ingresar (' + _itemUnidad + ') *';
+        cantConvertida.style.display = 'none';
+    }
 }
 
 // Modal de baja

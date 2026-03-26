@@ -700,6 +700,39 @@ def categorias_adicionales(id):
     )
 
 
+@inventario_bp.route('/<int:id>/presentaciones', methods=['POST'])
+@login_required
+def guardar_presentaciones(id):
+    """Guardar presentaciones (packs) de un item de inventario."""
+    import json as _json
+    org_id = get_current_org_id() or current_user.organizacion_id
+    item = ItemInventario.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    if current_user.role not in ('admin', 'pm'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True)
+    if not data or 'presentaciones' not in data:
+        return jsonify(ok=False, error='Datos inválidos'), 400
+
+    # Validar formato: [{"size": 50, "name": "Bolsa 50kg", "price": 5000}, ...]
+    presentaciones = []
+    for p in data['presentaciones']:
+        size = float(p.get('size', 0))
+        if size <= 0:
+            continue
+        presentaciones.append({
+            'size': size,
+            'name': p.get('name', f'Pack de {size}'),
+            'price': float(p.get('price', 0)) if p.get('price') else None,
+        })
+
+    item.presentaciones = _json.dumps(presentaciones) if presentaciones else None
+    db.session.commit()
+
+    return jsonify(ok=True, presentaciones=presentaciones)
+
+
 @inventario_bp.route('/reclasificar-encofrados', methods=['POST'])
 @login_required
 def reclasificar_encofrados():
@@ -887,19 +920,28 @@ def registrar_movimiento(id):
         return redirect(url_for('inventario.lista'))
 
     tipo = request.form.get('tipo')
-    cantidad = request.form.get('cantidad')
+    cantidad_raw = request.form.get('cantidad')
     precio_unitario_raw = request.form.get('precio_unitario', '0')
     moneda = request.form.get('moneda', 'ARS')
+    presentacion_size = request.form.get('presentacion', '')
     motivo = request.form.get('motivo')
     observaciones = request.form.get('observaciones')
 
-    if not all([tipo, cantidad]):
+    if not all([tipo, cantidad_raw]):
         flash('Tipo y cantidad son obligatorios.', 'danger')
         return redirect(url_for('inventario.detalle', id=id))
 
     try:
-        cantidad = float(cantidad)
+        cantidad = float(cantidad_raw)
         precio_unitario = float(precio_unitario_raw) if precio_unitario_raw else 0
+
+        # Convertir si se usó presentación (packs)
+        if presentacion_size:
+            pack_size = float(presentacion_size)
+            if pack_size > 0:
+                cantidad_packs = cantidad
+                cantidad = cantidad_packs * pack_size  # Convertir a unidad base
+                observaciones = f"[{int(cantidad_packs)} packs de {pack_size} {item.unidad or 'u'}] {observaciones or ''}"
         precio_unitario_usd = 0
 
         # Si el precio es en USD, convertir a ARS y guardar ambos
