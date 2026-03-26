@@ -221,10 +221,10 @@
 let items = [];
 let itemIdCounter = 0;
 
-// Inicializar Select2 cuando el modal se abre (necesario para modales Bootstrap)
+// Inicializar Select2 cuando jQuery esté disponible y el modal se abra
 let select2Initialized = false;
-$('#modalAgregarItem').on('shown.bs.modal', function() {
-    if (select2Initialized) return;
+function initSelect2EnModal() {
+    if (select2Initialized || typeof $ === 'undefined') return;
     select2Initialized = true;
     $('#itemInventarioSelect').select2({
         theme: 'bootstrap-5',
@@ -265,6 +265,13 @@ $('#modalAgregarItem').on('shown.bs.modal', function() {
             document.getElementById('itemUnidad').value = data.unidad || 'unidad';
         }
     });
+}
+
+// Esperar a que jQuery cargue y conectar al evento del modal
+window.addEventListener('load', function() {
+    if (typeof $ !== 'undefined') {
+        $('#modalAgregarItem').on('shown.bs.modal', initSelect2EnModal);
+    }
 });
 
 function cargarMaterialesObra() {
