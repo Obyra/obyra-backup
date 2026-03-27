@@ -318,3 +318,53 @@ def api_stats():
     }
 
     return jsonify(stats)
+
+
+@superadmin_bp.route('/limpiar-marcas-cuadrillas', methods=['POST'])
+@login_required
+@require_super_admin
+def limpiar_marcas_cuadrillas():
+    """Eliminar marcas comerciales de nombres de cuadrillas y roles."""
+    from models.budgets import CuadrillaTipo, MiembroCuadrilla
+    import re
+
+    marcas = [
+        'PERI', 'Peri', 'peri',
+        'DOKA', 'Doka', 'doka',
+        'ULMA', 'Ulma', 'ulma',
+        'EFCO', 'Efco', 'efco',
+        'Sinis', 'SINIS',
+        'Kaufmann', 'KAUFMANN',
+        'Encomax', 'ENCOMAX',
+    ]
+
+    cambios = 0
+
+    # Limpiar nombres de cuadrillas
+    cuadrillas = CuadrillaTipo.query.all()
+    for c in cuadrillas:
+        nombre_original = c.nombre
+        for marca in marcas:
+            c.nombre = c.nombre.replace(f' - sistema {marca}', '')
+            c.nombre = c.nombre.replace(f' - Sistema {marca}', '')
+            c.nombre = c.nombre.replace(f' {marca}', '')
+            c.nombre = c.nombre.replace(f' sistema {marca}', '')
+        # Limpiar espacios dobles
+        c.nombre = re.sub(r'\s+', ' ', c.nombre).strip()
+        if c.nombre != nombre_original:
+            cambios += 1
+
+    # Limpiar roles de miembros
+    miembros = MiembroCuadrilla.query.all()
+    for m in miembros:
+        rol_original = m.rol
+        for marca in marcas:
+            m.rol = m.rol.replace(f' {marca}', '')
+            m.rol = m.rol.replace(f' {marca.upper()}', '')
+        m.rol = re.sub(r'\s+', ' ', m.rol).strip()
+        if m.rol != rol_original:
+            cambios += 1
+
+    db.session.commit()
+    flash(f'Limpieza completada: {cambios} registros actualizados.', 'success')
+    return redirect(url_for('superadmin.panel'))
