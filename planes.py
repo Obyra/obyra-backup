@@ -11,17 +11,47 @@ from config.billing_config import BILLING
 
 planes_bp = Blueprint('planes', __name__, url_prefix='/planes')
 
-# Features comunes a todos los planes (sistema completo)
-FEATURES_SISTEMA_COMPLETO = [
-    'Calculadora IA completa',
-    'Presupuestos ilimitados',
-    'Gestion de obras',
+# Features por plan basados en plan_service.py matrix
+FEATURES_STANDARD = [
+    'Hasta 3 obras',
+    'Hasta 5 usuarios',
+    'Presupuestos (manual + IA basica)',
+    'Gestion de obras y tareas',
     'Gestion de clientes',
-    'Inventario completo',
-    'Modo offline para operarios',
-    'Reportes completos',
+    'Requerimientos de compra',
+    'Ordenes de compra basicas',
+    'Proveedores basicos',
+    'Reportes basicos',
+    'Equipos basico',
+    'Seguridad basica',
+    'Modo offline',
     'Soporte por email y WhatsApp',
-    'Actualizaciones incluidas'
+]
+
+FEATURES_PREMIUM_EXTRA = [
+    'Hasta 5 obras',
+    'Hasta 15 usuarios',
+    'Calculadora IA completa',
+    'Inventario completo (deposito, alertas, consumo)',
+    'Gestion avanzada de proveedores',
+    'Cotizaciones y comparativas',
+    'Reportes avanzados (costos, inventario, financiero)',
+    'Dashboard de costos',
+    'Trazabilidad operativa',
+    'Seguridad completa (incidentes, protocolos)',
+]
+
+FEATURES_FULL_PREMIUM_EXTRA = [
+    'Hasta 15 obras',
+    'Hasta 25 usuarios',
+    'Fichaje por geolocalizacion',
+    'Certificacion avanzada de operarios',
+    'Roles y permisos avanzados',
+    'Auditoria avanzada',
+    'Automatizaciones',
+    'Acceso API',
+    'Dashboard financiero',
+    'Soporte preferencial',
 ]
 
 # Configuración de planes de suscripción
@@ -44,7 +74,7 @@ PLANES_CONFIG = {
         'max_obras': 3,
         'duracion_dias': 365,
         'descripcion': 'Ideal para equipos pequenos',
-        'features': ['Hasta 3 obras', 'Hasta 5 usuarios'] + FEATURES_SISTEMA_COMPLETO
+        'features': FEATURES_STANDARD
     },
     'premium': {
         'nombre': 'Plan Premium',
@@ -54,7 +84,8 @@ PLANES_CONFIG = {
         'max_obras': 5,
         'duracion_dias': 365,
         'descripcion': 'Para empresas en crecimiento',
-        'features': ['Hasta 5 obras', 'Hasta 15 usuarios'] + FEATURES_SISTEMA_COMPLETO + ['Fichaje por geolocalizacion'],
+        'features': FEATURES_STANDARD + FEATURES_PREMIUM_EXTRA,
+        'features_new': FEATURES_PREMIUM_EXTRA,
         'popular': True
     },
     'full_premium': {
@@ -65,7 +96,8 @@ PLANES_CONFIG = {
         'max_obras': 15,
         'duracion_dias': 365,
         'descripcion': 'Para constructoras con operacion mas amplia',
-        'features': ['Hasta 15 obras', 'Hasta 25 usuarios'] + FEATURES_SISTEMA_COMPLETO + ['Fichaje por geolocalizacion']
+        'features': FEATURES_STANDARD + FEATURES_PREMIUM_EXTRA + FEATURES_FULL_PREMIUM_EXTRA,
+        'features_new': FEATURES_FULL_PREMIUM_EXTRA,
     }
 }
 

@@ -85,6 +85,19 @@
                             </div>
 
                             <!-- Features -->
+                            {% if plan.get('features_new') %}
+                            <p class="text-muted small mb-2">
+                                <i class="fas fa-arrow-up me-1"></i>Todo lo del plan anterior, mas:
+                            </p>
+                            <ul class="list-unstyled">
+                                {% for feature in plan.features_new %}
+                                <li class="mb-2 d-flex align-items-start">
+                                    <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                    <span class="fw-semibold">{{ feature }}</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
                             <ul class="list-unstyled">
                                 {% for feature in plan.features %}
                                 <li class="mb-2 d-flex align-items-start">
@@ -93,6 +106,7 @@
                                 </li>
                                 {% endfor %}
                             </ul>
+                            {% endif %}
                         </div>
 
                         <div class="card-footer bg-transparent p-4">
@@ -147,25 +161,20 @@
                                     <td class="text-center bg-primary bg-opacity-10"><strong>15</strong></td>
                                     <td class="text-center"><strong>25</strong></td>
                                 </tr>
+                                <!-- Standard features -->
                                 <tr class="table-light">
-                                    <td colspan="4" class="text-center fw-bold text-primary">
-                                        <i class="fas fa-star me-2"></i>Sistema completo incluido en todos los planes
+                                    <td colspan="4" class="text-center fw-bold text-success">
+                                        <i class="fas fa-check-circle me-2"></i>Incluido en todos los planes
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-brain me-2"></i>Calculadora IA completa</td>
+                                    <td><i class="fas fa-file-alt me-2"></i>Presupuestos (manual + IA basica)</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-file-alt me-2"></i>Presupuestos ilimitados</td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-building me-2"></i>Gestion de obras</td>
+                                    <td><i class="fas fa-building me-2"></i>Gestion de obras y tareas</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
@@ -177,39 +186,159 @@
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-boxes me-2"></i>Inventario completo</td>
+                                    <td><i class="fas fa-clipboard-list me-2"></i>Requerimientos de compra</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-wifi-slash me-2"></i>Modo offline para operarios</td>
+                                    <td><i class="fas fa-shopping-cart me-2"></i>Ordenes de compra basicas</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-chart-line me-2"></i>Reportes completos</td>
+                                    <td><i class="fas fa-truck me-2"></i>Proveedores basicos</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-headset me-2"></i>Soporte Email + WhatsApp</td>
+                                    <td><i class="fas fa-chart-bar me-2"></i>Reportes basicos</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-sync me-2"></i>Actualizaciones incluidas</td>
+                                    <td><i class="fas fa-tools me-2"></i>Equipos basico</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-shield-alt me-2"></i>Seguridad basica</td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-wifi-slash me-2"></i>Modo offline</td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-headset me-2"></i>Soporte email y WhatsApp</td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <!-- Premium features -->
+                                <tr class="table-light">
+                                    <td colspan="4" class="text-center fw-bold text-primary">
+                                        <i class="fas fa-star me-2"></i>Desde Premium
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-brain me-2"></i>Calculadora IA completa</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-boxes me-2"></i>Inventario completo (deposito, alertas, consumo)</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-truck-loading me-2"></i>Gestion avanzada de proveedores</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-balance-scale me-2"></i>Cotizaciones y comparativas</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-chart-line me-2"></i>Reportes avanzados (costos, inventario, financiero)</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-tachometer-alt me-2"></i>Dashboard de costos</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-route me-2"></i>Trazabilidad operativa</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-hard-hat me-2"></i>Seguridad completa (incidentes, protocolos)</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <!-- Full Premium features -->
+                                <tr class="table-light">
+                                    <td colspan="4" class="text-center fw-bold text-dark">
+                                        <i class="fas fa-crown me-2"></i>Solo Full Premium
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><i class="fas fa-map-marker-alt me-2"></i>Fichaje por geolocalizacion</td>
-                                    <td class="text-center"><i class="fas fa-times text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-certificate me-2"></i>Certificacion avanzada de operarios</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-user-shield me-2"></i>Roles y permisos avanzados</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-history me-2"></i>Auditoria avanzada</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-cogs me-2"></i>Automatizaciones</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-plug me-2"></i>Acceso API</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-chart-pie me-2"></i>Dashboard financiero</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-headset me-2"></i>Soporte preferencial</td>
+                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                             </tbody>
@@ -221,8 +350,8 @@
             <!-- Mensaje destacado -->
             <div class="alert alert-success mt-4 text-center">
                 <i class="fas fa-info-circle me-2"></i>
-                <strong>Todos los planes incluyen el sistema completo.</strong>
-                La diferencia es la cantidad de obras, usuarios y funcionalidades adicionales.
+                <strong>Cada plan superior incluye todo lo del anterior.</strong>
+                La diferencia esta en la cantidad de obras, usuarios y funcionalidades avanzadas.
             </div>
 
             <!-- Metodos de pago aceptados -->

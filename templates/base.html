@@ -337,7 +337,7 @@
                                 </a></li>
                                 <li><hr class="dropdown-divider"></li>
                             {% endif %}
-                            {% if current_user.role == 'admin' or current_user.is_super_admin %}
+                            {% if current_user.is_super_admin %}
                             <li><a class="dropdown-item" href="{{ url_for('reportes.audit_log') }}">
                                 <i class="fas fa-history me-2"></i>Registro de Auditoría
                             </a></li>

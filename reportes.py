@@ -33,9 +33,9 @@ reportes_bp = Blueprint('reportes', __name__)
 @reportes_bp.route('/audit-log')
 @login_required
 def audit_log():
-    """Vista del registro de auditoría — solo admin."""
-    if current_user.role not in ('admin',) and not current_user.is_super_admin:
-        flash('No tienes permisos para ver el registro de auditoría.', 'danger')
+    """Vista del registro de auditoría — solo super admin."""
+    if not getattr(current_user, 'is_super_admin', False):
+        flash('Acceso restringido a super administradores.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
     from models.audit import AuditLog
