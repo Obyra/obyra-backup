@@ -1412,7 +1412,7 @@ def asignar_usuario(obra_id):
                 flash('Usuarios inválidos', 'danger')
                 return redirect(url_for('obras.detalle', id=obra_id))
 
-        rol_en_obra = request.form.get('rol') or 'operario'
+        rol_en_obra = request.form.get('rol_en_obra') or request.form.get('rol') or 'operario'
         etapa_id = request.form.get('etapa_id') or None
 
         creados = 0
@@ -1439,15 +1439,51 @@ def asignar_usuario(obra_id):
                     flash('Error asignando usuario', 'danger')
                     return redirect(url_for('obras.detalle', id=obra_id))
 
+        # Si se seleccionó una etapa, asignar el usuario como responsable de TODAS las tareas de esa etapa
+        tareas_asignadas = 0
+        if etapa_id:
+            etapa_obj = EtapaObra.query.get(int(etapa_id))
+            if etapa_obj and etapa_obj.obra_id == obra_id:
+                tareas_etapa = TareaEtapa.query.filter_by(etapa_id=int(etapa_id)).all()
+                for tarea in tareas_etapa:
+                    for uid in user_ids_int:
+                        # Asignar como responsable si no tiene uno
+                        if not tarea.responsable_id:
+                            tarea.responsable_id = uid
+                        # Agregar como miembro de la tarea
+                        existe_miembro = TareaMiembro.query.filter_by(
+                            tarea_id=tarea.id, user_id=uid
+                        ).first()
+                        if not existe_miembro:
+                            db.session.add(TareaMiembro(tarea_id=tarea.id, user_id=uid))
+                            tareas_asignadas += 1
+
+        # También crear AsignacionObra para que aparezca en "Equipo Asignado"
+        for uid in user_ids_int:
+            asig_existe = AsignacionObra.query.filter_by(
+                obra_id=obra_id, usuario_id=uid, activo=True
+            ).first()
+            if not asig_existe:
+                db.session.add(AsignacionObra(
+                    obra_id=obra_id,
+                    usuario_id=uid,
+                    etapa_id=int(etapa_id) if etapa_id else None,
+                    rol_en_obra=rol_en_obra,
+                    activo=True
+                ))
+
         db.session.commit()
 
         if is_ajax:
-            return jsonify({"ok": True, "creados": creados, "ya_existian": ya_existian})
+            return jsonify({"ok": True, "creados": creados, "ya_existian": ya_existian, "tareas_asignadas": tareas_asignadas})
         else:
             if creados > 0:
-                flash(f'✅ Se asignaron {creados} usuarios a la obra', 'success')
+                msg = f'Se asignaron {creados} usuarios a la obra'
+                if tareas_asignadas > 0:
+                    msg += f' y {tareas_asignadas} tareas asignadas automáticamente'
+                flash(msg, 'success')
             if ya_existian > 0:
-                flash(f'ℹ️ {ya_existian} usuarios ya estaban asignados', 'info')
+                flash(f'{ya_existian} usuarios ya estaban asignados', 'info')
             return redirect(url_for('obras.detalle', id=obra_id))
 
     except Exception as e:
