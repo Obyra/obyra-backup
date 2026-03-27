@@ -320,7 +320,7 @@ def api_stats():
     return jsonify(stats)
 
 
-@superadmin_bp.route('/limpiar-marcas-cuadrillas', methods=['POST'])
+@superadmin_bp.route('/limpiar-marcas-cuadrillas', methods=['GET', 'POST'])
 @login_required
 @require_super_admin
 def limpiar_marcas_cuadrillas():
