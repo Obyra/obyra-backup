@@ -4555,7 +4555,45 @@ def api_editar_datos_tarea(tarea_id):
             else:
                 tarea.responsable_id = None
 
+        # Recalcular fecha fin basada en horas (si tiene fecha inicio y horas)
+        if tarea.fecha_inicio_plan and tarea.horas_estimadas and float(tarea.horas_estimadas) > 0:
+            from services.dependency_service import _sumar_dias_habiles
+            horas = float(tarea.horas_estimadas)
+            dias_necesarios = max(1, int(horas / 8))  # 8 horas por día hábil
+            nueva_fin = _sumar_dias_habiles(tarea.fecha_inicio_plan, dias_necesarios - 1)
+            tarea.fecha_fin_plan = nueva_fin
+            tarea.fecha_fin_estimada = nueva_fin
+
         db.session.commit()
+
+        # Propagar encadenamiento: actualizar fechas de tareas siguientes en la misma etapa
+        try:
+            from services.dependency_service import _siguiente_dia_habil, _sumar_dias_habiles
+            tareas_etapa = TareaEtapa.query.filter_by(
+                etapa_id=tarea.etapa_id
+            ).order_by(TareaEtapa.id).all()
+
+            fecha_cursor = None
+            cambios = False
+            for t in tareas_etapa:
+                if fecha_cursor and t.fecha_inicio_plan != fecha_cursor:
+                    t.fecha_inicio_plan = fecha_cursor
+                    t.fecha_inicio_estimada = fecha_cursor
+                    if t.horas_estimadas and float(t.horas_estimadas) > 0:
+                        dias = max(1, int(float(t.horas_estimadas) / 8))
+                        t.fecha_fin_plan = _sumar_dias_habiles(fecha_cursor, dias - 1)
+                        t.fecha_fin_estimada = t.fecha_fin_plan
+                    cambios = True
+
+                if t.fecha_fin_plan:
+                    fecha_cursor = _siguiente_dia_habil(t.fecha_fin_plan, 1)
+                elif t.fecha_inicio_plan:
+                    fecha_cursor = _siguiente_dia_habil(t.fecha_inicio_plan, 1)
+
+            if cambios:
+                db.session.commit()
+        except Exception as e:
+            current_app.logger.warning(f"Error propagando fechas de tareas: {e}")
 
         return jsonify(
             ok=True,
