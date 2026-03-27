@@ -5798,6 +5798,21 @@ def recargar_tareas_predefinidas(obra_id):
             if not tareas_predefinidas:
                 continue
 
+            # Buscar operario asignado a esta etapa (de AsignacionObra)
+            asignacion_etapa = AsignacionObra.query.filter_by(
+                obra_id=obra_id, etapa_id=etapa.id, activo=True
+            ).first()
+            responsable_id = asignacion_etapa.usuario_id if asignacion_etapa else None
+
+            # Si no hay asignación por etapa, buscar responsable de tareas existentes
+            if not responsable_id:
+                tareas_con_resp = TareaEtapa.query.filter(
+                    TareaEtapa.etapa_id == etapa.id,
+                    TareaEtapa.responsable_id.isnot(None)
+                ).first()
+                if tareas_con_resp:
+                    responsable_id = tareas_con_resp.responsable_id
+
             # Obtener tareas actuales
             tareas_actuales = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
 
@@ -5808,14 +5823,13 @@ def recargar_tareas_predefinidas(obra_id):
                 except Exception:
                     avances_count = 0
                 if avances_count == 0 and tarea.porcentaje_avance in (None, 0):
-                    # Eliminar miembros y responsables asociados
                     TareaMiembro.query.filter_by(tarea_id=tarea.id).delete()
                     db.session.delete(tarea)
                     total_eliminadas += 1
 
             db.session.flush()
 
-            # Crear tareas predefinidas (solo las que no existen ya)
+            # Crear tareas predefinidas con operario asignado
             nombres_existentes = {t.nombre for t in TareaEtapa.query.filter_by(etapa_id=etapa.id).all()}
 
             for tarea_def in tareas_predefinidas:
@@ -5830,8 +5844,15 @@ def recargar_tareas_predefinidas(obra_id):
                     estado='pendiente',
                     horas_estimadas=tarea_def.get('horas', 0),
                     unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+                    responsable_id=responsable_id,
                 )
                 db.session.add(nueva)
+                db.session.flush()
+
+                # Agregar como miembro de la tarea
+                if responsable_id:
+                    db.session.add(TareaMiembro(tarea_id=nueva.id, user_id=responsable_id))
+
                 total_creadas += 1
 
         db.session.commit()
