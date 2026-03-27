@@ -129,7 +129,7 @@
                                 {% for item in obras_data %}
                                 <tr>
                                     <td>
-                                        <a href="{{ url_for('obras.detalle', obra_id=item.obra.id) }}" class="text-decoration-none fw-semibold">
+                                        <a href="{{ url_for('obras.detalle', id=item.obra.id) }}" class="text-decoration-none fw-semibold">
                                             {{ item.obra.nombre }}
                                         </a>
                                         <br><small class="text-muted">{{ item.obra.cliente }}</small>
