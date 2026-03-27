@@ -2307,11 +2307,19 @@ def reporte_financiero():
         return redirect(url_for('auth.seleccionar_organizacion'))
 
     # Obras activas (no canceladas, no eliminadas)
-    obras = Obra.query.filter(
-        Obra.organizacion_id == org_id,
-        Obra.deleted_at.is_(None),
-        Obra.estado.notin_(['cancelada'])
-    ).order_by(Obra.nombre).all()
+    try:
+        obras = Obra.query.filter(
+            Obra.organizacion_id == org_id,
+            Obra.deleted_at.is_(None),
+            Obra.estado.notin_(['cancelada'])
+        ).order_by(Obra.nombre).all()
+    except Exception:
+        db.session.rollback()
+        # Fallback si deleted_at no existe aún en la BD
+        obras = Obra.query.filter(
+            Obra.organizacion_id == org_id,
+            Obra.estado.notin_(['cancelada'])
+        ).order_by(Obra.nombre).all()
 
     # ---------- Calcular costos desglosados por obra ----------
     obras_data = []
