@@ -421,11 +421,13 @@ def fichar(obra_id):
     # Si es admin/PM, traer operarios asignados para "fichar por otro"
     operarios_obra = []
     if _es_admin_o_pm(current_user):
+        # Buscar en AsignacionObra Y ObraMiembro (pueden estar en cualquiera)
+        user_ids_vistos = set()
         asignaciones = AsignacionObra.query.filter_by(
             obra_id=obra_id, activo=True
         ).all()
         for a in asignaciones:
-            if a.usuario_id != current_user.id and a.usuario:
+            if a.usuario_id != current_user.id and a.usuario and a.usuario_id not in user_ids_vistos:
                 ultima_f = _ultima_fichada_hoy(a.usuario_id, obra_id)
                 operarios_obra.append({
                     'id': a.usuario_id,
@@ -433,6 +435,22 @@ def fichar(obra_id):
                     'rol': a.rol_en_obra or 'operario',
                     'proximo_tipo': 'egreso' if (ultima_f and ultima_f.tipo == 'ingreso') else 'ingreso',
                 })
+                user_ids_vistos.add(a.usuario_id)
+
+        # También buscar en ObraMiembro
+        obra_miembros = ObraMiembro.query.filter_by(obra_id=obra_id).all()
+        for om in obra_miembros:
+            if om.usuario_id != current_user.id and om.usuario_id not in user_ids_vistos:
+                usuario = Usuario.query.get(om.usuario_id)
+                if usuario:
+                    ultima_f = _ultima_fichada_hoy(om.usuario_id, obra_id)
+                    operarios_obra.append({
+                        'id': om.usuario_id,
+                        'nombre': usuario.nombre_completo,
+                        'rol': om.rol_en_obra or 'operario',
+                        'proximo_tipo': 'egreso' if (ultima_f and ultima_f.tipo == 'ingreso') else 'ingreso',
+                    })
+                    user_ids_vistos.add(om.usuario_id)
 
     return render_template('fichadas/fichar.html',
                            obra=obra,
