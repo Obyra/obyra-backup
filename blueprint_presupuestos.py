@@ -1777,24 +1777,42 @@ def confirmar_como_obra(id):
 
         db.session.flush()
 
-        # Opcionalmente crear tareas desde los ítems del presupuesto
+        # Crear tareas predefinidas por etapa (tareas de OBRA, no materiales)
         if crear_tareas:
-            for etapa_nombre, items_etapa in etapas_dict.items():
-                etapa_id = etapas_creadas[etapa_nombre]
+            from tareas_predefinidas import obtener_tareas_por_etapa
+            tareas_creadas_count = 0
 
-                # Crear tareas para cada ítem de la etapa
-                for item in items_etapa:
+            for etapa_nombre in etapas_dict.keys():
+                etapa_id = etapas_creadas[etapa_nombre]
+                tareas_predefinidas = obtener_tareas_por_etapa(etapa_nombre)
+
+                if tareas_predefinidas:
+                    # Usar tareas predefinidas (son tareas de obra reales)
+                    for tarea_def in tareas_predefinidas:
+                        # Saltar tareas opcionales marcadas con si_aplica
+                        if tarea_def.get('si_aplica'):
+                            continue
+                        tarea = TareaEtapa(
+                            etapa_id=etapa_id,
+                            nombre=tarea_def['nombre'],
+                            estado='pendiente',
+                            horas_estimadas=tarea_def.get('horas', 0),
+                            unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+                        )
+                        db.session.add(tarea)
+                        tareas_creadas_count += 1
+                else:
+                    # Fallback: si no hay tareas predefinidas, crear tarea genérica por etapa
                     tarea = TareaEtapa(
                         etapa_id=etapa_id,
-                        nombre=item.descripcion,
+                        nombre=f'Ejecución {etapa_nombre}',
                         estado='pendiente',
-                        cantidad_planificada=float(item.cantidad) if item.cantidad else 0,
-                        unidad=item.unidad or 'un',
-                        item_presupuesto_id=item.id  # Vincular tarea con item del presupuesto
+                        unidad='un',
                     )
                     db.session.add(tarea)
+                    tareas_creadas_count += 1
 
-            current_app.logger.info(f"Creadas tareas para {len(etapas_dict)} etapas en obra {obra.id}")
+            current_app.logger.info(f"Creadas {tareas_creadas_count} tareas predefinidas para {len(etapas_dict)} etapas en obra {obra.id}")
 
         db.session.commit()
 
