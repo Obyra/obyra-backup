@@ -816,6 +816,30 @@ def detalle(id):
         porcentaje_obra = 0
 
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
+
+    # También incluir ObraMiembros (creados desde asignar-usuarios)
+    obra_miembros_extra = ObraMiembro.query.filter_by(obra_id=obra.id).all()
+    # Combinar: usar asignaciones + obra_miembros que no estén ya en asignaciones
+    asig_user_ids = {a.usuario_id for a in asignaciones}
+    for om in obra_miembros_extra:
+        if om.usuario_id not in asig_user_ids:
+            # Crear AsignacionObra automáticamente para sincronizar
+            nueva_asig = AsignacionObra(
+                obra_id=obra.id,
+                usuario_id=om.usuario_id,
+                rol_en_obra=om.rol_en_obra or 'operario',
+                etapa_id=om.etapa_id,
+                activo=True
+            )
+            db.session.add(nueva_asig)
+            asignaciones.append(nueva_asig)
+            asig_user_ids.add(om.usuario_id)
+    if obra_miembros_extra:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     # Solo usuarios con membresía activa en esta organización (misma lógica que panel Equipos)
     from models.core import OrgMembership
     usuarios_ids_sub = db.session.query(OrgMembership.user_id).filter(
