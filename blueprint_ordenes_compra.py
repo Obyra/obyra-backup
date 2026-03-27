@@ -178,7 +178,7 @@ def crear():
 
             # Si viene de un requerimiento, marcar como en_proceso
             if requerimiento_id:
-                req = RequerimientoCompra.query.get(requerimiento_id)
+                req = RequerimientoCompra.query.filter_by(id=requerimiento_id, organizacion_id=org_id).first()
                 if req and req.estado == 'aprobado':
                     req.marcar_en_proceso()
 

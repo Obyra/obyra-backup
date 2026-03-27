@@ -1701,6 +1701,22 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error creando campo activo en obras: {e}")
 
+    # Soft-delete: agregar deleted_at a obras
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='obras' AND column_name='deleted_at') THEN
+                ALTER TABLE obras ADD COLUMN deleted_at TIMESTAMP;
+                CREATE INDEX ix_obras_deleted_at ON obras(deleted_at);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error creando campo deleted_at en obras: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado

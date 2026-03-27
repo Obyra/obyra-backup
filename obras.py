@@ -49,6 +49,7 @@ from geocoding import normalizar_direccion_argentina
 from services.geocoding_service import resolve as resolve_geocode
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
 from services.memberships import get_current_org_id, get_current_membership
+from services.permissions import validate_obra_ownership, validate_tarea_ownership, get_org_id
 from services.obras_filters import (obras_visibles_clause,
                                     obra_tiene_presupuesto_confirmado)
 from services.certifications import (
@@ -1222,7 +1223,7 @@ def geolocalizar_direccion(direccion):
 @login_required
 def actualizar_coordenadas(id):
     """Actualiza las coordenadas de una obra (usado por geocodificación automática del clima)"""
-    obra = Obra.query.get_or_404(id)
+    obra = validate_obra_ownership(id)
 
     # Verificar permisos básicos (que el usuario tenga acceso a la obra)
     if not obra.es_visible_para(current_user):
@@ -1485,7 +1486,7 @@ def crear_tareas():
     """Crear una o múltiples tareas (con o sin sugeridas)."""
     try:
         obra_id = request.form.get("obra_id", type=int)
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
 
         if not can_manage_obra(obra):
             return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
@@ -1634,9 +1635,7 @@ def asignar_usuarios():
         if not tarea_ids or not user_ids:
             return jsonify(ok=False, error='Faltan tareas o usuarios'), 400
 
-        primera_tarea = TareaEtapa.query.get(int(tarea_ids[0]))
-        if not primera_tarea:
-            return jsonify(ok=False, error="Tarea no encontrada"), 404
+        primera_tarea = validate_tarea_ownership(int(tarea_ids[0]))
 
         obra = primera_tarea.etapa.obra
         if not can_manage_obra(obra):
@@ -2172,7 +2171,7 @@ def _crear_avance_impl(tarea_id):
     from werkzeug.utils import secure_filename
     from pathlib import Path
 
-    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    tarea = validate_tarea_ownership(tarea_id)
 
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'operario', 'administrador', 'tecnico', 'project_manager'}):
@@ -2400,14 +2399,11 @@ def completar_tarea(tarea_id):
     """Completar tarea - solo si restante = 0"""
     from models import resumen_tarea as _rt
 
-    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    tarea = validate_tarea_ownership(tarea_id)
     obra = tarea.etapa.obra
 
     if not can_manage_obra(obra):
         return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
-
-    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
-        return jsonify(ok=False, error="Sin permiso"), 403
 
     try:
         m = _rt(tarea)
@@ -2882,6 +2878,9 @@ def agregar_tarea(id):
         return redirect(url_for('reportes.dashboard'))
 
     etapa = EtapaObra.query.get_or_404(id)
+    org_id = get_org_id()
+    if not org_id or etapa.obra.organizacion_id != org_id:
+        abort(404)
 
     horas_estimadas = request.form.get('horas_estimadas')
     responsable_id = request.form.get('responsable_id')
@@ -4032,9 +4031,7 @@ def api_tareas_bulk_delete():
     if not ids:
         return jsonify({'error': 'No se proporcionaron IDs', 'ok': False}), 400
 
-    primera_tarea = TareaEtapa.query.get(ids[0])
-    if not primera_tarea:
-        return jsonify({'error': 'Tarea no encontrada', 'ok': False}), 404
+    primera_tarea = validate_tarea_ownership(ids[0])
 
     obra = primera_tarea.etapa.obra
     if not can_manage_obra(obra):
@@ -4109,6 +4106,9 @@ def api_etapas_bulk_delete():
 
     primera_etapa = EtapaObra.query.get(ids[0])
     if not primera_etapa:
+        return jsonify({'error': 'Etapa no encontrada', 'ok': False}), 404
+    org_id = get_org_id()
+    if not org_id or primera_etapa.obra.organizacion_id != org_id:
         return jsonify({'error': 'Etapa no encontrada', 'ok': False}), 404
 
     obra = primera_etapa.obra
@@ -4337,7 +4337,7 @@ def actualizar_progreso_automatico(id):
 @obras_bp.route('/tarea/<int:id>/actualizar_estado', methods=['POST'])
 @login_required
 def actualizar_estado_tarea(id):
-    tarea = TareaEtapa.query.get_or_404(id)
+    tarea = validate_tarea_ownership(id)
     obra = tarea.etapa.obra
 
     is_admin_like = is_admin() or ('tecnico' in _get_roles_usuario(current_user))
@@ -4405,7 +4405,7 @@ def actualizar_estado_tarea(id):
 @login_required
 def api_editar_datos_tarea(tarea_id):
     """Editar horas, cantidad, unidad, rendimiento y fechas de una tarea."""
-    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    tarea = validate_tarea_ownership(tarea_id)
     obra = tarea.etapa.obra
 
     if not can_manage_obra(obra):
@@ -4541,6 +4541,7 @@ def historial_certificaciones(id):
 @login_required
 def certificacion_unificada_preview(obra_id):
     """API: preview unificado etapas + operarios para un período."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import generar_preview_unificado
     desde = request.args.get('desde')
     hasta = request.args.get('hasta')
@@ -4566,6 +4567,7 @@ def certificacion_unificada_preview(obra_id):
 @login_required
 def liquidacion_mo_preview(obra_id):
     """API: preview de liquidación para un período (legacy)."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import generar_preview_liquidacion
     desde = request.args.get('desde')
     hasta = request.args.get('hasta')
@@ -4586,6 +4588,7 @@ def liquidacion_mo_preview(obra_id):
 @login_required
 def crear_liquidacion_mo(obra_id):
     """Crear una liquidación de mano de obra."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import crear_liquidacion
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
@@ -4615,6 +4618,7 @@ def crear_liquidacion_mo(obra_id):
 @login_required
 def confirmar_y_pagar_liquidacion(obra_id):
     """Crea liquidación + marca como pagado + actualiza costo_real en un solo paso."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import crear_liquidacion, registrar_pago_item
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
@@ -4649,7 +4653,7 @@ def confirmar_y_pagar_liquidacion(obra_id):
         # 3. Recalcular costo_real de la obra
         from services.liquidacion_mo import _decimal
         from models.templates import LiquidacionMOItem, LiquidacionMO as LiqMO
-        obra = Obra.query.get(obra_id)
+        obra = validate_obra_ownership(obra_id)
 
         costo_mo_pagado = _decimal(
             db.session.query(db.func.coalesce(db.func.sum(LiquidacionMOItem.monto), 0))
@@ -4688,6 +4692,9 @@ def recibo_liquidacion_pdf(item_id):
     item = LiquidacionMOItem.query.get_or_404(item_id)
     liq = item.liquidacion
     obra = liq.obra
+    org_id = get_org_id()
+    if not org_id or obra.organizacion_id != org_id:
+        abort(404)
     org = obra.organizacion if hasattr(obra, 'organizacion') else None
 
     html_content = render_template('obras/recibo_liquidacion_pdf.html',
@@ -4723,6 +4730,9 @@ def recibo_liquidacion_completa_pdf(liq_id):
 
     liq = LiqMO.query.get_or_404(liq_id)
     obra = liq.obra
+    org_id = get_org_id()
+    if not org_id or obra.organizacion_id != org_id:
+        abort(404)
     org = obra.organizacion if hasattr(obra, 'organizacion') else None
     items = liq.items.all()
 
@@ -4750,9 +4760,16 @@ def recibo_liquidacion_completa_pdf(liq_id):
 def pagar_liquidacion_mo_item(item_id):
     """Registrar pago de un item de liquidación."""
     from services.liquidacion_mo import registrar_pago_item
+    from models.templates import LiquidacionMOItem
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
         return jsonify(ok=False, error='Sin permisos'), 403
+
+    # Validate org ownership
+    liq_item = LiquidacionMOItem.query.get_or_404(item_id)
+    org_id = get_org_id()
+    if not org_id or liq_item.liquidacion.obra.organizacion_id != org_id:
+        abort(404)
 
     data = request.get_json(silent=True) or {}
     try:
@@ -4773,6 +4790,7 @@ def pagar_liquidacion_mo_item(item_id):
 @login_required
 def liquidacion_mo_historial(obra_id):
     """API: obtener historial de liquidaciones de una obra."""
+    validate_obra_ownership(obra_id)
     try:
         from services.liquidacion_mo import obtener_liquidaciones_obra
         liquidaciones = obtener_liquidaciones_obra(obra_id)
@@ -4832,6 +4850,9 @@ def desactivar_certificacion(id):
 
     certificacion = CertificacionAvance.query.get_or_404(id)
     obra = certificacion.obra
+    org_id = get_org_id()
+    if not org_id or obra.organizacion_id != org_id:
+        abort(404)
 
     try:
         certificacion.activa = False
@@ -4945,6 +4966,9 @@ def cambiar_estado_etapa(etapa_id):
         return redirect(url_for('reportes.dashboard'))
 
     etapa = EtapaObra.query.get_or_404(etapa_id)
+    org_id = get_org_id()
+    if not org_id or etapa.obra.organizacion_id != org_id:
+        abort(404)
     nuevo_estado = request.form.get('estado')
 
     estados_validos = ['pendiente', 'en_curso', 'pausada', 'finalizada']
@@ -4995,7 +5019,7 @@ def propagar_fechas(id):
         flash('No tienes permisos para ajustar fechas.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
 
-    obra = Obra.query.get_or_404(id)
+    obra = validate_obra_ownership(id)
     try:
         result = propagar_fechas_etapas(obra.id)
         if result['shifted_count'] > 0:
@@ -5018,6 +5042,9 @@ def propagar_fechas(id):
 def editar_fechas_etapa(etapa_id):
     """Editar fechas de una etapa manualmente (admin/técnico)."""
     etapa = EtapaObra.query.get_or_404(etapa_id)
+    org_id = get_org_id()
+    if not org_id or etapa.obra.organizacion_id != org_id:
+        abort(404)
     roles = _get_roles_usuario(current_user)
     if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
         return jsonify({'error': 'Sin permisos'}), 403
@@ -5112,6 +5139,9 @@ def editar_fechas_etapa(etapa_id):
 def cambiar_nivel_etapa(etapa_id):
     """Cambiar nivel de encadenamiento de una etapa."""
     etapa = EtapaObra.query.get_or_404(etapa_id)
+    org_id = get_org_id()
+    if not org_id or etapa.obra.organizacion_id != org_id:
+        abort(404)
     roles = _get_roles_usuario(current_user)
     if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
         return jsonify({'error': 'Sin permisos'}), 403
@@ -5402,7 +5432,7 @@ def get_wizard_etapas():
             response.headers['Content-Type'] = 'application/json'
             return response, 400
 
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
         if not can_manage_obra(obra):
             response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
             response.headers['Content-Type'] = 'application/json'
@@ -5469,8 +5499,8 @@ def api_calcular_superficie_etapa():
 
         # Si no se pasó superficie, obtenerla de la obra
         if superficie_cubierta is None and obra_id:
-            obra = Obra.query.get(obra_id)
-            if obra and obra.superficie_cubierta:
+            obra = validate_obra_ownership(obra_id)
+            if obra.superficie_cubierta:
                 superficie_cubierta = float(obra.superficie_cubierta)
             else:
                 return jsonify({
@@ -5511,8 +5541,8 @@ def api_get_factores_superficie():
 
         # Si se pasa obra_id, obtener superficie de la obra
         if obra_id and not superficie_cubierta:
-            obra = Obra.query.get(obra_id)
-            if obra and obra.superficie_cubierta:
+            obra = validate_obra_ownership(obra_id)
+            if obra.superficie_cubierta:
                 superficie_cubierta = float(obra.superficie_cubierta)
 
         # Si hay superficie, calcular todas las etapas
@@ -5612,7 +5642,7 @@ def wizard_tareas_opciones():
             response.headers['Content-Type'] = 'application/json'
             return response, 400
 
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
         if not can_manage_obra(obra):
             response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
             response.headers['Content-Type'] = 'application/json'
@@ -5685,7 +5715,7 @@ def wizard_create_tasks():
         if not tareas_data:
             return jsonify({'ok': False, 'error': 'No hay tareas para crear'}), 400
 
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
         if not can_manage_obra(obra):
             return jsonify({'ok': False, 'error': 'Sin permisos para gestionar esta obra'}), 403
 
@@ -5817,6 +5847,7 @@ def wizard_create_tasks():
 @login_required
 def crear_remito(obra_id):
     """Crear un remito manualmente."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito, RemitoItem
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'administrador', 'pm', 'project_manager', 'jefe_obra'}):
@@ -5868,6 +5899,7 @@ def crear_remito(obra_id):
 @login_required
 def ver_remito(obra_id, remito_id):
     """API: obtener detalle de un remito."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito
     remito = Remito.query.get_or_404(remito_id)
     return jsonify(ok=True, remito={
@@ -5895,6 +5927,7 @@ def ver_remito(obra_id, remito_id):
 @login_required
 def eliminar_remito(obra_id, remito_id):
     """Eliminar un remito."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'administrador', 'pm', 'project_manager'}):
@@ -5918,6 +5951,7 @@ def eliminar_remito(obra_id, remito_id):
 @login_required
 def remito_pdf(obra_id, remito_id):
     """Genera PDF del remito con la misma estetica que presupuestos."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito
     from weasyprint import HTML
     import io, os, base64

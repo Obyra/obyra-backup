@@ -2046,11 +2046,13 @@ def editar_item(id):
         if not org_id:
             return jsonify({'exito': False, 'error': 'Sin organización activa'}), 400
 
-        item = ItemPresupuesto.query.get_or_404(id)
+        item = ItemPresupuesto.query.get(id)
+        if not item:
+            abort(404)
         presupuesto = item.presupuesto
 
         if presupuesto.organizacion_id != org_id:
-            return jsonify({'exito': False, 'error': 'No autorizado'}), 403
+            abort(404)
 
         if presupuesto.estado != 'borrador':
             return jsonify({'exito': False, 'error': 'Solo se pueden editar items de presupuestos en borrador'}), 400
@@ -2135,7 +2137,9 @@ def eliminar_item(id):
         if not org_id:
             return jsonify({'ok': False, 'error': 'Sin organización activa'}), 400
 
-        item = ItemPresupuesto.query.get_or_404(id)
+        item = ItemPresupuesto.query.get(id)
+        if not item:
+            abort(404)
         presupuesto = item.presupuesto
 
         if presupuesto.organizacion_id != org_id:

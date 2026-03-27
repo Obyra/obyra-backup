@@ -30,6 +30,7 @@ from models import (
     MovimientoStock,
 )
 from services.memberships import get_current_org_id
+from services.permissions import validate_item_inventario_ownership, validate_obra_ownership
 
 # from inventario_new import nuevo_item as nuevo_item_view  # Commented out - causes import error
 from models import InventoryCategory, Organizacion
@@ -657,8 +658,8 @@ def editar_item(id):
 @login_required
 def categorias_adicionales(id):
     """Gestionar categorías adicionales de un item (many-to-many)."""
-    item = ItemInventario.query.get_or_404(id)
     org_id = get_current_org_id() or current_user.organizacion_id
+    item = validate_item_inventario_ownership(id)
 
     if current_user.role not in ('admin', 'pm'):
         return jsonify(ok=False, error='Sin permisos'), 403
@@ -682,12 +683,12 @@ def categorias_adicionales(id):
         for cat_id in categoria_ids:
             if cat_id == item.categoria_id:
                 continue
-            cat = InventoryCategory.query.get(cat_id)
+            cat = InventoryCategory.query.filter_by(id=cat_id, company_id=org_id).first()
             if cat and cat not in item.categorias_adicionales:
                 item.categorias_adicionales.append(cat)
     elif action == 'remove':
         for cat_id in categoria_ids:
-            cat = InventoryCategory.query.get(cat_id)
+            cat = InventoryCategory.query.filter_by(id=cat_id, company_id=org_id).first()
             if cat and cat in item.categorias_adicionales:
                 item.categorias_adicionales.remove(cat)
     else:
@@ -1128,7 +1129,7 @@ def uso_obra():
 
         try:
             cantidad = float(cantidad)
-            item_base = ItemInventario.query.get(item_id)
+            item_base = ItemInventario.query.filter_by(id=item_id, organizacion_id=org_id).first()
 
             if item_base is None:
                 flash('El artículo seleccionado no existe.', 'danger')
@@ -1211,7 +1212,7 @@ def uso_obra():
             if location_id == 'general':
                 location = deposito_general
             else:
-                location = Location.query.get(int(location_id))
+                location = Location.query.filter_by(id=int(location_id), organizacion_id=org_id).first()
 
             if not location:
                 flash('La ubicación seleccionada no existe.', 'danger')
@@ -1433,7 +1434,7 @@ def api_generar_codigo():
 
     try:
         # Obtener categoría
-        categoria = InventoryCategory.query.get(categoria_id)
+        categoria = InventoryCategory.query.filter_by(id=categoria_id, company_id=org_id).first()
         if not categoria:
             return jsonify({'error': 'Categoría no encontrada'}), 404
 
@@ -1707,9 +1708,10 @@ def api_buscar_similares():
         return jsonify({'similares': []})
 
     # Obtener nombre de categoría si se especifica
+    org_id = get_current_org_id() or current_user.organizacion_id
     categoria_nombre = None
     if categoria_id:
-        categoria = InventoryCategory.query.get(categoria_id)
+        categoria = InventoryCategory.query.filter_by(id=categoria_id, company_id=org_id).first()
         if categoria:
             categoria_nombre = categoria.nombre
 
@@ -2218,7 +2220,7 @@ def dar_baja(id):
         return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
 
     try:
-        item = ItemInventario.query.get_or_404(id)
+        item = validate_item_inventario_ownership(id)
 
         from decimal import Decimal
         cantidad = Decimal(str(request.form.get('cantidad', 0)))
@@ -2282,7 +2284,7 @@ def trasladar(id):
         from decimal import Decimal
         from datetime import datetime
 
-        item = ItemInventario.query.get_or_404(id)
+        item = validate_item_inventario_ownership(id)
 
         cantidad = Decimal(str(request.form.get('cantidad', 0)))
         obra_destino_id = request.form.get('obra_destino_id')

@@ -347,3 +347,127 @@ def require_not_operario(f):
 
         return f(*args, **kwargs)
     return decorated_function
+
+
+# ============================================================
+# MULTI-TENANT VALIDATION
+# ============================================================
+
+def get_org_id():
+    """
+    Obtener org_id del usuario actual de forma segura.
+    Usa session primero, luego fallback a organizacion_id del usuario.
+    """
+    from flask import session
+    org_id = session.get('current_org_id')
+    if org_id:
+        return int(org_id)
+    if hasattr(current_user, 'organizacion_id') and current_user.organizacion_id:
+        return int(current_user.organizacion_id)
+    return None
+
+
+def validate_obra_ownership(obra_id):
+    """
+    Valida que la obra pertenece a la organización del usuario.
+    Retorna la obra o aborta con 404.
+    """
+    from models.projects import Obra
+    org_id = get_org_id()
+    if not org_id:
+        abort(403)
+    obra = Obra.query.filter_by(id=obra_id, organizacion_id=org_id).first()
+    if not obra:
+        abort(404)
+    return obra
+
+
+def validate_tarea_ownership(tarea_id):
+    """
+    Valida que la tarea pertenece a una obra de la organización del usuario.
+    Retorna la tarea o aborta con 404.
+    """
+    from models.projects import TareaEtapa, EtapaObra, Obra
+    from models import db
+    org_id = get_org_id()
+    if not org_id:
+        abort(403)
+    tarea = TareaEtapa.query.join(EtapaObra).join(Obra).filter(
+        TareaEtapa.id == tarea_id,
+        Obra.organizacion_id == org_id
+    ).first()
+    if not tarea:
+        abort(404)
+    return tarea
+
+
+def validate_presupuesto_ownership(presupuesto_id):
+    """
+    Valida que el presupuesto pertenece a la organización del usuario.
+    Retorna el presupuesto o aborta con 404.
+    """
+    from models.budgets import Presupuesto
+    org_id = get_org_id()
+    if not org_id:
+        abort(403)
+    pres = Presupuesto.query.filter_by(id=presupuesto_id, organizacion_id=org_id).first()
+    if not pres:
+        abort(404)
+    return pres
+
+
+def validate_item_inventario_ownership(item_id):
+    """
+    Valida que el item de inventario pertenece a la organización del usuario.
+    Retorna el item o aborta con 404.
+    """
+    from models.inventory import ItemInventario
+    org_id = get_org_id()
+    if not org_id:
+        abort(403)
+    item = ItemInventario.query.filter_by(id=item_id, organizacion_id=org_id).first()
+    if not item:
+        abort(404)
+    return item
+
+
+def validate_requerimiento_ownership(req_id):
+    """
+    Valida que el requerimiento pertenece a la organización del usuario.
+    """
+    from models.proveedores_oc import RequerimientoCompra
+    org_id = get_org_id()
+    if not org_id:
+        abort(403)
+    req = RequerimientoCompra.query.filter_by(id=req_id, organizacion_id=org_id).first()
+    if not req:
+        abort(404)
+    return req
+
+
+def validate_oc_ownership(oc_id):
+    """
+    Valida que la orden de compra pertenece a la organización del usuario.
+    """
+    from models.proveedores_oc import OrdenCompra
+    org_id = get_org_id()
+    if not org_id:
+        abort(403)
+    oc = OrdenCompra.query.filter_by(id=oc_id, organizacion_id=org_id).first()
+    if not oc:
+        abort(404)
+    return oc
+
+
+def validate_proveedor_ownership(prov_id):
+    """
+    Valida que el proveedor pertenece a la organización del usuario.
+    """
+    from models.proveedores_oc import ProveedorOC
+    org_id = get_org_id()
+    if not org_id:
+        abort(403)
+    prov = ProveedorOC.query.filter_by(id=prov_id, organizacion_id=org_id).first()
+    if not prov:
+        abort(404)
+    return prov

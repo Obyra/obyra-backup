@@ -12,6 +12,7 @@ from flask import (Blueprint, render_template, request, jsonify,
 from flask_login import login_required, current_user
 from extensions import db, csrf
 from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
+from services.permissions import get_org_id, validate_obra_ownership
 
 fichadas_bp = Blueprint('fichadas', __name__, url_prefix='/fichadas')
 
@@ -461,9 +462,7 @@ def api_fichar():
     if not obra_id or tipo not in ('ingreso', 'egreso'):
         return jsonify({'ok': False, 'error': 'Datos incompletos'}), 400
 
-    obra = Obra.query.get(obra_id)
-    if not obra:
-        return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
+    obra = validate_obra_ownership(obra_id)
 
     # Admin/PM puede fichar en nombre de otro usuario
     fichar_usuario_id = current_user.id
@@ -588,9 +587,7 @@ def api_guardar_coords():
     if not obra_id or lat is None or lng is None:
         return jsonify({'ok': False, 'error': 'Datos incompletos'}), 400
 
-    obra = Obra.query.get(obra_id)
-    if not obra:
-        return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
+    obra = validate_obra_ownership(obra_id)
 
     obra.latitud = float(lat)
     obra.longitud = float(lng)

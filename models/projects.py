@@ -49,6 +49,9 @@ class Obra(db.Model):
     # Notas adicionales
     notas = db.Column(db.Text)
 
+    # Soft-delete
+    deleted_at = db.Column(db.DateTime, nullable=True, index=True)
+
     # Fichada / geolocalización
     radio_fichada_metros = db.Column(db.Integer, default=200)
 
@@ -66,6 +69,24 @@ class Obra(db.Model):
 
     def __repr__(self):
         return f'<Obra {self.nombre}>'
+
+    @property
+    def is_deleted(self):
+        return self.deleted_at is not None
+
+    def soft_delete(self):
+        """Marca la obra como eliminada sin borrar datos."""
+        self.deleted_at = datetime.utcnow()
+        self.estado = 'cancelada'
+
+    def restore(self):
+        """Restaura una obra eliminada."""
+        self.deleted_at = None
+
+    @classmethod
+    def query_active(cls):
+        """Query que excluye obras soft-deleted."""
+        return cls.query.filter(cls.deleted_at.is_(None))
 
     @property
     def dias_transcurridos(self):
