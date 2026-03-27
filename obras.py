@@ -5803,7 +5803,10 @@ def recargar_tareas_predefinidas(obra_id):
 
             # Eliminar tareas SIN avances (preservar las que tienen progreso)
             for tarea in tareas_actuales:
-                avances_count = tarea.avances.count() if hasattr(tarea.avances, 'count') else 0
+                try:
+                    avances_count = TareaAvance.query.filter_by(tarea_id=tarea.id).count()
+                except Exception:
+                    avances_count = 0
                 if avances_count == 0 and tarea.porcentaje_avance in (None, 0):
                     # Eliminar miembros y responsables asociados
                     TareaMiembro.query.filter_by(tarea_id=tarea.id).delete()
