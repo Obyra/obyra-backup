@@ -4573,7 +4573,7 @@ def api_editar_datos_tarea(tarea_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception("Error al editar datos de tarea")
-        return jsonify(ok=False, error="Error interno"), 500
+        return jsonify(ok=False, error=f"Error al guardar: {str(e)[:200]}"), 500
 
 
 @obras_bp.route('/tareas/<int:tarea_id>/asignar', methods=['POST'])
@@ -5857,7 +5857,15 @@ def recargar_tareas_predefinidas(obra_id):
 
         db.session.commit()
 
-        flash(f'Tareas actualizadas: {total_eliminadas} eliminadas, {total_creadas} creadas desde catálogo predefinido.', 'success')
+        # Distribuir fechas, horas y cantidades a las nuevas tareas (encadenamiento)
+        for etapa in etapas:
+            try:
+                distribuir_datos_etapa_a_tareas(etapa.id, forzar=True)
+            except Exception:
+                pass
+        db.session.commit()
+
+        flash(f'Tareas actualizadas: {total_eliminadas} eliminadas, {total_creadas} creadas con fechas encadenadas.', 'success')
         return redirect(url_for('obras.detalle', id=obra_id))
 
     except Exception as e:
