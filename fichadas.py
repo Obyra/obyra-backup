@@ -315,7 +315,7 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
 
 @fichadas_bp.route('/')
 @login_required
-@require_feature('attendance.basic')
+@require_feature('attendance.geo')
 def index():
     """Página principal: muestra obras asignadas con estado de fichada."""
     obras = _obras_asignadas(current_user)

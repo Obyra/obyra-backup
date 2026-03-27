@@ -97,7 +97,7 @@
                                 <i class="fas fa-building me-2"></i>Ver Obras
                             </a></li>
                             {% if has_endpoint('fichadas.index') %}
-                                {% if can_feature('attendance.basic') %}
+                                {% if can_feature('attendance.geo') %}
                                 <li><a class="dropdown-item" href="{{ url_for('fichadas.index') }}">
                                     <i class="fas fa-clock me-2"></i>Fichada
                                 </a></li>

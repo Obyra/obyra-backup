@@ -143,7 +143,7 @@ MODULE_FEATURE_MAP = {
     'requerimientos': ['requirements.basic'],
     'ordenes_compra': ['orders.basic'],
     'proveedores': ['providers.basic'],
-    'fichadas': ['attendance.basic'],
+    'fichadas': ['attendance.geo'],
 }
 
 
