@@ -2294,12 +2294,28 @@ def exportar_inventario_pdf():
 @login_required
 def reporte_financiero():
     """Dashboard financiero: rentabilidad por obra, márgenes y desglose de costos."""
+    try:
+        return _reporte_financiero_impl()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en reporte financiero: {e}", exc_info=True)
+        flash(f'Error al generar reporte financiero: {str(e)[:200]}', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+
+def _reporte_financiero_impl():
     if current_user.role not in ('admin', 'pm'):
         flash('No tienes permisos para ver el reporte financiero.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
     from decimal import Decimal, ROUND_HALF_UP
-    from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
+
+    # Import defensivo de modelos de liquidación
+    try:
+        from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
+        HAS_LIQUIDACION = True
+    except ImportError:
+        HAS_LIQUIDACION = False
 
     org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     if not org_id:
@@ -2350,16 +2366,17 @@ def reporte_financiero():
 
         # 2. Costo mano de obra (from liquidaciones pagadas)
         costo_mo = Decimal('0')
-        try:
-            costo_mo_raw = db.session.query(
-                func.coalesce(func.sum(LiquidacionMOItem.monto), 0)
-            ).join(LiqMO).filter(
-                LiqMO.obra_id == obra.id,
-                LiquidacionMOItem.estado == 'pagado'
-            ).scalar() or 0
-            costo_mo = Decimal(str(costo_mo_raw))
-        except Exception:
-            db.session.rollback()
+        if HAS_LIQUIDACION:
+            try:
+                costo_mo_raw = db.session.query(
+                    func.coalesce(func.sum(LiquidacionMOItem.monto), 0)
+                ).join(LiqMO).filter(
+                    LiqMO.obra_id == obra.id,
+                    LiquidacionMOItem.estado == 'pagado'
+                ).scalar() or 0
+                costo_mo = Decimal(str(costo_mo_raw))
+            except Exception:
+                db.session.rollback()
 
         # 3. Costo maquinaria (from EquipmentUsage)
         costo_maq = Decimal('0')
