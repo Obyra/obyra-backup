@@ -7,7 +7,7 @@
     <div class="row justify-content-center">
         <div class="col-lg-12">
             <!-- Encabezado -->
-            <div class="text-center mb-5">
+            <div class="text-center mb-4">
                 <h1 class="display-4 fw-bold text-primary mb-3">
                     <i class="fas fa-rocket me-3"></i>Planes OBYRA
                 </h1>
@@ -33,121 +33,521 @@
                 </span>
             </div>
 
-            <!-- Planes -->
-            <div class="row g-4 justify-content-center">
-                {% for plan_key, plan in planes.items() %}
-                <div class="col-lg-4">
-                    <div class="card h-100 shadow-lg border-0 {% if plan.get('popular') %}border-primary border-3{% endif %}">
-                        {% if plan.get('popular') %}
-                        <div class="card-header bg-primary text-white text-center py-2">
-                            <i class="fas fa-star me-1"></i> MAS POPULAR
+            <!-- Tabs de modalidad -->
+            <ul class="nav nav-pills justify-content-center mb-4" id="modalidadTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link active px-4 py-2 fw-semibold" id="saas-tab" data-bs-toggle="pill" href="#saas" role="tab">
+                        <i class="fas fa-sync-alt me-2"></i>Suscripcion Mensual
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link px-4 py-2 fw-semibold" id="licencia-tab" data-bs-toggle="pill" href="#licencia" role="tab">
+                        <i class="fas fa-key me-2"></i>Licencia 5 Anos
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="modalidadTabContent">
+
+                <!-- ============================================ -->
+                <!-- TAB 1: SaaS Mensual -->
+                <!-- ============================================ -->
+                <div class="tab-pane fade show active" id="saas" role="tabpanel">
+                    <div class="row g-4 justify-content-center">
+
+                        {# ---------- STANDARD ---------- #}
+                        <div class="col-lg-4">
+                            <div class="card h-100 shadow-lg border-0">
+                                <div class="card-header text-center py-4" style="background-color: #198754; color: #fff;">
+                                    <h3 class="card-title mb-1 fw-bold">Standard</h3>
+                                    <p class="mb-3 opacity-75">Ideal para equipos pequenos</p>
+                                    <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
+                                        <div class="d-flex justify-content-center align-items-baseline">
+                                            <span class="display-4 fw-bold">$199</span>
+                                            <span class="fs-5 ms-2">USD/mes</span>
+                                        </div>
+                                        <small class="opacity-75">+ IVA</small>
+                                        <hr class="my-2 opacity-50">
+                                        <span class="fs-6">${{ "{:,.0f}".format(199 * cotizacion.value) }} ARS/mes</span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="text-center mb-4 p-3 bg-light rounded-3">
+                                        <div class="d-flex justify-content-around">
+                                            <div>
+                                                <i class="fas fa-hard-hat fa-lg text-success mb-1"></i>
+                                                <h5 class="mb-0">3 obras</h5>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-users fa-lg text-success mb-1"></i>
+                                                <h5 class="mb-0">5 usuarios</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ul class="list-unstyled">
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                            <span>Presupuestos manuales</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                            <span>Gestion de obras y tareas</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                            <span>Cronograma encadenado</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                            <span>Clientes</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                            <span>OC basicas</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                            <span>Inventario completo</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="card-footer bg-transparent p-4">
+                                    {% if plan_actual == 'estandar' %}
+                                    <button class="btn btn-outline-secondary btn-lg w-100" disabled>
+                                        <i class="fas fa-check me-2"></i>PLAN ACTUAL
+                                    </button>
+                                    {% else %}
+                                    <a href="{{ url_for('planes.seleccionar_plan', plan_tipo='estandar') }}"
+                                       class="btn btn-outline-success btn-lg w-100">
+                                        <i class="fas fa-arrow-right me-2"></i>SELECCIONAR PLAN
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
-                        {% endif %}
 
-                        <!-- Header del plan -->
-                        <div class="card-header text-center py-4
-                            {% if plan_key == 'estandar' %}bg-success text-white
-                            {% elif plan_key == 'premium' %}bg-primary text-white
-                            {% else %}bg-dark text-white{% endif %}">
-                            <h3 class="card-title mb-2 fw-bold">{{ plan.nombre }}</h3>
-                            <p class="mb-3 opacity-75">{{ plan.descripcion }}</p>
-
-                            <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
-                                <div class="d-flex justify-content-center align-items-baseline">
-                                    <span class="display-4 fw-bold">${{ plan.precio_usd|int }}</span>
-                                    <span class="fs-5 ms-2">USD/mes</span>
-                                </div>
-                                <div class="mt-2">
-                                    <small class="opacity-75">+ IVA</small>
-                                </div>
-                                <hr class="my-2 opacity-50">
-                                <div>
-                                    <span class="fs-6">
-                                        ${{ "{:,.0f}".format(plan.precio_ars) }} ARS/mes
+                        {# ---------- PREMIUM ---------- #}
+                        <div class="col-lg-4">
+                            <div class="card h-100 shadow-lg border-0 border-primary border-3">
+                                <div class="position-relative">
+                                    <span class="badge bg-warning text-dark position-absolute top-0 start-50 translate-middle px-3 py-2 fs-6 shadow" style="z-index:2;">
+                                        <i class="fas fa-star me-1"></i>MAS POPULAR
                                     </span>
                                 </div>
-                            </div>
-                        </div>
-
-                        <div class="card-body p-4">
-                            <!-- Limites destacados -->
-                            <div class="text-center mb-4 p-3 bg-light rounded-3">
-                                <div class="d-flex justify-content-around">
-                                    <div>
-                                        <i class="fas fa-hard-hat fa-lg text-primary mb-1"></i>
-                                        <h5 class="mb-0">{{ plan.max_obras or 'Ilim.' }} obras</h5>
-                                    </div>
-                                    <div>
-                                        <i class="fas fa-users fa-lg text-primary mb-1"></i>
-                                        <h5 class="mb-0">{{ plan.max_usuarios }} usuarios</h5>
+                                <div class="card-header text-center py-4" style="background-color: #0d6efd; color: #fff;">
+                                    <h3 class="card-title mb-1 fw-bold">Premium</h3>
+                                    <p class="mb-3 opacity-75">Para empresas en crecimiento</p>
+                                    <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
+                                        <div class="d-flex justify-content-center align-items-baseline">
+                                            <span class="display-4 fw-bold">$399</span>
+                                            <span class="fs-5 ms-2">USD/mes</span>
+                                        </div>
+                                        <small class="opacity-75">+ IVA</small>
+                                        <hr class="my-2 opacity-50">
+                                        <span class="fs-6">${{ "{:,.0f}".format(399 * cotizacion.value) }} ARS/mes</span>
                                     </div>
                                 </div>
+                                <div class="card-body p-4">
+                                    <div class="text-center mb-4 p-3 bg-light rounded-3">
+                                        <div class="d-flex justify-content-around">
+                                            <div>
+                                                <i class="fas fa-hard-hat fa-lg text-primary mb-1"></i>
+                                                <h5 class="mb-0">5 obras</h5>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-users fa-lg text-primary mb-1"></i>
+                                                <h5 class="mb-0">15 usuarios</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-2">
+                                        <i class="fas fa-arrow-up me-1"></i>Todo lo anterior, mas:
+                                    </p>
+                                    <ul class="list-unstyled">
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Calculadora IA completa</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Requerimientos de compra</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Cotizaciones y comparativas</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Proveedores avanzados</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Caja por obra</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Remitos + PDF de OC</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Reportes completos (costos, inventario, financiero)</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Seguridad (checklists, incidentes)</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Fichaje por geolocalizacion</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Alertas automaticas</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="card-footer bg-transparent p-4">
+                                    {% if plan_actual == 'premium' %}
+                                    <button class="btn btn-outline-secondary btn-lg w-100" disabled>
+                                        <i class="fas fa-check me-2"></i>PLAN ACTUAL
+                                    </button>
+                                    {% else %}
+                                    <a href="{{ url_for('planes.seleccionar_plan', plan_tipo='premium') }}"
+                                       class="btn btn-primary btn-lg w-100">
+                                        <i class="fas fa-arrow-right me-2"></i>SELECCIONAR PLAN
+                                    </a>
+                                    {% endif %}
+                                </div>
                             </div>
-
-                            <!-- Features -->
-                            {% if plan.get('features_new') %}
-                            <p class="text-muted small mb-2">
-                                <i class="fas fa-arrow-up me-1"></i>Todo lo del plan anterior, mas:
-                            </p>
-                            <ul class="list-unstyled">
-                                {% for feature in plan.features_new %}
-                                <li class="mb-2 d-flex align-items-start">
-                                    <i class="fas fa-star text-warning me-2 mt-1"></i>
-                                    <span class="fw-semibold">{{ feature }}</span>
-                                </li>
-                                {% endfor %}
-                            </ul>
-                            {% else %}
-                            <ul class="list-unstyled">
-                                {% for feature in plan.features %}
-                                <li class="mb-2 d-flex align-items-start">
-                                    <i class="fas fa-check-circle text-success me-2 mt-1"></i>
-                                    <span>{{ feature }}</span>
-                                </li>
-                                {% endfor %}
-                            </ul>
-                            {% endif %}
                         </div>
 
-                        <div class="card-footer bg-transparent p-4">
-                            {% if plan_actual == plan_key %}
-                            <button class="btn btn-outline-secondary btn-lg w-100" disabled>
-                                <i class="fas fa-check me-2"></i>Plan Actual
-                            </button>
-                            {% else %}
-                            <a href="{{ url_for('planes.seleccionar_plan', plan_tipo=plan_key) }}"
-                               class="btn {% if plan.get('popular') %}btn-primary{% else %}btn-outline-primary{% endif %} btn-lg w-100">
-                                <i class="fas fa-arrow-right me-2"></i>Seleccionar Plan
-                            </a>
-                            {% endif %}
+                        {# ---------- FULL PREMIUM ---------- #}
+                        <div class="col-lg-4">
+                            <div class="card h-100 shadow-lg border-0">
+                                <div class="card-header text-center py-4" style="background-color: #1A374D; color: #fff;">
+                                    <h3 class="card-title mb-1 fw-bold">Full Premium</h3>
+                                    <p class="mb-3 opacity-75">Para constructoras con operacion amplia</p>
+                                    <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
+                                        <div class="d-flex justify-content-center align-items-baseline">
+                                            <span class="display-4 fw-bold">$799</span>
+                                            <span class="fs-5 ms-2">USD/mes</span>
+                                        </div>
+                                        <small class="opacity-75">+ IVA</small>
+                                        <hr class="my-2 opacity-50">
+                                        <span class="fs-6">${{ "{:,.0f}".format(799 * cotizacion.value) }} ARS/mes</span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="text-center mb-4 p-3 bg-light rounded-3">
+                                        <div class="d-flex justify-content-around">
+                                            <div>
+                                                <i class="fas fa-hard-hat fa-lg mb-1" style="color:#1A374D;"></i>
+                                                <h5 class="mb-0">15 obras</h5>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-users fa-lg mb-1" style="color:#1A374D;"></i>
+                                                <h5 class="mb-0">35 usuarios</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-2">
+                                        <i class="fas fa-arrow-up me-1"></i>Todo lo anterior, mas:
+                                    </p>
+                                    <ul class="list-unstyled">
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Certificacion avanzada (horas)</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Registro de auditoria</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">API / Integraciones</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Modo offline</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Dashboard financiero ejecutivo</span>
+                                        </li>
+                                        <li class="mb-2 d-flex align-items-start">
+                                            <i class="fas fa-star text-warning me-2 mt-1"></i>
+                                            <span class="fw-semibold">Soporte preferencial (email+whatsapp+presencial)</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="card-footer bg-transparent p-4">
+                                    {% if plan_actual == 'full_premium' %}
+                                    <button class="btn btn-outline-secondary btn-lg w-100" disabled>
+                                        <i class="fas fa-check me-2"></i>PLAN ACTUAL
+                                    </button>
+                                    {% else %}
+                                    <a href="{{ url_for('planes.seleccionar_plan', plan_tipo='full_premium') }}"
+                                       class="btn btn-outline-dark btn-lg w-100">
+                                        <i class="fas fa-arrow-right me-2"></i>SELECCIONAR PLAN
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
+
                     </div>
                 </div>
-                {% endfor %}
-            </div>
 
-            <!-- Tabla comparativa -->
+                <!-- ============================================ -->
+                <!-- TAB 2: Licencia 5 Anos -->
+                <!-- ============================================ -->
+                <div class="tab-pane fade" id="licencia" role="tabpanel">
+                    <div class="text-center mb-4">
+                        <span class="badge bg-success px-3 py-2 fs-6">
+                            <i class="fas fa-piggy-bank me-2"></i>Ahorra hasta un 70% vs. suscripcion mensual
+                        </span>
+                    </div>
+                    <div class="row g-4 justify-content-center">
+
+                        {# ---------- STANDARD LICENCIA ---------- #}
+                        <div class="col-lg-4">
+                            <div class="card h-100 shadow-lg border-0">
+                                <div class="card-header text-center py-4" style="background-color: #198754; color: #fff;">
+                                    <h3 class="card-title mb-1 fw-bold">Standard</h3>
+                                    <p class="mb-3 opacity-75">Licencia 5 anos</p>
+                                    <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
+                                        <div class="d-flex justify-content-center align-items-baseline">
+                                            <span class="display-4 fw-bold">$6.900</span>
+                                            <span class="fs-5 ms-2">USD</span>
+                                        </div>
+                                        <small class="opacity-75">+ IVA (pago unico)</small>
+                                        <hr class="my-2 opacity-50">
+                                        <span class="fs-6">${{ "{:,.0f}".format(6900 * cotizacion.value) }} ARS</span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="text-center mb-4 p-3 bg-light rounded-3">
+                                        <div class="d-flex justify-content-around">
+                                            <div>
+                                                <i class="fas fa-hard-hat fa-lg text-success mb-1"></i>
+                                                <h5 class="mb-0">3 obras</h5>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-users fa-lg text-success mb-1"></i>
+                                                <h5 class="mb-0">5 usuarios</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-light border mb-3 p-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-redo text-muted me-2"></i>
+                                            <strong>Renovacion anual:</strong>
+                                            <span class="ms-2">20% &mdash; $1.380 USD/ano</span>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-gift text-success me-2"></i>
+                                            <strong>Incluye:</strong>
+                                            <span class="ms-2">12 meses de servicio</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-2">
+                                        <i class="fas fa-check-circle text-success me-1"></i>Mismas funcionalidades que SaaS Standard
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent p-4">
+                                    {% if plan_actual == 'estandar' %}
+                                    <button class="btn btn-outline-secondary btn-lg w-100" disabled>
+                                        <i class="fas fa-check me-2"></i>PLAN ACTUAL
+                                    </button>
+                                    {% else %}
+                                    <a href="{{ url_for('planes.seleccionar_plan', plan_tipo='estandar') }}"
+                                       class="btn btn-outline-success btn-lg w-100">
+                                        <i class="fas fa-arrow-right me-2"></i>SELECCIONAR PLAN
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        {# ---------- PREMIUM LICENCIA ---------- #}
+                        <div class="col-lg-4">
+                            <div class="card h-100 shadow-lg border-0 border-primary border-3">
+                                <div class="position-relative">
+                                    <span class="badge bg-warning text-dark position-absolute top-0 start-50 translate-middle px-3 py-2 fs-6 shadow" style="z-index:2;">
+                                        <i class="fas fa-star me-1"></i>MAS POPULAR
+                                    </span>
+                                </div>
+                                <div class="card-header text-center py-4" style="background-color: #0d6efd; color: #fff;">
+                                    <h3 class="card-title mb-1 fw-bold">Premium</h3>
+                                    <p class="mb-3 opacity-75">Licencia 5 anos</p>
+                                    <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
+                                        <div class="d-flex justify-content-center align-items-baseline">
+                                            <span class="display-4 fw-bold">$14.900</span>
+                                            <span class="fs-5 ms-2">USD</span>
+                                        </div>
+                                        <small class="opacity-75">+ IVA (pago unico)</small>
+                                        <hr class="my-2 opacity-50">
+                                        <span class="fs-6">${{ "{:,.0f}".format(14900 * cotizacion.value) }} ARS</span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="text-center mb-4 p-3 bg-light rounded-3">
+                                        <div class="d-flex justify-content-around">
+                                            <div>
+                                                <i class="fas fa-hard-hat fa-lg text-primary mb-1"></i>
+                                                <h5 class="mb-0">5 obras</h5>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-users fa-lg text-primary mb-1"></i>
+                                                <h5 class="mb-0">15 usuarios</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-light border mb-3 p-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-redo text-muted me-2"></i>
+                                            <strong>Renovacion anual:</strong>
+                                            <span class="ms-2">20% &mdash; $2.980 USD/ano</span>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-gift text-success me-2"></i>
+                                            <strong>Incluye:</strong>
+                                            <span class="ms-2">12 meses de servicio</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-2">
+                                        <i class="fas fa-check-circle text-success me-1"></i>Mismas funcionalidades que SaaS Premium
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent p-4">
+                                    {% if plan_actual == 'premium' %}
+                                    <button class="btn btn-outline-secondary btn-lg w-100" disabled>
+                                        <i class="fas fa-check me-2"></i>PLAN ACTUAL
+                                    </button>
+                                    {% else %}
+                                    <a href="{{ url_for('planes.seleccionar_plan', plan_tipo='premium') }}"
+                                       class="btn btn-primary btn-lg w-100">
+                                        <i class="fas fa-arrow-right me-2"></i>SELECCIONAR PLAN
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        {# ---------- FULL PREMIUM LICENCIA ---------- #}
+                        <div class="col-lg-4">
+                            <div class="card h-100 shadow-lg border-0">
+                                <div class="card-header text-center py-4" style="background-color: #1A374D; color: #fff;">
+                                    <h3 class="card-title mb-1 fw-bold">Full Premium</h3>
+                                    <p class="mb-3 opacity-75">Licencia 5 anos</p>
+                                    <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
+                                        <div class="d-flex justify-content-center align-items-baseline">
+                                            <span class="display-4 fw-bold">$29.900</span>
+                                            <span class="fs-5 ms-2">USD</span>
+                                        </div>
+                                        <small class="opacity-75">+ IVA (pago unico)</small>
+                                        <hr class="my-2 opacity-50">
+                                        <span class="fs-6">${{ "{:,.0f}".format(29900 * cotizacion.value) }} ARS</span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="text-center mb-4 p-3 bg-light rounded-3">
+                                        <div class="d-flex justify-content-around">
+                                            <div>
+                                                <i class="fas fa-hard-hat fa-lg mb-1" style="color:#1A374D;"></i>
+                                                <h5 class="mb-0">15 obras</h5>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-users fa-lg mb-1" style="color:#1A374D;"></i>
+                                                <h5 class="mb-0">35 usuarios</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-light border mb-3 p-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-redo text-muted me-2"></i>
+                                            <strong>Renovacion anual:</strong>
+                                            <span class="ms-2">20% &mdash; $5.980 USD/ano</span>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-gift text-success me-2"></i>
+                                            <strong>Incluye:</strong>
+                                            <span class="ms-2">12 meses de servicio</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-2">
+                                        <i class="fas fa-check-circle text-success me-1"></i>Mismas funcionalidades que SaaS Full Premium
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent p-4">
+                                    {% if plan_actual == 'full_premium' %}
+                                    <button class="btn btn-outline-secondary btn-lg w-100" disabled>
+                                        <i class="fas fa-check me-2"></i>PLAN ACTUAL
+                                    </button>
+                                    {% else %}
+                                    <a href="{{ url_for('planes.seleccionar_plan', plan_tipo='full_premium') }}"
+                                       class="btn btn-outline-dark btn-lg w-100">
+                                        <i class="fas fa-arrow-right me-2"></i>SELECCIONAR PLAN
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>{# /tab-content #}
+
+            <!-- ============================================ -->
+            <!-- TABLA COMPARATIVA (visible en ambos tabs) -->
+            <!-- ============================================ -->
             <div class="card mt-5 shadow-sm">
                 <div class="card-header bg-light">
                     <h4 class="mb-0"><i class="fas fa-table me-2"></i>Comparativa de Planes</h4>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                        <table class="table table-hover mb-0 align-middle">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>Caracteristica</th>
-                                    <th class="text-center">Standard</th>
-                                    <th class="text-center bg-primary">Premium</th>
-                                    <th class="text-center">Full Premium</th>
+                                    <th style="min-width:260px;">Caracteristica</th>
+                                    <th class="text-center" style="background-color:#198754;color:#fff;">Standard</th>
+                                    <th class="text-center" style="background-color:#0d6efd;color:#fff;">Premium</th>
+                                    <th class="text-center" style="background-color:#1A374D;color:#fff;">Full Premium</th>
                                 </tr>
                             </thead>
                             <tbody>
+                                <!-- Precios SaaS -->
+                                <tr class="table-light">
+                                    <td colspan="4" class="fw-bold"><i class="fas fa-sync-alt me-2 text-primary"></i>Suscripcion Mensual (SaaS)</td>
+                                </tr>
                                 <tr>
                                     <td><i class="fas fa-dollar-sign me-2"></i>Precio mensual + IVA</td>
-                                    <td class="text-center"><strong>USD 400</strong></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><strong>USD 600</strong></td>
-                                    <td class="text-center"><strong>USD 800</strong></td>
+                                    <td class="text-center"><strong>USD 199</strong></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>USD 399</strong></td>
+                                    <td class="text-center"><strong>USD 799</strong></td>
+                                </tr>
+                                <!-- Precios Licencia -->
+                                <tr class="table-light">
+                                    <td colspan="4" class="fw-bold"><i class="fas fa-key me-2 text-primary"></i>Licencia 5 Anos</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-tag me-2"></i>Licencia (pago unico) + IVA</td>
+                                    <td class="text-center"><strong>USD 6.900</strong></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>USD 14.900</strong></td>
+                                    <td class="text-center"><strong>USD 29.900</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-redo me-2"></i>Renovacion anual (20%)</td>
+                                    <td class="text-center">$1.380/ano</td>
+                                    <td class="text-center bg-primary bg-opacity-10">$2.980/ano</td>
+                                    <td class="text-center">$5.980/ano</td>
+                                </tr>
+                                <!-- Limites -->
+                                <tr class="table-light">
+                                    <td colspan="4" class="fw-bold"><i class="fas fa-sliders-h me-2 text-primary"></i>Limites</td>
                                 </tr>
                                 <tr>
                                     <td><i class="fas fa-hard-hat me-2"></i>Cantidad de obras</td>
@@ -159,7 +559,7 @@
                                     <td><i class="fas fa-users me-2"></i>Cantidad de usuarios</td>
                                     <td class="text-center"><strong>5</strong></td>
                                     <td class="text-center bg-primary bg-opacity-10"><strong>15</strong></td>
-                                    <td class="text-center"><strong>25</strong></td>
+                                    <td class="text-center"><strong>35</strong></td>
                                 </tr>
                                 <!-- Standard features -->
                                 <tr class="table-light">
@@ -168,7 +568,7 @@
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-file-alt me-2"></i>Presupuestos (manual + IA basica)</td>
+                                    <td><i class="fas fa-file-alt me-2"></i>Presupuestos manuales</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
@@ -180,55 +580,25 @@
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-address-book me-2"></i>Gestion de clientes</td>
+                                    <td><i class="fas fa-link me-2"></i>Cronograma encadenado</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-clipboard-list me-2"></i>Requerimientos de compra</td>
+                                    <td><i class="fas fa-address-book me-2"></i>Clientes</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-shopping-cart me-2"></i>Ordenes de compra basicas</td>
+                                    <td><i class="fas fa-shopping-cart me-2"></i>OC basicas</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-truck me-2"></i>Proveedores basicos</td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-chart-bar me-2"></i>Reportes basicos</td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-tools me-2"></i>Equipos basico</td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-shield-alt me-2"></i>Seguridad basica</td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-wifi-slash me-2"></i>Modo offline</td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-headset me-2"></i>Soporte email y WhatsApp</td>
+                                    <td><i class="fas fa-boxes me-2"></i>Inventario completo</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
@@ -241,105 +611,111 @@
                                 </tr>
                                 <tr>
                                     <td><i class="fas fa-brain me-2"></i>Calculadora IA completa</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-boxes me-2"></i>Inventario completo (deposito, alertas, consumo)</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-truck-loading me-2"></i>Gestion avanzada de proveedores</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-clipboard-list me-2"></i>Requerimientos de compra</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
                                     <td><i class="fas fa-balance-scale me-2"></i>Cotizaciones y comparativas</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-chart-line me-2"></i>Reportes avanzados (costos, inventario, financiero)</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-truck-loading me-2"></i>Proveedores avanzados</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-tachometer-alt me-2"></i>Dashboard de costos</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-cash-register me-2"></i>Caja por obra</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-route me-2"></i>Trazabilidad operativa</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-file-pdf me-2"></i>Remitos + PDF de OC</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-hard-hat me-2"></i>Seguridad completa (incidentes, protocolos)</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-chart-line me-2"></i>Reportes completos (costos, inventario, financiero)</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-hard-hat me-2"></i>Seguridad (checklists, incidentes)</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-map-marker-alt me-2"></i>Fichaje por geolocalizacion</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-bell me-2"></i>Alertas automaticas</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <!-- Full Premium features -->
                                 <tr class="table-light">
-                                    <td colspan="4" class="text-center fw-bold text-dark">
+                                    <td colspan="4" class="text-center fw-bold" style="color:#1A374D;">
                                         <i class="fas fa-crown me-2"></i>Solo Full Premium
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-map-marker-alt me-2"></i>Fichaje por geolocalizacion</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-certificate me-2"></i>Certificacion avanzada (horas)</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-certificate me-2"></i>Certificacion avanzada de operarios</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-history me-2"></i>Registro de auditoria</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-user-shield me-2"></i>Roles y permisos avanzados</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-plug me-2"></i>API / Integraciones</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-history me-2"></i>Auditoria avanzada</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-wifi-slash me-2"></i>Modo offline</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-cogs me-2"></i>Automatizaciones</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
+                                    <td><i class="fas fa-chart-pie me-2"></i>Dashboard financiero ejecutivo</td>
+                                    <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-times text-danger"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
-                                <tr>
-                                    <td><i class="fas fa-plug me-2"></i>Acceso API</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <!-- Soporte -->
+                                <tr class="table-light">
+                                    <td colspan="4" class="text-center fw-bold text-secondary">
+                                        <i class="fas fa-headset me-2"></i>Soporte
+                                    </td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-chart-pie me-2"></i>Dashboard financiero</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-headset me-2"></i>Soporte preferencial</td>
-                                    <td class="text-center"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-lock text-muted"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                    <td><i class="fas fa-headset me-2"></i>Nivel de soporte</td>
+                                    <td class="text-center"><span class="badge bg-secondary">Email</span></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><span class="badge bg-primary">Prioritario<br><small>email + whatsapp</small></span></td>
+                                    <td class="text-center"><span class="badge text-white" style="background-color:#1A374D;">Preferencial<br><small>email + whatsapp + presencial</small></span></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -406,18 +782,22 @@
 .card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-
 .card:hover {
     transform: translateY(-5px);
 }
-
 .precio-container {
     border-radius: 1rem;
 }
-
+.nav-pills .nav-link {
+    border-radius: 2rem;
+    font-size: 1.05rem;
+}
+.nav-pills .nav-link.active {
+    background-color: #0d6efd;
+}
 @media (max-width: 768px) {
     .display-4 {
-        font-size: 2.5rem;
+        font-size: 2.2rem;
     }
 }
 </style>
