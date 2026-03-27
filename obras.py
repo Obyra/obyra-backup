@@ -5772,6 +5772,77 @@ def wizard_tareas_opciones():
         return jsonify({"ok": False, "error": str(e)}), 400
 
 
+@obras_bp.route('/<int:obra_id>/recargar-tareas', methods=['POST'])
+@login_required
+@require_active_subscription
+def recargar_tareas_predefinidas(obra_id):
+    """
+    Elimina tareas existentes de todas las etapas de una obra
+    y las reemplaza con las tareas predefinidas correctas.
+    Solo para admin. Preserva tareas con avances > 0.
+    """
+    try:
+        obra = validate_obra_ownership(obra_id)
+        if not can_manage_obra(obra):
+            flash('Sin permisos para gestionar esta obra.', 'danger')
+            return redirect(url_for('obras.detalle', id=obra_id))
+
+        from tareas_predefinidas import obtener_tareas_por_etapa
+
+        etapas = EtapaObra.query.filter_by(obra_id=obra_id).all()
+        total_eliminadas = 0
+        total_creadas = 0
+
+        for etapa in etapas:
+            tareas_predefinidas = obtener_tareas_por_etapa(etapa.nombre)
+            if not tareas_predefinidas:
+                continue
+
+            # Obtener tareas actuales
+            tareas_actuales = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
+
+            # Eliminar tareas SIN avances (preservar las que tienen progreso)
+            for tarea in tareas_actuales:
+                avances_count = tarea.avances.count() if hasattr(tarea.avances, 'count') else 0
+                if avances_count == 0 and tarea.porcentaje_avance in (None, 0):
+                    # Eliminar miembros y responsables asociados
+                    TareaMiembro.query.filter_by(tarea_id=tarea.id).delete()
+                    db.session.delete(tarea)
+                    total_eliminadas += 1
+
+            db.session.flush()
+
+            # Crear tareas predefinidas (solo las que no existen ya)
+            nombres_existentes = {t.nombre for t in TareaEtapa.query.filter_by(etapa_id=etapa.id).all()}
+
+            for tarea_def in tareas_predefinidas:
+                if tarea_def.get('si_aplica'):
+                    continue
+                if tarea_def['nombre'] in nombres_existentes:
+                    continue
+
+                nueva = TareaEtapa(
+                    etapa_id=etapa.id,
+                    nombre=tarea_def['nombre'],
+                    estado='pendiente',
+                    horas_estimadas=tarea_def.get('horas', 0),
+                    unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+                )
+                db.session.add(nueva)
+                total_creadas += 1
+
+        db.session.commit()
+
+        flash(f'Tareas actualizadas: {total_eliminadas} eliminadas, {total_creadas} creadas desde catálogo predefinido.', 'success')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error recargando tareas: {e}", exc_info=True)
+        flash(f'Error al recargar tareas: {str(e)[:200]}', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+
 @obras_bp.route('/api/wizard-tareas/budget-preview', methods=['POST'])
 @login_required
 def wizard_budget_preview():

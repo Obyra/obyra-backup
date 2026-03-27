@@ -120,8 +120,14 @@
                                     {% endif %}
 
                                     <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal" data-obra-id="{{ obra.id }}">
-                                      🧙‍♂️ Wizard Tareas
+                                      <i class="fas fa-wand-magic-sparkles me-1"></i>Wizard Tareas
                                     </button>
+                                    <form method="POST" action="{{ url_for('obras.recargar_tareas_predefinidas', obra_id=obra.id) }}" style="display:inline;" onsubmit="return confirm('Esto eliminará las tareas sin avance y las reemplazará con las predefinidas. ¿Continuar?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-warning btn-sm" title="Reemplaza tareas de materiales por tareas de obra reales">
+                                            <i class="fas fa-sync-alt me-1"></i>Recargar Tareas
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
 
