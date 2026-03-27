@@ -36,6 +36,15 @@ class Organizacion(db.Model):
     fecha_inicio_plan = db.Column(db.DateTime)  # Fecha de inicio del plan pago
     fecha_fin_plan = db.Column(db.DateTime)  # Fecha de vencimiento del plan
 
+    # Tipo de contratación y estado
+    contract_type = db.Column(db.String(20), default='subscription')  # subscription, license_5y, trial
+    subscription_status = db.Column(db.String(20), default='active')  # active, past_due, grace_period, read_only, suspended, cancelled
+    grace_period_until = db.Column(db.DateTime)  # Hasta cuándo dura el período de gracia
+
+    # Licencia 5 años — renovación anual de servicio
+    annual_service_due_date = db.Column(db.DateTime)  # Próxima fecha de pago anual de servicio
+    annual_service_status = db.Column(db.String(20), default='active')  # active, due, overdue
+
     # Descuentos (asignados por super admin)
     descuento_porcentaje = db.Column(db.Integer, default=0)  # 0, 10, 20, 30, 40, 50
     descuento_meses = db.Column(db.Integer, default=0)  # Duración del descuento en meses

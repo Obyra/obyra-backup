@@ -97,9 +97,15 @@
                                 <i class="fas fa-building me-2"></i>Ver Obras
                             </a></li>
                             {% if has_endpoint('fichadas.index') %}
-                            <li><a class="dropdown-item" href="{{ url_for('fichadas.index') }}">
-                                <i class="fas fa-clock me-2"></i>Fichada
-                            </a></li>
+                                {% if can_feature('attendance.basic') %}
+                                <li><a class="dropdown-item" href="{{ url_for('fichadas.index') }}">
+                                    <i class="fas fa-clock me-2"></i>Fichada
+                                </a></li>
+                                {% else %}
+                                <li><a class="dropdown-item text-muted" href="{{ url_for('planes.mostrar_planes') }}" title="Disponible en Plan Full Premium">
+                                    <i class="fas fa-lock me-2"></i>Fichada <span class="badge bg-success" style="font-size: 0.55rem;">Full Premium</span>
+                                </a></li>
+                                {% endif %}
                             {% endif %}
                             {% if has_endpoint('caja.dashboard') %}
                             <li><a class="dropdown-item" href="{{ url_for('caja.dashboard') }}">
@@ -111,44 +117,52 @@
                     {% endif %}
 
                     {# 4. Inventario #}
-                    {% if current_user.puede_acceder_modulo('inventario') and has_endpoint('inventario.lista') %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarInventario" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-boxes me-1"></i>Inventario
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">
-                                <i class="fas fa-boxes me-2"></i>Inventario
-                            </a></li>
-                            {% if has_endpoint('requerimientos.lista') %}
-                            <li><a class="dropdown-item" href="{{ url_for('requerimientos.lista') }}">
-                                <i class="fas fa-shopping-cart me-2"></i>Requerimientos de Compra
-                            </a></li>
-                            {% endif %}
-                            {% if has_endpoint('ordenes_compra.lista') %}
-                            <li><a class="dropdown-item" href="{{ url_for('ordenes_compra.lista') }}">
-                                <i class="fas fa-file-invoice-dollar me-2"></i>Ordenes de Compra
-                            </a></li>
-                            {% endif %}
-                            {% if has_endpoint('proveedores_oc.lista') %}
-                            <li><a class="dropdown-item" href="{{ url_for('proveedores_oc.lista') }}">
-                                <i class="fas fa-truck me-2"></i>Proveedores
-                            </a></li>
-                            {% endif %}
-                            {% if has_endpoint('obras.equipos_movimientos') %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('obras.equipos_movimientos') }}">
-                                <i class="fas fa-truck-loading me-2"></i>Maquinaria
-                            </a></li>
-                            {% endif %}
-                            {% if current_user.role == 'admin' and has_endpoint('inventario.categorias') %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">
-                                <i class="fas fa-tags me-2"></i>Categorias
-                            </a></li>
-                            {% endif %}
-                        </ul>
-                    </li>
+                    {% if can_feature('inventory.full') %}
+                        {% if current_user.puede_acceder_modulo('inventario') and has_endpoint('inventario.lista') %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarInventario" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-boxes me-1"></i>Inventario
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">
+                                    <i class="fas fa-boxes me-2"></i>Inventario
+                                </a></li>
+                                {% if has_endpoint('requerimientos.lista') %}
+                                <li><a class="dropdown-item" href="{{ url_for('requerimientos.lista') }}">
+                                    <i class="fas fa-shopping-cart me-2"></i>Requerimientos de Compra
+                                </a></li>
+                                {% endif %}
+                                {% if has_endpoint('ordenes_compra.lista') %}
+                                <li><a class="dropdown-item" href="{{ url_for('ordenes_compra.lista') }}">
+                                    <i class="fas fa-file-invoice-dollar me-2"></i>Ordenes de Compra
+                                </a></li>
+                                {% endif %}
+                                {% if has_endpoint('proveedores_oc.lista') %}
+                                <li><a class="dropdown-item" href="{{ url_for('proveedores_oc.lista') }}">
+                                    <i class="fas fa-truck me-2"></i>Proveedores
+                                </a></li>
+                                {% endif %}
+                                {% if has_endpoint('obras.equipos_movimientos') %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('obras.equipos_movimientos') }}">
+                                    <i class="fas fa-truck-loading me-2"></i>Maquinaria
+                                </a></li>
+                                {% endif %}
+                                {% if current_user.role == 'admin' and has_endpoint('inventario.categorias') %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">
+                                    <i class="fas fa-tags me-2"></i>Categorias
+                                </a></li>
+                                {% endif %}
+                            </ul>
+                        </li>
+                        {% endif %}
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link text-muted" href="{{ url_for('planes.mostrar_planes') }}" title="Disponible en Plan Premium">
+                                <i class="fas fa-lock me-1"></i>Inventario <span class="badge bg-warning text-dark" style="font-size: 0.6rem;">Premium</span>
+                            </a>
+                        </li>
                     {% endif %}
 
                     {# 5. Equipos #}
@@ -289,6 +303,11 @@
                                 <i class="fas fa-user me-1"></i>
                             {% endif %}
                             <span>{{ current_user.nombre }}</span>
+                            {% if plan_info and plan_info.tipo %}
+                            <span class="badge ms-2 {% if plan_info.tipo == 'prueba' %}bg-secondary{% elif plan_info.tipo == 'estandar' %}bg-info{% elif plan_info.tipo == 'premium' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                                {{ plan_info.nombre or plan_info.tipo|upper }}
+                            </span>
+                            {% endif %}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             {% if current_user.role == 'admin' and current_user.plan_activo == 'prueba' and not current_user.is_super_admin %}
@@ -343,6 +362,18 @@
             {% endif %}
         </div>
     </nav>
+
+    {% if plan_info and plan_info.is_trial and plan_info.days_remaining is defined and plan_info.days_remaining <= 7 %}
+    <div class="alert alert-warning text-center mb-0 py-1">
+        <small><i class="fas fa-clock me-1"></i>Tu prueba gratuita vence en {{ plan_info.days_remaining }} días.
+        <a href="{{ url_for('planes.mostrar_planes') }}">Elegi un plan</a></small>
+    </div>
+    {% endif %}
+    {% if plan_info and plan_info.is_expired %}
+    <div class="alert alert-danger text-center mb-0 py-1">
+        <small><i class="fas fa-exclamation-triangle me-1"></i>Tu suscripcion vencio. <a href="{{ url_for('planes.mostrar_planes') }}" class="text-white fw-bold">Renova tu plan</a></small>
+    </div>
+    {% endif %}
 
     <!-- Alerts -->
     <div class="container-fluid mt-3">

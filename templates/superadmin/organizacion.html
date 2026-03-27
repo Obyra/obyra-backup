@@ -16,8 +16,13 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>
                     <i class="fas fa-building me-2"></i>{{ org.nombre }}
-                    {% if org.plan %}
-                    <span class="badge bg-info ms-2">{{ org.plan }}</span>
+                    {% if org.plan_tipo %}
+                    <span class="badge ms-2 {% if org.plan_tipo == 'prueba' %}bg-secondary{% elif org.plan_tipo == 'estandar' %}bg-info{% elif org.plan_tipo == 'premium' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                        {{ plan_summary.plan_nombre if plan_summary else org.plan_tipo }}
+                    </span>
+                    {% endif %}
+                    {% if subscription_status == 'suspended' %}
+                    <span class="badge bg-danger ms-1">SUSPENDIDA</span>
                     {% endif %}
                 </h2>
                 <a href="{{ url_for('superadmin.panel') }}" class="btn btn-secondary">
@@ -27,20 +32,164 @@
         </div>
     </div>
 
+    <!-- Plan Warnings -->
+    {% if plan_warnings %}
+    <div class="row mb-3">
+        <div class="col-12">
+            {% for warning in plan_warnings %}
+            <div class="alert alert-warning py-2 mb-2">
+                <i class="fas fa-exclamation-triangle me-1"></i>{{ warning }}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Plan y Descuento -->
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <strong><i class="fas fa-crown me-2"></i>Plan Actual</strong>
+                    {% if subscription_status == 'suspended' %}
+                        <span class="badge bg-danger">SUSPENDIDA</span>
+                    {% elif subscription_status == 'grace_period' %}
+                        <span class="badge bg-warning text-dark">GRACIA</span>
+                    {% elif subscription_status == 'read_only' %}
+                        <span class="badge bg-secondary">SOLO LECTURA</span>
+                    {% elif subscription_status == 'active' %}
+                        <span class="badge bg-success">ACTIVA</span>
+                    {% elif subscription_status == 'trial' %}
+                        <span class="badge bg-info">PRUEBA</span>
+                    {% endif %}
                 </div>
                 <div class="card-body">
-                    <p><strong>Plan:</strong> <span class="badge bg-info fs-6">{{ org.plan_tipo or 'prueba' }}</span></p>
-                    <p><strong>Usuarios:</strong> {{ org.max_usuarios or 5 }} máx</p>
-                    <p><strong>Obras:</strong> {{ org.max_obras or 1 }} máx</p>
-                    {% if org.fecha_fin_plan %}
-                    <p><strong>Vence:</strong> {{ org.fecha_fin_plan.strftime('%d/%m/%Y') }}</p>
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <strong>Plan:</strong>
+                            <span class="badge fs-6 {% if org.plan_tipo == 'prueba' %}bg-secondary{% elif org.plan_tipo == 'estandar' %}bg-info{% elif org.plan_tipo == 'premium' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                                {{ plan_summary.plan_nombre if plan_summary else (org.plan_tipo or 'prueba') }}
+                            </span>
+                        </div>
+                        <div class="col-6">
+                            <strong>Contrato:</strong>
+                            {% if org.contract_type == 'license_5y' %}
+                                <span class="badge bg-dark">Licencia 5 anos</span>
+                            {% elif org.contract_type == 'trial' %}
+                                <span class="badge bg-secondary">Trial</span>
+                            {% else %}
+                                <span class="badge bg-primary">Suscripcion</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6"><strong>Usuarios:</strong> {{ plan_summary.usuarios_activos if plan_summary else '?' }} / {{ org.max_usuarios or 5 }} max</div>
+                        <div class="col-6"><strong>Obras:</strong> {{ plan_summary.obras_activas if plan_summary else '?' }} / {{ org.max_obras or 1 }} max</div>
+                    </div>
+                    {% if org.fecha_inicio_plan %}
+                    <p class="mb-1"><strong>Inicio:</strong> {{ org.fecha_inicio_plan.strftime('%d/%m/%Y') }}</p>
                     {% endif %}
+                    {% if org.fecha_fin_plan %}
+                    <p class="mb-1"><strong>Vence:</strong> {{ org.fecha_fin_plan.strftime('%d/%m/%Y') }}
+                        {% if days_remaining is defined %}
+                            {% if days_remaining > 30 %}
+                                <span class="text-success">({{ days_remaining }} dias)</span>
+                            {% elif days_remaining > 0 %}
+                                <span class="text-warning fw-bold">({{ days_remaining }} dias)</span>
+                            {% else %}
+                                <span class="text-danger fw-bold">(vencido hace {{ days_remaining|abs }} dias)</span>
+                            {% endif %}
+                        {% endif %}
+                    </p>
+                    {% endif %}
+                    {% if org.grace_period_until %}
+                    <p class="mb-1"><strong>Gracia hasta:</strong> <span class="text-warning">{{ org.grace_period_until.strftime('%d/%m/%Y') }}</span></p>
+                    {% endif %}
+
+                    <hr>
+
+                    <!-- Acciones de suscripcion -->
+                    <div class="d-flex gap-2 flex-wrap mb-3">
+                        {% if subscription_status != 'suspended' %}
+                        <form method="POST" action="{{ url_for('superadmin.suspender_org', org_id=org.id) }}" class="d-inline"
+                              onsubmit="return confirm('Seguro que queres suspender a {{ org.nombre }}?')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-ban me-1"></i>Suspender
+                            </button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('superadmin.reactivar_org', org_id=org.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="fas fa-check-circle me-1"></i>Reactivar
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        <button class="btn btn-warning btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#graciaForm">
+                            <i class="fas fa-hourglass-half me-1"></i>Dar Gracia
+                        </button>
+                    </div>
+
+                    <div class="collapse mb-3" id="graciaForm">
+                        <form method="POST" action="{{ url_for('superadmin.dar_gracia', org_id=org.id) }}" class="d-flex gap-2 align-items-end">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div>
+                                <label class="form-label small mb-1">Dias de gracia</label>
+                                <select name="dias_gracia" class="form-select form-select-sm" style="width: 120px;">
+                                    <option value="7">7 dias</option>
+                                    <option value="14">14 dias</option>
+                                    <option value="30" selected>30 dias</option>
+                                    <option value="60">60 dias</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-warning btn-sm">
+                                <i class="fas fa-save me-1"></i>Aplicar
+                            </button>
+                        </form>
+                    </div>
+
+                    <hr>
+
+                    <!-- Cambiar Plan -->
+                    <h6 class="text-muted"><i class="fas fa-exchange-alt me-1"></i>Cambiar Plan</h6>
+                    <form method="POST" action="{{ url_for('superadmin.activar_plan', org_id=org.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-4">
+                                <label class="form-label small">Plan</label>
+                                <select name="plan_tipo" class="form-select form-select-sm">
+                                    <option value="prueba" {{ 'selected' if org.plan_tipo == 'prueba' }}>Prueba</option>
+                                    <option value="estandar" {{ 'selected' if org.plan_tipo == 'estandar' }}>Standard</option>
+                                    <option value="premium" {{ 'selected' if org.plan_tipo == 'premium' }}>Premium</option>
+                                    <option value="full_premium" {{ 'selected' if org.plan_tipo == 'full_premium' }}>Full Premium</option>
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label small">Dias</label>
+                                <select name="dias" class="form-select form-select-sm">
+                                    <option value="30">30</option>
+                                    <option value="90">90</option>
+                                    <option value="180">180</option>
+                                    <option value="365" selected>365</option>
+                                    <option value="1825">5 anos</option>
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label small">Contrato</label>
+                                <select name="contract_type" class="form-select form-select-sm">
+                                    <option value="subscription" {{ 'selected' if org.contract_type == 'subscription' }}>Suscripcion</option>
+                                    <option value="license_5y" {{ 'selected' if org.contract_type == 'license_5y' }}>Licencia 5y</option>
+                                </select>
+                            </div>
+                            <div class="col-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

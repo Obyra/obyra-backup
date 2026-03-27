@@ -29,6 +29,7 @@ from sqlalchemy import desc, or_
 from models import Presupuesto, ItemPresupuesto, Obra, Organizacion, Cliente
 from services.calculation import BudgetCalculator, BudgetConstants
 from services.memberships import get_current_org_id, get_current_membership
+from services.plan_service import require_active_subscription
 from utils.pagination import Pagination
 from utils import safe_int
 import io
@@ -247,6 +248,7 @@ def lista():
 
 @presupuestos_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
+@require_active_subscription
 def crear():
     """Crear nuevo presupuesto"""
     # Log database info for debugging
@@ -576,6 +578,7 @@ def crear():
 
 @presupuestos_bp.route('/crear-manual', methods=['GET', 'POST'])
 @login_required
+@require_active_subscription
 def crear_manual():
     """Crear nuevo presupuesto de forma manual (sin IA)"""
     # Verificar permisos de gestión
@@ -1559,6 +1562,7 @@ def identificar_etapa_por_tipo(item):
 
 @presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
 @login_required
+@require_active_subscription
 def confirmar_como_obra(id):
     """Confirmar presupuesto y convertirlo en obra"""
     try:

@@ -646,7 +646,14 @@ def utility_processor():
             return f'{int(v):,}'.replace(',', '.')
         return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
-    return dict(
+    # Plan service context
+    try:
+        from services.plan_service import inject_plan_context
+        plan_ctx = inject_plan_context()
+    except Exception:
+        plan_ctx = {'plan_info': {}, 'can_feature': lambda f: True}
+
+    result = dict(
         obtener_tareas_para_etapa=obtener_tareas_para_etapa,
         has_endpoint=has_endpoint,
         tiene_rol=tiene_rol_helper,
@@ -656,6 +663,8 @@ def utility_processor():
         current_organization=current_org,
         current_org_id=get_current_org_id,
     )
+    result.update(plan_ctx)
+    return result
 
 # ---------------- Template filters ----------------
 @app.template_filter('fecha')
@@ -1717,14 +1726,31 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error creando campo deleted_at en obras: {e}")
 
+    # Plan service: campos de suscripción/licencia en organizaciones
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='contract_type') THEN
+                ALTER TABLE organizaciones ADD COLUMN contract_type VARCHAR(20) DEFAULT 'subscription';
+                ALTER TABLE organizaciones ADD COLUMN subscription_status VARCHAR(20) DEFAULT 'active';
+                ALTER TABLE organizaciones ADD COLUMN grace_period_until TIMESTAMP;
+                ALTER TABLE organizaciones ADD COLUMN annual_service_due_date TIMESTAMP;
+                ALTER TABLE organizaciones ADD COLUMN annual_service_status VARCHAR(20) DEFAULT 'active';
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error creando campos de plan en organizaciones: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado
     # - CASCADE DELETE en tarea_miembros/tarea_responsables: ya aplicado
     # - Limpieza de duplicados inventario: completada manualmente
     # - Reclasificación encofrados: completada
-    # Los modelos tienen las definiciones correctas (index=True, ondelete='CASCADE', etc.)
-    # Si se necesita recrear la DB, SQLAlchemy create_all() aplica todo desde los modelos.
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""

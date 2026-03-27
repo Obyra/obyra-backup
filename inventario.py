@@ -31,6 +31,7 @@ from models import (
 )
 from services.memberships import get_current_org_id
 from services.permissions import validate_item_inventario_ownership, validate_obra_ownership
+from services.plan_service import require_feature, require_active_subscription
 
 # from inventario_new import nuevo_item as nuevo_item_view  # Commented out - causes import error
 from models import InventoryCategory, Organizacion
@@ -268,6 +269,7 @@ def _ensure_canonical_categories(org_id):
 
 @inventario_bp.route('/')
 @login_required
+@require_feature('inventory.full')
 def lista():
     current_app.logger.info(f"[INVENTARIO] Accediendo a lista. User: {current_user.email}")
     if not current_user.puede_acceder_modulo('inventario'):
@@ -454,6 +456,7 @@ def lista():
 
 @inventario_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
+@require_feature('inventory.full')
 def crear():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para crear items de inventario.', 'danger')
@@ -591,6 +594,7 @@ def crear():
 
 @inventario_bp.route('/<int:id>')
 @login_required
+@require_feature('inventory.full')
 def detalle(id):
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para ver detalles de inventario.', 'danger')
@@ -1056,6 +1060,7 @@ def registrar_movimiento(id):
 
 @inventario_bp.route('/uso-obra', methods=['GET', 'POST'])
 @login_required
+@require_feature('inventory.full')
 def uso_obra():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para registrar uso en obra.', 'danger')

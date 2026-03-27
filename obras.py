@@ -50,6 +50,7 @@ from services.geocoding_service import resolve as resolve_geocode
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
 from services.memberships import get_current_org_id, get_current_membership
 from services.permissions import validate_obra_ownership, validate_tarea_ownership, get_org_id
+from services.plan_service import require_active_subscription
 from services.obras_filters import (obras_visibles_clause,
                                     obra_tiene_presupuesto_confirmado)
 from services.certifications import (
@@ -488,6 +489,7 @@ def lista():
 
 @obras_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
+@require_active_subscription
 def verificar_limite_obras(org_id, lock=False):
     """Verifica si la organización puede crear más obras según su plan.
     Si lock=True, usa SELECT FOR UPDATE para evitar race conditions."""
@@ -1482,6 +1484,7 @@ def agregar_etapa(id):
 
 @obras_bp.route("/tareas/crear", methods=['POST'])
 @login_required
+@require_active_subscription
 def crear_tareas():
     """Crear una o múltiples tareas (con o sin sugeridas)."""
     try:
@@ -2155,6 +2158,7 @@ def normalize_unit(unit):
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
 @csrf.exempt
 @login_required
+@require_active_subscription
 def crear_avance(tarea_id):
     """Registrar avance con fotos (operarios desde dashboard)."""
     try:

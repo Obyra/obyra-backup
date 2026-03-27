@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc
 from app import db
+from services.plan_service import require_feature
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario,
                    Organizacion, OrgMembership, ItemPresupuesto, EtapaObra,
@@ -1117,6 +1118,7 @@ def reporte_obras():
 
 @reportes_bp.route('/costos')
 @login_required
+@require_feature('reports.costos')
 def reporte_costos():
     if not current_user.puede_acceder_modulo('reportes'):
         flash('No tienes permisos para ver reportes de costos.', 'danger')
@@ -1434,6 +1436,7 @@ def reporte_costos():
 
 @reportes_bp.route('/inventario')
 @login_required
+@require_feature('reports.inventario')
 def reporte_inventario():
     if not current_user.puede_acceder_modulo('reportes'):
         flash('No tienes permisos para ver reportes de inventario.', 'danger')
@@ -2292,6 +2295,7 @@ def exportar_inventario_pdf():
 
 @reportes_bp.route('/financiero')
 @login_required
+@require_feature('reports.financiero')
 def reporte_financiero():
     """Dashboard financiero: rentabilidad por obra, márgenes y desglose de costos."""
     try:

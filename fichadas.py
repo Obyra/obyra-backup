@@ -13,6 +13,7 @@ from flask_login import login_required, current_user
 from extensions import db, csrf
 from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
 from services.permissions import get_org_id, validate_obra_ownership
+from services.plan_service import require_feature
 
 fichadas_bp = Blueprint('fichadas', __name__, url_prefix='/fichadas')
 
@@ -314,6 +315,7 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
 
 @fichadas_bp.route('/')
 @login_required
+@require_feature('attendance.basic')
 def index():
     """Página principal: muestra obras asignadas con estado de fichada."""
     obras = _obras_asignadas(current_user)
@@ -449,6 +451,7 @@ def fichar(obra_id):
 @fichadas_bp.route('/api/fichar', methods=['POST'])
 @csrf.exempt
 @login_required
+@require_feature('attendance.geo')
 def api_fichar():
     """Registra una fichada de ingreso o egreso."""
     data = request.get_json(silent=True) or {}

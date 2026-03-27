@@ -74,6 +74,7 @@ def panel():
 @require_super_admin
 def ver_organizacion(org_id):
     """Ver detalles de una organización específica"""
+    from services.plan_service import get_plan_summary, get_subscription_status, PLAN_FEATURES
 
     org = Organizacion.query.get_or_404(org_id)
 
@@ -84,13 +85,32 @@ def ver_organizacion(org_id):
     items = ItemInventario.query.filter_by(organizacion_id=org_id, activo=True).order_by(ItemInventario.nombre).all()
     clientes = Cliente.query.filter_by(organizacion_id=org_id).order_by(Cliente.nombre).all()
 
+    # Plan summary para la vista
+    plan_summary = get_plan_summary(org)
+    status, days_remaining, is_writable = get_subscription_status(org)
+
+    # Warnings de excedentes
+    plan_warnings = []
+    plan_config = PLAN_FEATURES.get(org.plan_tipo or 'prueba', PLAN_FEATURES['prueba'])
+    obras_activas = len([o for o in obras if getattr(o, 'estado', '') != 'cancelada'])
+    usuarios_activos = len([u for u in usuarios if getattr(u, 'activo', True)])
+
+    if obras_activas > (org.max_obras or plan_config['max_obras']):
+        plan_warnings.append(f'Tiene {obras_activas} obras activas pero el plan permite {org.max_obras or plan_config["max_obras"]}.')
+    if usuarios_activos > (org.max_usuarios or plan_config['max_usuarios']):
+        plan_warnings.append(f'Tiene {usuarios_activos} usuarios activos pero el plan permite {org.max_usuarios or plan_config["max_usuarios"]}.')
+
     return render_template('superadmin/organizacion.html',
                           org=org,
                           usuarios=usuarios,
                           obras=obras,
                           presupuestos=presupuestos,
                           items=items,
-                          clientes=clientes)
+                          clientes=clientes,
+                          plan_summary=plan_summary,
+                          plan_warnings=plan_warnings,
+                          subscription_status=status,
+                          days_remaining=days_remaining)
 
 
 @superadmin_bp.route('/inventario')
@@ -174,26 +194,72 @@ def usuarios_global():
 @require_super_admin
 def activar_plan(org_id):
     """Activar o cambiar el plan de una organización manualmente"""
-    from planes import PLANES_CONFIG
+    from services.plan_service import PLAN_FEATURES, change_plan
 
     org = Organizacion.query.get_or_404(org_id)
     plan_tipo = request.form.get('plan_tipo', 'estandar')
     dias = int(request.form.get('dias', 30))
+    contract_type = request.form.get('contract_type', 'subscription')
 
-    plan_info = PLANES_CONFIG.get(plan_tipo, PLANES_CONFIG.get('estandar'))
-    if not plan_info:
-        flash('Plan no válido.', 'error')
-        return redirect(url_for('superadmin.panel'))
+    # Usar change_plan del plan_service para manejo seguro
+    success, message, warnings = change_plan(
+        org, plan_tipo, days=dias, contract_type=contract_type,
+        changed_by=current_user.id
+    )
 
-    org.plan_tipo = plan_tipo
-    org.max_usuarios = plan_info['max_usuarios']
-    org.max_obras = plan_info.get('max_obras', 3)
-    org.fecha_inicio_plan = datetime.utcnow()
-    org.fecha_fin_plan = datetime.utcnow() + timedelta(days=dias)
+    if not success:
+        flash(message, 'error')
+        return redirect(url_for('superadmin.ver_organizacion', org_id=org_id))
+
+    # Actualizar subscription_status
+    org.subscription_status = 'active'
+    org.grace_period_until = None
     db.session.commit()
 
-    flash(f'Plan "{plan_info["nombre"]}" activado para {org.nombre} por {dias} días.', 'success')
-    return redirect(url_for('superadmin.panel'))
+    for w in warnings:
+        flash(w, 'warning')
+
+    flash(message, 'success')
+    return redirect(url_for('superadmin.ver_organizacion', org_id=org_id))
+
+
+@superadmin_bp.route('/suspender/<int:org_id>', methods=['POST'])
+@login_required
+@require_super_admin
+def suspender_org(org_id):
+    """Suspender una organización"""
+    org = Organizacion.query.get_or_404(org_id)
+    org.subscription_status = 'suspended'
+    db.session.commit()
+    flash(f'Organización {org.nombre} suspendida.', 'warning')
+    return redirect(url_for('superadmin.ver_organizacion', org_id=org_id))
+
+
+@superadmin_bp.route('/reactivar/<int:org_id>', methods=['POST'])
+@login_required
+@require_super_admin
+def reactivar_org(org_id):
+    """Reactivar una organización suspendida"""
+    org = Organizacion.query.get_or_404(org_id)
+    org.subscription_status = 'active'
+    org.grace_period_until = None
+    db.session.commit()
+    flash(f'Organización {org.nombre} reactivada.', 'success')
+    return redirect(url_for('superadmin.ver_organizacion', org_id=org_id))
+
+
+@superadmin_bp.route('/gracia/<int:org_id>', methods=['POST'])
+@login_required
+@require_super_admin
+def dar_gracia(org_id):
+    """Otorgar período de gracia a una organización"""
+    org = Organizacion.query.get_or_404(org_id)
+    dias_gracia = int(request.form.get('dias_gracia', 7))
+    org.subscription_status = 'grace_period'
+    org.grace_period_until = datetime.utcnow() + timedelta(days=dias_gracia)
+    db.session.commit()
+    flash(f'Período de gracia de {dias_gracia} días otorgado a {org.nombre}.', 'info')
+    return redirect(url_for('superadmin.ver_organizacion', org_id=org_id))
 
 
 @superadmin_bp.route('/descuento/<int:org_id>', methods=['POST'])
