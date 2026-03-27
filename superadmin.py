@@ -320,6 +320,27 @@ def api_stats():
     return jsonify(stats)
 
 
+@superadmin_bp.route('/debug-obra-coords/<int:obra_id>')
+@login_required
+@require_super_admin
+def debug_obra_coords(obra_id):
+    """Ver coordenadas de una obra para debug de GPS."""
+    from models.projects import Obra
+    obra = Obra.query.get_or_404(obra_id)
+    return jsonify({
+        'id': obra.id,
+        'nombre': obra.nombre,
+        'direccion': obra.direccion,
+        'latitud': float(obra.latitud) if obra.latitud else None,
+        'longitud': float(obra.longitud) if obra.longitud else None,
+        'radio_fichada_metros': obra.radio_fichada_metros,
+        'geocode_status': obra.geocode_status,
+        'geocode_provider': obra.geocode_provider,
+        'direccion_normalizada': obra.direccion_normalizada,
+        'google_maps_link': f'https://www.google.com/maps?q={obra.latitud},{obra.longitud}' if obra.latitud else None,
+    })
+
+
 @superadmin_bp.route('/limpiar-marcas-cuadrillas', methods=['GET', 'POST'])
 @login_required
 @require_super_admin
