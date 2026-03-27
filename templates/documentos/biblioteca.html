@@ -142,7 +142,7 @@
                                 <i class="fas fa-download"></i>
                             </a>
                             {% endif %}
-                            {% if current_user.rol == 'administrador' and has_endpoint('documentos.editar_documento') %}
+                            {% if current_user.role == 'admin' and has_endpoint('documentos.editar_documento') %}
                             <a href="{{ url_for('documentos.editar_documento', documento_id=doc.id) }}"
                                class="btn btn-sm btn-outline-secondary"
                                title="Editar">

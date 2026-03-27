@@ -661,7 +661,7 @@ class UserService(BaseService[Usuario]):
             return role_perm.can_edit
 
         # Fallback: admins y tecnicos pueden editar la mayoría
-        if user.rol in ['administrador', 'tecnico', 'jefe_obra']:
+        if user.role in ['admin', 'pm']:
             return True
 
         return False

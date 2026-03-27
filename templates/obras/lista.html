@@ -14,7 +14,7 @@
                     </span>
                     {# Botón Nueva Obra deshabilitado - Las obras solo se crean desde el módulo de Presupuestos #}
                     {% if false %}
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    {% if current_user.role in ['admin', 'pm'] %}
                     <a href="{{ url_for('obras.crear') }}" class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i>Nueva Obra
                     </a>
@@ -23,7 +23,7 @@
                     
                     {# alternativa reversible: ocultar botón Backfill Tareas #}
                     {% if false %}
-                    {% if current_user.rol == 'administrador' and current_user.is_super_admin %}
+                    {% if current_user.role == 'admin' and current_user.is_super_admin %}
                     <form method="POST" action="{{ url_for('obras.admin_backfill_tareas') }}" style="display: inline;" 
                           onsubmit="return confirm('¿Estás segura de ejecutar el backfill de tareas predefinidas? Esto agregará tareas a etapas existentes que tengan menos de 5 tareas.')">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -164,7 +164,7 @@
                                                 <span class="d-none d-md-inline ms-1">Mapa</span>
                                             </a>
                                             {% endif %}
-                                            {% if current_user.rol == 'administrador' %}
+                                            {% if current_user.role == 'admin' %}
                                             <button class="btn btn-sm btn-outline-danger d-flex align-items-center" onclick="confirmarEliminarObra({{ obra.id }}, '{{ obra.nombre }}')" title="Eliminar obra">
                                                 <i class="fas fa-trash-alt"></i>
                                                 <span class="d-none d-md-inline ms-1">Eliminar</span>
@@ -181,7 +181,7 @@
                             <i class="fas fa-building fa-3x text-muted mb-3"></i>
                             <h6 class="text-muted">No hay obras registradas</h6>
                             <p class="text-muted">
-                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                {% if current_user.role in ['admin', 'pm'] %}
                                     Las obras se crean desde el módulo de Presupuestos.
                                 {% else %}
                                     No tienes obras asignadas actualmente.

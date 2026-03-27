@@ -2284,3 +2284,155 @@ def exportar_inventario_pdf():
     except Exception as e:
         flash(f'Error al generar el PDF: {str(e)[:200]}', 'danger')
         return redirect(url_for('reportes.reporte_inventario'))
+
+
+# ============================================================================
+# REPORTE FINANCIERO — Rentabilidad, márgenes y flujo de caja por obra
+# ============================================================================
+
+@reportes_bp.route('/financiero')
+@login_required
+def reporte_financiero():
+    """Dashboard financiero: rentabilidad por obra, márgenes y desglose de costos."""
+    if current_user.role not in ('admin', 'pm'):
+        flash('No tienes permisos para ver el reporte financiero.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    from decimal import Decimal, ROUND_HALF_UP
+    from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        flash('Selecciona una organización para ver el reporte financiero.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion'))
+
+    # Obras activas (no canceladas, no eliminadas)
+    obras = Obra.query.filter(
+        Obra.organizacion_id == org_id,
+        Obra.deleted_at.is_(None),
+        Obra.estado.notin_(['cancelada'])
+    ).order_by(Obra.nombre).all()
+
+    # ---------- Calcular costos desglosados por obra ----------
+    obras_data = []
+    total_presupuestado = Decimal('0')
+    total_costo_real = Decimal('0')
+    total_materiales = Decimal('0')
+    total_mano_obra = Decimal('0')
+    total_maquinaria = Decimal('0')
+
+    # Chart data
+    chart_nombres = []
+    chart_presupuestos = []
+    chart_costos_reales = []
+
+    for obra in obras:
+        presupuesto = Decimal(str(obra.presupuesto_total or 0))
+
+        # 1. Costo materiales (from UsoInventario)
+        costo_mat = db.session.query(
+            func.coalesce(
+                func.sum(
+                    UsoInventario.cantidad_usada *
+                    func.coalesce(UsoInventario.precio_unitario_al_uso, 0)
+                ), 0
+            )
+        ).filter(UsoInventario.obra_id == obra.id).scalar()
+        costo_mat = Decimal(str(costo_mat or 0))
+
+        # 2. Costo mano de obra (from liquidaciones pagadas)
+        costo_mo = Decimal('0')
+        try:
+            costo_mo_raw = db.session.query(
+                func.coalesce(func.sum(LiquidacionMOItem.monto), 0)
+            ).join(LiqMO).filter(
+                LiqMO.obra_id == obra.id,
+                LiquidacionMOItem.estado == 'pagado'
+            ).scalar() or 0
+            costo_mo = Decimal(str(costo_mo_raw))
+        except Exception:
+            db.session.rollback()
+
+        # 3. Costo maquinaria (from EquipmentUsage)
+        costo_maq = Decimal('0')
+        try:
+            from models.equipment import EquipmentUsage, Equipment
+            maq_raw = db.session.query(
+                func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0)
+            ).join(Equipment).filter(
+                EquipmentUsage.project_id == obra.id,
+                EquipmentUsage.estado == 'aprobado'
+            ).scalar() or 0
+            costo_maq = Decimal(str(maq_raw))
+        except Exception:
+            db.session.rollback()
+
+        costo_total = costo_mat + costo_mo + costo_maq
+        margen = presupuesto - costo_total
+        pct_margen = (margen / presupuesto * Decimal('100')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP) if presupuesto > 0 else Decimal('0')
+
+        # Semáforo
+        if pct_margen > 15:
+            semaforo = 'verde'
+        elif pct_margen >= 5:
+            semaforo = 'amarillo'
+        else:
+            semaforo = 'rojo'
+
+        obras_data.append({
+            'obra': obra,
+            'presupuesto': presupuesto,
+            'costo_materiales': costo_mat,
+            'costo_mano_obra': costo_mo,
+            'costo_maquinaria': costo_maq,
+            'costo_total': costo_total,
+            'margen': margen,
+            'pct_margen': float(pct_margen),
+            'progreso': obra.progreso or 0,
+            'semaforo': semaforo,
+        })
+
+        total_presupuestado += presupuesto
+        total_costo_real += costo_total
+        total_materiales += costo_mat
+        total_mano_obra += costo_mo
+        total_maquinaria += costo_maq
+
+        # Chart data
+        chart_nombres.append(obra.nombre[:25])
+        chart_presupuestos.append(float(presupuesto))
+        chart_costos_reales.append(float(costo_total))
+
+    # ---------- Summary ----------
+    margen_bruto = total_presupuestado - total_costo_real
+    pct_margen_global = float(
+        (margen_bruto / total_presupuestado * Decimal('100')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+    ) if total_presupuestado > 0 else 0.0
+
+    # Otros costos (total - materiales - MO - maquinaria), mínimo 0
+    otros = max(Decimal('0'), total_costo_real - total_materiales - total_mano_obra - total_maquinaria)
+
+    resumen = {
+        'total_presupuestado': total_presupuestado,
+        'total_costo_real': total_costo_real,
+        'margen_bruto': margen_bruto,
+        'pct_margen': pct_margen_global,
+    }
+
+    # Pie chart data
+    pie_labels = ['Materiales', 'Mano de Obra', 'Maquinaria', 'Otros']
+    pie_values = [
+        float(total_materiales),
+        float(total_mano_obra),
+        float(total_maquinaria),
+        float(otros),
+    ]
+
+    return render_template('reportes/financiero.html',
+                           resumen=resumen,
+                           obras_data=obras_data,
+                           chart_nombres=chart_nombres,
+                           chart_presupuestos=chart_presupuestos,
+                           chart_costos_reales=chart_costos_reales,
+                           pie_labels=pie_labels,
+                           pie_values=pie_values)

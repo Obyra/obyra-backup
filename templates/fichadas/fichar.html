@@ -24,7 +24,7 @@
                     <i class="fas fa-user me-1"></i>{{ current_user.nombre_completo }}
                 </span>
                 <span class="badge bg-secondary bg-opacity-10 text-secondary px-3 py-2">
-                    <i class="fas fa-id-badge me-1"></i>{{ current_user.role or current_user.rol or 'Operario' }}
+                    <i class="fas fa-id-badge me-1"></i>{{ current_user.role or 'Operario' }}
                 </span>
             </div>
             {% if es_admin and operarios_obra %}

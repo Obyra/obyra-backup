@@ -127,7 +127,7 @@
                                 <td><small>{{ usuario.email }}</small></td>
                                 <td><small>{{ usuario.telefono or '-' }}</small></td>
                                 <td>
-                                    <span class="badge bg-secondary">{{ usuario.role or usuario.rol or 'Sin rol' }}</span>
+                                    <span class="badge bg-secondary">{{ usuario.role or 'Sin rol' }}</span>
                                     {% if usuario.is_super_admin %}
                                     <span class="badge bg-danger">Super Admin</span>
                                     {% endif %}

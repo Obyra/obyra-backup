@@ -161,9 +161,11 @@ class Usuario(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
-    # Sistema de roles unificado: admin, pm, tecnico, operario
-    rol = db.Column(db.String(50), nullable=True)  # DEPRECATED: sincronizado desde role
-    role = db.Column(db.String(20), nullable=False, default='operario')
+    # Sistema de roles unificado — canonical values: 'admin', 'pm', 'operario'
+    # DEPRECATED: 'rol' is kept for DB backwards-compat; auto-synced from 'role' via before_insert/before_update event.
+    # All code checks MUST use 'role', never 'rol'.
+    rol = db.Column(db.String(50), nullable=True)  # DEPRECATED — do NOT use for checks
+    role = db.Column(db.String(20), nullable=False, default='operario')  # Canonical role field
 
     _ROLE_TO_ROL = {'admin': 'administrador', 'pm': 'tecnico', 'tecnico': 'tecnico', 'operario': 'operario'}
 
@@ -515,6 +517,14 @@ class Usuario(UserMixin, db.Model):
             db.session.add(profile)
             db.session.flush()
         return profile
+
+
+@db.event.listens_for(Usuario, 'before_insert')
+@db.event.listens_for(Usuario, 'before_update')
+def _sync_usuario_rol(mapper, connection, target):
+    """Sync deprecated 'rol' field from canonical 'role' field."""
+    if target.role:
+        target.rol = Usuario._sync_rol_from_role(target.role)
 
 
 class OrgMembership(db.Model):

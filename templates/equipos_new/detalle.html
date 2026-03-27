@@ -196,7 +196,7 @@
                                                         {% endif %}
                                                     </td>
                                                     <td>
-                                                        {% if uso.estado == 'pendiente' and current_user.rol in ['administrador', 'tecnico'] %}
+                                                        {% if uso.estado == 'pendiente' and current_user.role in ['admin', 'pm'] %}
                                                             <div class="btn-group btn-group-sm">
                                                                 <button class="btn btn-outline-success" onclick="aprobarUso({{ uso.id }})">
                                                                     <i class="fas fa-check"></i>

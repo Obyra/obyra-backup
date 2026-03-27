@@ -77,7 +77,7 @@
                                 {% endfor %}
                             </select>
                             <div class="form-text">
-                                {% if current_user.rol == 'administrador' and has_endpoint('documentos.configuracion_tipos') %}
+                                {% if current_user.role == 'admin' and has_endpoint('documentos.configuracion_tipos') %}
                                 <a href="{{ url_for('documentos.configuracion_tipos') }}" target="_blank">
                                     Configurar tipos de documento
                                 </a>
@@ -116,7 +116,7 @@
                             <label for="estado" class="form-label">Estado Inicial</label>
                             <select class="form-select" id="estado" name="estado">
                                 <option value="revision" selected>En Revisión</option>
-                                {% if current_user.rol == 'administrador' %}
+                                {% if current_user.role == 'admin' %}
                                 <option value="aprobado">Aprobado</option>
                                 {% endif %}
                             </select>

@@ -87,7 +87,7 @@
                         </td>
                         <td>{{ usuario.email }}</td>
                         <td>
-                            <span class="badge bg-secondary">{{ usuario.rol or usuario.role or 'Sin rol' }}</span>
+                            <span class="badge bg-secondary">{{ usuario.role or 'Sin rol' }}</span>
                         </td>
                         <td>
                             {% if usuario.activo %}

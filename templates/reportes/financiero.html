@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte Financiero - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-chart-line me-2 text-primary"></i>Reporte Financiero
+                </h1>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Dashboard
+                    </a>
+                    <button class="btn btn-danger" onclick="window.print()">
+                        <i class="fas fa-file-pdf me-1"></i>Exportar PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not obras_data %}
+    <!-- Estado vacío -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">Sin datos financieros</h5>
+                    <p class="text-muted">No hay obras activas con presupuesto cargado en esta organizacion.</p>
+                    <a href="{{ url_for('obras.lista_obras') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Crear Obra
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+
+    <!-- 4 Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ resumen.total_presupuestado|moneda }}</h3>
+                            <p class="mb-0 text-muted small">Total Presupuestado</p>
+                        </div>
+                        <i class="fas fa-file-invoice-dollar fa-2x text-primary opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ resumen.total_costo_real|moneda }}</h3>
+                            <p class="mb-0 text-muted small">Costo Real Total</p>
+                        </div>
+                        <i class="fas fa-receipt fa-2x text-warning opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold {% if resumen.margen_bruto < 0 %}text-danger{% else %}text-success{% endif %}">
+                                {{ resumen.margen_bruto|moneda }}
+                            </h3>
+                            <p class="mb-0 text-muted small">Margen Bruto</p>
+                        </div>
+                        <i class="fas fa-balance-scale fa-2x text-success opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold {% if resumen.pct_margen < 5 %}text-danger{% elif resumen.pct_margen < 15 %}text-warning{% else %}text-success{% endif %}">
+                                {{ '{:.1f}'.format(resumen.pct_margen) }}%
+                            </h3>
+                            <p class="mb-0 text-muted small">% Margen Global</p>
+                        </div>
+                        <i class="fas fa-percentage fa-2x text-info opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla semáforo de obras -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0"><i class="fas fa-traffic-light me-2"></i>Rentabilidad por Obra</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Obra</th>
+                                    <th class="text-end">Presupuesto</th>
+                                    <th class="text-end">Materiales</th>
+                                    <th class="text-end">Mano de Obra</th>
+                                    <th class="text-end">Maquinaria</th>
+                                    <th class="text-end">Costo Total</th>
+                                    <th class="text-end">Margen</th>
+                                    <th class="text-center">% Margen</th>
+                                    <th class="text-center">Progreso</th>
+                                    <th class="text-center">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in obras_data %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('obras.detalle_obra', obra_id=item.obra.id) }}" class="text-decoration-none fw-semibold">
+                                            {{ item.obra.nombre }}
+                                        </a>
+                                        <br><small class="text-muted">{{ item.obra.cliente }}</small>
+                                    </td>
+                                    <td class="text-end">{{ item.presupuesto|moneda }}</td>
+                                    <td class="text-end">{{ item.costo_materiales|moneda }}</td>
+                                    <td class="text-end">{{ item.costo_mano_obra|moneda }}</td>
+                                    <td class="text-end">{{ item.costo_maquinaria|moneda }}</td>
+                                    <td class="text-end fw-semibold">{{ item.costo_total|moneda }}</td>
+                                    <td class="text-end {% if item.margen < 0 %}text-danger{% else %}text-success{% endif %} fw-semibold">
+                                        {{ item.margen|moneda }}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {% if item.semaforo == 'verde' %}bg-success{% elif item.semaforo == 'amarillo' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                            {{ '{:.1f}'.format(item.pct_margen) }}%
+                                        </span>
+                                    </td>
+                                    <td class="text-center" style="min-width: 100px;">
+                                        <div class="progress" style="height: 8px;">
+                                            <div class="progress-bar" role="progressbar"
+                                                 style="width: {{ item.progreso }}%"
+                                                 aria-valuenow="{{ item.progreso }}" aria-valuemin="0" aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                        <small class="text-muted">{{ item.progreso }}%</small>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if item.semaforo == 'verde' %}
+                                            <i class="fas fa-circle text-success" title="Margen saludable (>15%)"></i>
+                                        {% elif item.semaforo == 'amarillo' %}
+                                            <i class="fas fa-circle text-warning" title="Margen ajustado (5-15%)"></i>
+                                        {% else %}
+                                            <i class="fas fa-circle text-danger" title="Margen critico (<5%)"></i>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light fw-bold">
+                                <tr>
+                                    <td>TOTALES</td>
+                                    <td class="text-end">{{ resumen.total_presupuestado|moneda }}</td>
+                                    <td class="text-end" colspan="3"></td>
+                                    <td class="text-end">{{ resumen.total_costo_real|moneda }}</td>
+                                    <td class="text-end {% if resumen.margen_bruto < 0 %}text-danger{% else %}text-success{% endif %}">
+                                        {{ resumen.margen_bruto|moneda }}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {% if resumen.pct_margen >= 15 %}bg-success{% elif resumen.pct_margen >= 5 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                            {{ '{:.1f}'.format(resumen.pct_margen) }}%
+                                        </span>
+                                    </td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row mb-4">
+        <!-- Bar Chart: Presupuesto vs Costo Real -->
+        <div class="col-lg-7 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Presupuesto vs Costo Real</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartBarComparativo" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pie Chart: Distribución de Costos -->
+        <div class="col-lg-5 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Distribucion de Costos</h5>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <canvas id="chartPieCostos" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leyenda semáforo -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body py-2">
+                    <small class="text-muted">
+                        <i class="fas fa-circle text-success me-1"></i> Margen &gt; 15% (saludable)
+                        <span class="mx-3">|</span>
+                        <i class="fas fa-circle text-warning me-1"></i> Margen 5-15% (ajustado)
+                        <span class="mx-3">|</span>
+                        <i class="fas fa-circle text-danger me-1"></i> Margen &lt; 5% (critico)
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if obras_data %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Bar Chart: Presupuesto vs Costo Real ---
+    const ctxBar = document.getElementById('chartBarComparativo').getContext('2d');
+    new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_nombres|tojson }},
+            datasets: [
+                {
+                    label: 'Presupuesto',
+                    data: {{ chart_presupuestos|tojson }},
+                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Costo Real',
+                    data: {{ chart_costos_reales|tojson }},
+                    backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return ctx.dataset.label + ': $ ' + ctx.parsed.y.toLocaleString('es-AR', {minimumFractionDigits: 0});
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            if (value >= 1000000) return '$ ' + (value / 1000000).toFixed(1) + 'M';
+                            if (value >= 1000) return '$ ' + (value / 1000).toFixed(0) + 'K';
+                            return '$ ' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // --- Pie Chart: Distribución de Costos ---
+    const ctxPie = document.getElementById('chartPieCostos').getContext('2d');
+    const pieValues = {{ pie_values|tojson }};
+    const hasData = pieValues.some(v => v > 0);
+
+    if (hasData) {
+        new Chart(ctxPie, {
+            type: 'doughnut',
+            data: {
+                labels: {{ pie_labels|tojson }},
+                datasets: [{
+                    data: pieValues,
+                    backgroundColor: [
+                        '#0d6efd',
+                        '#198754',
+                        '#ffc107',
+                        '#6c757d'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+                                return ctx.label + ': $ ' + ctx.parsed.toLocaleString('es-AR') + ' (' + pct + '%)';
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('chartPieCostos').parentElement.innerHTML =
+            '<p class="text-muted text-center">Sin costos registrados</p>';
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

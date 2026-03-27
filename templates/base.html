@@ -141,7 +141,7 @@
                                 <i class="fas fa-truck-loading me-2"></i>Maquinaria
                             </a></li>
                             {% endif %}
-                            {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
+                            {% if current_user.role == 'admin' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">
                                 <i class="fas fa-tags me-2"></i>Categorias
@@ -205,10 +205,14 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_obras') }}">Reporte de Obras</a></li>
-                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            {% if current_user.role in ['admin', 'pm'] %}
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_costos') }}">Reporte de Costos</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_inventario') }}">Reporte de Inventario</a></li>
+                            {% if current_user.role in ['admin', 'pm'] %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_financiero') }}"><i class="fas fa-chart-line me-1"></i>Reporte Financiero</a></li>
+                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}

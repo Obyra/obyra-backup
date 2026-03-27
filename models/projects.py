@@ -144,7 +144,7 @@ class Obra(db.Model):
 
     def puede_ser_pausada_por(self, usuario):
         """Verifica si un usuario puede pausar esta obra"""
-        return (usuario.rol == 'administrador' or
+        return (usuario.role == 'admin' or
                 usuario.puede_pausar_obras or
                 usuario.organizacion_id == self.organizacion_id)
 

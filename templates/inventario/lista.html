@@ -16,12 +16,12 @@
                         <i class="fas fa-exclamation-triangle me-1"></i>Alertas
                         <span class="badge bg-danger ms-1" id="badgeAlertas" style="display:none;">0</span>
                     </a>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    {% if current_user.role in ['admin', 'pm'] %}
                     <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalGestionCategorias">
                         <i class="fas fa-tags me-1"></i>Categorías
                     </button>
                     {% endif %}
-                    {% if current_user.rol == 'administrador' %}
+                    {% if current_user.role == 'admin' %}
                     {% if current_user.is_super_admin %}
                     <button type="button" class="btn btn-outline-info ms-1" id="btnSeedIA" onclick="seedItemsIA()">
                         <i class="fas fa-robot me-1"></i>Cargar Items IA
@@ -191,7 +191,7 @@
                 <table class="table table-hover table-striped align-middle">
                     <thead class="table-dark">
                         <tr>
-                            {% if current_user.rol == 'administrador' %}
+                            {% if current_user.role == 'admin' %}
                             <th style="width:35px;"><input type="checkbox" id="selectAll" onclick="toggleAll(this)" class="form-check-input"></th>
                             {% endif %}
                             <th>Código</th>
@@ -214,7 +214,7 @@
                         {% set total_trasladado = item_data.total_trasladado or 0 %}
                         {% set ubicaciones_stock = item_data.ubicaciones_stock or [] %}
                         <tr class="{{ 'table-warning' if item.necesita_reposicion }}" id="item-row-{{ item.id }}">
-                            {% if current_user.rol == 'administrador' %}
+                            {% if current_user.role == 'admin' %}
                             <td><input type="checkbox" class="form-check-input item-check" value="{{ item.id }}" onchange="updateBulkBar()"></td>
                             {% endif %}
                             <td>
@@ -291,7 +291,7 @@
                                        title="Ver detalles del item">
                                         <i class="fas fa-eye me-1"></i>Ver
                                     </a>
-                                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                    {% if current_user.role in ['admin', 'pm'] %}
                                     <button type="button" class="btn btn-secondary btn-sm"
                                             title="Baja, traslado, eliminar"
                                             data-unidad="{{ item.unidad or 'unidad' }}"
@@ -313,13 +313,13 @@
                     <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
                     <h4 class="text-muted">No hay items de inventario</h4>
                     <p class="text-muted">
-                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                        {% if current_user.role in ['admin', 'pm'] %}
                             Comienza registrando una compra para agregar items al inventario.
                         {% else %}
                             No hay items disponibles para visualizar.
                         {% endif %}
                     </p>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    {% if current_user.role in ['admin', 'pm'] %}
                     <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-primary">
                         <i class="fas fa-shopping-cart me-1"></i>Ir a Compras
                     </a>
@@ -414,7 +414,7 @@
                     <button type="button" class="list-group-item list-group-item-action" onclick="ejecutarAccion('traslado')">
                         <i class="fas fa-exchange-alt text-success me-2"></i>Trasladar a otro depósito
                     </button>
-                    {% if current_user.rol == 'administrador' %}
+                    {% if current_user.role == 'admin' %}
                     <button type="button" class="list-group-item list-group-item-action text-danger" onclick="ejecutarAccion('eliminar')">
                         <i class="fas fa-trash me-2"></i>Eliminar item
                     </button>
@@ -1170,7 +1170,7 @@ function eliminarBulk() {
 }
 </script>
 
-{% if current_user.rol == 'administrador' %}
+{% if current_user.role == 'admin' %}
 <!-- Barra flotante de acciones en lote -->
 <div id="bulkBar" style="display:none; position:fixed; bottom:0; left:0; right:0; z-index:1050;"
      class="bg-dark text-white p-3 d-flex align-items-center justify-content-center gap-3 shadow-lg">
