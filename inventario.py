@@ -629,6 +629,8 @@ def detalle(id):
 
 @inventario_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def editar_item(id):
     """Editar categoría y datos básicos de un item."""
     item = ItemInventario.query.get_or_404(id)
@@ -660,6 +662,8 @@ def editar_item(id):
 @inventario_bp.route('/<int:id>/categorias-adicionales', methods=['POST'])
 @csrf.exempt
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def categorias_adicionales(id):
     """Gestionar categorías adicionales de un item (many-to-many)."""
     org_id = get_current_org_id() or current_user.organizacion_id
@@ -707,6 +711,8 @@ def categorias_adicionales(id):
 
 @inventario_bp.route('/<int:id>/presentaciones', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def guardar_presentaciones(id):
     """Guardar presentaciones (packs) de un item de inventario."""
     import json as _json
@@ -740,6 +746,8 @@ def guardar_presentaciones(id):
 
 @inventario_bp.route('/reclasificar-encofrados', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def reclasificar_encofrados():
     """Reclasificar items de encofrado que están mal categorizados."""
     org_id = get_current_org_id() or current_user.organizacion_id
@@ -781,6 +789,8 @@ def reclasificar_encofrados():
 @inventario_bp.route('/mover-categoria-bulk', methods=['POST'])
 @csrf.exempt
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def mover_categoria_bulk():
     """Mover múltiples items a otra categoría."""
     if current_user.role != 'admin':
@@ -812,6 +822,8 @@ def mover_categoria_bulk():
 @inventario_bp.route('/eliminar-bulk', methods=['POST'])
 @csrf.exempt
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def eliminar_bulk():
     """Eliminar múltiples items."""
     if current_user.role != 'admin':
@@ -842,6 +854,8 @@ def eliminar_bulk():
 
 @inventario_bp.route('/<int:id>/eliminar', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def eliminar(id):
     """Elimina (desactiva) un item de inventario."""
     if current_user.role not in ['admin']:
@@ -911,6 +925,8 @@ def eliminar(id):
 
 @inventario_bp.route('/<int:id>/movimiento', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def registrar_movimiento(id):
     if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para registrar movimientos.', 'danger')
@@ -1353,6 +1369,7 @@ def uso_obra():
 
 @inventario_bp.route('/categorias')
 @login_required
+@require_feature('inventory.full')
 def categorias():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para acceder al catálogo de categorías.', 'danger')
@@ -1393,6 +1410,7 @@ def categorias():
 @inventario_bp.route('/api/categorias', methods=['GET'])
 @inventario_bp.route('/api/categorias/', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_categorias():
     company_id = _resolve_company_id()
     if not company_id:
@@ -1422,6 +1440,8 @@ def api_categorias():
 
 @inventario_bp.route('/api/generar-codigo', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_generar_codigo():
     """
     API para generar código automático correlativo único basado en categoría.
@@ -1489,6 +1509,8 @@ def api_generar_codigo():
 
 @inventario_bp.route('/api/crear-item', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_crear_item():
     """
     API para crear un nuevo item de inventario (usado desde modal de Compras).
@@ -1569,6 +1591,7 @@ def api_crear_item():
 
 @inventario_bp.route('/api/tipo-cambio', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_tipo_cambio():
     """
     API para obtener el tipo de cambio actual USD/ARS.
@@ -1695,6 +1718,8 @@ def api_tipo_cambio():
 
 @inventario_bp.route('/api/buscar-similares', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_buscar_similares():
     """
     API para buscar materiales similares en el catálogo global.
@@ -1757,6 +1782,8 @@ def api_buscar_similares():
 
 @inventario_bp.route('/api/usar-material-global/<int:material_id>', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_usar_material_global(material_id):
     """
     API para usar un material del catálogo global.
@@ -1895,6 +1922,8 @@ def api_usar_material_global(material_id):
 
 @inventario_bp.route('/categoria', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def crear_categoria():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para actualizar el catálogo.', 'danger')
@@ -1929,6 +1958,7 @@ def crear_categoria():
 
 @inventario_bp.route('/api/buscar-items', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_buscar_items():
     """
     API para búsqueda AJAX de items del inventario.
@@ -2002,6 +2032,7 @@ def api_buscar_items():
 
 @inventario_bp.route('/items-disponibles', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def items_disponibles():
     """
     Endpoint para obtener items del inventario disponibles para una obra.
@@ -2046,6 +2077,7 @@ def items_disponibles():
 
 @inventario_bp.route('/analisis', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def analisis():
     """
     Análisis de consumo de inventario:
@@ -2219,6 +2251,8 @@ def analisis():
 
 @inventario_bp.route('/dar_baja/<int:id>', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def dar_baja(id):
     """Da de baja un item de inventario por uso o rotura"""
     if not current_user.puede_acceder_modulo('inventario'):
@@ -2279,6 +2313,8 @@ def dar_baja(id):
 
 @inventario_bp.route('/trasladar/<int:id>', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def trasladar(id):
     """Traslada un item de inventario general al stock de una obra"""
     if not current_user.puede_acceder_modulo('inventario'):
@@ -2385,6 +2421,7 @@ def trasladar(id):
 
 @inventario_bp.route('/api/<int:item_id>/stock-obras', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_stock_en_obras(item_id):
     """Obtiene el stock de un item en todas las obras"""
     try:
@@ -2424,6 +2461,7 @@ def api_stock_en_obras(item_id):
 
 @inventario_bp.route('/api/<int:item_id>/traslados', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_traslados_item(item_id):
     """Obtiene el historial de traslados de un item desde la tabla stock_obra"""
     try:
@@ -2467,6 +2505,7 @@ def api_traslados_item(item_id):
 
 @inventario_bp.route('/api/alertas-stock', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_alertas_stock():
     """Obtiene las alertas de stock bajo para la organización actual"""
     from services.stock_alerts_service import obtener_resumen_alertas
@@ -2491,6 +2530,7 @@ def api_alertas_stock():
 
 @inventario_bp.route('/api/alertas-stock/count', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_alertas_stock_count():
     """Obtiene solo el conteo de alertas de stock bajo (para badges)"""
     from services.stock_alerts_service import contar_alertas_stock
@@ -2517,6 +2557,8 @@ def api_alertas_stock_count():
 
 @inventario_bp.route('/api/alertas-stock/generar', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_generar_alertas():
     """Genera notificaciones para todos los items con stock bajo"""
     from services.stock_alerts_service import generar_alertas_masivas
@@ -2542,6 +2584,7 @@ def api_generar_alertas():
 
 @inventario_bp.route('/alertas-stock')
 @login_required
+@require_feature('inventory.full')
 def alertas_stock():
     """Vista de alertas de stock bajo"""
     from services.stock_alerts_service import obtener_resumen_alertas
@@ -2956,6 +2999,7 @@ def limpiar_marcas():
 
 @inventario_bp.route('/deposito')
 @login_required
+@require_feature('inventory.full')
 def deposito():
     """Vista del depósito general — stock disponible para trasladar a obras."""
     if not current_user.puede_acceder_modulo('inventario'):

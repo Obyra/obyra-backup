@@ -716,5 +716,7 @@ def inject_plan_context():
             },
             'can_feature': lambda f: f in features or getattr(current_user, 'is_super_admin', False),
         }
-    except Exception:
-        return {'plan_info': {}, 'can_feature': lambda f: True}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error en inject_plan_context: {e}")
+        return {'plan_info': {}, 'can_feature': lambda f: False}

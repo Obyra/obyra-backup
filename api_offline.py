@@ -237,6 +237,13 @@ def tareas_por_obra(obra_id):
     Obtener todas las tareas de una obra específica.
     """
     try:
+        # Validar que la obra pertenece a la organización del usuario
+        org_id = get_current_org_id()
+        from models.projects import Obra
+        obra = Obra.query.filter_by(id=obra_id, organizacion_id=org_id).first()
+        if not obra:
+            return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
+
         # Obtener tareas a través de las etapas de la obra
         tareas = db.session.query(TareaEtapa).join(EtapaObra).filter(
             EtapaObra.obra_id == obra_id
