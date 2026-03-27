@@ -387,15 +387,43 @@ def D(x):
 
 def seed_tareas_para_etapa(nueva_etapa, auto_commit=True, slug=None):
     """
-    Función idempotente para crear tareas predefinidas en una etapa.
-
-    DESHABILITADA: Las tareas ahora solo se crean mediante el Wizard.
-    Los materiales y mano de obra vienen del presupuesto confirmado,
-    no como tareas en etapas.
+    Crea tareas predefinidas en una etapa automáticamente.
+    Usa el catálogo de tareas_predefinidas.py (tareas reales de obra).
+    Idempotente: no crea duplicados si ya existen tareas.
     """
-    # NO crear tareas automáticamente del catálogo
-    # Las tareas deben venir del wizard de configuración de obra
-    return 0
+    from tareas_predefinidas import obtener_tareas_por_etapa
+
+    # Si la etapa ya tiene tareas, no crear más
+    tareas_existentes = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id).count()
+    if tareas_existentes > 0:
+        return 0
+
+    nombre_etapa = nueva_etapa.nombre
+    tareas_predefinidas = obtener_tareas_por_etapa(nombre_etapa)
+
+    if not tareas_predefinidas:
+        return 0
+
+    creadas = 0
+    for tarea_def in tareas_predefinidas:
+        # Saltar tareas opcionales
+        if tarea_def.get('si_aplica'):
+            continue
+
+        tarea = TareaEtapa(
+            etapa_id=nueva_etapa.id,
+            nombre=tarea_def['nombre'],
+            estado='pendiente',
+            horas_estimadas=tarea_def.get('horas', 0),
+            unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+        )
+        db.session.add(tarea)
+        creadas += 1
+
+    if auto_commit and creadas > 0:
+        db.session.flush()
+
+    return creadas
 
 
 # ==== Rutas principales ====
