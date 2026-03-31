@@ -707,9 +707,10 @@ def detalle(id):
     tareas_por_etapa = {}
 
     def _cargar_tareas(etapa_ids):
-        """Carga tareas + avances en 2 queries (selectin) en vez de N+1."""
+        """Carga tareas + avances + miembros + responsable en pocas queries (selectin)."""
         tareas = TareaEtapa.query.options(
-            selectinload(TareaEtapa.avances)
+            selectinload(TareaEtapa.avances),
+            selectinload(TareaEtapa.miembros),
         ).filter(TareaEtapa.etapa_id.in_(etapa_ids)).all() if etapa_ids else []
         por_etapa = {}
         for t in tareas:
@@ -936,7 +937,10 @@ def detalle(id):
     _materiales_etapas = {}  # item.id -> lista de nombres de etapa
     _materiales_cantidad = {}  # item.id -> cantidad consolidada
     if presupuesto:
-        items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+        items_presupuesto = ItemPresupuesto.query.options(
+            selectinload(ItemPresupuesto.etapa),
+            selectinload(ItemPresupuesto.item_inventario),
+        ).filter_by(presupuesto_id=presupuesto.id).order_by(ItemPresupuesto.id.asc()).all()
         # Consolidar materiales duplicados para la vista
         try:
             _consolidados = {}
