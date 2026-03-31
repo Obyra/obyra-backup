@@ -142,21 +142,27 @@
                             </td>
                             <td>{{ oc.fecha_emision.strftime('%d/%m/%Y') if oc.fecha_emision else '-' }}</td>
                             <td>
-                                {% if oc.fecha_entrega_estimada %}
-                                    {% if oc.estado in ('completada', 'cancelada') %}
-                                    <span>{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }}</span>
-                                    {% else %}
-                                        {% set dias = (oc.fecha_entrega_estimada - today).days if today is defined else 999 %}
+                                {% if oc.estado in ('completada', 'cancelada') %}
+                                    <span>{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') if oc.fecha_entrega_estimada else '-' }}</span>
+                                {% else %}
+                                    <form method="POST" action="{{ url_for('ordenes_compra.actualizar_fecha_entrega', id=oc.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="date" name="fecha_entrega_estimada" class="form-control form-control-sm" style="width: 140px; display: inline-block;"
+                                               value="{{ oc.fecha_entrega_estimada.strftime('%Y-%m-%d') if oc.fecha_entrega_estimada else '' }}"
+                                               onchange="this.form.submit()">
+                                    </form>
+                                    {% if oc.fecha_entrega_estimada and today is defined %}
+                                        {% set dias = (oc.fecha_entrega_estimada - today).days %}
                                         {% if dias < 0 %}
-                                        <span class="badge bg-danger">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }} (vencida)</span>
+                                        <br><span class="badge bg-danger mt-1">vencida</span>
+                                        {% elif dias == 0 %}
+                                        <br><span class="badge bg-danger mt-1">HOY</span>
                                         {% elif dias <= 2 %}
-                                        <span class="badge bg-warning text-dark">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }} ({{ dias }}d)</span>
-                                        {% else %}
-                                        <span>{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }}</span>
+                                        <br><span class="badge bg-warning text-dark mt-1">{{ dias }}d</span>
+                                        {% elif dias <= 7 %}
+                                        <br><span class="badge bg-info text-dark mt-1">{{ dias }}d</span>
                                         {% endif %}
                                     {% endif %}
-                                {% else %}
-                                    <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
                             <td class="text-end">

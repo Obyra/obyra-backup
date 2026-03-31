@@ -667,13 +667,13 @@ def notificar_entregas_proximas(app=None):
     from models import Usuario
 
     hoy = date.today()
-    en_2_dias = hoy + __import__('datetime').timedelta(days=2)
+    en_7_dias = hoy + __import__('datetime').timedelta(days=7)
 
     # OCs emitidas con entrega entre hoy y 2 días
     ocs = OrdenCompra.query.filter(
         OrdenCompra.estado == 'emitida',
         OrdenCompra.fecha_entrega_estimada.isnot(None),
-        OrdenCompra.fecha_entrega_estimada <= en_2_dias,
+        OrdenCompra.fecha_entrega_estimada <= en_7_dias,
         OrdenCompra.fecha_entrega_estimada >= hoy
     ).all()
 
