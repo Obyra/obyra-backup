@@ -495,7 +495,8 @@
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
-                                                        <span class="badge bg-primary">{{ item.cantidad|entero }} {{ item.unidad }}</span>
+                                                        {% set cant_mostrar = materiales_cantidad.get(item.id, item.cantidad) if materiales_cantidad is defined else item.cantidad %}
+                                                        <span class="badge bg-primary">{{ cant_mostrar|entero }} {{ item.unidad }}</span>
                                                     </td>
                                                     {# Buscar stock transferido: por ID, por nombre exacto, o por coincidencia parcial #}
                                                     {% set transferido_encontrado = namespace(data=none) %}
@@ -542,10 +543,11 @@
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-end">
+                                                        {% set cant_costo = materiales_cantidad.get(item.id, item.cantidad) if materiales_cantidad is defined else item.cantidad %}
                                                         {% if presupuesto.currency == 'USD' %}
-                                                            <strong>US$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
+                                                            <strong>US$ {{ (cant_costo * item.precio_unitario)|round(2) }}</strong>
                                                         {% else %}
-                                                            <strong>$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
+                                                            <strong>$ {{ (cant_costo * item.precio_unitario)|round(2) }}</strong>
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-center">

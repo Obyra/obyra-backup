@@ -933,7 +933,8 @@ def detalle(id):
     # Obtener el presupuesto asociado y sus items (materiales/mano de obra)
     presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
     items_presupuesto = []
-    _materiales_etapas = {}  # key -> lista de nombres de etapa (para mostrar en template)
+    _materiales_etapas = {}  # item.id -> lista de nombres de etapa
+    _materiales_cantidad = {}  # item.id -> cantidad consolidada
     if presupuesto:
         items_raw = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
         # Consolidar materiales duplicados (mismo item_inventario o misma descripción)
@@ -949,20 +950,18 @@ def detalle(id):
             etapa_nombre = item.etapa.nombre if item.etapa else ''
             if key in _consolidados:
                 _consolidados[key]['cantidad'] += float(item.cantidad or 0)
-                _consolidados[key]['costo'] += float(item.cantidad or 0) * float(item.precio_unitario or 0)
                 if etapa_nombre:
                     _consolidados[key]['etapas'].append(etapa_nombre)
             else:
                 _consolidados[key] = {
                     'item': item,
                     'cantidad': float(item.cantidad or 0),
-                    'costo': float(item.cantidad or 0) * float(item.precio_unitario or 0),
                     'etapas': [etapa_nombre] if etapa_nombre else [],
                 }
-        for key, data in _consolidados.items():
+        for data in _consolidados.values():
             item = data['item']
-            item.cantidad = data['cantidad']
             _materiales_etapas[item.id] = data['etapas']
+            _materiales_cantidad[item.id] = data['cantidad']
             items_presupuesto.append(item)
 
     # Calcular avances de mano de obra por etapa — UN solo query agregado
@@ -1224,6 +1223,7 @@ def detalle(id):
                          presupuesto=presupuesto,
                          items_presupuesto=items_presupuesto,
                          materiales_etapas=_materiales_etapas,
+                         materiales_cantidad=_materiales_cantidad,
                          avances_mano_obra=avances_mano_obra,
                          cuadrillas_por_etapa=cuadrillas_por_etapa,
                          stock_transferido=stock_transferido,
