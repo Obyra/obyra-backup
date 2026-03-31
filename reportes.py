@@ -371,6 +371,20 @@ def dashboard():
     # Datos financieros para gráficos
     datos_financieros = calcular_datos_financieros(obras_activas, org_id)
 
+    # Entregas próximas de OC (próximos 7 días)
+    entregas_proximas = []
+    try:
+        from models.inventory import OrdenCompra
+        fecha_limite_oc = date.today() + timedelta(days=7)
+        entregas_proximas = OrdenCompra.query.filter(
+            OrdenCompra.organizacion_id == org_id,
+            OrdenCompra.estado.in_(['emitida', 'recibida_parcial']),
+            OrdenCompra.fecha_entrega_estimada.isnot(None),
+            OrdenCompra.fecha_entrega_estimada <= fecha_limite_oc,
+        ).order_by(OrdenCompra.fecha_entrega_estimada).all()
+    except Exception:
+        pass
+
     return render_template('reportes/dashboard.html',
                          kpis=kpis,
                          obras_activas=obras_activas,
@@ -387,6 +401,7 @@ def dashboard():
                          show_reports_banner=show_reports_banner,
                          encargados_obra=encargados_obra,
                          datos_financieros=datos_financieros,
+                         entregas_proximas=entregas_proximas,
                          fecha_hoy=date.today())
 
 
