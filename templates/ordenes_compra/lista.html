@@ -154,13 +154,13 @@
                                     {% if oc.fecha_entrega_estimada and today is defined %}
                                         {% set dias = (oc.fecha_entrega_estimada - today).days %}
                                         {% if dias < 0 %}
-                                        <br><span class="badge bg-danger mt-1">vencida</span>
+                                        <span class="badge bg-danger ms-1">vencida</span>
                                         {% elif dias == 0 %}
-                                        <br><span class="badge bg-danger mt-1">HOY</span>
+                                        <span class="badge bg-danger ms-1">HOY</span>
                                         {% elif dias <= 2 %}
-                                        <br><span class="badge bg-warning text-dark mt-1">{{ dias }}d</span>
+                                        <span class="badge bg-warning text-dark ms-1">{{ dias }}d</span>
                                         {% elif dias <= 7 %}
-                                        <br><span class="badge bg-info text-dark mt-1">{{ dias }}d</span>
+                                        <span class="badge bg-info text-dark ms-1">{{ dias }}d</span>
                                         {% endif %}
                                     {% endif %}
                                 {% endif %}
