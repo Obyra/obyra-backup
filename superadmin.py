@@ -341,6 +341,32 @@ def debug_obra_coords(obra_id):
     })
 
 
+@superadmin_bp.route('/fix-obra-coords/<int:obra_id>', methods=['POST'])
+@login_required
+@require_super_admin
+def fix_obra_coords(obra_id):
+    """Forzar coordenadas de una obra (superadmin)."""
+    from models.projects import Obra
+    obra = Obra.query.get_or_404(obra_id)
+    data = request.get_json(silent=True) or {}
+    lat = data.get('latitud')
+    lng = data.get('longitud')
+    if lat is None or lng is None:
+        return jsonify({'ok': False, 'error': 'Faltan latitud/longitud'}), 400
+    old_lat, old_lng = float(obra.latitud) if obra.latitud else None, float(obra.longitud) if obra.longitud else None
+    obra.latitud = float(lat)
+    obra.longitud = float(lng)
+    obra.geocode_status = 'ok'
+    obra.geocode_provider = 'manual_superadmin'
+    db.session.commit()
+    return jsonify({
+        'ok': True,
+        'obra': obra.nombre,
+        'old': {'lat': old_lat, 'lng': old_lng},
+        'new': {'lat': float(obra.latitud), 'lng': float(obra.longitud)},
+    })
+
+
 @superadmin_bp.route('/limpiar-marcas-cuadrillas', methods=['GET', 'POST'])
 @login_required
 @require_super_admin
