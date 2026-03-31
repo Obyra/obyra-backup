@@ -1040,6 +1040,7 @@
                                             <th class="text-end">Total</th>
                                             <th class="text-center">Estado</th>
                                             <th class="text-center">Recepcion</th>
+                                            <th>Entrega Est.</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -1058,6 +1059,13 @@
                                                     <div class="progress-bar bg-{{ 'success' if pct==100 else 'warning' }}"
                                                          style="width:{{ pct }}%">{{ pct }}%</div>
                                                 </div>
+                                            </td>
+                                            <td>
+                                                {% if oc.fecha_entrega_estimada %}
+                                                <span class="badge bg-{{ 'danger' if oc.fecha_entrega_estimada < today else ('warning text-dark' if (oc.fecha_entrega_estimada - today).days <= 2 else 'light text-dark') }}">
+                                                    {{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }}
+                                                </span>
+                                                {% else %}-{% endif %}
                                             </td>
                                             <td>
                                                 <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}"

@@ -68,7 +68,8 @@ def lista():
     return render_template('ordenes_compra/lista.html',
                          ordenes=ordenes, conteos=conteos,
                          estado_filtro=estado, obra_id_filtro=obra_id,
-                         proveedor_filtro=proveedor_q, obras=obras)
+                         proveedor_filtro=proveedor_q, obras=obras,
+                         today=date.today())
 
 
 # ============================================================
@@ -296,6 +297,40 @@ def emitir(id):
         current_app.logger.exception('Error al notificar OC emitida')
 
     flash(f'OC {oc.numero} emitida exitosamente.', 'success')
+    return redirect(url_for('ordenes_compra.detalle', id=oc.id))
+
+
+# ============================================================
+# ACTUALIZAR FECHA DE ENTREGA
+# ============================================================
+
+@ordenes_compra_bp.route('/<int:id>/fecha-entrega', methods=['POST'])
+@login_required
+def actualizar_fecha_entrega(id):
+    from models.inventory import OrdenCompra
+
+    if not _tiene_permiso_oc():
+        flash('No tiene permisos.', 'danger')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    oc = OrdenCompra.query.get_or_404(id)
+    if oc.organizacion_id != current_user.organizacion_id:
+        flash('No tiene acceso.', 'danger')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    fecha_str = request.form.get('fecha_entrega_estimada', '')
+    if fecha_str:
+        try:
+            oc.fecha_entrega_estimada = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            db.session.commit()
+            flash(f'Fecha de entrega actualizada a {oc.fecha_entrega_estimada.strftime("%d/%m/%Y")}.', 'success')
+        except ValueError:
+            flash('Formato de fecha inválido.', 'danger')
+    else:
+        oc.fecha_entrega_estimada = None
+        db.session.commit()
+        flash('Fecha de entrega eliminada.', 'info')
+
     return redirect(url_for('ordenes_compra.detalle', id=oc.id))
 
 

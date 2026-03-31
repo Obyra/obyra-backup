@@ -205,7 +205,18 @@
                         </tr>
                         <tr>
                             <td class="text-muted">Entrega Est.</td>
-                            <td class="text-end">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') if oc.fecha_entrega_estimada else '-' }}</td>
+                            <td class="text-end">
+                                {% if oc.estado in ('borrador', 'emitida') %}
+                                <form method="POST" action="{{ url_for('ordenes_compra.actualizar_fecha_entrega', id=oc.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="date" name="fecha_entrega_estimada" class="form-control form-control-sm d-inline-block" style="width: auto;"
+                                           value="{{ oc.fecha_entrega_estimada.strftime('%Y-%m-%d') if oc.fecha_entrega_estimada else '' }}"
+                                           onchange="this.form.submit()">
+                                </form>
+                                {% else %}
+                                {{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') if oc.fecha_entrega_estimada else '-' }}
+                                {% endif %}
+                            </td>
                         </tr>
                         <tr>
                             <td class="text-muted">Entrega Real</td>

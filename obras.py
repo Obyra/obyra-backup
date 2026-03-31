@@ -1212,6 +1212,7 @@ def detalle(id):
                          remitos_count=remitos_count,
                          remitos_list=remitos_list,
                          ordenes_compra_list=ordenes_compra_list,
+                         today=date.today(),
                          requerimientos_list=requerimientos_list,
                          hay_desfase_fechas=hay_desfase_fechas,
                          etapas_con_avance=etapas_con_avance,
