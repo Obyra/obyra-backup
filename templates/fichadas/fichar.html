@@ -62,10 +62,10 @@
             </div>
             {% if es_admin %}
             <div id="btnCorregirUbicacion" class="text-center mt-2" style="display:none;">
-                <button class="btn btn-outline-warning btn-sm" onclick="corregirUbicacionObra()">
-                    <i class="fas fa-map-pin me-1"></i>Usar mi ubicacion actual como ubicacion de la obra
+                <button class="btn btn-warning btn-lg w-100 py-3" onclick="corregirUbicacionObra()" style="font-size: 1.1rem; border-radius: 12px;">
+                    <i class="fas fa-map-pin me-1"></i> Corregir ubicacion de la obra con mi GPS
                 </button>
-                <div class="form-text">Si la ubicacion de la obra es incorrecta, esto la corrige con tu GPS actual.</div>
+                <div class="form-text mt-1">La ubicacion guardada parece incorrecta. Esto la actualiza con tu posicion actual.</div>
             </div>
             {% endif %}
         </div>

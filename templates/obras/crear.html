@@ -21,6 +21,8 @@
                 <div class="card-body">
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="geo_lat" id="geo_lat" value="">
+                        <input type="hidden" name="geo_lng" id="geo_lng" value="">
                         <!-- Información básica -->
                         <h5 class="border-bottom pb-2 mb-3">Información Básica</h5>
                         
@@ -242,10 +244,12 @@ function displaySuggestions(places) {
 function selectAddress(address, lat, lon) {
     direccionInput.value = address;
     selectedAddress = address;
-    // Guardar coordenadas si están disponibles (para uso futuro)
+    // Guardar coordenadas en campos hidden para enviar al backend
     if (lat && lon) {
         direccionInput.dataset.lat = lat;
         direccionInput.dataset.lon = lon;
+        document.getElementById('geo_lat').value = lat;
+        document.getElementById('geo_lng').value = lon;
     }
     hideSuggestions();
     showMapsLink(lat, lon);

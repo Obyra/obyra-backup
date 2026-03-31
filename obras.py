@@ -592,12 +592,28 @@ def crear():
         geocode_payload = None
         latitud, longitud = None, None
         direccion_normalizada = None
+
+        # Usar coordenadas del frontend si las tiene (más precisas, el usuario las vio en el mapa)
+        geo_lat = request.form.get('geo_lat')
+        geo_lng = request.form.get('geo_lng')
+        if geo_lat and geo_lng:
+            try:
+                latitud = _to_coord_decimal(float(geo_lat))
+                longitud = _to_coord_decimal(float(geo_lng))
+            except (ValueError, TypeError):
+                latitud, longitud = None, None
+
         if direccion:
             direccion_normalizada = normalizar_direccion_argentina(direccion)
-            geocode_payload = resolve_geocode(direccion_normalizada)
-            if geocode_payload:
-                latitud = _to_coord_decimal(geocode_payload.get('lat'))
-                longitud = _to_coord_decimal(geocode_payload.get('lng'))
+            # Solo geocodificar si no tenemos coords del frontend
+            if latitud is None or longitud is None:
+                geocode_payload = resolve_geocode(direccion_normalizada)
+                if geocode_payload:
+                    latitud = _to_coord_decimal(geocode_payload.get('lat'))
+                    longitud = _to_coord_decimal(geocode_payload.get('lng'))
+            else:
+                # Tenemos coords del frontend, armar payload mínimo
+                geocode_payload = {'provider': 'frontend', 'status': 'ok'}
 
         nueva_obra = Obra(
             nombre=nombre,
