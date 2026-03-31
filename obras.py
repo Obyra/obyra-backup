@@ -936,33 +936,42 @@ def detalle(id):
     _materiales_etapas = {}  # item.id -> lista de nombres de etapa
     _materiales_cantidad = {}  # item.id -> cantidad consolidada
     if presupuesto:
-        items_raw = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
-        # Consolidar materiales duplicados (mismo item_inventario o misma descripción)
-        _consolidados = {}
-        for item in items_raw:
-            if item.tipo != 'material':
-                items_presupuesto.append(item)
-                continue
-            if item.item_inventario_id:
-                key = ('inv', item.item_inventario_id)
-            else:
-                key = ('desc', (item.descripcion or '').strip().lower())
-            etapa_nombre = item.etapa.nombre if item.etapa else ''
-            if key in _consolidados:
-                _consolidados[key]['cantidad'] += float(item.cantidad or 0)
-                if etapa_nombre:
-                    _consolidados[key]['etapas'].append(etapa_nombre)
-            else:
-                _consolidados[key] = {
-                    'item': item,
-                    'cantidad': float(item.cantidad or 0),
-                    'etapas': [etapa_nombre] if etapa_nombre else [],
-                }
-        for data in _consolidados.values():
-            item = data['item']
-            _materiales_etapas[item.id] = data['etapas']
-            _materiales_cantidad[item.id] = data['cantidad']
-            items_presupuesto.append(item)
+        items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+        # Consolidar materiales duplicados para la vista
+        try:
+            _consolidados = {}
+            _items_consolidados = []
+            for item in items_presupuesto:
+                if item.tipo != 'material':
+                    _items_consolidados.append(item)
+                    continue
+                if item.item_inventario_id:
+                    key = ('inv', item.item_inventario_id)
+                else:
+                    key = ('desc', (item.descripcion or '').strip().lower())
+                etapa_nombre = ''
+                try:
+                    etapa_nombre = item.etapa.nombre if item.etapa else ''
+                except Exception:
+                    pass
+                if key in _consolidados:
+                    _consolidados[key]['cantidad'] += float(item.cantidad or 0)
+                    if etapa_nombre:
+                        _consolidados[key]['etapas'].append(etapa_nombre)
+                else:
+                    _consolidados[key] = {
+                        'item': item,
+                        'cantidad': float(item.cantidad or 0),
+                        'etapas': [etapa_nombre] if etapa_nombre else [],
+                    }
+            for data in _consolidados.values():
+                itm = data['item']
+                _materiales_etapas[itm.id] = data['etapas']
+                _materiales_cantidad[itm.id] = data['cantidad']
+                _items_consolidados.append(itm)
+            items_presupuesto = _items_consolidados
+        except Exception:
+            pass  # Si falla la consolidación, usar items sin consolidar
 
     # Calcular avances de mano de obra por etapa — UN solo query agregado
     avances_mano_obra = {}
