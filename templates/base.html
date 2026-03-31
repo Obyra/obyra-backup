@@ -52,6 +52,37 @@
             
             <div class="collapse navbar-collapse justify-content-center" id="navbarNav">
                 <ul class="navbar-nav">
+                    {% if current_user.is_authenticated and current_user.role == 'operario' %}
+                    {# ===== NAVBAR OPERARIO: solo Tareas, Fichada, Manual ===== #}
+
+                    {# Mis Tareas #}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('obras.mis_tareas') }}">
+                            <i class="fas fa-tasks me-1"></i>Mis Tareas
+                        </a>
+                    </li>
+
+                    {# Fichada #}
+                    {% if has_endpoint('fichadas.index') %}
+                        {% if can_feature('attendance.geo') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('fichadas.index') }}">
+                                <i class="fas fa-clock me-1"></i>Fichada
+                            </a>
+                        </li>
+                        {% endif %}
+                    {% endif %}
+
+                    {# Manual #}
+                    <li class="nav-item">
+                        <a class="nav-link text-info" href="{{ url_for('manual') }}">
+                            <i class="fas fa-book me-1"></i>Manual
+                        </a>
+                    </li>
+
+                    {% else %}
+                    {# ===== NAVBAR NORMAL: admin, pm, tecnico ===== #}
+
                     {# 1. Dashboard - solo para admin/pm #}
                     {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
                     <li class="nav-item">
@@ -211,7 +242,7 @@
                     </li>
                     {% endif %}
                     -->
-                    
+
                     {% if current_user.puede_acceder_modulo('reportes') and has_endpoint('reportes.reporte_obras') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarReportes" role="button" data-bs-toggle="dropdown">
@@ -264,10 +295,13 @@
                             <i class="fas fa-book me-1"></i>Manual
                         </a>
                     </li>
+
+                    {% endif %}{# fin if operario / else #}
                 </ul>
 
                 <ul class="navbar-nav align-items-center">
-                    {# Icono de notificaciones #}
+                    {# Icono de notificaciones - ocultar para operarios #}
+                    {% if current_user.role != 'operario' %}
                     <li class="nav-item dropdown me-2">
                         <a class="nav-link position-relative" href="#" id="navbarNotificaciones" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-bell"></i>
@@ -294,6 +328,7 @@
                             </li>
                         </ul>
                     </li>
+                    {% endif %}
 
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="navbarUsuario" role="button" data-bs-toggle="dropdown">
