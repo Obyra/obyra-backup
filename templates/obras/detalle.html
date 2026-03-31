@@ -484,8 +484,11 @@
                                                     <td>
                                                         <div>
                                                             <strong>{{ item.descripcion }}</strong>
-                                                            {% if item._etapas_consolidadas is defined and item._etapas_consolidadas|length > 1 %}
-                                                            <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ item._etapas_consolidadas|join(', ') }}</small>
+                                                            {% set etapas_list = materiales_etapas.get(item.id, []) if materiales_etapas is defined else [] %}
+                                                            {% if etapas_list|length > 1 %}
+                                                            <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ etapas_list|join(', ') }}</small>
+                                                            {% elif etapas_list|length == 1 and etapas_list[0] %}
+                                                            <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ etapas_list[0] }}</small>
                                                             {% elif item.etapa %}
                                                             <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ item.etapa.nombre }}</small>
                                                             {% endif %}

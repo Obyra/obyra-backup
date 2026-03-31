@@ -933,35 +933,36 @@ def detalle(id):
     # Obtener el presupuesto asociado y sus items (materiales/mano de obra)
     presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
     items_presupuesto = []
+    _materiales_etapas = {}  # key -> lista de nombres de etapa (para mostrar en template)
     if presupuesto:
         items_raw = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
         # Consolidar materiales duplicados (mismo item_inventario o misma descripción)
-        # para que no aparezcan repetidos en la tabla de materiales
         _consolidados = {}
         for item in items_raw:
             if item.tipo != 'material':
                 items_presupuesto.append(item)
                 continue
-            # Clave de agrupación: item_inventario_id si existe, sino descripción normalizada
             if item.item_inventario_id:
                 key = ('inv', item.item_inventario_id)
             else:
                 key = ('desc', (item.descripcion or '').strip().lower())
+            etapa_nombre = item.etapa.nombre if item.etapa else ''
             if key in _consolidados:
-                # Sumar cantidad y costo al item existente
-                existing = _consolidados[key]
-                existing._cantidad_consolidada += float(item.cantidad or 0)
-                existing._costo_consolidado += float(item.cantidad or 0) * float(item.precio_unitario or 0)
-                existing._etapas_consolidadas.append(item.etapa.nombre if item.etapa else '')
+                _consolidados[key]['cantidad'] += float(item.cantidad or 0)
+                _consolidados[key]['costo'] += float(item.cantidad or 0) * float(item.precio_unitario or 0)
+                if etapa_nombre:
+                    _consolidados[key]['etapas'].append(etapa_nombre)
             else:
-                # Primer item con esta clave — guardar con atributos auxiliares
-                item._cantidad_consolidada = float(item.cantidad or 0)
-                item._costo_consolidado = float(item.cantidad or 0) * float(item.precio_unitario or 0)
-                item._etapas_consolidadas = [item.etapa.nombre if item.etapa else '']
-                _consolidados[key] = item
-        # Reemplazar cantidad original con la consolidada en los items agrupados
-        for item in _consolidados.values():
-            item.cantidad = item._cantidad_consolidada
+                _consolidados[key] = {
+                    'item': item,
+                    'cantidad': float(item.cantidad or 0),
+                    'costo': float(item.cantidad or 0) * float(item.precio_unitario or 0),
+                    'etapas': [etapa_nombre] if etapa_nombre else [],
+                }
+        for key, data in _consolidados.items():
+            item = data['item']
+            item.cantidad = data['cantidad']
+            _materiales_etapas[item.id] = data['etapas']
             items_presupuesto.append(item)
 
     # Calcular avances de mano de obra por etapa — UN solo query agregado
@@ -1222,6 +1223,7 @@ def detalle(id):
                          certificaciones_recientes=cert_recientes,
                          presupuesto=presupuesto,
                          items_presupuesto=items_presupuesto,
+                         materiales_etapas=_materiales_etapas,
                          avances_mano_obra=avances_mano_obra,
                          cuadrillas_por_etapa=cuadrillas_por_etapa,
                          stock_transferido=stock_transferido,
