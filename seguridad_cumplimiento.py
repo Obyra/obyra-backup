@@ -217,7 +217,7 @@ def checklists():
 @login_required
 def nuevo_checklist():
     """Formulario para nuevo checklist"""
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
+    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion']), Obra.deleted_at.is_(None)).all()
     protocolos = ProtocoloSeguridad.query.filter_by(activo=True).all()
     from datetime import date
     return render_template('seguridad/nuevo_checklist.html', obras=obras, protocolos=protocolos, today=date.today().isoformat())
@@ -336,7 +336,7 @@ def incidentes():
 @login_required
 def reportar_incidente():
     """Formulario para reportar incidente"""
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso'])).all()
+    obras = Obra.query.filter(Obra.estado.in_(['en_curso']), Obra.deleted_at.is_(None)).all()
     return render_template('seguridad/reportar_incidente.html', obras=obras)
 
 @seguridad_bp.route('/reportar_incidente', methods=['POST'])
@@ -393,7 +393,7 @@ def certificaciones():
         Usuario.activo == True,
         Usuario.is_super_admin.is_(False)
     ).all()
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
+    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion']), Obra.deleted_at.is_(None)).all()
 
     return render_template('seguridad/certificaciones.html',
                          certificaciones=certificaciones,
@@ -412,7 +412,7 @@ def agregar_certificacion():
     obra_id = request.args.get('obra_id', type=int)
 
     # Obtener obras activas
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
+    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion']), Obra.deleted_at.is_(None)).all()
 
     # Si se especifica una obra, obtener operarios asignados a esa obra
     usuarios = []
@@ -531,6 +531,7 @@ def obtener_obras_sin_inspeccion_reciente():
     
     obras_sin_inspeccion = Obra.query.filter(
         Obra.estado == 'en_curso',
+        Obra.deleted_at.is_(None),
         ~Obra.id.in_(obras_con_inspeccion)
     ).all()
     
@@ -662,7 +663,7 @@ def calcular_obras_conformes():
         ChecklistSeguridad.puntuacion >= 80
     ).distinct().count()
     
-    total_obras = Obra.query.filter_by(estado='en_curso').count()
+    total_obras = Obra.query.filter_by(estado='en_curso').filter(Obra.deleted_at.is_(None)).count()
     
     return (obras_conformes / total_obras * 100) if total_obras > 0 else 0
 

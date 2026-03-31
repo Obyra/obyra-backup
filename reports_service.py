@@ -93,7 +93,8 @@ def generate_dashboard_report():
         if project_ids:
             valid_projects = Obra.query.filter(
                 Obra.id.in_(project_ids),
-                Obra.organizacion_id == current_user.organizacion_id
+                Obra.organizacion_id == current_user.organizacion_id,
+                Obra.deleted_at.is_(None)
             ).all()
             if len(valid_projects) != len(project_ids):
                 return jsonify({'error': 'Algunos proyectos no pertenecen a la organización'}), 400
@@ -291,6 +292,7 @@ def gather_report_data_v2(org_id, fecha_desde, fecha_hasta, project_ids, include
     # === Obras Activas ===
     obras_query = Obra.query.filter(
         Obra.organizacion_id == org_id,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     )
     
@@ -328,8 +330,8 @@ def calculate_kpis_v2(org_id, fecha_desde, fecha_hasta, project_ids):
     """Calcula KPIs para un período específico"""
     
     # Query base filtrada por organización
-    obras_query = Obra.query.filter(Obra.organizacion_id == org_id)
-    
+    obras_query = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None))
+
     if project_ids:
         obras_query = obras_query.filter(Obra.id.in_(project_ids))
     
@@ -374,6 +376,7 @@ def calculate_kpis_v2(org_id, fecha_desde, fecha_hasta, project_ids):
     # Presupuestos creados en el período
     presupuestos_creados = Presupuesto.query.filter(
         Presupuesto.organizacion_id == org_id,
+        Presupuesto.deleted_at.is_(None),
         Presupuesto.fecha_creacion >= fecha_desde,
         Presupuesto.fecha_creacion <= fecha_hasta
     ).count()

@@ -67,7 +67,7 @@ def dashboard():
 
     org_id = current_user.organizacion_id
 
-    obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # Calcular saldo por obra
     resumen_obras = []

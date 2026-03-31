@@ -973,6 +973,7 @@ def registrar_movimiento(id):
                 from models.budgets import Presupuesto
                 ultimo = Presupuesto.query.filter(
                     Presupuesto.organizacion_id == org_id,
+                    Presupuesto.deleted_at.is_(None),
                     Presupuesto.tasa_usd_venta.isnot(None)
                 ).order_by(Presupuesto.fecha_creacion.desc()).first()
                 tasa_usd = float(ultimo.tasa_usd_venta) if ultimo and ultimo.tasa_usd_venta else 1200
@@ -2222,7 +2223,7 @@ def analisis():
         ).scalar() or 0
 
         # Obtener todas las obras para el filtro
-        todas_obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+        todas_obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
         return render_template('inventario/analisis.html',
                              top_items=top_items_data,
@@ -3025,7 +3026,8 @@ def deposito():
     # Obras disponibles para traslado
     obras = Obra.query.filter_by(
         organizacion_id=org_id
-    ).filter(Obra.estado.in_(['en_curso', 'pendiente', 'activa'])
+    ).filter(Obra.estado.in_(['en_curso', 'pendiente', 'activa']),
+             Obra.deleted_at.is_(None)
     ).order_by(Obra.nombre).all()
 
     # Movimientos recientes

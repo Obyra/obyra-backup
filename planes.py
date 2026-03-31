@@ -8,51 +8,118 @@ from app import db
 from models import Usuario
 from models.core import Organizacion
 from config.billing_config import BILLING
+from services.plan_service import PLAN_FEATURES
 
 planes_bp = Blueprint('planes', __name__, url_prefix='/planes')
 
-# Features por plan basados en plan_service.py matrix
-FEATURES_STANDARD = [
-    'Hasta 3 obras',
-    'Hasta 5 usuarios',
-    'Presupuestos manuales + PDF',
-    'Gestion de obras, tareas y cronograma encadenado',
-    'Certificaciones y avances de obra',
-    'Gestion de clientes',
-    'Ordenes de compra basicas',
-    'Inventario completo (deposito, alertas, consumo, categorias)',
-    'Equipos basico',
-    'Soporte por email y WhatsApp',
-]
+# ---------------------------------------------------------------------------
+# Mapping from feature codes (plan_service.py) to human-readable Spanish labels
+# ---------------------------------------------------------------------------
+FEATURE_LABELS = {
+    'budgets.basic': 'Presupuestos manuales',
+    'budgets.manual': 'Presupuestos manuales',
+    'budgets.pdf': 'Exportacion de presupuestos a PDF',
+    'budgets.ai_basic': 'Calculadora IA basica',
+    'budgets.ai_full': 'Calculadora IA completa',
+    'budgets.excel_import': 'Importacion desde Excel',
+    'works.basic': 'Gestion de obras y tareas',
+    'works.stages': 'Etapas del proyecto',
+    'works.tasks': 'Tareas de obra',
+    'works.advances': 'Avances de obra',
+    'works.certifications': 'Certificaciones de obra',
+    'works.cronograma': 'Cronograma encadenado',
+    'works.remitos': 'Remitos + PDF de OC',
+    'works.caja': 'Caja por obra',
+    'works.gantt': 'Diagrama Gantt',
+    'clients.manage': 'Gestion de clientes',
+    'orders.basic': 'Ordenes de compra basicas',
+    'orders.create': 'Creacion de ordenes de compra',
+    'orders.cotizaciones': 'Cotizaciones y comparativas',
+    'orders.comparativa': 'Comparativa de proveedores',
+    'requirements.basic': 'Requerimientos de compra',
+    'requirements.create': 'Creacion de requerimientos',
+    'providers.basic': 'Proveedores basicos',
+    'providers.manage': 'Gestion avanzada de proveedores',
+    'providers.history': 'Historial de proveedores',
+    'inventory.full': 'Inventario completo',
+    'inventory.deposito': 'Deposito y stock por obra',
+    'inventory.alertas': 'Alertas de stock bajo',
+    'inventory.categorias': 'Categorias de inventario',
+    'inventory.consumo': 'Consumo de materiales',
+    'reports.basic': 'Reportes basicos',
+    'reports.obras': 'Reportes de obras',
+    'reports.costos': 'Reportes de costos',
+    'reports.inventario': 'Reportes de inventario',
+    'reports.financiero': 'Reporte financiero',
+    'reports.pdf_export': 'Exportacion de reportes a PDF',
+    'reports.audit_log': 'Registro de auditoria',
+    'teams.basic': 'Equipos basico',
+    'teams.invite': 'Invitaciones de equipo',
+    'teams.rendimiento': 'Rendimiento de equipo',
+    'teams.advanced_roles': 'Roles y permisos avanzados',
+    'security.basic': 'Seguridad basica',
+    'security.checklists': 'Checklists de seguridad',
+    'security.incidents': 'Gestion de incidentes',
+    'security.protocols': 'Protocolos de seguridad',
+    'security.certifications': 'Certificaciones de seguridad',
+    'security.audit_advanced': 'Auditoria avanzada',
+    'attendance.geo': 'Fichaje por geolocalizacion',
+    'attendance.alerts': 'Alertas de fichada',
+    'automation.basic': 'Alertas automaticas',
+    'automation.advanced': 'Automatizaciones avanzadas',
+    'api.access': 'Acceso API / Integraciones',
+    'offline.basic': 'Modo offline',
+    'offline.sync': 'Sincronizacion offline',
+    'dashboard.costos': 'Dashboard de costos',
+    'dashboard.financiero': 'Dashboard financiero ejecutivo',
+    'manual.access': 'Acceso al manual',
+}
 
-FEATURES_PREMIUM_EXTRA = [
-    'Hasta 5 obras',
-    'Hasta 15 usuarios',
-    'Calculadora IA completa + importacion Excel',
-    'Requerimientos de compra',
-    'Cotizaciones y comparativas de proveedores',
-    'Proveedores avanzados (historial, gestion)',
-    'Caja por obra',
-    'Remitos + PDF de OC',
-    'Reportes basicos, financieros y de costos',
-    'Seguridad completa (checklists, incidentes, protocolos)',
-    'Alertas automaticas',
-    'Fichaje por geolocalizacion',
-    'Dashboard de costos',
-]
 
-FEATURES_FULL_PREMIUM_EXTRA = [
-    'Hasta 15 obras',
-    'Hasta 35 usuarios',
-    'Certificacion avanzada (horas)',
-    'Registro de auditoria (log de acciones)',
-    'API e integraciones',
-    'Roles y permisos avanzados',
-    'Modo offline con sincronizacion',
-    'Dashboard financiero ejecutivo',
-    'Automatizaciones avanzadas',
-    'Soporte preferencial',
-]
+def _features_to_labels(feature_codes):
+    """Convert a set of feature codes to a sorted list of display labels (no duplicates)."""
+    seen = set()
+    labels = []
+    for code in sorted(feature_codes):
+        label = FEATURE_LABELS.get(code)
+        if label and label not in seen:
+            seen.add(label)
+            labels.append(label)
+    return labels
+
+
+def _extra_features_labels(plan_features, base_features):
+    """Labels for features in *plan_features* that are NOT in *base_features*."""
+    extra_codes = plan_features - base_features
+    return _features_to_labels(extra_codes)
+
+
+# ---------------------------------------------------------------------------
+# Build UI feature lists dynamically from the authoritative PLAN_FEATURES
+# ---------------------------------------------------------------------------
+_std_feats = PLAN_FEATURES['estandar']['features']
+_prm_feats = PLAN_FEATURES['premium']['features']
+_fpm_feats = PLAN_FEATURES['full_premium']['features']
+
+FEATURES_STANDARD = (
+    [f"Hasta {PLAN_FEATURES['estandar']['max_obras']} obras",
+     f"Hasta {PLAN_FEATURES['estandar']['max_usuarios']} usuarios"]
+    + _features_to_labels(_std_feats)
+    + ['Soporte por email y WhatsApp']
+)
+
+FEATURES_PREMIUM_EXTRA = (
+    [f"Hasta {PLAN_FEATURES['premium']['max_obras']} obras",
+     f"Hasta {PLAN_FEATURES['premium']['max_usuarios']} usuarios"]
+    + _extra_features_labels(_prm_feats, _std_feats)
+)
+
+FEATURES_FULL_PREMIUM_EXTRA = (
+    [f"Hasta {PLAN_FEATURES['full_premium']['max_obras']} obras",
+     f"Hasta {PLAN_FEATURES['full_premium']['max_usuarios']} usuarios"]
+    + _extra_features_labels(_fpm_feats, _prm_feats)
+    + ['Soporte preferencial']
+)
 
 # Configuración de planes de suscripción
 PLANES_CONFIG = {
@@ -226,8 +293,8 @@ def seleccionar_plan(plan_tipo):
         precio_usd_con_iva = (precio_usd_sin_iva * IVA).quantize(Decimal('0.01'))
 
         tc = Decimal(str(cotizacion['value']))
-        precio_ars_tarjeta = (precio_usd_con_iva * tc).quantize(Decimal('0.01'))
-        precio_ars_transferencia = precio_ars_tarjeta
+        # Mismo precio ARS para los 3 métodos de pago
+        precio_ars = (precio_usd_con_iva * tc).quantize(Decimal('0'))
 
         return render_template('planes/instrucciones_pago.html',
             plan_seleccionado=plan_tipo,
@@ -235,8 +302,8 @@ def seleccionar_plan(plan_tipo):
             precio_usd=float(precio_usd_sin_iva),
             precio_usd_sin_iva=float(precio_usd_sin_iva),
             precio_usd_con_iva=float(precio_usd_con_iva),
-            precio_ars_tarjeta=float(precio_ars_tarjeta),
-            precio_ars_transferencia=float(precio_ars_transferencia),
+            precio_ars_tarjeta=float(precio_ars),
+            precio_ars_transferencia=float(precio_ars),
             max_usuarios=plan['max_usuarios'],
             cotizacion=cotizacion,
             bank_info=BILLING.get_bank_info(),

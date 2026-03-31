@@ -460,7 +460,8 @@ def lista():
     if org_id:
         query = Obra.query.filter(
             Obra.organizacion_id == org_id,
-            Obra.estado != 'cancelada'  # Excluir obras eliminadas (soft delete)
+            Obra.estado != 'cancelada',  # Excluir obras eliminadas (soft delete)
+            Obra.deleted_at.is_(None)
         )
 
         if not mostrar_borradores:
@@ -488,7 +489,8 @@ def lista():
             # Solo sincronizar si no hay filtro de estado (evitar queries extras)
             obras_planif = Obra.query.filter(
                 Obra.organizacion_id == org_id,
-                Obra.estado == 'planificacion'
+                Obra.estado == 'planificacion',
+                Obra.deleted_at.is_(None)
             ).all()
         sync_changed = False
         for o in obras_planif:
@@ -531,7 +533,8 @@ def verificar_limite_obras(org_id, lock=False):
     limite = org.max_obras or 1
     cantidad_actual = Obra.query.filter(
         Obra.organizacion_id == org_id,
-        Obra.estado != 'cancelada'
+        Obra.estado != 'cancelada',
+        Obra.deleted_at.is_(None)
     ).count()
     if cantidad_actual >= limite:
         return False, f"Has alcanzado el límite de {limite} obras de tu plan. Para crear más obras, mejorá tu plan."
@@ -6497,7 +6500,7 @@ def equipos_movimientos():
     org_id = current_user.organizacion_id
 
     equipos = Equipment.query.filter_by(company_id=org_id).order_by(Equipment.nombre).all()
-    obras = Obra.query.filter_by(organizacion_id=org_id, estado='en_curso').order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id, estado='en_curso').filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # Últimos movimientos
     movimientos = EquipmentMovement.query.filter_by(company_id=org_id)\

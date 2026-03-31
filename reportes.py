@@ -202,20 +202,23 @@ def dashboard():
         func.count(Obra.id)
     ).filter(
         Obra.organizacion_id == org_id,
-        visible_clause
+        visible_clause,
+        Obra.deleted_at.is_(None)
     ).group_by(Obra.estado).all()
 
     # Obras con ubicación para el mapa (filtradas por organización)
     obras_con_ubicacion = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.direccion.isnot(None),
         Obra.direccion != ''
     ).all()
 
     # Presupuestos recientes
     presupuestos_recientes = Presupuesto.query.filter(
-        Presupuesto.organizacion_id == org_id
+        Presupuesto.organizacion_id == org_id,
+        Presupuesto.deleted_at.is_(None)
     ).order_by(desc(Presupuesto.fecha_creacion)).limit(5).all()
 
     # Bulk update: marcar presupuestos expirados como vencidos en una sola query
@@ -291,6 +294,7 @@ def dashboard():
     obras_vencimiento = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.fecha_fin_estimada <= fecha_limite,
         Obra.fecha_fin_estimada >= date.today(),
         Obra.estado.in_(['planificacion', 'en_curso'])
@@ -303,6 +307,7 @@ def dashboard():
     obras_activas = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).order_by(desc(Obra.fecha_creacion)).limit(10).all()
 
@@ -564,7 +569,7 @@ def calcular_datos_financieros(obras_activas, org_id):
         presupuesto_ids = [p.id for o in obras_activas
                           for p in (Presupuesto.query.filter_by(
                               obra_id=o.id, organizacion_id=org_id
-                          ).all())]
+                          ).filter(Presupuesto.deleted_at.is_(None)).all())]
         if presupuesto_ids:
             desglose = db.session.query(
                 ItemPresupuesto.tipo,
@@ -711,6 +716,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     obras_activas = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).count()
 
@@ -719,6 +725,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     obras_nuevas_mes = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.fecha_creacion >= primer_dia_mes
     ).count()
 
@@ -728,6 +735,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     ).filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
     costo_total_millones = float(presupuesto_total) / 1000000 if presupuesto_total else 0
@@ -738,6 +746,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     ).filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso']),
         Obra.costo_real.isnot(None)
     ).scalar() or 0
@@ -753,6 +762,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     ).filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
     
@@ -760,6 +770,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     obras_retrasadas = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).filter(
         Obra.progreso < 50  # Simplificado: menos del 50% se considera retrasado
@@ -826,7 +837,7 @@ def reporte_obras():
     fecha_hasta = request.args.get('fecha_hasta', '')
 
     # Base query con filtro de organización (excluir canceladas/eliminadas)
-    query = Obra.query.filter(Obra.organizacion_id == org_id)
+    query = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None))
     if not estado:
         query = query.filter(Obra.estado != 'cancelada')
 
@@ -1080,7 +1091,8 @@ def reporte_obras():
         if obra_ids_list:
             pres_ids = [p.id for p in Presupuesto.query.filter(
                 Presupuesto.obra_id.in_(obra_ids_list),
-                Presupuesto.organizacion_id == org_id
+                Presupuesto.organizacion_id == org_id,
+                Presupuesto.deleted_at.is_(None)
             ).all()]
             if pres_ids:
                 for tipo, total in db.session.query(
@@ -1146,7 +1158,7 @@ def reporte_costos():
     agrupar_por = request.args.get('agrupar', 'obra')  # obra, categoria, mes
 
     # Obtener obras de la organización
-    obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # OPTIMIZACION: Base query con EAGER LOADING para evitar N+1
     from sqlalchemy.orm import joinedload
@@ -1718,7 +1730,7 @@ def exportar_obras_pdf():
     fecha_hasta = request.args.get('fecha_hasta', '')
 
     # Base query con filtro de organizacion
-    query = Obra.query.filter(Obra.organizacion_id == org_id)
+    query = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None))
 
     if estado:
         query = query.filter(Obra.estado == estado)
@@ -1814,7 +1826,8 @@ def exportar_obras_pdf():
         if obra_ids_list:
             pres_ids = [p.id for p in Presupuesto.query.filter(
                 Presupuesto.obra_id.in_(obra_ids_list),
-                Presupuesto.organizacion_id == org_id
+                Presupuesto.organizacion_id == org_id,
+                Presupuesto.deleted_at.is_(None)
             ).all()]
             if pres_ids:
                 for tipo, total in db.session.query(
@@ -1894,7 +1907,7 @@ def exportar_costos_pdf():
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
 
-    obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # OPTIMIZACION: Eager loading para evitar N+1
     from sqlalchemy.orm import joinedload

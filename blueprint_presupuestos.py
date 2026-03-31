@@ -188,6 +188,7 @@ def lista():
 
         # Query base - excluir presupuestos eliminados y presupuestos confirmados como obras
         query = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
+            Presupuesto.deleted_at.is_(None),
             Presupuesto.estado != 'eliminado',
             or_(
                 Presupuesto.confirmado_como_obra.is_(False),
@@ -231,7 +232,7 @@ def lista():
         db.session.commit()
 
         # Obras disponibles para filtro
-        obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+        obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
         return render_template('presupuestos/lista.html',
                              presupuestos=presupuestos.items,
@@ -528,7 +529,7 @@ def crear():
             return redirect(url_for('presupuestos.detalle', id=presupuesto.id))
 
         # GET - Mostrar formulario
-        obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+        obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
         # Generar número de presupuesto sugerido ÚNICO
         fecha_hoy = date.today().strftime('%Y%m%d')

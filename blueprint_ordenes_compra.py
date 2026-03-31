@@ -63,7 +63,7 @@ def lista():
     for est in ['borrador', 'emitida', 'recibida_parcial', 'completada', 'cancelada']:
         conteos[est] = base_q.filter_by(estado=est).count()
 
-    obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     return render_template('ordenes_compra/lista.html',
                          ordenes=ordenes, conteos=conteos,
@@ -194,7 +194,7 @@ def crear():
             return redirect(request.url)
 
     # GET
-    obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # Si viene de un requerimiento, precargar datos
     requerimiento = None
