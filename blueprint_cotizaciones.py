@@ -50,7 +50,7 @@ def gestionar(rc_id):
     ).order_by(CotizacionProveedor.created_at).all()
 
     # Contar estados
-    recibidas = sum(1 for c in cotizaciones if c.estado in ('recibida', 'elegida'))
+    recibidas = sum(1 for c in cotizaciones if c.estado in ('recibida', 'elegida', 'descartada'))
     elegida = next((c for c in cotizaciones if c.estado == 'elegida'), None)
 
     # Proveedores disponibles para el dropdown
@@ -250,7 +250,7 @@ def comparar(rc_id):
     cotizaciones = CotizacionProveedor.query.filter_by(
         requerimiento_id=rc.id
     ).filter(
-        CotizacionProveedor.estado.in_(['recibida', 'elegida'])
+        CotizacionProveedor.estado.in_(['recibida', 'elegida', 'descartada'])
     ).all()
 
     if len(cotizaciones) < 2:
