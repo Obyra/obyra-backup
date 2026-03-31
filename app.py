@@ -441,6 +441,23 @@ def unauthorized():
     return _login_redirect()
 
 # ---------------- Views ----------------
+_ultima_alerta_oc = {'fecha': None}
+
+@app.before_request
+def alertas_diarias_oc():
+    """Ejecuta alertas de entrega de OC una vez al día."""
+    from datetime import date
+    hoy = date.today()
+    if _ultima_alerta_oc['fecha'] == hoy:
+        return
+    _ultima_alerta_oc['fecha'] = hoy
+    try:
+        from blueprint_ordenes_compra import notificar_entregas_proximas
+        notificar_entregas_proximas()
+    except Exception:
+        app.logger.debug('Error en alertas diarias OC (no crítico)')
+
+
 @app.before_request
 def sincronizar_membresia_actual():
     """Carga la membresía activa en cada request para usuarios autenticados."""

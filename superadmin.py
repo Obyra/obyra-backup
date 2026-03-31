@@ -367,6 +367,16 @@ def fix_obra_coords(obra_id):
     })
 
 
+@superadmin_bp.route('/cron/alertas-entregas-oc')
+@login_required
+@require_super_admin
+def cron_alertas_entregas_oc():
+    """Ejecutar alertas de entregas próximas de OC (llamar diariamente)."""
+    from blueprint_ordenes_compra import notificar_entregas_proximas
+    cantidad = notificar_entregas_proximas()
+    return jsonify({'ok': True, 'ocs_con_entrega_proxima': cantidad})
+
+
 @superadmin_bp.route('/limpiar-marcas-cuadrillas', methods=['GET', 'POST'])
 @login_required
 @require_super_admin
