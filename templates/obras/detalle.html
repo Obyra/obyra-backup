@@ -495,7 +495,11 @@
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
+                                                        {% if materiales_cantidad is defined and item.id in materiales_cantidad %}
+                                                        <span class="badge bg-primary">{{ materiales_cantidad[item.id]|int }} {{ item.unidad }}</span>
+                                                        {% else %}
                                                         <span class="badge bg-primary">{{ item.cantidad|entero }} {{ item.unidad }}</span>
+                                                        {% endif %}
                                                     </td>
                                                     {# Buscar stock transferido: por ID, por nombre exacto, o por coincidencia parcial #}
                                                     {% set transferido_encontrado = namespace(data=none) %}
@@ -542,17 +546,18 @@
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-end">
+                                                        {% set cant_para_costo = materiales_cantidad[item.id] if (materiales_cantidad is defined and item.id in materiales_cantidad) else item.cantidad|float %}
                                                         {% if presupuesto.currency == 'USD' %}
-                                                            <strong>US$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
+                                                            <strong>US$ {{ (cant_para_costo * item.precio_unitario|float)|round(2) }}</strong>
                                                         {% else %}
-                                                            <strong>$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
+                                                            <strong>$ {{ (cant_para_costo * item.precio_unitario|float)|round(2) }}</strong>
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-center">
                                                         {% if item.item_inventario %}
                                                             {# Material vinculado - mostrar stock real #}
                                                             {% set stock = item.item_inventario.stock_actual|float %}
-                                                            {% set necesario = item.cantidad|float %}
+                                                            {% set necesario = materiales_cantidad[item.id] if (materiales_cantidad is defined and item.id in materiales_cantidad) else item.cantidad|float %}
                                                             {% if stock >= necesario %}
                                                                 <span class="badge bg-success" title="Stock suficiente">
                                                                     <i class="fas fa-check me-1"></i>{{ stock|numero }} {{ item.item_inventario.unidad }}
