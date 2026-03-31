@@ -17,7 +17,6 @@ from typing import Dict, List, Optional
 from jinja2 import TemplateNotFound
 
 from app import db
-from extensions import csrf
 from models import (
     ItemInventario,
     # CategoriaInventario removed - using InventoryCategory
@@ -660,7 +659,6 @@ def editar_item(id):
 
 
 @inventario_bp.route('/<int:id>/categorias-adicionales', methods=['POST'])
-@csrf.exempt
 @login_required
 @require_feature('inventory.full')
 @require_active_subscription
@@ -787,7 +785,6 @@ def reclasificar_encofrados():
 
 
 @inventario_bp.route('/mover-categoria-bulk', methods=['POST'])
-@csrf.exempt
 @login_required
 @require_feature('inventory.full')
 @require_active_subscription
@@ -820,7 +817,6 @@ def mover_categoria_bulk():
 
 
 @inventario_bp.route('/eliminar-bulk', methods=['POST'])
-@csrf.exempt
 @login_required
 @require_feature('inventory.full')
 @require_active_subscription
@@ -2606,7 +2602,6 @@ def alertas_stock():
 
 
 @inventario_bp.route('/seed-items-ia', methods=['POST'])
-@csrf.exempt
 @login_required
 def seed_items_ia():
     """Carga items de la calculadora IA al inventario de la organización."""
@@ -2737,7 +2732,6 @@ def seed_items_ia():
 
 
 @inventario_bp.route('/seed-constructoras', methods=['POST'])
-@csrf.exempt
 @login_required
 def seed_constructoras():
     """Carga datos hardcodeados de constructoras de referencia (Cortes y Sistemas).

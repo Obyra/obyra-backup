@@ -5,7 +5,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app)
 from flask_login import login_required, current_user
 from datetime import datetime
-from extensions import db, csrf
+from extensions import db
 from models import Cliente
 from services.memberships import get_current_org_id
 from sqlalchemy import or_
@@ -275,7 +275,6 @@ def editar(id):
 
 
 @clientes_bp.route('/<int:id>/eliminar', methods=['POST'])
-@csrf.exempt
 @login_required
 def eliminar(id):
     """Eliminar (desactivar) cliente"""
@@ -318,7 +317,6 @@ def eliminar(id):
 
 
 @clientes_bp.route('/<int:id>/actualizar-rapido', methods=['POST'])
-@csrf.exempt
 @login_required
 def actualizar_rapido(id):
     """Actualizar datos básicos del cliente (para completar desde modal de confirmación)"""
@@ -388,7 +386,6 @@ def actualizar_rapido(id):
 
 
 @clientes_bp.route('/<int:id>/cambiar-estado', methods=['POST'])
-@csrf.exempt
 @login_required
 def cambiar_estado(id):
     """Cambiar estado activo/inactivo del cliente"""

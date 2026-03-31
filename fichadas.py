@@ -10,7 +10,7 @@ from datetime import datetime, date, timedelta, timezone
 from flask import (Blueprint, render_template, request, jsonify,
                    flash, redirect, url_for, current_app)
 from flask_login import login_required, current_user
-from extensions import db, csrf
+from extensions import db
 from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
 from services.permissions import get_org_id, validate_obra_ownership
 from services.plan_service import require_feature
@@ -467,7 +467,6 @@ def fichar(obra_id):
 # ---------------------------------------------------------------------------
 
 @fichadas_bp.route('/api/fichar', methods=['POST'])
-@csrf.exempt
 @login_required
 @require_feature('attendance.geo')
 def api_fichar():
@@ -581,7 +580,6 @@ def api_fichar():
 
 
 @fichadas_bp.route('/api/limpiar', methods=['POST'])
-@csrf.exempt
 @login_required
 def api_limpiar_fichadas():
     """Elimina todas las fichadas (solo super_admin). Para testing."""
@@ -593,7 +591,6 @@ def api_limpiar_fichadas():
 
 
 @fichadas_bp.route('/api/guardar_coords', methods=['POST'])
-@csrf.exempt
 @login_required
 def api_guardar_coords():
     """Guarda coordenadas geocodificadas de una obra (admins y PMs)."""

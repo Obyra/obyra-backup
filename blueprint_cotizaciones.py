@@ -8,7 +8,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app)
 from flask_login import login_required, current_user
 from datetime import datetime
-from extensions import db, csrf
+from extensions import db
 
 cotizaciones_bp = Blueprint('cotizaciones', __name__, url_prefix='/cotizaciones')
 
@@ -306,7 +306,6 @@ def comparar(rc_id):
 # ============================================================
 
 @cotizaciones_bp.route('/<int:id>/elegir', methods=['POST'])
-@csrf.exempt
 @login_required
 def elegir(id):
     from models.proveedores_oc import CotizacionProveedor
@@ -354,7 +353,6 @@ def elegir(id):
 # ============================================================
 
 @cotizaciones_bp.route('/<int:id>/eliminar', methods=['POST'])
-@csrf.exempt
 @login_required
 def eliminar(id):
     from models.proveedores_oc import CotizacionProveedor

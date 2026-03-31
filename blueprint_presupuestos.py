@@ -24,7 +24,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from extensions import db, csrf, limiter
+from extensions import db, limiter
 from sqlalchemy import desc, or_
 from models import Presupuesto, ItemPresupuesto, Obra, Organizacion, Cliente
 from services.calculation import BudgetCalculator, BudgetConstants
@@ -1879,7 +1879,6 @@ def confirmar_como_obra(id):
 
 
 @presupuestos_bp.route('/<int:id>/editar-obra', methods=['POST'])
-@csrf.exempt
 @login_required
 def editar_obra(id):
     """Editar información de la obra/proyecto del presupuesto"""
@@ -2056,7 +2055,6 @@ def agregar_item(id):
 
 @presupuestos_bp.route('/item/<int:id>/editar', methods=['POST'])
 @login_required
-@csrf.exempt
 def editar_item(id):
     """Editar item de presupuesto"""
     # Usar método centralizado de permisos
@@ -2188,7 +2186,6 @@ def eliminar_item(id):
 
 
 @presupuestos_bp.route('/<int:id>/eliminar', methods=['POST'])
-@csrf.exempt  # Exentar CSRF para este endpoint que usa AJAX
 @login_required
 @limiter.limit("10 per minute")
 def eliminar(id):
@@ -2297,7 +2294,6 @@ def cambiar_estado(id):
 
 
 @presupuestos_bp.route('/<int:id>/revertir-borrador', methods=['POST'])
-@csrf.exempt
 @login_required
 def revertir_borrador(id):
     """Revertir presupuesto a estado borrador (solo administradores)"""
@@ -2376,7 +2372,6 @@ def restaurar(id):
 
 
 @presupuestos_bp.route('/<int:id>/asignar-cliente', methods=['POST'])
-@csrf.exempt
 @login_required
 def asignar_cliente(id):
     """Asignar un cliente existente al presupuesto"""
@@ -2429,7 +2424,6 @@ def asignar_cliente(id):
 
 
 @presupuestos_bp.route('/<int:id>/crear-asignar-cliente', methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_asignar_cliente(id):
     """Crear un cliente nuevo y asignarlo al presupuesto"""
@@ -2649,7 +2643,6 @@ def guardar_presupuesto():
 
 
 @presupuestos_bp.route('/ia/calcular/etapas', methods=['POST'])
-@csrf.exempt
 @login_required
 def calcular_etapas_ia():
     """
@@ -3113,7 +3106,6 @@ def api_precios_mercadolibre():
 
 
 @presupuestos_bp.route('/api/calculadora/actualizar-precios-ml', methods=['POST'])
-@csrf.exempt
 @login_required
 def api_actualizar_precios_ml():
     """

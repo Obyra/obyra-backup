@@ -7,7 +7,7 @@ import json
 import os
 import requests
 from app import db
-from extensions import limiter, csrf
+from extensions import limiter
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import selectinload
@@ -2304,7 +2304,6 @@ def normalize_unit(unit):
 
 
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
-@csrf.exempt
 @login_required
 @require_active_subscription
 def crear_avance(tarea_id):
@@ -4162,7 +4161,6 @@ def api_curva_s_tarea(tarea_id):
 
 
 @obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
-@csrf.exempt
 @login_required
 @limiter.limit("20 per minute")
 def eliminar_tarea(tarea_id):
@@ -4343,7 +4341,6 @@ def geocodificar_todas():
 
 
 @obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])
-@csrf.exempt
 @login_required
 @limiter.limit("10 per minute")
 def eliminar_obra(obra_id):
@@ -4795,7 +4792,6 @@ def liquidacion_mo_preview(obra_id):
 
 
 @obras_bp.route('/<int:obra_id>/liquidacion-mo', methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_liquidacion_mo(obra_id):
     """Crear una liquidación de mano de obra."""
@@ -4825,7 +4821,6 @@ def crear_liquidacion_mo(obra_id):
 
 
 @obras_bp.route('/<int:obra_id>/liquidacion-mo/confirmar-y-pagar', methods=['POST'])
-@csrf.exempt
 @login_required
 def confirmar_y_pagar_liquidacion(obra_id):
     """Crea liquidación + marca como pagado + actualiza costo_real en un solo paso."""
@@ -4966,7 +4961,6 @@ def recibo_liquidacion_completa_pdf(liq_id):
 
 
 @obras_bp.route('/liquidacion-mo/item/<int:item_id>/pagar', methods=['POST'])
-@csrf.exempt
 @login_required
 def pagar_liquidacion_mo_item(item_id):
     """Registrar pago de un item de liquidación."""
@@ -5248,7 +5242,6 @@ def propagar_fechas(id):
 # ===== ENDPOINTS PARA DEPENDENCIAS Y GANTT =====
 
 @obras_bp.route('/etapas/<int:etapa_id>/editar_fechas', methods=['POST'])
-@csrf.exempt
 @login_required
 def editar_fechas_etapa(etapa_id):
     """Editar fechas de una etapa manualmente (admin/técnico)."""
@@ -5345,7 +5338,6 @@ def editar_fechas_etapa(etapa_id):
 
 
 @obras_bp.route('/etapas/<int:etapa_id>/nivel', methods=['POST'])
-@csrf.exempt
 @login_required
 def cambiar_nivel_etapa(etapa_id):
     """Cambiar nivel de encadenamiento de una etapa."""
@@ -5461,7 +5453,6 @@ def gantt_data(id):
 # ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====
 
 @obras_bp.route("/avances/<int:avance_id>/aprobar", methods=['POST'])
-@csrf.exempt
 @login_required
 def aprobar_avance(avance_id):
     from utils.permissions import can_approve_avance
@@ -5511,7 +5502,6 @@ def aprobar_avance(avance_id):
 
 
 @obras_bp.route("/avances/<int:avance_id>/rechazar", methods=['POST'])
-@csrf.exempt
 @login_required
 def rechazar_avance(avance_id):
     from utils.permissions import can_approve_avance
@@ -5542,7 +5532,6 @@ def rechazar_avance(avance_id):
 
 
 @obras_bp.route("/avances/<int:avance_id>/corregir", methods=['POST'])
-@csrf.exempt
 @login_required
 def corregir_avance(avance_id):
     """Corregir la cantidad de un avance y aprobarlo."""
@@ -6157,7 +6146,6 @@ def wizard_create_tasks():
 # ============================================================
 
 @obras_bp.route('/<int:obra_id>/remitos', methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_remito(obra_id):
     """Crear un remito manualmente."""
@@ -6237,7 +6225,6 @@ def ver_remito(obra_id, remito_id):
 
 
 @obras_bp.route('/<int:obra_id>/remitos/<int:remito_id>', methods=['DELETE'])
-@csrf.exempt
 @login_required
 def eliminar_remito(obra_id, remito_id):
     """Eliminar un remito."""
@@ -6377,7 +6364,6 @@ def escala_salarial_api():
 
 
 @obras_bp.route('/escala-salarial/api', methods=['POST'])
-@csrf.exempt
 @login_required
 def escala_salarial_actualizar():
     """API: actualizar escala salarial."""
@@ -6438,7 +6424,6 @@ def cuadrillas_api():
 
 
 @obras_bp.route('/cuadrillas/api', methods=['POST'])
-@csrf.exempt
 @login_required
 def cuadrillas_guardar():
     """API: crear o actualizar una cuadrilla tipo."""

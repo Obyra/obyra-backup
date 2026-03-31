@@ -6,7 +6,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app)
 from flask_login import login_required, current_user
 from datetime import datetime
-from extensions import db, csrf
+from extensions import db
 from sqlalchemy import or_
 
 proveedores_oc_bp = Blueprint('proveedores_oc', __name__, url_prefix='/proveedores-oc')
@@ -258,7 +258,6 @@ def editar(id):
 # ============================================================
 
 @proveedores_oc_bp.route('/<int:id>/cambiar-estado', methods=['POST'])
-@csrf.exempt
 @login_required
 def cambiar_estado(id):
     from models.proveedores_oc import ProveedorOC
@@ -363,7 +362,6 @@ def api_detalle(id):
 
 
 @proveedores_oc_bp.route('/api/crear', methods=['POST'])
-@csrf.exempt
 @login_required
 def api_crear():
     """Crear proveedor inline desde modal en OC (retorna JSON)."""

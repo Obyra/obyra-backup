@@ -90,6 +90,27 @@ def _safe_cli_print(*args, **kwargs):
 
 print = _safe_cli_print  # type: ignore[assignment]
 
+# --------------- SENTRY ERROR MONITORING ---------------
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.flask import FlaskIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    SENTRY_AVAILABLE = True
+except ImportError:
+    SENTRY_AVAILABLE = False
+
+if SENTRY_AVAILABLE:
+    sentry_dsn = os.environ.get('SENTRY_DSN', '')
+    if sentry_dsn:
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            integrations=[FlaskIntegration(), SqlalchemyIntegration()],
+            traces_sample_rate=0.1,
+            profiles_sample_rate=0.1,
+            environment=os.environ.get('FLASK_ENV', 'production'),
+            send_default_pii=False,  # Don't send personal data
+        )
+
 # create the app
 app = Flask(__name__)
 
@@ -1839,15 +1860,8 @@ for module_name, attr_name, prefix in [
         blueprint = _import_blueprint(module_name, attr_name)
         app.register_blueprint(blueprint, url_prefix=prefix)
 
-        # Excluir endpoint de eliminar presupuesto del CSRF
-        if module_name == 'presupuestos':
-            # El nombre de la vista en el blueprint es solo 'eliminar'
-            view_func = blueprint.view_functions.get('eliminar')
-            if view_func:
-                csrf.exempt(view_func)
-                app.logger.info(f"CSRF exempt aplicado a presupuestos.eliminar")
-            else:
-                app.logger.warning(f"No se encontró la vista 'eliminar' en presupuestos. Vistas disponibles: {list(blueprint.view_functions.keys())}")
+        # CSRF protection is now handled globally via the fetch interceptor
+        # in base.html which auto-injects X-CSRFToken on all non-GET requests.
     except Exception as exc:
         app.logger.warning(
             "Blueprint opcional %s no disponible: %s", module_name, exc
