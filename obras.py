@@ -934,7 +934,35 @@ def detalle(id):
     presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
     items_presupuesto = []
     if presupuesto:
-        items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+        items_raw = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+        # Consolidar materiales duplicados (mismo item_inventario o misma descripción)
+        # para que no aparezcan repetidos en la tabla de materiales
+        _consolidados = {}
+        for item in items_raw:
+            if item.tipo != 'material':
+                items_presupuesto.append(item)
+                continue
+            # Clave de agrupación: item_inventario_id si existe, sino descripción normalizada
+            if item.item_inventario_id:
+                key = ('inv', item.item_inventario_id)
+            else:
+                key = ('desc', (item.descripcion or '').strip().lower())
+            if key in _consolidados:
+                # Sumar cantidad y costo al item existente
+                existing = _consolidados[key]
+                existing._cantidad_consolidada += float(item.cantidad or 0)
+                existing._costo_consolidado += float(item.cantidad or 0) * float(item.precio_unitario or 0)
+                existing._etapas_consolidadas.append(item.etapa.nombre if item.etapa else '')
+            else:
+                # Primer item con esta clave — guardar con atributos auxiliares
+                item._cantidad_consolidada = float(item.cantidad or 0)
+                item._costo_consolidado = float(item.cantidad or 0) * float(item.precio_unitario or 0)
+                item._etapas_consolidadas = [item.etapa.nombre if item.etapa else '']
+                _consolidados[key] = item
+        # Reemplazar cantidad original con la consolidada en los items agrupados
+        for item in _consolidados.values():
+            item.cantidad = item._cantidad_consolidada
+            items_presupuesto.append(item)
 
     # Calcular avances de mano de obra por etapa — UN solo query agregado
     avances_mano_obra = {}
@@ -3341,9 +3369,30 @@ def api_analizar_materiales(obra_id):
         if not presupuesto:
             return jsonify({'ok': False, 'error': 'Esta obra no tiene presupuesto confirmado'}), 400
 
-        materiales = [item for item in presupuesto.items if item.tipo == 'material']
-        if not materiales:
+        materiales_raw = [item for item in presupuesto.items if item.tipo == 'material']
+        if not materiales_raw:
             return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
+
+        # Consolidar materiales duplicados (mismo item_inventario o misma descripción)
+        _mat_consolidados = {}
+        for item in materiales_raw:
+            if item.item_inventario_id:
+                key = ('inv', item.item_inventario_id)
+            else:
+                key = ('desc', (item.descripcion or '').strip().lower())
+            if key in _mat_consolidados:
+                existing = _mat_consolidados[key]
+                existing['_cantidad_total'] += float(item.cantidad or 0)
+            else:
+                _mat_consolidados[key] = {
+                    'item': item,
+                    '_cantidad_total': float(item.cantidad or 0),
+                }
+        materiales = []
+        for data in _mat_consolidados.values():
+            item = data['item']
+            item._cantidad_consolidada_api = data['_cantidad_total']
+            materiales.append(item)
 
         # Obtener cantidades ya pedidas en requerimientos de compra activos
         ya_pedido_por_item = {}  # item_inventario_id -> cantidad total pedida
@@ -3371,7 +3420,7 @@ def api_analizar_materiales(obra_id):
         sin_vincular = []
 
         for material in materiales:
-            cantidad_necesaria = float(material.cantidad or 0)
+            cantidad_necesaria = float(getattr(material, '_cantidad_consolidada_api', material.cantidad) or 0)
             if cantidad_necesaria <= 0:
                 continue
 
