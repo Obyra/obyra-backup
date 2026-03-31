@@ -143,13 +143,17 @@
                             <td>{{ oc.fecha_emision.strftime('%d/%m/%Y') if oc.fecha_emision else '-' }}</td>
                             <td>
                                 {% if oc.fecha_entrega_estimada %}
-                                    {% set dias = (oc.fecha_entrega_estimada - today).days if today is defined else 999 %}
-                                    {% if dias < 0 %}
-                                    <span class="badge bg-danger">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }} (vencida)</span>
-                                    {% elif dias <= 2 %}
-                                    <span class="badge bg-warning text-dark">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }} ({{ dias }}d)</span>
-                                    {% else %}
+                                    {% if oc.estado in ('completada', 'cancelada') %}
                                     <span>{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }}</span>
+                                    {% else %}
+                                        {% set dias = (oc.fecha_entrega_estimada - today).days if today is defined else 999 %}
+                                        {% if dias < 0 %}
+                                        <span class="badge bg-danger">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }} (vencida)</span>
+                                        {% elif dias <= 2 %}
+                                        <span class="badge bg-warning text-dark">{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }} ({{ dias }}d)</span>
+                                        {% else %}
+                                        <span>{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }}</span>
+                                        {% endif %}
                                     {% endif %}
                                 {% else %}
                                     <span class="text-muted">-</span>
