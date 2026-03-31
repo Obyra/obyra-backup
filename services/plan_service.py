@@ -326,6 +326,12 @@ def check_limit(limit_type, org=None):
 
     if limit_type == 'obras':
         from models.projects import Obra
+        # Lock la org para evitar race condition (dos usuarios creando obra al mismo tiempo)
+        from extensions import db
+        db.session.execute(
+            db.text('SELECT 1 FROM organizaciones WHERE id = :oid FOR UPDATE'),
+            {'oid': org.id}
+        )
         limite = org.max_obras or 1
         actual = Obra.query.filter(
             Obra.organizacion_id == org.id,
@@ -591,7 +597,7 @@ def inject_plan_context():
     try:
         org = get_org()
         if not org:
-            return {'plan_info': {}, 'can_feature': lambda f: True}
+            return {'plan_info': {}, 'can_feature': lambda f: getattr(current_user, 'is_super_admin', False)}
 
         plan = org.plan_tipo or 'prueba'
         status, days, is_writable = get_subscription_status(org)

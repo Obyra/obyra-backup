@@ -148,8 +148,8 @@ app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 
 # PostgreSQL-optimized connection pooling
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 10,           # Conexiones en el pool
-    "max_overflow": 20,        # Conexiones adicionales si el pool está lleno
+    "pool_size": 20,           # Conexiones en el pool (escalable)
+    "max_overflow": 50,        # Conexiones adicionales si el pool está lleno
     "pool_timeout": 30,        # Timeout para obtener conexión del pool
     "pool_recycle": 1800,      # Reciclar conexiones cada 30 min
     "pool_pre_ping": True,     # Verificar conexión antes de usarla
@@ -1616,6 +1616,22 @@ with app.app_context():
             END IF;
             IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_fichadas_obra_fecha') THEN
                 CREATE INDEX ix_fichadas_obra_fecha ON fichadas(obra_id, fecha_hora);
+            END IF;
+            -- Indices de escalabilidad (audit 2026-03-31)
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_equipment_company') THEN
+                CREATE INDEX ix_equipment_company ON equipment(company_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_obras_org_estado_deleted') THEN
+                CREATE INDEX ix_obras_org_estado_deleted ON obras(organizacion_id, estado, deleted_at);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_etapas_obra_id') THEN
+                CREATE INDEX ix_etapas_obra_id ON etapas_obra(obra_id, orden);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_tareas_etapa_id') THEN
+                CREATE INDEX ix_tareas_etapa_id ON tareas_etapa(etapa_id, orden);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_uso_inv_obra') THEN
+                CREATE INDEX ix_uso_inv_obra ON uso_inventario(obra_id);
             END IF;
         END $$;
         """
