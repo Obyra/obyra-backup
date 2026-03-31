@@ -596,8 +596,8 @@ def api_limpiar_fichadas():
 @csrf.exempt
 @login_required
 def api_guardar_coords():
-    """Guarda coordenadas geocodificadas de una obra (solo admins)."""
-    if not _es_admin(current_user):
+    """Guarda coordenadas geocodificadas de una obra (admins y PMs)."""
+    if not _es_admin_o_pm(current_user):
         return jsonify({'ok': False, 'error': 'No autorizado'}), 403
 
     data = request.get_json(silent=True) or {}

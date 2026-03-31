@@ -60,14 +60,12 @@
             <div id="estadoUbicacion" class="alert alert-info text-center">
                 <i class="fas fa-spinner fa-spin me-2"></i>Obteniendo tu ubicacion...
             </div>
-            {% if es_admin %}
             <div id="btnCorregirUbicacion" class="text-center mt-2" style="display:none;">
                 <button class="btn btn-warning btn-lg w-100 py-3" onclick="corregirUbicacionObra()" style="font-size: 1.1rem; border-radius: 12px;">
                     <i class="fas fa-map-pin me-1"></i> Corregir ubicacion de la obra con mi GPS
                 </button>
                 <div class="form-text mt-1">La ubicacion guardada parece incorrecta. Esto la actualiza con tu posicion actual.</div>
             </div>
-            {% endif %}
         </div>
     </div>
 
@@ -512,6 +510,8 @@ function recalcularDistancia() {
     } else {
         actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm. Necesitas estar dentro de ' + OBRA_RADIO + 'm.');
         btn.disabled = true;
+        var btnCorregir = document.getElementById('btnCorregirUbicacion');
+        if (btnCorregir) btnCorregir.style.display = 'block';
     }
 }
 
