@@ -1631,31 +1631,32 @@ with app.app_context():
             if not admin_password:
                 print('[ADMIN] ERROR: Variable ADMIN_DEFAULT_PASSWORD no configurada. No se creará admin por defecto.')
                 db.session.rollback()
-                return
+                admin_password = None  # Skip admin creation
 
-            admin = Usuario(
-                nombre='Administrador',
-                apellido='OBYRA',
-                email=admin_email,
-                rol='administrador',
-                role='administrador',
-                is_super_admin=True,
-                auth_provider='manual',
-                activo=True,
-                organizacion_id=admin_org.id,
-                primary_org_id=admin_org.id,
-            )
-            admin.set_password(admin_password)
-            db.session.add(admin)
-            db.session.commit()
-            print(f'[ADMIN] Usuario administrador creado: {admin_email} (password desde variable de entorno)')
+            if admin_password:
+                admin = Usuario(
+                    nombre='Administrador',
+                    apellido='OBYRA',
+                    email=admin_email,
+                    rol='administrador',
+                    role='administrador',
+                    is_super_admin=True,
+                    auth_provider='manual',
+                    activo=True,
+                    organizacion_id=admin_org.id,
+                    primary_org_id=admin_org.id,
+                )
+                admin.set_password(admin_password, skip_validation=True)
+                db.session.add(admin)
+                db.session.commit()
+                print(f'[ADMIN] Usuario administrador creado: {admin_email} (password desde variable de entorno)')
         else:
             updated = False
             hashed_markers = ('pbkdf2:', 'scrypt:', 'argon2:', 'bcrypt')
             stored_hash = admin.password_hash or ''
             if not stored_hash or not stored_hash.startswith(hashed_markers):
                 original_secret = stored_hash or 'admin123'
-                admin.set_password(original_secret)
+                admin.set_password(original_secret, skip_validation=True)
                 updated = True
             if admin.auth_provider != 'manual':
                 admin.auth_provider = 'manual'
