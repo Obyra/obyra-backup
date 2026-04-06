@@ -63,12 +63,13 @@ def lista():
     for est in ['borrador', 'emitida', 'recibida_parcial', 'completada', 'cancelada']:
         conteos[est] = base_q.filter_by(estado=est).count()
 
-    obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     return render_template('ordenes_compra/lista.html',
                          ordenes=ordenes, conteos=conteos,
                          estado_filtro=estado, obra_id_filtro=obra_id,
-                         proveedor_filtro=proveedor_q, obras=obras)
+                         proveedor_filtro=proveedor_q, obras=obras,
+                         today=date.today())
 
 
 # ============================================================
@@ -178,7 +179,7 @@ def crear():
 
             # Si viene de un requerimiento, marcar como en_proceso
             if requerimiento_id:
-                req = RequerimientoCompra.query.get(requerimiento_id)
+                req = RequerimientoCompra.query.filter_by(id=requerimiento_id, organizacion_id=org_id).first()
                 if req and req.estado == 'aprobado':
                     req.marcar_en_proceso()
 
@@ -193,7 +194,7 @@ def crear():
             return redirect(request.url)
 
     # GET
-    obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # Si viene de un requerimiento, precargar datos
     requerimiento = None
@@ -288,7 +289,48 @@ def emitir(id):
     oc.estado = 'emitida'
     oc.fecha_emision = date.today()
     db.session.commit()
+
+    # Notificar al PM y admins de la obra sobre la OC emitida
+    try:
+        _notificar_oc_emitida(oc)
+    except Exception:
+        current_app.logger.exception('Error al notificar OC emitida')
+
     flash(f'OC {oc.numero} emitida exitosamente.', 'success')
+    return redirect(url_for('ordenes_compra.detalle', id=oc.id))
+
+
+# ============================================================
+# ACTUALIZAR FECHA DE ENTREGA
+# ============================================================
+
+@ordenes_compra_bp.route('/<int:id>/fecha-entrega', methods=['POST'])
+@login_required
+def actualizar_fecha_entrega(id):
+    from models.inventory import OrdenCompra
+
+    if not _tiene_permiso_oc():
+        flash('No tiene permisos.', 'danger')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    oc = OrdenCompra.query.get_or_404(id)
+    if oc.organizacion_id != current_user.organizacion_id:
+        flash('No tiene acceso.', 'danger')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    fecha_str = request.form.get('fecha_entrega_estimada', '')
+    if fecha_str:
+        try:
+            oc.fecha_entrega_estimada = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            db.session.commit()
+            flash(f'Fecha de entrega actualizada a {oc.fecha_entrega_estimada.strftime("%d/%m/%Y")}.', 'success')
+        except ValueError:
+            flash('Formato de fecha inválido.', 'danger')
+    else:
+        oc.fecha_entrega_estimada = None
+        db.session.commit()
+        flash('Fecha de entrega eliminada.', 'info')
+
     return redirect(url_for('ordenes_compra.detalle', id=oc.id))
 
 
@@ -552,3 +594,139 @@ def oc_pdf(id):
         as_attachment=True,
         download_name=f'OC_{oc.numero}.pdf'
     )
+
+
+# ============================================================
+# NOTIFICACIONES DE OC
+# ============================================================
+
+def _notificar_oc_emitida(oc):
+    """Notifica al PM y admins de la obra que se emitió una OC."""
+    from models.core import Notificacion
+    from models.projects import ObraMiembro, AsignacionObra
+    from models import Usuario
+
+    obra = oc.obra
+    org_id = oc.organizacion_id
+    fecha_entrega = oc.fecha_entrega_estimada
+
+    fecha_str = fecha_entrega.strftime('%d/%m/%Y') if fecha_entrega else 'sin fecha definida'
+    titulo = f'OC {oc.numero} emitida — {oc.proveedor}'
+    mensaje = (
+        f'Se emitió la orden de compra {oc.numero} para la obra {obra.nombre}. '
+        f'Proveedor: {oc.proveedor}. '
+        f'Fecha estimada de entrega: {fecha_str}.'
+    )
+    url = url_for('ordenes_compra.detalle', id=oc.id)
+
+    # Buscar PMs y admins de la obra
+    usuarios_notificar = set()
+
+    # PMs asignados a la obra (ObraMiembro)
+    miembros = ObraMiembro.query.filter_by(obra_id=obra.id).all()
+    for m in miembros:
+        if m.usuario and m.usuario.role in ('pm', 'admin'):
+            usuarios_notificar.add(m.usuario_id)
+
+    # PMs asignados via AsignacionObra
+    asignaciones = AsignacionObra.query.filter_by(obra_id=obra.id).all()
+    for a in asignaciones:
+        if a.usuario and a.usuario.role in ('pm', 'admin'):
+            usuarios_notificar.add(a.usuario_id)
+
+    # Admins de la org
+    admins = Usuario.query.filter_by(organizacion_id=org_id, role='admin').all()
+    for admin in admins:
+        usuarios_notificar.add(admin.id)
+
+    for uid in usuarios_notificar:
+        Notificacion.crear_notificacion(
+            organizacion_id=org_id,
+            usuario_id=uid,
+            tipo='oc_emitida',
+            titulo=titulo,
+            mensaje=mensaje,
+            url=url,
+            referencia_tipo='orden_compra',
+            referencia_id=oc.id
+        )
+    db.session.commit()
+
+
+def notificar_entregas_proximas(app=None):
+    """
+    Genera alertas para OC con entrega próxima.
+    Llamar diariamente (ej. desde cron o ruta admin).
+
+    - 2 días antes de fecha_entrega_estimada: alerta inicial
+    - Cada día hasta la fecha: recordatorio diario
+    """
+    from models.inventory import OrdenCompra
+    from models.core import Notificacion
+    from models.projects import ObraMiembro, AsignacionObra
+    from models import Usuario
+
+    hoy = date.today()
+    en_7_dias = hoy + __import__('datetime').timedelta(days=7)
+
+    # OCs emitidas con entrega entre hoy y 2 días
+    ocs = OrdenCompra.query.filter(
+        OrdenCompra.estado == 'emitida',
+        OrdenCompra.fecha_entrega_estimada.isnot(None),
+        OrdenCompra.fecha_entrega_estimada <= en_7_dias,
+        OrdenCompra.fecha_entrega_estimada >= hoy
+    ).all()
+
+    for oc in ocs:
+        dias_restantes = (oc.fecha_entrega_estimada - hoy).days
+        obra = oc.obra
+        org_id = oc.organizacion_id
+
+        if dias_restantes == 0:
+            titulo = f'HOY llega material — OC {oc.numero}'
+            mensaje = f'Hoy es la fecha de entrega de {oc.proveedor} para {obra.nombre}.'
+        elif dias_restantes == 1:
+            titulo = f'MANANA llega material — OC {oc.numero}'
+            mensaje = f'Manana {oc.proveedor} entrega material para {obra.nombre}.'
+        else:
+            titulo = f'En {dias_restantes} dias llega material — OC {oc.numero}'
+            mensaje = f'{oc.proveedor} entrega material para {obra.nombre} el {oc.fecha_entrega_estimada.strftime("%d/%m/%Y")}.'
+
+        url_oc = f'/ordenes-compra/{oc.id}'
+
+        # Buscar PMs y admins
+        usuarios_notificar = set()
+        miembros = ObraMiembro.query.filter_by(obra_id=obra.id).all()
+        for m in miembros:
+            if m.usuario and m.usuario.role in ('pm', 'admin'):
+                usuarios_notificar.add(m.usuario_id)
+        asignaciones = AsignacionObra.query.filter_by(obra_id=obra.id).all()
+        for a in asignaciones:
+            if a.usuario and a.usuario.role in ('pm', 'admin'):
+                usuarios_notificar.add(a.usuario_id)
+        admins = Usuario.query.filter_by(organizacion_id=org_id, role='admin').all()
+        for admin in admins:
+            usuarios_notificar.add(admin.id)
+
+        for uid in usuarios_notificar:
+            # Evitar duplicados: no notificar si ya se notificó hoy para esta OC
+            ya_existe = Notificacion.query.filter_by(
+                usuario_id=uid,
+                referencia_tipo='oc_entrega',
+                referencia_id=oc.id,
+            ).filter(
+                db.func.date(Notificacion.fecha_creacion) == hoy
+            ).first()
+            if not ya_existe:
+                Notificacion.crear_notificacion(
+                    organizacion_id=org_id,
+                    usuario_id=uid,
+                    tipo='oc_entrega',
+                    titulo=titulo,
+                    mensaje=mensaje,
+                    url=url_oc,
+                    referencia_tipo='oc_entrega',
+                    referencia_id=oc.id
+                )
+    db.session.commit()
+    return len(ocs)

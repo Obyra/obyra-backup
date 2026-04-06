@@ -104,7 +104,8 @@
                             <th>Total</th>
                             <th>Estado</th>
                             <th>Recepcion</th>
-                            <th>Fecha</th>
+                            <th>Emision</th>
+                            <th>Entrega Est.</th>
                             <th class="text-end">Acciones</th>
                         </tr>
                     </thead>
@@ -140,6 +141,30 @@
                                 </div>
                             </td>
                             <td>{{ oc.fecha_emision.strftime('%d/%m/%Y') if oc.fecha_emision else '-' }}</td>
+                            <td>
+                                {% if oc.estado in ('completada', 'cancelada') %}
+                                    <span>{{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') if oc.fecha_entrega_estimada else '-' }}</span>
+                                {% else %}
+                                    <form method="POST" action="{{ url_for('ordenes_compra.actualizar_fecha_entrega', id=oc.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="date" name="fecha_entrega_estimada" class="form-control form-control-sm" style="width: 140px; display: inline-block;"
+                                               value="{{ oc.fecha_entrega_estimada.strftime('%Y-%m-%d') if oc.fecha_entrega_estimada else '' }}"
+                                               onchange="this.form.submit()">
+                                    </form>
+                                    {% if oc.fecha_entrega_estimada and today is defined %}
+                                        {% set dias = (oc.fecha_entrega_estimada - today).days %}
+                                        {% if dias < 0 %}
+                                        <span class="badge bg-danger ms-1">vencida</span>
+                                        {% elif dias == 0 %}
+                                        <span class="badge bg-danger ms-1">HOY</span>
+                                        {% elif dias <= 2 %}
+                                        <span class="badge bg-warning text-dark ms-1">{{ dias }}d</span>
+                                        {% elif dias <= 7 %}
+                                        <span class="badge bg-info text-dark ms-1">{{ dias }}d</span>
+                                        {% endif %}
+                                    {% endif %}
+                                {% endif %}
+                            </td>
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
                                     <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}"

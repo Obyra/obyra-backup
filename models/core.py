@@ -36,6 +36,15 @@ class Organizacion(db.Model):
     fecha_inicio_plan = db.Column(db.DateTime)  # Fecha de inicio del plan pago
     fecha_fin_plan = db.Column(db.DateTime)  # Fecha de vencimiento del plan
 
+    # Tipo de contratación y estado
+    contract_type = db.Column(db.String(20), default='subscription')  # subscription, license_5y, trial
+    subscription_status = db.Column(db.String(20), default='active')  # active, past_due, grace_period, read_only, suspended, cancelled
+    grace_period_until = db.Column(db.DateTime)  # Hasta cuándo dura el período de gracia
+
+    # Licencia 5 años — renovación anual de servicio
+    annual_service_due_date = db.Column(db.DateTime)  # Próxima fecha de pago anual de servicio
+    annual_service_status = db.Column(db.String(20), default='active')  # active, due, overdue
+
     # Descuentos (asignados por super admin)
     descuento_porcentaje = db.Column(db.Integer, default=0)  # 0, 10, 20, 30, 40, 50
     descuento_meses = db.Column(db.Integer, default=0)  # Duración del descuento en meses
@@ -161,9 +170,11 @@ class Usuario(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
-    # Sistema de roles unificado: admin, pm, tecnico, operario
-    rol = db.Column(db.String(50), nullable=True)  # DEPRECATED: sincronizado desde role
-    role = db.Column(db.String(20), nullable=False, default='operario')
+    # Sistema de roles unificado — canonical values: 'admin', 'pm', 'operario'
+    # DEPRECATED: 'rol' is kept for DB backwards-compat; auto-synced from 'role' via before_insert/before_update event.
+    # All code checks MUST use 'role', never 'rol'.
+    rol = db.Column(db.String(50), nullable=True)  # DEPRECATED — do NOT use for checks
+    role = db.Column(db.String(20), nullable=False, default='operario')  # Canonical role field
 
     _ROLE_TO_ROL = {'admin': 'administrador', 'pm': 'tecnico', 'tecnico': 'tecnico', 'operario': 'operario'}
 
@@ -534,6 +545,14 @@ class Usuario(UserMixin, db.Model):
             db.session.add(profile)
             db.session.flush()
         return profile
+
+
+@db.event.listens_for(Usuario, 'before_insert')
+@db.event.listens_for(Usuario, 'before_update')
+def _sync_usuario_rol(mapper, connection, target):
+    """Sync deprecated 'rol' field from canonical 'role' field."""
+    if target.role:
+        target.rol = Usuario._sync_rol_from_role(target.role)
 
 
 class OrgMembership(db.Model):

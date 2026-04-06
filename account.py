@@ -9,7 +9,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
-from extensions import db, csrf
+from extensions import db
 from models import PerfilUsuario, Usuario
 from auth import normalizar_cuit, validar_cuit
 

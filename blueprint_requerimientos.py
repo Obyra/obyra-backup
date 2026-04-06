@@ -60,7 +60,7 @@ def lista():
     requerimientos = query.offset((page - 1) * per_page).limit(per_page).all()
 
     # Obtener obras para filtro
-    obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # Contar por estado para badges
     conteos = db.session.query(
@@ -159,7 +159,7 @@ def crear(obra_id=None):
     # GET - mostrar formulario
     obras = Obra.query.filter_by(
         organizacion_id=org_id
-    ).filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
+    ).filter(Obra.estado.in_(['planificacion', 'en_curso']), Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     obra_seleccionada = None
     materiales_obra = []

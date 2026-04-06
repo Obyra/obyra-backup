@@ -10,7 +10,7 @@ from datetime import datetime, date, timedelta, timezone
 from flask import (Blueprint, render_template, request, jsonify,
                    flash, redirect, url_for, current_app, abort)
 from flask_login import login_required, current_user
-from extensions import db, csrf
+from extensions import db
 from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
 from services.memberships import get_current_org_id
 
@@ -329,6 +329,7 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
 
 @fichadas_bp.route('/')
 @login_required
+@require_feature('attendance.geo')
 def index():
     """Página principal: muestra obras asignadas con estado de fichada."""
     obras = _obras_asignadas(current_user)
@@ -436,11 +437,13 @@ def fichar(obra_id):
     # Si es admin/PM, traer operarios asignados para "fichar por otro"
     operarios_obra = []
     if _es_admin_o_pm(current_user):
+        # Buscar en AsignacionObra Y ObraMiembro (pueden estar en cualquiera)
+        user_ids_vistos = set()
         asignaciones = AsignacionObra.query.filter_by(
             obra_id=obra_id, activo=True
         ).all()
         for a in asignaciones:
-            if a.usuario_id != current_user.id and a.usuario:
+            if a.usuario_id != current_user.id and a.usuario and a.usuario_id not in user_ids_vistos:
                 ultima_f = _ultima_fichada_hoy(a.usuario_id, obra_id)
                 operarios_obra.append({
                     'id': a.usuario_id,
@@ -448,6 +451,22 @@ def fichar(obra_id):
                     'rol': a.rol_en_obra or 'operario',
                     'proximo_tipo': 'egreso' if (ultima_f and ultima_f.tipo == 'ingreso') else 'ingreso',
                 })
+                user_ids_vistos.add(a.usuario_id)
+
+        # También buscar en ObraMiembro
+        obra_miembros = ObraMiembro.query.filter_by(obra_id=obra_id).all()
+        for om in obra_miembros:
+            if om.usuario_id != current_user.id and om.usuario_id not in user_ids_vistos:
+                usuario = Usuario.query.get(om.usuario_id)
+                if usuario:
+                    ultima_f = _ultima_fichada_hoy(om.usuario_id, obra_id)
+                    operarios_obra.append({
+                        'id': om.usuario_id,
+                        'nombre': usuario.nombre_completo,
+                        'rol': om.rol_en_obra or 'operario',
+                        'proximo_tipo': 'egreso' if (ultima_f and ultima_f.tipo == 'ingreso') else 'ingreso',
+                    })
+                    user_ids_vistos.add(om.usuario_id)
 
     return render_template('fichadas/fichar.html',
                            obra=obra,
@@ -464,8 +483,8 @@ def fichar(obra_id):
 # ---------------------------------------------------------------------------
 
 @fichadas_bp.route('/api/fichar', methods=['POST'])
-@csrf.exempt
 @login_required
+@require_feature('attendance.geo')
 def api_fichar():
     """Registra una fichada de ingreso o egreso."""
     data = request.get_json(silent=True) or {}
@@ -581,7 +600,6 @@ def api_fichar():
 
 
 @fichadas_bp.route('/api/limpiar', methods=['POST'])
-@csrf.exempt
 @login_required
 def api_limpiar_fichadas():
     """Elimina todas las fichadas (solo super_admin). Para testing."""
@@ -593,11 +611,10 @@ def api_limpiar_fichadas():
 
 
 @fichadas_bp.route('/api/guardar_coords', methods=['POST'])
-@csrf.exempt
 @login_required
 def api_guardar_coords():
-    """Guarda coordenadas geocodificadas de una obra (solo admins)."""
-    if not _es_admin(current_user):
+    """Guarda coordenadas geocodificadas de una obra (admins y PMs)."""
+    if not _es_admin_o_pm(current_user):
         return jsonify({'ok': False, 'error': 'No autorizado'}), 403
 
     data = request.get_json(silent=True) or {}

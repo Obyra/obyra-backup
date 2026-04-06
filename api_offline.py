@@ -299,7 +299,11 @@ def crear_avance():
         if not tarea_id:
             return jsonify({'ok': False, 'error': 'tarea_id es requerido'}), 400
 
-        tarea = TareaEtapa.query.get(tarea_id)
+        org_id = get_current_org_id()
+        tarea = TareaEtapa.query.join(EtapaObra).join(Obra).filter(
+            TareaEtapa.id == tarea_id,
+            Obra.organizacion_id == org_id
+        ).first()
         if not tarea:
             return jsonify({'ok': False, 'error': 'Tarea no encontrada'}), 404
         if tarea.etapa.obra.organizacion_id != get_current_org_id():
@@ -347,7 +351,11 @@ def actualizar_tarea(tarea_id):
     Actualizar estado/progreso de una tarea.
     """
     try:
-        tarea = TareaEtapa.query.get(tarea_id)
+        org_id = get_current_org_id()
+        tarea = TareaEtapa.query.join(EtapaObra).join(Obra).filter(
+            TareaEtapa.id == tarea_id,
+            Obra.organizacion_id == org_id
+        ).first()
         if not tarea:
             return jsonify({'ok': False, 'error': 'Tarea no encontrada'}), 404
         if tarea.etapa.obra.organizacion_id != get_current_org_id():
@@ -461,13 +469,18 @@ def sync_batch():
 
         results = []
 
+        org_id = get_current_org_id()
+
         for op in operations:
             op_type = op.get('type')
             op_data = op.get('data', {})
 
             try:
                 if op_type == 'CREATE_AVANCE':
-                    tarea = TareaEtapa.query.get(op_data.get('tarea_id'))
+                    tarea = TareaEtapa.query.join(EtapaObra).join(Obra).filter(
+                        TareaEtapa.id == op_data.get('tarea_id'),
+                        Obra.organizacion_id == org_id
+                    ).first()
                     if tarea:
                         avance = TareaAvance(
                             tarea_id=op_data.get('tarea_id'),
@@ -494,7 +507,10 @@ def sync_batch():
                         })
 
                 elif op_type == 'UPDATE_TAREA':
-                    tarea = TareaEtapa.query.get(op_data.get('id'))
+                    tarea = TareaEtapa.query.join(EtapaObra).join(Obra).filter(
+                        TareaEtapa.id == op_data.get('id'),
+                        Obra.organizacion_id == org_id
+                    ).first()
                     if tarea:
                         if 'estado' in op_data:
                             tarea.estado = op_data['estado']

@@ -32,6 +32,7 @@ def geocodificar_obras_existentes():
     from models import Obra
 
     obras_pendientes = Obra.query.filter(
+        Obra.deleted_at.is_(None),
         Obra.direccion.isnot(None),
         Obra.direccion != "",
         db.or_(Obra.latitud.is_(None), Obra.longitud.is_(None)),

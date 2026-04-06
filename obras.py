@@ -7,7 +7,7 @@ import json
 import os
 import requests
 from app import db
-from extensions import limiter, csrf
+from extensions import limiter
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import selectinload
@@ -49,6 +49,8 @@ from geocoding import normalizar_direccion_argentina
 from services.geocoding_service import resolve as resolve_geocode
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
 from services.memberships import get_current_org_id, get_current_membership
+from services.permissions import validate_obra_ownership, validate_tarea_ownership, get_org_id
+from services.plan_service import require_active_subscription
 from services.obras_filters import (obras_visibles_clause,
                                     obra_tiene_presupuesto_confirmado)
 from services.certifications import (
@@ -385,15 +387,43 @@ def D(x):
 
 def seed_tareas_para_etapa(nueva_etapa, auto_commit=True, slug=None):
     """
-    Función idempotente para crear tareas predefinidas en una etapa.
-
-    DESHABILITADA: Las tareas ahora solo se crean mediante el Wizard.
-    Los materiales y mano de obra vienen del presupuesto confirmado,
-    no como tareas en etapas.
+    Crea tareas predefinidas en una etapa automáticamente.
+    Usa el catálogo de tareas_predefinidas.py (tareas reales de obra).
+    Idempotente: no crea duplicados si ya existen tareas.
     """
-    # NO crear tareas automáticamente del catálogo
-    # Las tareas deben venir del wizard de configuración de obra
-    return 0
+    from tareas_predefinidas import obtener_tareas_por_etapa
+
+    # Si la etapa ya tiene tareas, no crear más
+    tareas_existentes = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id).count()
+    if tareas_existentes > 0:
+        return 0
+
+    nombre_etapa = nueva_etapa.nombre
+    tareas_predefinidas = obtener_tareas_por_etapa(nombre_etapa)
+
+    if not tareas_predefinidas:
+        return 0
+
+    creadas = 0
+    for tarea_def in tareas_predefinidas:
+        # Saltar tareas opcionales
+        if tarea_def.get('si_aplica'):
+            continue
+
+        tarea = TareaEtapa(
+            etapa_id=nueva_etapa.id,
+            nombre=tarea_def['nombre'],
+            estado='pendiente',
+            horas_estimadas=tarea_def.get('horas', 0),
+            unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+        )
+        db.session.add(tarea)
+        creadas += 1
+
+    if auto_commit and creadas > 0:
+        db.session.flush()
+
+    return creadas
 
 
 # ==== Rutas principales ====
@@ -430,7 +460,8 @@ def lista():
     if org_id:
         query = Obra.query.filter(
             Obra.organizacion_id == org_id,
-            Obra.estado != 'cancelada'  # Excluir obras eliminadas (soft delete)
+            Obra.estado != 'cancelada',  # Excluir obras eliminadas (soft delete)
+            Obra.deleted_at.is_(None)
         )
 
         if not mostrar_borradores:
@@ -458,7 +489,8 @@ def lista():
             # Solo sincronizar si no hay filtro de estado (evitar queries extras)
             obras_planif = Obra.query.filter(
                 Obra.organizacion_id == org_id,
-                Obra.estado == 'planificacion'
+                Obra.estado == 'planificacion',
+                Obra.deleted_at.is_(None)
             ).all()
         sync_changed = False
         for o in obras_planif:
@@ -487,6 +519,7 @@ def lista():
 
 @obras_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
+@require_active_subscription
 def verificar_limite_obras(org_id, lock=False):
     """Verifica si la organización puede crear más obras según su plan.
     Si lock=True, usa SELECT FOR UPDATE para evitar race conditions."""
@@ -500,7 +533,8 @@ def verificar_limite_obras(org_id, lock=False):
     limite = org.max_obras or 1
     cantidad_actual = Obra.query.filter(
         Obra.organizacion_id == org_id,
-        Obra.estado != 'cancelada'
+        Obra.estado != 'cancelada',
+        Obra.deleted_at.is_(None)
     ).count()
     if cantidad_actual >= limite:
         return False, f"Has alcanzado el límite de {limite} obras de tu plan. Para crear más obras, mejorá tu plan."
@@ -561,12 +595,28 @@ def crear():
         geocode_payload = None
         latitud, longitud = None, None
         direccion_normalizada = None
+
+        # Usar coordenadas del frontend si las tiene (más precisas, el usuario las vio en el mapa)
+        geo_lat = request.form.get('geo_lat')
+        geo_lng = request.form.get('geo_lng')
+        if geo_lat and geo_lng:
+            try:
+                latitud = _to_coord_decimal(float(geo_lat))
+                longitud = _to_coord_decimal(float(geo_lng))
+            except (ValueError, TypeError):
+                latitud, longitud = None, None
+
         if direccion:
             direccion_normalizada = normalizar_direccion_argentina(direccion)
-            geocode_payload = resolve_geocode(direccion_normalizada)
-            if geocode_payload:
-                latitud = _to_coord_decimal(geocode_payload.get('lat'))
-                longitud = _to_coord_decimal(geocode_payload.get('lng'))
+            # Solo geocodificar si no tenemos coords del frontend
+            if latitud is None or longitud is None:
+                geocode_payload = resolve_geocode(direccion_normalizada)
+                if geocode_payload:
+                    latitud = _to_coord_decimal(geocode_payload.get('lat'))
+                    longitud = _to_coord_decimal(geocode_payload.get('lng'))
+            else:
+                # Tenemos coords del frontend, armar payload mínimo
+                geocode_payload = {'provider': 'frontend', 'status': 'ok'}
 
         nueva_obra = Obra(
             nombre=nombre,
@@ -660,9 +710,10 @@ def detalle(id):
     tareas_por_etapa = {}
 
     def _cargar_tareas(etapa_ids):
-        """Carga tareas + avances en 2 queries (selectin) en vez de N+1."""
+        """Carga tareas + avances + miembros + responsable en pocas queries (selectin)."""
         tareas = TareaEtapa.query.options(
-            selectinload(TareaEtapa.avances)
+            selectinload(TareaEtapa.avances),
+            selectinload(TareaEtapa.miembros),
         ).filter(TareaEtapa.etapa_id.in_(etapa_ids)).all() if etapa_ids else []
         por_etapa = {}
         for t in tareas:
@@ -813,6 +864,30 @@ def detalle(id):
         porcentaje_obra = 0
 
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
+
+    # También incluir ObraMiembros (creados desde asignar-usuarios)
+    obra_miembros_extra = ObraMiembro.query.filter_by(obra_id=obra.id).all()
+    # Combinar: usar asignaciones + obra_miembros que no estén ya en asignaciones
+    asig_user_ids = {a.usuario_id for a in asignaciones}
+    for om in obra_miembros_extra:
+        if om.usuario_id not in asig_user_ids:
+            # Crear AsignacionObra automáticamente para sincronizar
+            nueva_asig = AsignacionObra(
+                obra_id=obra.id,
+                usuario_id=om.usuario_id,
+                rol_en_obra=om.rol_en_obra or 'operario',
+                etapa_id=om.etapa_id,
+                activo=True
+            )
+            db.session.add(nueva_asig)
+            asignaciones.append(nueva_asig)
+            asig_user_ids.add(om.usuario_id)
+    if obra_miembros_extra:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     # Solo usuarios con membresía activa en esta organización (misma lógica que panel Equipos)
     from models.core import OrgMembership
     usuarios_ids_sub = db.session.query(OrgMembership.user_id).filter(
@@ -862,8 +937,48 @@ def detalle(id):
     # Obtener el presupuesto asociado y sus items (materiales/mano de obra)
     presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
     items_presupuesto = []
+    _materiales_etapas = {}  # item.id -> lista de nombres de etapa
+    _materiales_cantidad = {}  # item.id -> cantidad consolidada
     if presupuesto:
-        items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+        items_presupuesto = ItemPresupuesto.query.options(
+            selectinload(ItemPresupuesto.etapa),
+            selectinload(ItemPresupuesto.item_inventario),
+        ).filter_by(presupuesto_id=presupuesto.id).order_by(ItemPresupuesto.id.asc()).all()
+        # Consolidar materiales duplicados para la vista
+        try:
+            _consolidados = {}
+            _items_consolidados = []
+            for item in items_presupuesto:
+                if item.tipo != 'material':
+                    _items_consolidados.append(item)
+                    continue
+                if item.item_inventario_id:
+                    key = ('inv', item.item_inventario_id)
+                else:
+                    key = ('desc', (item.descripcion or '').strip().lower())
+                etapa_nombre = ''
+                try:
+                    etapa_nombre = item.etapa.nombre if item.etapa else ''
+                except Exception:
+                    pass
+                if key in _consolidados:
+                    _consolidados[key]['cantidad'] += float(item.cantidad or 0)
+                    if etapa_nombre:
+                        _consolidados[key]['etapas'].append(etapa_nombre)
+                else:
+                    _consolidados[key] = {
+                        'item': item,
+                        'cantidad': float(item.cantidad or 0),
+                        'etapas': [etapa_nombre] if etapa_nombre else [],
+                    }
+            for data in _consolidados.values():
+                itm = data['item']
+                _materiales_etapas[itm.id] = data['etapas']
+                _materiales_cantidad[itm.id] = data['cantidad']
+                _items_consolidados.append(itm)
+            items_presupuesto = _items_consolidados
+        except Exception:
+            pass  # Si falla la consolidación, usar items sin consolidar
 
     # Calcular avances de mano de obra por etapa — UN solo query agregado
     avances_mano_obra = {}
@@ -1104,6 +1219,7 @@ def detalle(id):
                          remitos_count=remitos_count,
                          remitos_list=remitos_list,
                          ordenes_compra_list=ordenes_compra_list,
+                         today=date.today(),
                          requerimientos_list=requerimientos_list,
                          hay_desfase_fechas=hay_desfase_fechas,
                          etapas_con_avance=etapas_con_avance,
@@ -1123,6 +1239,8 @@ def detalle(id):
                          certificaciones_recientes=cert_recientes,
                          presupuesto=presupuesto,
                          items_presupuesto=items_presupuesto,
+                         materiales_etapas=_materiales_etapas,
+                         materiales_cantidad=_materiales_cantidad,
                          avances_mano_obra=avances_mano_obra,
                          cuadrillas_por_etapa=cuadrillas_por_etapa,
                          stock_transferido=stock_transferido,
@@ -1385,7 +1503,7 @@ def asignar_usuario(obra_id):
                 flash('Usuarios inválidos', 'danger')
                 return redirect(url_for('obras.detalle', id=obra_id))
 
-        rol_en_obra = request.form.get('rol') or 'operario'
+        rol_en_obra = request.form.get('rol_en_obra') or request.form.get('rol') or 'operario'
         etapa_id = request.form.get('etapa_id') or None
 
         creados = 0
@@ -1412,15 +1530,51 @@ def asignar_usuario(obra_id):
                     flash('Error asignando usuario', 'danger')
                     return redirect(url_for('obras.detalle', id=obra_id))
 
+        # Si se seleccionó una etapa, asignar el usuario como responsable de TODAS las tareas de esa etapa
+        tareas_asignadas = 0
+        if etapa_id:
+            etapa_obj = EtapaObra.query.get(int(etapa_id))
+            if etapa_obj and etapa_obj.obra_id == obra_id:
+                tareas_etapa = TareaEtapa.query.filter_by(etapa_id=int(etapa_id)).all()
+                for tarea in tareas_etapa:
+                    for uid in user_ids_int:
+                        # Asignar como responsable si no tiene uno
+                        if not tarea.responsable_id:
+                            tarea.responsable_id = uid
+                        # Agregar como miembro de la tarea
+                        existe_miembro = TareaMiembro.query.filter_by(
+                            tarea_id=tarea.id, user_id=uid
+                        ).first()
+                        if not existe_miembro:
+                            db.session.add(TareaMiembro(tarea_id=tarea.id, user_id=uid))
+                            tareas_asignadas += 1
+
+        # También crear AsignacionObra para que aparezca en "Equipo Asignado"
+        for uid in user_ids_int:
+            asig_existe = AsignacionObra.query.filter_by(
+                obra_id=obra_id, usuario_id=uid, activo=True
+            ).first()
+            if not asig_existe:
+                db.session.add(AsignacionObra(
+                    obra_id=obra_id,
+                    usuario_id=uid,
+                    etapa_id=int(etapa_id) if etapa_id else None,
+                    rol_en_obra=rol_en_obra,
+                    activo=True
+                ))
+
         db.session.commit()
 
         if is_ajax:
-            return jsonify({"ok": True, "creados": creados, "ya_existian": ya_existian})
+            return jsonify({"ok": True, "creados": creados, "ya_existian": ya_existian, "tareas_asignadas": tareas_asignadas})
         else:
             if creados > 0:
-                flash(f'✅ Se asignaron {creados} usuarios a la obra', 'success')
+                msg = f'Se asignaron {creados} usuarios a la obra'
+                if tareas_asignadas > 0:
+                    msg += f' y {tareas_asignadas} tareas asignadas automáticamente'
+                flash(msg, 'success')
             if ya_existian > 0:
-                flash(f'ℹ️ {ya_existian} usuarios ya estaban asignados', 'info')
+                flash(f'{ya_existian} usuarios ya estaban asignados', 'info')
             return redirect(url_for('obras.detalle', id=obra_id))
 
     except Exception as e:
@@ -1481,11 +1635,12 @@ def agregar_etapa(id):
 
 @obras_bp.route("/tareas/crear", methods=['POST'])
 @login_required
+@require_active_subscription
 def crear_tareas():
     """Crear una o múltiples tareas (con o sin sugeridas)."""
     try:
         obra_id = request.form.get("obra_id", type=int)
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
 
         if not can_manage_obra(obra):
             return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
@@ -1634,9 +1789,7 @@ def asignar_usuarios():
         if not tarea_ids or not user_ids:
             return jsonify(ok=False, error='Faltan tareas o usuarios'), 400
 
-        primera_tarea = TareaEtapa.query.get(int(tarea_ids[0]))
-        if not primera_tarea:
-            return jsonify(ok=False, error="Tarea no encontrada"), 404
+        primera_tarea = validate_tarea_ownership(int(tarea_ids[0]))
 
         obra = primera_tarea.etapa.obra
         if not can_manage_obra(obra):
@@ -2155,6 +2308,7 @@ def normalize_unit(unit):
 
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
 @login_required
+@require_active_subscription
 def crear_avance(tarea_id):
     """Registrar avance con fotos (operarios desde dashboard)."""
     try:
@@ -2401,14 +2555,11 @@ def completar_tarea(tarea_id):
     """Completar tarea - solo si restante = 0"""
     from models import resumen_tarea as _rt
 
-    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    tarea = validate_tarea_ownership(tarea_id)
     obra = tarea.etapa.obra
 
     if not can_manage_obra(obra):
         return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
-
-    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
-        return jsonify(ok=False, error="Sin permiso"), 403
 
     try:
         m = _rt(tarea)
@@ -3237,9 +3388,30 @@ def api_analizar_materiales(obra_id):
         if not presupuesto:
             return jsonify({'ok': False, 'error': 'Esta obra no tiene presupuesto confirmado'}), 400
 
-        materiales = [item for item in presupuesto.items if item.tipo == 'material']
-        if not materiales:
+        materiales_raw = [item for item in presupuesto.items if item.tipo == 'material']
+        if not materiales_raw:
             return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
+
+        # Consolidar materiales duplicados (mismo item_inventario o misma descripción)
+        _mat_consolidados = {}
+        for item in materiales_raw:
+            if item.item_inventario_id:
+                key = ('inv', item.item_inventario_id)
+            else:
+                key = ('desc', (item.descripcion or '').strip().lower())
+            if key in _mat_consolidados:
+                existing = _mat_consolidados[key]
+                existing['_cantidad_total'] += float(item.cantidad or 0)
+            else:
+                _mat_consolidados[key] = {
+                    'item': item,
+                    '_cantidad_total': float(item.cantidad or 0),
+                }
+        materiales = []
+        for data in _mat_consolidados.values():
+            item = data['item']
+            item._cantidad_consolidada_api = data['_cantidad_total']
+            materiales.append(item)
 
         # Obtener cantidades ya pedidas en requerimientos de compra activos
         ya_pedido_por_item = {}  # item_inventario_id -> cantidad total pedida
@@ -3267,7 +3439,7 @@ def api_analizar_materiales(obra_id):
         sin_vincular = []
 
         for material in materiales:
-            cantidad_necesaria = float(material.cantidad or 0)
+            cantidad_necesaria = float(getattr(material, '_cantidad_consolidada_api', material.cantidad) or 0)
             if cantidad_necesaria <= 0:
                 continue
 
@@ -4034,9 +4206,7 @@ def api_tareas_bulk_delete():
     if not ids:
         return jsonify({'error': 'No se proporcionaron IDs', 'ok': False}), 400
 
-    primera_tarea = TareaEtapa.query.get(ids[0])
-    if not primera_tarea:
-        return jsonify({'error': 'Tarea no encontrada', 'ok': False}), 404
+    primera_tarea = validate_tarea_ownership(ids[0])
 
     obra = primera_tarea.etapa.obra
     if not can_manage_obra(obra):
@@ -4111,6 +4281,9 @@ def api_etapas_bulk_delete():
 
     primera_etapa = EtapaObra.query.get(ids[0])
     if not primera_etapa:
+        return jsonify({'error': 'Etapa no encontrada', 'ok': False}), 404
+    org_id = get_org_id()
+    if not org_id or primera_etapa.obra.organizacion_id != org_id:
         return jsonify({'error': 'Etapa no encontrada', 'ok': False}), 404
 
     obra = primera_etapa.obra
@@ -4408,7 +4581,7 @@ def actualizar_estado_tarea(id):
 @login_required
 def api_editar_datos_tarea(tarea_id):
     """Editar horas, cantidad, unidad, rendimiento y fechas de una tarea."""
-    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    tarea = validate_tarea_ownership(tarea_id)
     obra = tarea.etapa.obra
 
     if not can_manage_obra(obra):
@@ -4466,7 +4639,45 @@ def api_editar_datos_tarea(tarea_id):
             else:
                 tarea.responsable_id = None
 
+        # Recalcular fecha fin basada en horas (si tiene fecha inicio y horas)
+        if tarea.fecha_inicio_plan and tarea.horas_estimadas and float(tarea.horas_estimadas) > 0:
+            from services.dependency_service import _sumar_dias_habiles
+            horas = float(tarea.horas_estimadas)
+            dias_necesarios = max(1, int(horas / 8))  # 8 horas por día hábil
+            nueva_fin = _sumar_dias_habiles(tarea.fecha_inicio_plan, dias_necesarios - 1)
+            tarea.fecha_fin_plan = nueva_fin
+            tarea.fecha_fin_estimada = nueva_fin
+
         db.session.commit()
+
+        # Propagar encadenamiento: actualizar fechas de tareas siguientes en la misma etapa
+        try:
+            from services.dependency_service import _siguiente_dia_habil, _sumar_dias_habiles
+            tareas_etapa = TareaEtapa.query.filter_by(
+                etapa_id=tarea.etapa_id
+            ).order_by(TareaEtapa.id).all()
+
+            fecha_cursor = None
+            cambios = False
+            for t in tareas_etapa:
+                if fecha_cursor and t.fecha_inicio_plan != fecha_cursor:
+                    t.fecha_inicio_plan = fecha_cursor
+                    t.fecha_inicio_estimada = fecha_cursor
+                    if t.horas_estimadas and float(t.horas_estimadas) > 0:
+                        dias = max(1, int(float(t.horas_estimadas) / 8))
+                        t.fecha_fin_plan = _sumar_dias_habiles(fecha_cursor, dias - 1)
+                        t.fecha_fin_estimada = t.fecha_fin_plan
+                    cambios = True
+
+                if t.fecha_fin_plan:
+                    fecha_cursor = _siguiente_dia_habil(t.fecha_fin_plan, 1)
+                elif t.fecha_inicio_plan:
+                    fecha_cursor = _siguiente_dia_habil(t.fecha_inicio_plan, 1)
+
+            if cambios:
+                db.session.commit()
+        except Exception as e:
+            current_app.logger.warning(f"Error propagando fechas de tareas: {e}")
 
         return jsonify(
             ok=True,
@@ -4484,7 +4695,7 @@ def api_editar_datos_tarea(tarea_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception("Error al editar datos de tarea")
-        return jsonify(ok=False, error="Error interno"), 500
+        return jsonify(ok=False, error=f"Error al guardar: {str(e)[:200]}"), 500
 
 
 @obras_bp.route('/tareas/<int:tarea_id>/asignar', methods=['POST'])
@@ -4544,6 +4755,7 @@ def historial_certificaciones(id):
 @login_required
 def certificacion_unificada_preview(obra_id):
     """API: preview unificado etapas + operarios para un período."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import generar_preview_unificado
     desde = request.args.get('desde')
     hasta = request.args.get('hasta')
@@ -4569,6 +4781,7 @@ def certificacion_unificada_preview(obra_id):
 @login_required
 def liquidacion_mo_preview(obra_id):
     """API: preview de liquidación para un período (legacy)."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import generar_preview_liquidacion
     desde = request.args.get('desde')
     hasta = request.args.get('hasta')
@@ -4588,6 +4801,7 @@ def liquidacion_mo_preview(obra_id):
 @login_required
 def crear_liquidacion_mo(obra_id):
     """Crear una liquidación de mano de obra."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import crear_liquidacion
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
@@ -4616,6 +4830,7 @@ def crear_liquidacion_mo(obra_id):
 @login_required
 def confirmar_y_pagar_liquidacion(obra_id):
     """Crea liquidación + marca como pagado + actualiza costo_real en un solo paso."""
+    validate_obra_ownership(obra_id)
     from services.liquidacion_mo import crear_liquidacion, registrar_pago_item
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
@@ -4650,7 +4865,7 @@ def confirmar_y_pagar_liquidacion(obra_id):
         # 3. Recalcular costo_real de la obra
         from services.liquidacion_mo import _decimal
         from models.templates import LiquidacionMOItem, LiquidacionMO as LiqMO
-        obra = Obra.query.get(obra_id)
+        obra = validate_obra_ownership(obra_id)
 
         costo_mo_pagado = _decimal(
             db.session.query(db.func.coalesce(db.func.sum(LiquidacionMOItem.monto), 0))
@@ -4691,6 +4906,9 @@ def recibo_liquidacion_pdf(item_id):
         abort(403)
     liq = item.liquidacion
     obra = liq.obra
+    org_id = get_org_id()
+    if not org_id or obra.organizacion_id != org_id:
+        abort(404)
     org = obra.organizacion if hasattr(obra, 'organizacion') else None
 
     html_content = render_template('obras/recibo_liquidacion_pdf.html',
@@ -4728,6 +4946,9 @@ def recibo_liquidacion_completa_pdf(liq_id):
     if liq.obra.organizacion_id != get_current_org_id():
         abort(403)
     obra = liq.obra
+    org_id = get_org_id()
+    if not org_id or obra.organizacion_id != org_id:
+        abort(404)
     org = obra.organizacion if hasattr(obra, 'organizacion') else None
     items = liq.items.all()
 
@@ -4763,6 +4984,12 @@ def pagar_liquidacion_mo_item(item_id):
     if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
         return jsonify(ok=False, error='Sin permisos'), 403
 
+    # Validate org ownership
+    liq_item = LiquidacionMOItem.query.get_or_404(item_id)
+    org_id = get_org_id()
+    if not org_id or liq_item.liquidacion.obra.organizacion_id != org_id:
+        abort(404)
+
     data = request.get_json(silent=True) or {}
     try:
         metodo = data.get('metodo_pago', 'transferencia')
@@ -4782,6 +5009,7 @@ def pagar_liquidacion_mo_item(item_id):
 @login_required
 def liquidacion_mo_historial(obra_id):
     """API: obtener historial de liquidaciones de una obra."""
+    validate_obra_ownership(obra_id)
     try:
         from services.liquidacion_mo import obtener_liquidaciones_obra
         liquidaciones = obtener_liquidaciones_obra(obra_id)
@@ -4843,6 +5071,9 @@ def desactivar_certificacion(id):
     if certificacion.obra.organizacion_id != get_current_org_id():
         abort(403)
     obra = certificacion.obra
+    org_id = get_org_id()
+    if not org_id or obra.organizacion_id != org_id:
+        abort(404)
 
     try:
         certificacion.activa = False
@@ -4956,6 +5187,9 @@ def cambiar_estado_etapa(etapa_id):
         return redirect(url_for('reportes.dashboard'))
 
     etapa = EtapaObra.query.get_or_404(etapa_id)
+    org_id = get_org_id()
+    if not org_id or etapa.obra.organizacion_id != org_id:
+        abort(404)
     nuevo_estado = request.form.get('estado')
 
     estados_validos = ['pendiente', 'en_curso', 'pausada', 'finalizada']
@@ -5006,7 +5240,7 @@ def propagar_fechas(id):
         flash('No tienes permisos para ajustar fechas.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
 
-    obra = Obra.query.get_or_404(id)
+    obra = validate_obra_ownership(id)
     try:
         result = propagar_fechas_etapas(obra.id)
         if result['shifted_count'] > 0:
@@ -5028,6 +5262,9 @@ def propagar_fechas(id):
 def editar_fechas_etapa(etapa_id):
     """Editar fechas de una etapa manualmente (admin/técnico)."""
     etapa = EtapaObra.query.get_or_404(etapa_id)
+    org_id = get_org_id()
+    if not org_id or etapa.obra.organizacion_id != org_id:
+        abort(404)
     roles = _get_roles_usuario(current_user)
     if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
         return jsonify({'error': 'Sin permisos'}), 403
@@ -5121,6 +5358,9 @@ def editar_fechas_etapa(etapa_id):
 def cambiar_nivel_etapa(etapa_id):
     """Cambiar nivel de encadenamiento de una etapa."""
     etapa = EtapaObra.query.get_or_404(etapa_id)
+    org_id = get_org_id()
+    if not org_id or etapa.obra.organizacion_id != org_id:
+        abort(404)
     roles = _get_roles_usuario(current_user)
     if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
         return jsonify({'error': 'Sin permisos'}), 403
@@ -5408,7 +5648,7 @@ def get_wizard_etapas():
             response.headers['Content-Type'] = 'application/json'
             return response, 400
 
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
         if not can_manage_obra(obra):
             response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
             response.headers['Content-Type'] = 'application/json'
@@ -5475,8 +5715,8 @@ def api_calcular_superficie_etapa():
 
         # Si no se pasó superficie, obtenerla de la obra
         if superficie_cubierta is None and obra_id:
-            obra = Obra.query.get(obra_id)
-            if obra and obra.superficie_cubierta:
+            obra = validate_obra_ownership(obra_id)
+            if obra.superficie_cubierta:
                 superficie_cubierta = float(obra.superficie_cubierta)
             else:
                 return jsonify({
@@ -5517,8 +5757,8 @@ def api_get_factores_superficie():
 
         # Si se pasa obra_id, obtener superficie de la obra
         if obra_id and not superficie_cubierta:
-            obra = Obra.query.get(obra_id)
-            if obra and obra.superficie_cubierta:
+            obra = validate_obra_ownership(obra_id)
+            if obra.superficie_cubierta:
                 superficie_cubierta = float(obra.superficie_cubierta)
 
         # Si hay superficie, calcular todas las etapas
@@ -5618,7 +5858,7 @@ def wizard_tareas_opciones():
             response.headers['Content-Type'] = 'application/json'
             return response, 400
 
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
         if not can_manage_obra(obra):
             response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
             response.headers['Content-Type'] = 'application/json'
@@ -5656,6 +5896,109 @@ def wizard_tareas_opciones():
         return jsonify({"ok": False, "error": str(e)}), 400
 
 
+@obras_bp.route('/<int:obra_id>/recargar-tareas', methods=['POST'])
+@login_required
+@require_active_subscription
+def recargar_tareas_predefinidas(obra_id):
+    """
+    Elimina tareas existentes de todas las etapas de una obra
+    y las reemplaza con las tareas predefinidas correctas.
+    Solo para admin. Preserva tareas con avances > 0.
+    """
+    try:
+        obra = validate_obra_ownership(obra_id)
+        if not can_manage_obra(obra):
+            flash('Sin permisos para gestionar esta obra.', 'danger')
+            return redirect(url_for('obras.detalle', id=obra_id))
+
+        from tareas_predefinidas import obtener_tareas_por_etapa
+
+        etapas = EtapaObra.query.filter_by(obra_id=obra_id).all()
+        total_eliminadas = 0
+        total_creadas = 0
+
+        for etapa in etapas:
+            tareas_predefinidas = obtener_tareas_por_etapa(etapa.nombre)
+            if not tareas_predefinidas:
+                continue
+
+            # Buscar operario asignado a esta etapa (de AsignacionObra)
+            asignacion_etapa = AsignacionObra.query.filter_by(
+                obra_id=obra_id, etapa_id=etapa.id, activo=True
+            ).first()
+            responsable_id = asignacion_etapa.usuario_id if asignacion_etapa else None
+
+            # Si no hay asignación por etapa, buscar responsable de tareas existentes
+            if not responsable_id:
+                tareas_con_resp = TareaEtapa.query.filter(
+                    TareaEtapa.etapa_id == etapa.id,
+                    TareaEtapa.responsable_id.isnot(None)
+                ).first()
+                if tareas_con_resp:
+                    responsable_id = tareas_con_resp.responsable_id
+
+            # Obtener tareas actuales
+            tareas_actuales = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
+
+            # Eliminar tareas SIN avances (preservar las que tienen progreso)
+            for tarea in tareas_actuales:
+                try:
+                    avances_count = TareaAvance.query.filter_by(tarea_id=tarea.id).count()
+                except Exception:
+                    avances_count = 0
+                if avances_count == 0 and tarea.porcentaje_avance in (None, 0):
+                    TareaMiembro.query.filter_by(tarea_id=tarea.id).delete()
+                    db.session.delete(tarea)
+                    total_eliminadas += 1
+
+            db.session.flush()
+
+            # Crear tareas predefinidas con operario asignado
+            nombres_existentes = {t.nombre for t in TareaEtapa.query.filter_by(etapa_id=etapa.id).all()}
+
+            for tarea_def in tareas_predefinidas:
+                if tarea_def.get('si_aplica'):
+                    continue
+                if tarea_def['nombre'] in nombres_existentes:
+                    continue
+
+                nueva = TareaEtapa(
+                    etapa_id=etapa.id,
+                    nombre=tarea_def['nombre'],
+                    estado='pendiente',
+                    horas_estimadas=tarea_def.get('horas', 0),
+                    unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+                    responsable_id=responsable_id,
+                )
+                db.session.add(nueva)
+                db.session.flush()
+
+                # Agregar como miembro de la tarea
+                if responsable_id:
+                    db.session.add(TareaMiembro(tarea_id=nueva.id, user_id=responsable_id))
+
+                total_creadas += 1
+
+        db.session.commit()
+
+        # Distribuir fechas, horas y cantidades a las nuevas tareas (encadenamiento)
+        for etapa in etapas:
+            try:
+                distribuir_datos_etapa_a_tareas(etapa.id, forzar=True)
+            except Exception:
+                pass
+        db.session.commit()
+
+        flash(f'Tareas actualizadas: {total_eliminadas} eliminadas, {total_creadas} creadas con fechas encadenadas.', 'success')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error recargando tareas: {e}", exc_info=True)
+        flash(f'Error al recargar tareas: {str(e)[:200]}', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+
 @obras_bp.route('/api/wizard-tareas/budget-preview', methods=['POST'])
 @login_required
 def wizard_budget_preview():
@@ -5691,7 +6034,7 @@ def wizard_create_tasks():
         if not tareas_data:
             return jsonify({'ok': False, 'error': 'No hay tareas para crear'}), 400
 
-        obra = Obra.query.get_or_404(obra_id)
+        obra = validate_obra_ownership(obra_id)
         if not can_manage_obra(obra):
             return jsonify({'ok': False, 'error': 'Sin permisos para gestionar esta obra'}), 403
 
@@ -5822,6 +6165,7 @@ def wizard_create_tasks():
 @login_required
 def crear_remito(obra_id):
     """Crear un remito manualmente."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito, RemitoItem
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'administrador', 'pm', 'project_manager', 'jefe_obra'}):
@@ -5873,6 +6217,7 @@ def crear_remito(obra_id):
 @login_required
 def ver_remito(obra_id, remito_id):
     """API: obtener detalle de un remito."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito
     remito = Remito.query.get_or_404(remito_id)
     if remito.obra.organizacion_id != get_current_org_id():
@@ -5901,6 +6246,7 @@ def ver_remito(obra_id, remito_id):
 @login_required
 def eliminar_remito(obra_id, remito_id):
     """Eliminar un remito."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'administrador', 'pm', 'project_manager'}):
@@ -5926,6 +6272,7 @@ def eliminar_remito(obra_id, remito_id):
 @login_required
 def remito_pdf(obra_id, remito_id):
     """Genera PDF del remito con la misma estetica que presupuestos."""
+    validate_obra_ownership(obra_id)
     from models.inventory import Remito
     from weasyprint import HTML
     import io, os, base64
@@ -6170,7 +6517,7 @@ def equipos_movimientos():
     org_id = current_user.organizacion_id
 
     equipos = Equipment.query.filter_by(company_id=org_id).order_by(Equipment.nombre).all()
-    obras = Obra.query.filter_by(organizacion_id=org_id, estado='en_curso').order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id, estado='en_curso').filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # Últimos movimientos
     movimientos = EquipmentMovement.query.filter_by(company_id=org_id)\

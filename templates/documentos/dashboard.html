@@ -202,7 +202,7 @@
                             </a>
                         </div>
                         {% endif %}
-                        {% if current_user.rol == 'administrador' and has_endpoint('documentos.configuracion_tipos') %}
+                        {% if current_user.role == 'admin' and has_endpoint('documentos.configuracion_tipos') %}
                         <div class="col-md-3">
                             <a href="{{ url_for('documentos.configuracion_tipos') }}" class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center py-3">
                                 <i class="fas fa-cog fa-2x me-3"></i>

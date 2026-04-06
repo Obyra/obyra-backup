@@ -265,7 +265,7 @@ class ProjectService(BaseService[Obra]):
             raise NotFoundException('Usuario', user_id)
 
         return (
-            usuario.rol == 'administrador' or
+            usuario.role == 'admin' or
             getattr(usuario, 'puede_pausar_obras', False) or
             usuario.organizacion_id == obra.organizacion_id
         )

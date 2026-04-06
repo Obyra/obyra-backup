@@ -10,7 +10,7 @@ class Equipment(db.Model):
     __tablename__ = 'equipment'
 
     id = db.Column(db.Integer, primary_key=True)
-    company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
     nombre = db.Column(db.String(200), nullable=False)
     codigo = db.Column(db.String(50))  # Código interno: MAQ-001, GRU-003, etc.
     tipo = db.Column(db.String(100), nullable=False)  # hormigonera, guinche, martillo, etc.

@@ -143,6 +143,21 @@ class Presupuesto(db.Model):
     def __repr__(self):
         return f'<Presupuesto {self.numero}>'
 
+    def soft_delete(self):
+        """Marca el presupuesto como eliminado sin borrar datos."""
+        self.deleted_at = datetime.utcnow()
+        self.estado = 'eliminado'
+
+    def restore(self):
+        """Restaura un presupuesto eliminado."""
+        self.deleted_at = None
+        self.estado = 'borrador'
+
+    @classmethod
+    def query_active(cls):
+        """Query que excluye presupuestos soft-deleted."""
+        return cls.query.filter(cls.deleted_at.is_(None))
+
     def calcular_totales(self):
         """
         Calcula todos los totales del presupuesto usando el calculador centralizado.

@@ -6,7 +6,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app)
 from flask_login import login_required, current_user
 from datetime import datetime
-from extensions import db, csrf
+from extensions import db
 from sqlalchemy import or_
 
 proveedores_oc_bp = Blueprint('proveedores_oc', __name__, url_prefix='/proveedores-oc')

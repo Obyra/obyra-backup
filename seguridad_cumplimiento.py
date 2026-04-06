@@ -574,6 +574,7 @@ def obtener_obras_sin_inspeccion_reciente(org_id=None):
     obras_sin_inspeccion = Obra.query.filter(
         Obra.organizacion_id == org_id,
         Obra.estado == 'en_curso',
+        Obra.deleted_at.is_(None),
         ~Obra.id.in_(obras_con_inspeccion)
     ).all()
 

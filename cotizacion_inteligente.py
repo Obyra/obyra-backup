@@ -20,8 +20,8 @@ cotizacion_bp = Blueprint('cotizacion', __name__)
 def dashboard():
     """Dashboard del módulo de cotización inteligente"""
     # Estadísticas de cotizaciones
-    total_cotizaciones = Presupuesto.query.count()
-    cotizaciones_aprobadas = Presupuesto.query.filter_by(estado='aprobado').count()
+    total_cotizaciones = Presupuesto.query.filter(Presupuesto.deleted_at.is_(None)).count()
+    cotizaciones_aprobadas = Presupuesto.query.filter_by(estado='aprobado').filter(Presupuesto.deleted_at.is_(None)).count()
     tasa_conversion = (cotizaciones_aprobadas / total_cotizaciones * 100) if total_cotizaciones > 0 else 0
     
     # Cotizaciones recientes
@@ -95,7 +95,7 @@ def paso_revision():
         return redirect(url_for('cotizacion.calculadora_inteligente'))
     
     # Obtener obras existentes para el selector
-    obras = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
     
     return render_template('cotizacion/revision.html', datos=datos, obras=obras)
 

@@ -119,6 +119,7 @@ def obtener_alertas_obras_demoradas(org_id, limite=5):
 
     obras = Obra.query.filter(
         Obra.organizacion_id == org_id,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso']),
         Obra.fecha_fin_estimada.isnot(None),
         Obra.fecha_fin_estimada < hoy
@@ -320,6 +321,7 @@ def obtener_alertas_sobrecosto(org_id, limite=5, umbral_porcentaje=10):
 
     obras = Obra.query.filter(
         Obra.organizacion_id == org_id,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['en_curso']),
         Obra.presupuesto_total > 0,
         Obra.costo_real > 0

@@ -87,7 +87,7 @@ def lista():
         return json_resp
     
     # Obtener datos para filtros
-    projects = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).all()
+    projects = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).filter(Obra.deleted_at.is_(None)).all()
     tipos = db.session.query(Equipment.tipo).filter_by(company_id=current_user.organizacion_id).distinct().all()
     
     return render_template('equipos_new/lista.html', 

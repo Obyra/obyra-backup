@@ -5,7 +5,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app)
 from flask_login import login_required, current_user
 from datetime import datetime
-from extensions import db, csrf
+from extensions import db
 from models import Cliente
 from services.memberships import get_current_org_id
 from sqlalchemy import or_

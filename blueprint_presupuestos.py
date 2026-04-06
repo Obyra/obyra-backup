@@ -24,11 +24,12 @@ from flask import (Blueprint, render_template, request, flash, redirect,
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from extensions import db, csrf, limiter
+from extensions import db, limiter
 from sqlalchemy import desc, or_
 from models import Presupuesto, ItemPresupuesto, Obra, Organizacion, Cliente
 from services.calculation import BudgetCalculator, BudgetConstants
 from services.memberships import get_current_org_id, get_current_membership
+from services.plan_service import require_active_subscription
 from utils.pagination import Pagination
 from utils import safe_int
 import io
@@ -187,6 +188,7 @@ def lista():
 
         # Query base - excluir presupuestos eliminados y presupuestos confirmados como obras
         query = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
+            Presupuesto.deleted_at.is_(None),
             Presupuesto.estado != 'eliminado',
             or_(
                 Presupuesto.confirmado_como_obra.is_(False),
@@ -230,7 +232,7 @@ def lista():
         db.session.commit()
 
         # Obras disponibles para filtro
-        obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+        obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
         return render_template('presupuestos/lista.html',
                              presupuestos=presupuestos.items,
@@ -247,6 +249,7 @@ def lista():
 
 @presupuestos_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
+@require_active_subscription
 def crear():
     """Crear nuevo presupuesto"""
     # Log database info for debugging
@@ -526,7 +529,7 @@ def crear():
             return redirect(url_for('presupuestos.detalle', id=presupuesto.id))
 
         # GET - Mostrar formulario
-        obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+        obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
         # Generar número de presupuesto sugerido ÚNICO
         fecha_hoy = date.today().strftime('%Y%m%d')
@@ -577,6 +580,7 @@ def crear():
 
 @presupuestos_bp.route('/crear-manual', methods=['GET', 'POST'])
 @login_required
+@require_active_subscription
 def crear_manual():
     """Crear nuevo presupuesto de forma manual (sin IA)"""
     # Verificar permisos de gestión
@@ -1560,6 +1564,7 @@ def identificar_etapa_por_tipo(item):
 
 @presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
 @login_required
+@require_active_subscription
 def confirmar_como_obra(id):
     """Confirmar presupuesto y convertirlo en obra"""
     try:
@@ -1774,24 +1779,42 @@ def confirmar_como_obra(id):
 
         db.session.flush()
 
-        # Opcionalmente crear tareas desde los ítems del presupuesto
+        # Crear tareas predefinidas por etapa (tareas de OBRA, no materiales)
         if crear_tareas:
-            for etapa_nombre, items_etapa in etapas_dict.items():
-                etapa_id = etapas_creadas[etapa_nombre]
+            from tareas_predefinidas import obtener_tareas_por_etapa
+            tareas_creadas_count = 0
 
-                # Crear tareas para cada ítem de la etapa
-                for item in items_etapa:
+            for etapa_nombre in etapas_dict.keys():
+                etapa_id = etapas_creadas[etapa_nombre]
+                tareas_predefinidas = obtener_tareas_por_etapa(etapa_nombre)
+
+                if tareas_predefinidas:
+                    # Usar tareas predefinidas (son tareas de obra reales)
+                    for tarea_def in tareas_predefinidas:
+                        # Saltar tareas opcionales marcadas con si_aplica
+                        if tarea_def.get('si_aplica'):
+                            continue
+                        tarea = TareaEtapa(
+                            etapa_id=etapa_id,
+                            nombre=tarea_def['nombre'],
+                            estado='pendiente',
+                            horas_estimadas=tarea_def.get('horas', 0),
+                            unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+                        )
+                        db.session.add(tarea)
+                        tareas_creadas_count += 1
+                else:
+                    # Fallback: si no hay tareas predefinidas, crear tarea genérica por etapa
                     tarea = TareaEtapa(
                         etapa_id=etapa_id,
-                        nombre=item.descripcion,
+                        nombre=f'Ejecución {etapa_nombre}',
                         estado='pendiente',
-                        cantidad_planificada=float(item.cantidad) if item.cantidad else 0,
-                        unidad=item.unidad or 'un',
-                        item_presupuesto_id=item.id  # Vincular tarea con item del presupuesto
+                        unidad='un',
                     )
                     db.session.add(tarea)
+                    tareas_creadas_count += 1
 
-            current_app.logger.info(f"Creadas tareas para {len(etapas_dict)} etapas en obra {obra.id}")
+            current_app.logger.info(f"Creadas {tareas_creadas_count} tareas predefinidas para {len(etapas_dict)} etapas en obra {obra.id}")
 
         db.session.commit()
 
@@ -2045,11 +2068,13 @@ def editar_item(id):
         if not org_id:
             return jsonify({'exito': False, 'error': 'Sin organización activa'}), 400
 
-        item = ItemPresupuesto.query.get_or_404(id)
+        item = ItemPresupuesto.query.get(id)
+        if not item:
+            abort(404)
         presupuesto = item.presupuesto
 
         if presupuesto.organizacion_id != org_id:
-            return jsonify({'exito': False, 'error': 'No autorizado'}), 403
+            abort(404)
 
         if presupuesto.estado != 'borrador':
             return jsonify({'exito': False, 'error': 'Solo se pueden editar items de presupuestos en borrador'}), 400
@@ -2134,7 +2159,9 @@ def eliminar_item(id):
         if not org_id:
             return jsonify({'ok': False, 'error': 'Sin organización activa'}), 400
 
-        item = ItemPresupuesto.query.get_or_404(id)
+        item = ItemPresupuesto.query.get(id)
+        if not item:
+            abort(404)
         presupuesto = item.presupuesto
 
         if presupuesto.organizacion_id != org_id:

@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc
 from app import db
+from services.plan_service import require_feature
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario,
                    Organizacion, OrgMembership, ItemPresupuesto, EtapaObra,
@@ -32,9 +33,9 @@ reportes_bp = Blueprint('reportes', __name__)
 @reportes_bp.route('/audit-log')
 @login_required
 def audit_log():
-    """Vista del registro de auditoría — solo admin."""
-    if current_user.role not in ('admin',) and not current_user.is_super_admin:
-        flash('No tienes permisos para ver el registro de auditoría.', 'danger')
+    """Vista del registro de auditoría — solo super admin."""
+    if not getattr(current_user, 'is_super_admin', False):
+        flash('Acceso restringido a super administradores.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
     from models.audit import AuditLog
@@ -201,20 +202,23 @@ def dashboard():
         func.count(Obra.id)
     ).filter(
         Obra.organizacion_id == org_id,
-        visible_clause
+        visible_clause,
+        Obra.deleted_at.is_(None)
     ).group_by(Obra.estado).all()
 
     # Obras con ubicación para el mapa (filtradas por organización)
     obras_con_ubicacion = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.direccion.isnot(None),
         Obra.direccion != ''
     ).all()
 
     # Presupuestos recientes
     presupuestos_recientes = Presupuesto.query.filter(
-        Presupuesto.organizacion_id == org_id
+        Presupuesto.organizacion_id == org_id,
+        Presupuesto.deleted_at.is_(None)
     ).order_by(desc(Presupuesto.fecha_creacion)).limit(5).all()
 
     # Bulk update: marcar presupuestos expirados como vencidos en una sola query
@@ -290,6 +294,7 @@ def dashboard():
     obras_vencimiento = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.fecha_fin_estimada <= fecha_limite,
         Obra.fecha_fin_estimada >= date.today(),
         Obra.estado.in_(['planificacion', 'en_curso'])
@@ -302,6 +307,7 @@ def dashboard():
     obras_activas = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).order_by(desc(Obra.fecha_creacion)).limit(10).all()
 
@@ -370,6 +376,20 @@ def dashboard():
     # Datos financieros para gráficos
     datos_financieros = calcular_datos_financieros(obras_activas, org_id)
 
+    # Entregas próximas de OC (próximos 7 días)
+    entregas_proximas = []
+    try:
+        from models.inventory import OrdenCompra
+        fecha_limite_oc = date.today() + timedelta(days=7)
+        entregas_proximas = OrdenCompra.query.filter(
+            OrdenCompra.organizacion_id == org_id,
+            OrdenCompra.estado.in_(['emitida', 'recibida_parcial']),
+            OrdenCompra.fecha_entrega_estimada.isnot(None),
+            OrdenCompra.fecha_entrega_estimada <= fecha_limite_oc,
+        ).order_by(OrdenCompra.fecha_entrega_estimada).all()
+    except Exception:
+        pass
+
     return render_template('reportes/dashboard.html',
                          kpis=kpis,
                          obras_activas=obras_activas,
@@ -386,6 +406,7 @@ def dashboard():
                          show_reports_banner=show_reports_banner,
                          encargados_obra=encargados_obra,
                          datos_financieros=datos_financieros,
+                         entregas_proximas=entregas_proximas,
                          fecha_hoy=date.today())
 
 
@@ -548,7 +569,7 @@ def calcular_datos_financieros(obras_activas, org_id):
         presupuesto_ids = [p.id for o in obras_activas
                           for p in (Presupuesto.query.filter_by(
                               obra_id=o.id, organizacion_id=org_id
-                          ).all())]
+                          ).filter(Presupuesto.deleted_at.is_(None)).all())]
         if presupuesto_ids:
             desglose = db.session.query(
                 ItemPresupuesto.tipo,
@@ -695,6 +716,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     obras_activas = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).count()
 
@@ -703,6 +725,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     obras_nuevas_mes = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.fecha_creacion >= primer_dia_mes
     ).count()
 
@@ -712,6 +735,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     ).filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
     costo_total_millones = float(presupuesto_total) / 1000000 if presupuesto_total else 0
@@ -722,6 +746,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     ).filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso']),
         Obra.costo_real.isnot(None)
     ).scalar() or 0
@@ -737,6 +762,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     ).filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
     
@@ -744,6 +770,7 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
     obras_retrasadas = Obra.query.filter(
         Obra.organizacion_id == org_id,
         visible_clause,
+        Obra.deleted_at.is_(None),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).filter(
         Obra.progreso < 50  # Simplificado: menos del 50% se considera retrasado
@@ -816,7 +843,7 @@ def reporte_obras():
     fecha_hasta = request.args.get('fecha_hasta', '')
 
     # Base query con filtro de organización (excluir canceladas/eliminadas)
-    query = Obra.query.filter(Obra.organizacion_id == org_id)
+    query = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None))
     if not estado:
         query = query.filter(Obra.estado != 'cancelada')
 
@@ -1070,7 +1097,8 @@ def reporte_obras():
         if obra_ids_list:
             pres_ids = [p.id for p in Presupuesto.query.filter(
                 Presupuesto.obra_id.in_(obra_ids_list),
-                Presupuesto.organizacion_id == org_id
+                Presupuesto.organizacion_id == org_id,
+                Presupuesto.deleted_at.is_(None)
             ).all()]
             if pres_ids:
                 for tipo, total in db.session.query(
@@ -1123,6 +1151,7 @@ def reporte_obras():
 
 @reportes_bp.route('/costos')
 @login_required
+@require_feature('reports.costos')
 def reporte_costos():
     if not current_user.puede_acceder_modulo('reportes'):
         flash('No tienes permisos para ver reportes de costos.', 'danger')
@@ -1135,7 +1164,7 @@ def reporte_costos():
     agrupar_por = request.args.get('agrupar', 'obra')  # obra, categoria, mes
 
     # Obtener obras de la organización
-    obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # OPTIMIZACION: Base query con EAGER LOADING para evitar N+1
     from sqlalchemy.orm import joinedload
@@ -1440,6 +1469,7 @@ def reporte_costos():
 
 @reportes_bp.route('/inventario')
 @login_required
+@require_feature('reports.inventario')
 def reporte_inventario():
     if not current_user.puede_acceder_modulo('reportes'):
         flash('No tienes permisos para ver reportes de inventario.', 'danger')
@@ -1706,7 +1736,7 @@ def exportar_obras_pdf():
     fecha_hasta = request.args.get('fecha_hasta', '')
 
     # Base query con filtro de organizacion
-    query = Obra.query.filter(Obra.organizacion_id == org_id)
+    query = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None))
 
     if estado:
         query = query.filter(Obra.estado == estado)
@@ -1802,7 +1832,8 @@ def exportar_obras_pdf():
         if obra_ids_list:
             pres_ids = [p.id for p in Presupuesto.query.filter(
                 Presupuesto.obra_id.in_(obra_ids_list),
-                Presupuesto.organizacion_id == org_id
+                Presupuesto.organizacion_id == org_id,
+                Presupuesto.deleted_at.is_(None)
             ).all()]
             if pres_ids:
                 for tipo, total in db.session.query(
@@ -1882,7 +1913,7 @@ def exportar_costos_pdf():
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
 
-    obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
     # OPTIMIZACION: Eager loading para evitar N+1
     from sqlalchemy.orm import joinedload
@@ -2290,3 +2321,181 @@ def exportar_inventario_pdf():
     except Exception as e:
         flash(f'Error al generar el PDF: {str(e)[:200]}', 'danger')
         return redirect(url_for('reportes.reporte_inventario'))
+
+
+# ============================================================================
+# REPORTE FINANCIERO — Rentabilidad, márgenes y flujo de caja por obra
+# ============================================================================
+
+@reportes_bp.route('/financiero')
+@login_required
+@require_feature('reports.financiero')
+def reporte_financiero():
+    """Dashboard financiero: rentabilidad por obra, márgenes y desglose de costos."""
+    try:
+        return _reporte_financiero_impl()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en reporte financiero: {e}", exc_info=True)
+        flash(f'Error al generar reporte financiero: {str(e)[:200]}', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+
+def _reporte_financiero_impl():
+    if current_user.role not in ('admin', 'pm'):
+        flash('No tienes permisos para ver el reporte financiero.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    from decimal import Decimal, ROUND_HALF_UP
+
+    # Import defensivo de modelos de liquidación
+    try:
+        from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
+        HAS_LIQUIDACION = True
+    except ImportError:
+        HAS_LIQUIDACION = False
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        flash('Selecciona una organización para ver el reporte financiero.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion'))
+
+    # Obras activas (no canceladas, no eliminadas)
+    try:
+        obras = Obra.query.filter(
+            Obra.organizacion_id == org_id,
+            Obra.deleted_at.is_(None),
+            Obra.estado.notin_(['cancelada'])
+        ).order_by(Obra.nombre).all()
+    except Exception:
+        db.session.rollback()
+        # Fallback si deleted_at no existe aún en la BD
+        obras = Obra.query.filter(
+            Obra.organizacion_id == org_id,
+            Obra.estado.notin_(['cancelada'])
+        ).order_by(Obra.nombre).all()
+
+    # ---------- Calcular costos desglosados por obra ----------
+    obras_data = []
+    total_presupuestado = Decimal('0')
+    total_costo_real = Decimal('0')
+    total_materiales = Decimal('0')
+    total_mano_obra = Decimal('0')
+    total_maquinaria = Decimal('0')
+
+    # Chart data
+    chart_nombres = []
+    chart_presupuestos = []
+    chart_costos_reales = []
+
+    for obra in obras:
+        presupuesto = Decimal(str(obra.presupuesto_total or 0))
+
+        # 1. Costo materiales (from UsoInventario)
+        costo_mat = db.session.query(
+            func.coalesce(
+                func.sum(
+                    UsoInventario.cantidad_usada *
+                    func.coalesce(UsoInventario.precio_unitario_al_uso, 0)
+                ), 0
+            )
+        ).filter(UsoInventario.obra_id == obra.id).scalar()
+        costo_mat = Decimal(str(costo_mat or 0))
+
+        # 2. Costo mano de obra (from liquidaciones pagadas)
+        costo_mo = Decimal('0')
+        if HAS_LIQUIDACION:
+            try:
+                costo_mo_raw = db.session.query(
+                    func.coalesce(func.sum(LiquidacionMOItem.monto), 0)
+                ).join(LiqMO).filter(
+                    LiqMO.obra_id == obra.id,
+                    LiquidacionMOItem.estado == 'pagado'
+                ).scalar() or 0
+                costo_mo = Decimal(str(costo_mo_raw))
+            except Exception:
+                db.session.rollback()
+
+        # 3. Costo maquinaria (from EquipmentUsage)
+        costo_maq = Decimal('0')
+        try:
+            from models.equipment import EquipmentUsage, Equipment
+            maq_raw = db.session.query(
+                func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0)
+            ).join(Equipment).filter(
+                EquipmentUsage.project_id == obra.id,
+                EquipmentUsage.estado == 'aprobado'
+            ).scalar() or 0
+            costo_maq = Decimal(str(maq_raw))
+        except Exception:
+            db.session.rollback()
+
+        costo_total = costo_mat + costo_mo + costo_maq
+        margen = presupuesto - costo_total
+        pct_margen = (margen / presupuesto * Decimal('100')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP) if presupuesto > 0 else Decimal('0')
+
+        # Semáforo
+        if pct_margen > 15:
+            semaforo = 'verde'
+        elif pct_margen >= 5:
+            semaforo = 'amarillo'
+        else:
+            semaforo = 'rojo'
+
+        obras_data.append({
+            'obra': obra,
+            'presupuesto': presupuesto,
+            'costo_materiales': costo_mat,
+            'costo_mano_obra': costo_mo,
+            'costo_maquinaria': costo_maq,
+            'costo_total': costo_total,
+            'margen': margen,
+            'pct_margen': float(pct_margen),
+            'progreso': obra.progreso or 0,
+            'semaforo': semaforo,
+        })
+
+        total_presupuestado += presupuesto
+        total_costo_real += costo_total
+        total_materiales += costo_mat
+        total_mano_obra += costo_mo
+        total_maquinaria += costo_maq
+
+        # Chart data
+        chart_nombres.append(obra.nombre[:25])
+        chart_presupuestos.append(float(presupuesto))
+        chart_costos_reales.append(float(costo_total))
+
+    # ---------- Summary ----------
+    margen_bruto = total_presupuestado - total_costo_real
+    pct_margen_global = float(
+        (margen_bruto / total_presupuestado * Decimal('100')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+    ) if total_presupuestado > 0 else 0.0
+
+    # Otros costos (total - materiales - MO - maquinaria), mínimo 0
+    otros = max(Decimal('0'), total_costo_real - total_materiales - total_mano_obra - total_maquinaria)
+
+    resumen = {
+        'total_presupuestado': total_presupuestado,
+        'total_costo_real': total_costo_real,
+        'margen_bruto': margen_bruto,
+        'pct_margen': pct_margen_global,
+    }
+
+    # Pie chart data
+    pie_labels = ['Materiales', 'Mano de Obra', 'Maquinaria', 'Otros']
+    pie_values = [
+        float(total_materiales),
+        float(total_mano_obra),
+        float(total_maquinaria),
+        float(otros),
+    ]
+
+    return render_template('reportes/financiero.html',
+                           resumen=resumen,
+                           obras_data=obras_data,
+                           chart_nombres=chart_nombres,
+                           chart_presupuestos=chart_presupuestos,
+                           chart_costos_reales=chart_costos_reales,
+                           pie_labels=pie_labels,
+                           pie_values=pie_values)

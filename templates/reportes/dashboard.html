@@ -125,6 +125,65 @@
         </div>
     </div>
     
+    <!-- Entregas Próximas de OC -->
+    {% if entregas_proximas %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm border-start border-warning border-4">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-truck text-warning me-2"></i>Entregas de Material Próximas</h6>
+                    <span class="badge bg-warning text-dark">{{ entregas_proximas|length }} OC</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>OC</th>
+                                    <th>Obra</th>
+                                    <th>Proveedor</th>
+                                    <th>Entrega</th>
+                                    <th class="text-end">Total</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for oc in entregas_proximas %}
+                                {% set dias = (oc.fecha_entrega_estimada - fecha_hoy).days %}
+                                <tr>
+                                    <td><strong>{{ oc.numero }}</strong></td>
+                                    <td>{{ oc.obra.nombre }}</td>
+                                    <td>{{ oc.proveedor }}</td>
+                                    <td>
+                                        {% if dias < 0 %}
+                                        <span class="badge bg-danger">{{ oc.fecha_entrega_estimada.strftime('%d/%m') }} VENCIDA</span>
+                                        {% elif dias == 0 %}
+                                        <span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>HOY</span>
+                                        {% elif dias == 1 %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>MANANA</span>
+                                        {% elif dias <= 3 %}
+                                        <span class="badge bg-warning text-dark">{{ oc.fecha_entrega_estimada.strftime('%d/%m') }} ({{ dias }}d)</span>
+                                        {% else %}
+                                        <span class="badge bg-info text-dark">{{ oc.fecha_entrega_estimada.strftime('%d/%m') }} ({{ dias }}d)</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end"><strong>{{ oc.moneda }} {{ '{:,.0f}'.format(oc.total|float) }}</strong></td>
+                                    <td>
+                                        <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Gráficos Financieros -->
     <div class="row mb-4">
         {% if datos_financieros and datos_financieros.presupuesto_vs_real %}

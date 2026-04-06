@@ -195,7 +195,7 @@ def lista():
 
     obras = None
     if org_id:
-        query = Obra.query.filter(Obra.organizacion_id == org_id)
+        query = Obra.query.filter(Obra.organizacion_id == org_id, Obra.deleted_at.is_(None))
 
         if not mostrar_borradores:
             query = query.filter(obras_visibles_clause(Obra))

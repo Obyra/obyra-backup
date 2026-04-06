@@ -8,21 +8,118 @@ from app import db
 from models import Usuario
 from models.core import Organizacion
 from config.billing_config import BILLING
+from services.plan_service import PLAN_FEATURES
 
 planes_bp = Blueprint('planes', __name__, url_prefix='/planes')
 
-# Features comunes a todos los planes (sistema completo)
-FEATURES_SISTEMA_COMPLETO = [
-    'Calculadora IA completa',
-    'Presupuestos ilimitados',
-    'Gestion de obras',
-    'Gestion de clientes',
-    'Inventario completo',
-    'Modo offline para operarios',
-    'Reportes completos',
-    'Soporte por email y WhatsApp',
-    'Actualizaciones incluidas'
-]
+# ---------------------------------------------------------------------------
+# Mapping from feature codes (plan_service.py) to human-readable Spanish labels
+# ---------------------------------------------------------------------------
+FEATURE_LABELS = {
+    'budgets.basic': 'Presupuestos manuales',
+    'budgets.manual': 'Presupuestos manuales',
+    'budgets.pdf': 'Exportacion de presupuestos a PDF',
+    'budgets.ai_basic': 'Calculadora IA basica',
+    'budgets.ai_full': 'Calculadora IA completa',
+    'budgets.excel_import': 'Importacion desde Excel',
+    'works.basic': 'Gestion de obras y tareas',
+    'works.stages': 'Etapas del proyecto',
+    'works.tasks': 'Tareas de obra',
+    'works.advances': 'Avances de obra',
+    'works.certifications': 'Certificaciones de obra',
+    'works.cronograma': 'Cronograma encadenado',
+    'works.remitos': 'Remitos + PDF de OC',
+    'works.caja': 'Caja por obra',
+    'works.gantt': 'Diagrama Gantt',
+    'clients.manage': 'Gestion de clientes',
+    'orders.basic': 'Ordenes de compra basicas',
+    'orders.create': 'Creacion de ordenes de compra',
+    'orders.cotizaciones': 'Cotizaciones y comparativas',
+    'orders.comparativa': 'Comparativa de proveedores',
+    'requirements.basic': 'Requerimientos de compra',
+    'requirements.create': 'Creacion de requerimientos',
+    'providers.basic': 'Proveedores basicos',
+    'providers.manage': 'Gestion avanzada de proveedores',
+    'providers.history': 'Historial de proveedores',
+    'inventory.full': 'Inventario completo',
+    'inventory.deposito': 'Deposito y stock por obra',
+    'inventory.alertas': 'Alertas de stock bajo',
+    'inventory.categorias': 'Categorias de inventario',
+    'inventory.consumo': 'Consumo de materiales',
+    'reports.basic': 'Reportes basicos',
+    'reports.obras': 'Reportes de obras',
+    'reports.costos': 'Reportes de costos',
+    'reports.inventario': 'Reportes de inventario',
+    'reports.financiero': 'Reporte financiero',
+    'reports.pdf_export': 'Exportacion de reportes a PDF',
+    'reports.audit_log': 'Registro de auditoria',
+    'teams.basic': 'Equipos basico',
+    'teams.invite': 'Invitaciones de equipo',
+    'teams.rendimiento': 'Rendimiento de equipo',
+    'teams.advanced_roles': 'Roles y permisos avanzados',
+    'security.basic': 'Seguridad basica',
+    'security.checklists': 'Checklists de seguridad',
+    'security.incidents': 'Gestion de incidentes',
+    'security.protocols': 'Protocolos de seguridad',
+    'security.certifications': 'Certificaciones de seguridad',
+    'security.audit_advanced': 'Auditoria avanzada',
+    'attendance.geo': 'Fichaje por geolocalizacion',
+    'attendance.alerts': 'Alertas de fichada',
+    'automation.basic': 'Alertas automaticas',
+    'automation.advanced': 'Automatizaciones avanzadas',
+    'api.access': 'Acceso API / Integraciones',
+    'offline.basic': 'Modo offline',
+    'offline.sync': 'Sincronizacion offline',
+    'dashboard.costos': 'Dashboard de costos',
+    'dashboard.financiero': 'Dashboard financiero ejecutivo',
+    'manual.access': 'Acceso al manual',
+}
+
+
+def _features_to_labels(feature_codes):
+    """Convert a set of feature codes to a sorted list of display labels (no duplicates)."""
+    seen = set()
+    labels = []
+    for code in sorted(feature_codes):
+        label = FEATURE_LABELS.get(code)
+        if label and label not in seen:
+            seen.add(label)
+            labels.append(label)
+    return labels
+
+
+def _extra_features_labels(plan_features, base_features):
+    """Labels for features in *plan_features* that are NOT in *base_features*."""
+    extra_codes = plan_features - base_features
+    return _features_to_labels(extra_codes)
+
+
+# ---------------------------------------------------------------------------
+# Build UI feature lists dynamically from the authoritative PLAN_FEATURES
+# ---------------------------------------------------------------------------
+_std_feats = PLAN_FEATURES['estandar']['features']
+_prm_feats = PLAN_FEATURES['premium']['features']
+_fpm_feats = PLAN_FEATURES['full_premium']['features']
+
+FEATURES_STANDARD = (
+    [f"Hasta {PLAN_FEATURES['estandar']['max_obras']} obras",
+     f"Hasta {PLAN_FEATURES['estandar']['max_usuarios']} usuarios"]
+    + _features_to_labels(_std_feats)
+    + ['Soporte por email y WhatsApp']
+)
+
+FEATURES_PREMIUM_EXTRA = (
+    [f"Hasta {PLAN_FEATURES['premium']['max_obras']} obras",
+     f"Hasta {PLAN_FEATURES['premium']['max_usuarios']} usuarios"]
+    + _extra_features_labels(_prm_feats, _std_feats)
+)
+
+FEATURES_FULL_PREMIUM_EXTRA = (
+    [f"Hasta {PLAN_FEATURES['full_premium']['max_obras']} obras",
+     f"Hasta {PLAN_FEATURES['full_premium']['max_usuarios']} usuarios"]
+    + _extra_features_labels(_fpm_feats, _prm_feats)
+    + ['Soporte preferencial']
+)
 
 # Configuración de planes de suscripción
 PLANES_CONFIG = {
@@ -38,34 +135,36 @@ PLANES_CONFIG = {
     },
     'estandar': {
         'nombre': 'Plan Standard',
-        'precio_usd': Decimal('400.00'),
-        'precio_mensual_usd': Decimal('400.00'),
+        'precio_usd': Decimal('199.00'),
+        'precio_mensual_usd': Decimal('199.00'),
         'max_usuarios': 5,
         'max_obras': 3,
         'duracion_dias': 365,
         'descripcion': 'Ideal para equipos pequenos',
-        'features': ['Hasta 3 obras', 'Hasta 5 usuarios'] + FEATURES_SISTEMA_COMPLETO
+        'features': FEATURES_STANDARD
     },
     'premium': {
         'nombre': 'Plan Premium',
-        'precio_usd': Decimal('600.00'),
-        'precio_mensual_usd': Decimal('600.00'),
+        'precio_usd': Decimal('399.00'),
+        'precio_mensual_usd': Decimal('399.00'),
         'max_usuarios': 15,
         'max_obras': 5,
         'duracion_dias': 365,
         'descripcion': 'Para empresas en crecimiento',
-        'features': ['Hasta 5 obras', 'Hasta 15 usuarios'] + FEATURES_SISTEMA_COMPLETO + ['Fichaje por geolocalizacion'],
+        'features': FEATURES_STANDARD + FEATURES_PREMIUM_EXTRA,
+        'features_new': FEATURES_PREMIUM_EXTRA,
         'popular': True
     },
     'full_premium': {
         'nombre': 'Plan Full Premium',
-        'precio_usd': Decimal('800.00'),
-        'precio_mensual_usd': Decimal('800.00'),
-        'max_usuarios': 25,
+        'precio_usd': Decimal('799.00'),
+        'precio_mensual_usd': Decimal('799.00'),
+        'max_usuarios': 35,
         'max_obras': 15,
         'duracion_dias': 365,
         'descripcion': 'Para constructoras con operacion mas amplia',
-        'features': ['Hasta 15 obras', 'Hasta 25 usuarios'] + FEATURES_SISTEMA_COMPLETO + ['Fichaje por geolocalizacion']
+        'features': FEATURES_STANDARD + FEATURES_PREMIUM_EXTRA + FEATURES_FULL_PREMIUM_EXTRA,
+        'features_new': FEATURES_FULL_PREMIUM_EXTRA,
     }
 }
 
@@ -181,35 +280,39 @@ def mostrar_planes():
 @login_required
 def seleccionar_plan(plan_tipo):
     """Seleccionar un plan y redirigir a instrucciones de pago"""
-    if plan_tipo not in PLANES_CONFIG or plan_tipo == 'prueba':
-        flash('Plan no válido.', 'error')
+    try:
+        if plan_tipo not in PLANES_CONFIG or plan_tipo == 'prueba':
+            flash('Plan no válido.', 'error')
+            return redirect(url_for('planes.mostrar_planes'))
+
+        plan = PLANES_CONFIG[plan_tipo]
+        cotizacion = obtener_cotizacion_bna()
+
+        IVA = Decimal('1.21')
+        precio_usd_sin_iva = Decimal(str(plan['precio_usd']))
+        precio_usd_con_iva = (precio_usd_sin_iva * IVA).quantize(Decimal('0.01'))
+
+        tc = Decimal(str(cotizacion['value']))
+        # Mismo precio ARS para los 3 métodos de pago
+        precio_ars = (precio_usd_con_iva * tc).quantize(Decimal('0'))
+
+        return render_template('planes/instrucciones_pago.html',
+            plan_seleccionado=plan_tipo,
+            plan_nombre=plan['nombre'],
+            precio_usd=float(precio_usd_sin_iva),
+            precio_usd_sin_iva=float(precio_usd_sin_iva),
+            precio_usd_con_iva=float(precio_usd_con_iva),
+            precio_ars_tarjeta=float(precio_ars),
+            precio_ars_transferencia=float(precio_ars),
+            max_usuarios=plan['max_usuarios'],
+            cotizacion=cotizacion,
+            bank_info=BILLING.get_bank_info(),
+            user=current_user
+        )
+    except Exception as e:
+        current_app.logger.error(f"Error en seleccionar_plan: {e}", exc_info=True)
+        flash(f'Error al cargar plan: {str(e)[:200]}', 'danger')
         return redirect(url_for('planes.mostrar_planes'))
-
-    plan = PLANES_CONFIG[plan_tipo]
-    cotizacion = obtener_cotizacion_bna()
-
-    IVA = Decimal('1.21')
-    precio_usd_sin_iva = plan['precio_usd']
-    precio_usd_con_iva = (precio_usd_sin_iva * IVA).quantize(Decimal('0.01'))
-
-    tc = Decimal(str(cotizacion['value']))
-    # Tarjeta: USD con IVA × tipo de cambio
-    precio_ars_tarjeta = (precio_usd_con_iva * tc).quantize(Decimal('0.01'))
-    # Transferencia ARS: USD con IVA × tipo de cambio (mismo, sin comisión MP)
-    precio_ars_transferencia = precio_ars_tarjeta
-
-    return render_template('planes/instrucciones_pago.html',
-        plan_seleccionado=plan_tipo,
-        plan_nombre=plan['nombre'],
-        precio_usd_sin_iva=float(precio_usd_sin_iva),
-        precio_usd_con_iva=float(precio_usd_con_iva),
-        precio_ars_tarjeta=float(precio_ars_tarjeta),
-        precio_ars_transferencia=float(precio_ars_transferencia),
-        max_usuarios=plan['max_usuarios'],
-        cotizacion=cotizacion,
-        bank_info=BILLING.get_bank_info(),
-        user=current_user
-    )
 
 
 @planes_bp.route('/pagar')

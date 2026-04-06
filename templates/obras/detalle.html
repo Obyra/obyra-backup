@@ -120,8 +120,14 @@
                                     {% endif %}
 
                                     <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal" data-obra-id="{{ obra.id }}">
-                                      🧙‍♂️ Wizard Tareas
+                                      <i class="fas fa-wand-magic-sparkles me-1"></i>Wizard Tareas
                                     </button>
+                                    <form method="POST" action="{{ url_for('obras.recargar_tareas_predefinidas', obra_id=obra.id) }}" style="display:inline;" onsubmit="return confirm('Esto eliminará las tareas sin avance y las reemplazará con las predefinidas. ¿Continuar?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-warning btn-sm" title="Reemplaza tareas de materiales por tareas de obra reales">
+                                            <i class="fas fa-sync-alt me-1"></i>Recargar Tareas
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
 
@@ -167,7 +173,7 @@
                             <div id="etapas-list">
                             {% if etapas %}
                                 {% for etapa in etapas %}
-                                <div class="card mb-2 border shadow-sm etapa-card">
+                                <div class="card mb-2 border shadow-sm etapa-card" id="etapa-{{ etapa.id }}">
                                     <!-- Header clickeable para expandir/colapsar -->
                                     <div class="card-header bg-white py-2 px-3" style="cursor:pointer;" onclick="toggleTareasEtapa({{ etapa.id }})">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -367,7 +373,7 @@
                         <div class="d-flex align-items-center">
                             <i class="fas fa-boxes me-2"></i>
                             <span class="fw-bold">Materiales y Recursos</span>
-                            <i class="fas fa-chevron-up ms-2" id="materialesToggleIcon"></i>
+                            <i class="fas fa-chevron-down ms-2" id="materialesToggleIcon"></i>
                         </div>
                         <div onclick="event.stopPropagation();">
                             {% if presupuesto %}
@@ -378,7 +384,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="card-body p-3" id="materialesContenido">
+                <div class="card-body p-3" id="materialesContenido" style="display:none;">
                     <!-- Tabs: Materiales | Mano de Obra | Maquinaria -->
                     <style>
                         #materialesTab .nav-link {
@@ -478,13 +484,22 @@
                                                     <td>
                                                         <div>
                                                             <strong>{{ item.descripcion }}</strong>
-                                                            {% if item.etapa %}
+                                                            {% set etapas_list = materiales_etapas.get(item.id, []) if materiales_etapas is defined else [] %}
+                                                            {% if etapas_list|length > 1 %}
+                                                            <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ etapas_list|join(', ') }}</small>
+                                                            {% elif etapas_list|length == 1 and etapas_list[0] %}
+                                                            <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ etapas_list[0] }}</small>
+                                                            {% elif item.etapa %}
                                                             <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ item.etapa.nombre }}</small>
                                                             {% endif %}
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
+                                                        {% if materiales_cantidad is defined and item.id in materiales_cantidad %}
+                                                        <span class="badge bg-primary">{{ materiales_cantidad[item.id]|int }} {{ item.unidad }}</span>
+                                                        {% else %}
                                                         <span class="badge bg-primary">{{ item.cantidad|entero }} {{ item.unidad }}</span>
+                                                        {% endif %}
                                                     </td>
                                                     {# Buscar stock transferido: por ID, por nombre exacto, o por coincidencia parcial #}
                                                     {% set transferido_encontrado = namespace(data=none) %}
@@ -531,17 +546,18 @@
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-end">
+                                                        {% set cant_para_costo = materiales_cantidad[item.id] if (materiales_cantidad is defined and item.id in materiales_cantidad) else item.cantidad|float %}
                                                         {% if presupuesto.currency == 'USD' %}
-                                                            <strong>US$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
+                                                            <strong>US$ {{ (cant_para_costo * item.precio_unitario|float)|round(2) }}</strong>
                                                         {% else %}
-                                                            <strong>$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
+                                                            <strong>$ {{ (cant_para_costo * item.precio_unitario|float)|round(2) }}</strong>
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-center">
                                                         {% if item.item_inventario %}
                                                             {# Material vinculado - mostrar stock real #}
                                                             {% set stock = item.item_inventario.stock_actual|float %}
-                                                            {% set necesario = item.cantidad|float %}
+                                                            {% set necesario = materiales_cantidad[item.id] if (materiales_cantidad is defined and item.id in materiales_cantidad) else item.cantidad|float %}
                                                             {% if stock >= necesario %}
                                                                 <span class="badge bg-success" title="Stock suficiente">
                                                                     <i class="fas fa-check me-1"></i>{{ stock|numero }} {{ item.item_inventario.unidad }}
@@ -770,24 +786,25 @@
     <div class="row mt-3" id="seccionMaquinaria">
         <div class="col-12">
             <div class="card shadow-sm border-0">
-                <div class="card-header p-3" style="background: linear-gradient(135deg, #e67e22 0%, #d35400 100%); color: white;">
+                <div class="card-header p-3" style="background: linear-gradient(135deg, #e67e22 0%, #d35400 100%); color: white; cursor: pointer;"
+                     onclick="var el=document.getElementById('maquinariaContenido'); var icon=document.getElementById('maquinariaToggleIcon'); if(el.style.display==='none'){el.style.display='';icon.className='fas fa-chevron-up';}else{el.style.display='none';icon.className='fas fa-chevron-down';}">
                     <div class="d-flex align-items-center justify-content-between">
                         <div class="d-flex align-items-center">
                             <i class="fas fa-truck-loading me-2"></i>
                             <span class="fw-bold">Maquinaria en esta Obra</span>
-                            {% if movimientos_pendientes|length > 0 %}
-                            <span class="badge bg-danger ms-2">{{ movimientos_pendientes|length }} en tránsito</span>
-                            {% endif %}
                             {% if equipos_en_obra|length > 0 %}
                             <span class="badge bg-light text-dark ms-2">{{ equipos_en_obra|length }} en obra</span>
                             {% endif %}
+                            <i class="fas fa-chevron-down ms-2" id="maquinariaToggleIcon"></i>
                         </div>
-                        <a href="{{ url_for('obras.equipos_movimientos') }}" class="btn btn-sm btn-light">
-                            <i class="fas fa-external-link-alt me-1"></i>Ir a Panel Maquinaria
-                        </a>
+                        <div onclick="event.stopPropagation();">
+                            <a href="{{ url_for('obras.equipos_movimientos') }}" class="btn btn-sm btn-light">
+                                <i class="fas fa-external-link-alt me-1"></i>Ir a Panel Maquinaria
+                            </a>
+                        </div>
                     </div>
                 </div>
-                <div class="card-body p-3">
+                <div class="card-body p-3" id="maquinariaContenido" style="display:none;">
                     {% if movimientos_pendientes|length > 0 %}
                     <div class="alert alert-warning py-2 mb-3">
                         <i class="fas fa-truck me-2"></i>
@@ -1012,9 +1029,6 @@
                         <div class="tab-pane fade" id="pane-oc" role="tabpanel">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5 class="mb-0">Ordenes de Compra</h5>
-                                <a href="{{ url_for('ordenes_compra.crear') }}?obra_id={{ obra.id }}" class="btn btn-sm btn-primary">
-                                    <i class="fas fa-plus me-1"></i>Nueva OC
-                                </a>
                             </div>
                             {% if ordenes_compra_list %}
                             <div class="table-responsive">
@@ -1026,6 +1040,7 @@
                                             <th class="text-end">Total</th>
                                             <th class="text-center">Estado</th>
                                             <th class="text-center">Recepcion</th>
+                                            <th>Entrega Est.</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -1044,6 +1059,13 @@
                                                     <div class="progress-bar bg-{{ 'success' if pct==100 else 'warning' }}"
                                                          style="width:{{ pct }}%">{{ pct }}%</div>
                                                 </div>
+                                            </td>
+                                            <td>
+                                                {% if oc.fecha_entrega_estimada %}
+                                                <span class="badge bg-{{ 'danger' if oc.fecha_entrega_estimada < today else ('warning text-dark' if (oc.fecha_entrega_estimada - today).days <= 2 else 'light text-dark') }}">
+                                                    {{ oc.fecha_entrega_estimada.strftime('%d/%m/%Y') }}
+                                                </span>
+                                                {% else %}-{% endif %}
                                             </td>
                                             <td>
                                                 <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}"
@@ -2404,9 +2426,11 @@ function toggleTareasEtapa(etapaId) {
     if (tareasDiv.classList.contains('show')) {
         tareasDiv.classList.remove('show');
         chevron.style.transform = 'rotate(0deg)';
+        localStorage.removeItem('obyra_last_etapa_{{ obra.id }}');
     } else {
         tareasDiv.classList.add('show');
         chevron.style.transform = 'rotate(90deg)';
+        localStorage.setItem('obyra_last_etapa_{{ obra.id }}', etapaId);
         if (container.innerHTML.includes('spinner-border')) {
             cargarTareasEtapa(etapaId);
         }
@@ -2727,6 +2751,21 @@ document.getElementById('formNuevaTarea')?.addEventListener('submit', async func
 
 /* -------- Certificación: validación simple -------- */
 document.addEventListener('DOMContentLoaded', function() {
+    // Auto-scroll: restaurar posición de la última etapa abierta
+    var lastEtapa = localStorage.getItem('obyra_last_etapa_{{ obra.id }}');
+    if (window.location.hash && window.location.hash.startsWith('#etapa-')) {
+        lastEtapa = window.location.hash.replace('#etapa-', '');
+    }
+    if (lastEtapa) {
+        var etapaEl = document.getElementById('etapa-' + lastEtapa);
+        if (etapaEl) {
+            setTimeout(function() {
+                etapaEl.scrollIntoView({behavior: 'smooth', block: 'start'});
+                toggleTareasEtapa(parseInt(lastEtapa));
+            }, 300);
+        }
+    }
+
     const certificarForm = document.querySelector('#certificarAvanceModal form');
     if (certificarForm) {
         certificarForm.addEventListener('submit', function(e) {

@@ -40,7 +40,7 @@
                                     {% else %}
                                     <span class="text-muted">Sin categoría</span>
                                     {% endif %}
-                                    {% if current_user.rol == 'administrador' %}
+                                    {% if current_user.role == 'admin' %}
                                     <button class="btn btn-sm btn-link p-0 ms-1" data-bs-toggle="modal" data-bs-target="#modalCambiarCat" title="Cambiar categoría">
                                         <i class="fas fa-pencil-alt"></i>
                                     </button>
@@ -54,13 +54,13 @@
                                     {% for cat in item.categorias_adicionales %}
                                         <span class="badge bg-outline-secondary border me-1 mb-1">
                                             {{ cat.nombre }}
-                                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                            {% if current_user.role in ['admin', 'pm'] %}
                                             <a href="#" onclick="quitarCatAdicional({{ cat.id }}); return false;" class="text-danger ms-1" title="Quitar"><i class="fas fa-times"></i></a>
                                             {% endif %}
                                         </span>
                                     {% endfor %}
                                     </div>
-                                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                    {% if current_user.role in ['admin', 'pm'] %}
                                     <button class="btn btn-sm btn-link p-0 mt-1" data-bs-toggle="modal" data-bs-target="#modalCatsAdicionales" title="Agregar categorías">
                                         <i class="fas fa-plus-circle me-1"></i>Agregar
                                     </button>
@@ -429,7 +429,7 @@ function cargarTraslados() {
 }
 </script>
 
-{% if current_user.rol in ['administrador', 'tecnico'] %}
+{% if current_user.role in ['admin', 'pm'] %}
 <!-- Modal Cambiar Categoría -->
 <div class="modal fade" id="modalCambiarCat" tabindex="-1">
     <div class="modal-dialog">

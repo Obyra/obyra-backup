@@ -17,7 +17,6 @@ from typing import Dict, List, Optional
 from jinja2 import TemplateNotFound
 
 from app import db
-from extensions import csrf
 from models import (
     ItemInventario,
     # CategoriaInventario removed - using InventoryCategory
@@ -30,6 +29,8 @@ from models import (
     MovimientoStock,
 )
 from services.memberships import get_current_org_id
+from services.permissions import validate_item_inventario_ownership, validate_obra_ownership
+from services.plan_service import require_feature, require_active_subscription
 
 # from inventario_new import nuevo_item as nuevo_item_view  # Commented out - causes import error
 from models import InventoryCategory, Organizacion
@@ -267,6 +268,7 @@ def _ensure_canonical_categories(org_id):
 
 @inventario_bp.route('/')
 @login_required
+@require_feature('inventory.full')
 def lista():
     current_app.logger.info(f"[INVENTARIO] Accediendo a lista. User: {current_user.email}")
     if not current_user.puede_acceder_modulo('inventario'):
@@ -453,6 +455,7 @@ def lista():
 
 @inventario_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
+@require_feature('inventory.full')
 def crear():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para crear items de inventario.', 'danger')
@@ -590,6 +593,7 @@ def crear():
 
 @inventario_bp.route('/<int:id>')
 @login_required
+@require_feature('inventory.full')
 def detalle(id):
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para ver detalles de inventario.', 'danger')
@@ -624,6 +628,8 @@ def detalle(id):
 
 @inventario_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def editar_item(id):
     """Editar categoría y datos básicos de un item."""
     item = ItemInventario.query.get_or_404(id)
@@ -654,10 +660,12 @@ def editar_item(id):
 
 @inventario_bp.route('/<int:id>/categorias-adicionales', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def categorias_adicionales(id):
     """Gestionar categorías adicionales de un item (many-to-many)."""
-    item = ItemInventario.query.get_or_404(id)
     org_id = get_current_org_id() or current_user.organizacion_id
+    item = validate_item_inventario_ownership(id)
 
     if current_user.role not in ('admin', 'pm'):
         return jsonify(ok=False, error='Sin permisos'), 403
@@ -681,12 +689,12 @@ def categorias_adicionales(id):
         for cat_id in categoria_ids:
             if cat_id == item.categoria_id:
                 continue
-            cat = InventoryCategory.query.get(cat_id)
+            cat = InventoryCategory.query.filter_by(id=cat_id, company_id=org_id).first()
             if cat and cat not in item.categorias_adicionales:
                 item.categorias_adicionales.append(cat)
     elif action == 'remove':
         for cat_id in categoria_ids:
-            cat = InventoryCategory.query.get(cat_id)
+            cat = InventoryCategory.query.filter_by(id=cat_id, company_id=org_id).first()
             if cat and cat in item.categorias_adicionales:
                 item.categorias_adicionales.remove(cat)
     else:
@@ -701,6 +709,8 @@ def categorias_adicionales(id):
 
 @inventario_bp.route('/<int:id>/presentaciones', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def guardar_presentaciones(id):
     """Guardar presentaciones (packs) de un item de inventario."""
     import json as _json
@@ -734,6 +744,8 @@ def guardar_presentaciones(id):
 
 @inventario_bp.route('/reclasificar-encofrados', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def reclasificar_encofrados():
     """Reclasificar items de encofrado que están mal categorizados."""
     org_id = get_current_org_id() or current_user.organizacion_id
@@ -774,6 +786,8 @@ def reclasificar_encofrados():
 
 @inventario_bp.route('/mover-categoria-bulk', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def mover_categoria_bulk():
     """Mover múltiples items a otra categoría."""
     if current_user.role != 'admin':
@@ -804,6 +818,8 @@ def mover_categoria_bulk():
 
 @inventario_bp.route('/eliminar-bulk', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def eliminar_bulk():
     """Eliminar múltiples items."""
     if current_user.role != 'admin':
@@ -834,6 +850,8 @@ def eliminar_bulk():
 
 @inventario_bp.route('/<int:id>/eliminar', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def eliminar(id):
     """Elimina (desactiva) un item de inventario."""
     if current_user.role not in ['admin']:
@@ -903,6 +921,8 @@ def eliminar(id):
 
 @inventario_bp.route('/<int:id>/movimiento', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def registrar_movimiento(id):
     if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para registrar movimientos.', 'danger')
@@ -953,6 +973,7 @@ def registrar_movimiento(id):
                 from models.budgets import Presupuesto
                 ultimo = Presupuesto.query.filter(
                     Presupuesto.organizacion_id == org_id,
+                    Presupuesto.deleted_at.is_(None),
                     Presupuesto.tasa_usd_venta.isnot(None)
                 ).order_by(Presupuesto.fecha_creacion.desc()).first()
                 tasa_usd = float(ultimo.tasa_usd_venta) if ultimo and ultimo.tasa_usd_venta else 1200
@@ -1052,6 +1073,7 @@ def registrar_movimiento(id):
 
 @inventario_bp.route('/uso-obra', methods=['GET', 'POST'])
 @login_required
+@require_feature('inventory.full')
 def uso_obra():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para registrar uso en obra.', 'danger')
@@ -1125,7 +1147,7 @@ def uso_obra():
 
         try:
             cantidad = float(cantidad)
-            item_base = ItemInventario.query.get(item_id)
+            item_base = ItemInventario.query.filter_by(id=item_id, organizacion_id=org_id).first()
 
             if item_base is None:
                 flash('El artículo seleccionado no existe.', 'danger')
@@ -1208,7 +1230,7 @@ def uso_obra():
             if location_id == 'general':
                 location = deposito_general
             else:
-                location = Location.query.get(int(location_id))
+                location = Location.query.filter_by(id=int(location_id), organizacion_id=org_id).first()
 
             if not location:
                 flash('La ubicación seleccionada no existe.', 'danger')
@@ -1344,6 +1366,7 @@ def uso_obra():
 
 @inventario_bp.route('/categorias')
 @login_required
+@require_feature('inventory.full')
 def categorias():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para acceder al catálogo de categorías.', 'danger')
@@ -1384,6 +1407,7 @@ def categorias():
 @inventario_bp.route('/api/categorias', methods=['GET'])
 @inventario_bp.route('/api/categorias/', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_categorias():
     company_id = _resolve_company_id()
     if not company_id:
@@ -1413,6 +1437,8 @@ def api_categorias():
 
 @inventario_bp.route('/api/generar-codigo', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_generar_codigo():
     """
     API para generar código automático correlativo único basado en categoría.
@@ -1430,7 +1456,7 @@ def api_generar_codigo():
 
     try:
         # Obtener categoría
-        categoria = InventoryCategory.query.get(categoria_id)
+        categoria = InventoryCategory.query.filter_by(id=categoria_id, company_id=org_id).first()
         if not categoria:
             return jsonify({'error': 'Categoría no encontrada'}), 404
 
@@ -1480,6 +1506,8 @@ def api_generar_codigo():
 
 @inventario_bp.route('/api/crear-item', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_crear_item():
     """
     API para crear un nuevo item de inventario (usado desde modal de Compras).
@@ -1560,6 +1588,7 @@ def api_crear_item():
 
 @inventario_bp.route('/api/tipo-cambio', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_tipo_cambio():
     """
     API para obtener el tipo de cambio actual USD/ARS.
@@ -1686,6 +1715,8 @@ def api_tipo_cambio():
 
 @inventario_bp.route('/api/buscar-similares', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_buscar_similares():
     """
     API para buscar materiales similares en el catálogo global.
@@ -1704,9 +1735,10 @@ def api_buscar_similares():
         return jsonify({'similares': []})
 
     # Obtener nombre de categoría si se especifica
+    org_id = get_current_org_id() or current_user.organizacion_id
     categoria_nombre = None
     if categoria_id:
-        categoria = InventoryCategory.query.get(categoria_id)
+        categoria = InventoryCategory.query.filter_by(id=categoria_id, company_id=org_id).first()
         if categoria:
             categoria_nombre = categoria.nombre
 
@@ -1747,6 +1779,8 @@ def api_buscar_similares():
 
 @inventario_bp.route('/api/usar-material-global/<int:material_id>', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_usar_material_global(material_id):
     """
     API para usar un material del catálogo global.
@@ -1885,6 +1919,8 @@ def api_usar_material_global(material_id):
 
 @inventario_bp.route('/categoria', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def crear_categoria():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para actualizar el catálogo.', 'danger')
@@ -1919,6 +1955,7 @@ def crear_categoria():
 
 @inventario_bp.route('/api/buscar-items', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_buscar_items():
     """
     API para búsqueda AJAX de items del inventario.
@@ -1992,6 +2029,7 @@ def api_buscar_items():
 
 @inventario_bp.route('/items-disponibles', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def items_disponibles():
     """
     Endpoint para obtener items del inventario disponibles para una obra.
@@ -2036,6 +2074,7 @@ def items_disponibles():
 
 @inventario_bp.route('/analisis', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def analisis():
     """
     Análisis de consumo de inventario:
@@ -2184,7 +2223,7 @@ def analisis():
         ).scalar() or 0
 
         # Obtener todas las obras para el filtro
-        todas_obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+        todas_obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
 
         return render_template('inventario/analisis.html',
                              top_items=top_items_data,
@@ -2209,13 +2248,15 @@ def analisis():
 
 @inventario_bp.route('/dar_baja/<int:id>', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def dar_baja(id):
     """Da de baja un item de inventario por uso o rotura"""
     if not current_user.puede_acceder_modulo('inventario'):
         return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
 
     try:
-        item = ItemInventario.query.get_or_404(id)
+        item = validate_item_inventario_ownership(id)
 
         from decimal import Decimal
         cantidad = Decimal(str(request.form.get('cantidad', 0)))
@@ -2269,6 +2310,8 @@ def dar_baja(id):
 
 @inventario_bp.route('/trasladar/<int:id>', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def trasladar(id):
     """Traslada un item de inventario general al stock de una obra"""
     if not current_user.puede_acceder_modulo('inventario'):
@@ -2279,7 +2322,7 @@ def trasladar(id):
         from decimal import Decimal
         from datetime import datetime
 
-        item = ItemInventario.query.get_or_404(id)
+        item = validate_item_inventario_ownership(id)
 
         cantidad = Decimal(str(request.form.get('cantidad', 0)))
         obra_destino_id = request.form.get('obra_destino_id')
@@ -2375,6 +2418,7 @@ def trasladar(id):
 
 @inventario_bp.route('/api/<int:item_id>/stock-obras', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_stock_en_obras(item_id):
     """Obtiene el stock de un item en todas las obras"""
     try:
@@ -2414,6 +2458,7 @@ def api_stock_en_obras(item_id):
 
 @inventario_bp.route('/api/<int:item_id>/traslados', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_traslados_item(item_id):
     """Obtiene el historial de traslados de un item desde la tabla stock_obra"""
     try:
@@ -2457,6 +2502,7 @@ def api_traslados_item(item_id):
 
 @inventario_bp.route('/api/alertas-stock', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_alertas_stock():
     """Obtiene las alertas de stock bajo para la organización actual"""
     from services.stock_alerts_service import obtener_resumen_alertas
@@ -2481,6 +2527,7 @@ def api_alertas_stock():
 
 @inventario_bp.route('/api/alertas-stock/count', methods=['GET'])
 @login_required
+@require_feature('inventory.full')
 def api_alertas_stock_count():
     """Obtiene solo el conteo de alertas de stock bajo (para badges)"""
     from services.stock_alerts_service import contar_alertas_stock
@@ -2507,6 +2554,8 @@ def api_alertas_stock_count():
 
 @inventario_bp.route('/api/alertas-stock/generar', methods=['POST'])
 @login_required
+@require_feature('inventory.full')
+@require_active_subscription
 def api_generar_alertas():
     """Genera notificaciones para todos los items con stock bajo"""
     from services.stock_alerts_service import generar_alertas_masivas
@@ -2532,6 +2581,7 @@ def api_generar_alertas():
 
 @inventario_bp.route('/alertas-stock')
 @login_required
+@require_feature('inventory.full')
 def alertas_stock():
     """Vista de alertas de stock bajo"""
     from services.stock_alerts_service import obtener_resumen_alertas
@@ -2944,6 +2994,7 @@ def limpiar_marcas():
 
 @inventario_bp.route('/deposito')
 @login_required
+@require_feature('inventory.full')
 def deposito():
     """Vista del depósito general — stock disponible para trasladar a obras."""
     if not current_user.puede_acceder_modulo('inventario'):
@@ -2975,7 +3026,8 @@ def deposito():
     # Obras disponibles para traslado
     obras = Obra.query.filter_by(
         organizacion_id=org_id
-    ).filter(Obra.estado.in_(['en_curso', 'pendiente', 'activa'])
+    ).filter(Obra.estado.in_(['en_curso', 'pendiente', 'activa']),
+             Obra.deleted_at.is_(None)
     ).order_by(Obra.nombre).all()
 
     # Movimientos recientes

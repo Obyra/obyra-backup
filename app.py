@@ -90,6 +90,27 @@ def _safe_cli_print(*args, **kwargs):
 
 print = _safe_cli_print  # type: ignore[assignment]
 
+# --------------- SENTRY ERROR MONITORING ---------------
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.flask import FlaskIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    SENTRY_AVAILABLE = True
+except ImportError:
+    SENTRY_AVAILABLE = False
+
+if SENTRY_AVAILABLE:
+    sentry_dsn = os.environ.get('SENTRY_DSN', '')
+    if sentry_dsn:
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            integrations=[FlaskIntegration(), SqlalchemyIntegration()],
+            traces_sample_rate=0.1,
+            profiles_sample_rate=0.1,
+            environment=os.environ.get('FLASK_ENV', 'production'),
+            send_default_pii=False,  # Don't send personal data
+        )
+
 # create the app
 app = Flask(__name__)
 
@@ -148,8 +169,8 @@ app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 
 # PostgreSQL-optimized connection pooling
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 10,           # Conexiones en el pool
-    "max_overflow": 20,        # Conexiones adicionales si el pool está lleno
+    "pool_size": 20,           # Conexiones en el pool (escalable)
+    "max_overflow": 50,        # Conexiones adicionales si el pool está lleno
     "pool_timeout": 30,        # Timeout para obtener conexión del pool
     "pool_recycle": 1800,      # Reciclar conexiones cada 30 min
     "pool_pre_ping": True,     # Verificar conexión antes de usarla
@@ -441,6 +462,23 @@ def unauthorized():
     return _login_redirect()
 
 # ---------------- Views ----------------
+_ultima_alerta_oc = {'fecha': None}
+
+@app.before_request
+def alertas_diarias_oc():
+    """Ejecuta alertas de entrega de OC una vez al día."""
+    from datetime import date
+    hoy = date.today()
+    if _ultima_alerta_oc['fecha'] == hoy:
+        return
+    _ultima_alerta_oc['fecha'] = hoy
+    try:
+        from blueprint_ordenes_compra import notificar_entregas_proximas
+        notificar_entregas_proximas()
+    except Exception:
+        app.logger.debug('Error en alertas diarias OC (no crítico)')
+
+
 @app.before_request
 def sincronizar_membresia_actual():
     """Carga la membresía activa en cada request para usuarios autenticados."""
@@ -660,7 +698,14 @@ def utility_processor():
             return f'{int(v):,}'.replace(',', '.')
         return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
-    return dict(
+    # Plan service context
+    try:
+        from services.plan_service import inject_plan_context
+        plan_ctx = inject_plan_context()
+    except Exception:
+        plan_ctx = {'plan_info': {}, 'can_feature': lambda f: True}
+
+    result = dict(
         obtener_tareas_para_etapa=obtener_tareas_para_etapa,
         has_endpoint=has_endpoint,
         tiene_rol=tiene_rol_helper,
@@ -670,6 +715,8 @@ def utility_processor():
         current_organization=current_org,
         current_org_id=get_current_org_id,
     )
+    result.update(plan_ctx)
+    return result
 
 # ---------------- Template filters ----------------
 @app.template_filter('fecha')
@@ -1605,6 +1652,22 @@ with app.app_context():
             IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_fichadas_obra_fecha') THEN
                 CREATE INDEX ix_fichadas_obra_fecha ON fichadas(obra_id, fecha_hora);
             END IF;
+            -- Indices de escalabilidad (audit 2026-03-31)
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_equipment_company') THEN
+                CREATE INDEX ix_equipment_company ON equipment(company_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_obras_org_estado_deleted') THEN
+                CREATE INDEX ix_obras_org_estado_deleted ON obras(organizacion_id, estado, deleted_at);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_etapas_obra_id') THEN
+                CREATE INDEX ix_etapas_obra_id ON etapas_obra(obra_id, orden);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_tareas_etapa_id') THEN
+                CREATE INDEX ix_tareas_etapa_id ON tareas_etapa(etapa_id, orden);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_uso_inv_obra') THEN
+                CREATE INDEX ix_uso_inv_obra ON uso_inventario(obra_id);
+            END IF;
         END $$;
         """
         db.session.execute(text(idx_sql))
@@ -1720,14 +1783,47 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] Error creando campo activo en obras: {e}")
 
+    # Soft-delete: agregar deleted_at a obras
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='obras' AND column_name='deleted_at') THEN
+                ALTER TABLE obras ADD COLUMN deleted_at TIMESTAMP;
+                CREATE INDEX ix_obras_deleted_at ON obras(deleted_at);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error creando campo deleted_at en obras: {e}")
+
+    # Plan service: campos de suscripción/licencia en organizaciones
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='contract_type') THEN
+                ALTER TABLE organizaciones ADD COLUMN contract_type VARCHAR(20) DEFAULT 'subscription';
+                ALTER TABLE organizaciones ADD COLUMN subscription_status VARCHAR(20) DEFAULT 'active';
+                ALTER TABLE organizaciones ADD COLUMN grace_period_until TIMESTAMP;
+                ALTER TABLE organizaciones ADD COLUMN annual_service_due_date TIMESTAMP;
+                ALTER TABLE organizaciones ADD COLUMN annual_service_status VARCHAR(20) DEFAULT 'active';
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Error creando campos de plan en organizaciones: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado
     # - CASCADE DELETE en tarea_miembros/tarea_responsables: ya aplicado
     # - Limpieza de duplicados inventario: completada manualmente
     # - Reclasificación encofrados: completada
-    # Los modelos tienen las definiciones correctas (index=True, ondelete='CASCADE', etc.)
-    # Si se necesita recrear la DB, SQLAlchemy create_all() aplica todo desde los modelos.
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
@@ -1783,15 +1879,8 @@ for module_name, attr_name, prefix in [
         blueprint = _import_blueprint(module_name, attr_name)
         app.register_blueprint(blueprint, url_prefix=prefix)
 
-        # Excluir endpoint de eliminar presupuesto del CSRF
-        if module_name == 'presupuestos':
-            # El nombre de la vista en el blueprint es solo 'eliminar'
-            view_func = blueprint.view_functions.get('eliminar')
-            if view_func:
-                csrf.exempt(view_func)
-                app.logger.info(f"CSRF exempt aplicado a presupuestos.eliminar")
-            else:
-                app.logger.warning(f"No se encontró la vista 'eliminar' en presupuestos. Vistas disponibles: {list(blueprint.view_functions.keys())}")
+        # CSRF protection is now handled globally via the fetch interceptor
+        # in base.html which auto-injects X-CSRFToken on all non-GET requests.
     except Exception as exc:
         app.logger.warning(
             "Blueprint opcional %s no disponible: %s", module_name, exc

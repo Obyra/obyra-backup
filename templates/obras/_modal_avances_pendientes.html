@@ -12,7 +12,7 @@
             <div class="modal-body">
 
                 <!-- Formulario de registro de nuevo avance (colapsable) -->
-                {% if current_user.role in ['admin', 'pm', 'administrador', 'tecnico', 'project_manager'] or current_user.is_super_admin %}
+                {% if current_user.role in ['admin', 'pm'] or current_user.is_super_admin %}
                 <div class="mb-4">
                     <button class="btn btn-outline-primary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#collapseNuevoAvance">
                         <i class="fas fa-plus me-2"></i>Registrar Nuevo Avance
