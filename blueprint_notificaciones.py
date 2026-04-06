@@ -3,7 +3,7 @@ Blueprint de Notificaciones
 Gestiona las notificaciones internas del sistema
 """
 
-from flask import Blueprint, render_template, jsonify, request, url_for
+from flask import Blueprint, render_template, jsonify, request, url_for, current_app
 from flask_login import login_required, current_user
 from extensions import db
 from datetime import datetime
@@ -48,7 +48,7 @@ def api_recientes():
             'no_leidas': no_leidas
         })
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error notificaciones: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @notificaciones_bp.route('/api/marcar-leida/<int:id>', methods=['POST'])
@@ -69,7 +69,7 @@ def api_marcar_leida(id):
 
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error notificaciones: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @notificaciones_bp.route('/api/marcar-todas-leidas', methods=['POST'])
@@ -91,7 +91,7 @@ def api_marcar_todas_leidas():
         return jsonify({'ok': True})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error notificaciones: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @notificaciones_bp.route('/api/count')
@@ -104,7 +104,7 @@ def api_count():
         count = Notificacion.contar_no_leidas(current_user.id)
         return jsonify({'ok': True, 'count': count})
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error notificaciones: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @notificaciones_bp.route('/api/eliminar/<int:id>', methods=['POST', 'DELETE'])
@@ -126,4 +126,4 @@ def api_eliminar(id):
         return jsonify({'ok': True})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error notificaciones: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500

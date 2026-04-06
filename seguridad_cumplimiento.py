@@ -12,6 +12,7 @@ from utils.pagination import Pagination
 from app import db
 from models import *
 from utils import *
+from services.memberships import get_current_org_id
 
 seguridad_bp = Blueprint('seguridad', __name__)
 
@@ -27,6 +28,7 @@ class ProtocoloSeguridad(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     activo = db.Column(db.Boolean, default=True)
     normativa_referencia = db.Column(db.String(200))
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True, index=True)
 
 class ChecklistSeguridad(db.Model):
     __tablename__ = 'checklists_seguridad'
@@ -42,6 +44,8 @@ class ChecklistSeguridad(db.Model):
     acciones_correctivas = db.Column(db.Text)
     fecha_completado = db.Column(db.DateTime)
     
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True, index=True)
+
     # Relaciones
     obra = db.relationship('Obra')
     protocolo = db.relationship('ProtocoloSeguridad')
@@ -82,6 +86,8 @@ class IncidenteSeguridad(db.Model):
     estado = db.Column(db.String(20), default='abierto')  # abierto, investigando, cerrado
     fecha_cierre = db.Column(db.DateTime)
     
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True, index=True)
+
     # Relaciones
     obra = db.relationship('Obra')
     responsable = db.relationship('Usuario')
@@ -99,6 +105,8 @@ class CertificacionPersonal(db.Model):
     archivo_certificado = db.Column(db.String(500))
     activo = db.Column(db.Boolean, default=True)
     
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True, index=True)
+
     # Relaciones
     usuario = db.relationship('Usuario')
 
@@ -119,6 +127,8 @@ class AuditoriaSeguridad(db.Model):
     fecha_seguimiento = db.Column(db.Date)
     estado = db.Column(db.String(20), default='programada')  # programada, ejecutada, cerrada
     
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True, index=True)
+
     # Relaciones
     obra = db.relationship('Obra')
 
@@ -126,23 +136,29 @@ class AuditoriaSeguridad(db.Model):
 @login_required
 def dashboard():
     """Dashboard principal de seguridad y cumplimiento"""
+    org_id = get_current_org_id()
+
     # KPIs de seguridad
     incidentes_mes = IncidenteSeguridad.query.filter(
+        IncidenteSeguridad.organizacion_id == org_id,
         IncidenteSeguridad.fecha_incidente >= datetime.now().replace(day=1)
     ).count()
-    
-    checklists_pendientes = ChecklistSeguridad.query.filter_by(estado='pendiente').count()
-    
+
+    checklists_pendientes = ChecklistSeguridad.query.filter_by(
+        organizacion_id=org_id, estado='pendiente'
+    ).count()
+
     certificaciones_vencen = CertificacionPersonal.query.filter(
+        CertificacionPersonal.organizacion_id == org_id,
         CertificacionPersonal.fecha_vencimiento <= date.today() + timedelta(days=30),
         CertificacionPersonal.activo == True
     ).count()
-    
-    obras_sin_inspeccion = obtener_obras_sin_inspeccion_reciente()
-    
+
+    obras_sin_inspeccion = obtener_obras_sin_inspeccion_reciente(org_id)
+
     # Estadísticas
-    stats = calcular_estadisticas_seguridad()
-    
+    stats = calcular_estadisticas_seguridad(org_id)
+
     return render_template('seguridad/dashboard.html',
                          incidentes_mes=incidentes_mes,
                          checklists_pendientes=checklists_pendientes,
@@ -154,7 +170,8 @@ def dashboard():
 @login_required
 def protocolos():
     """Gestión de protocolos de seguridad"""
-    protocolos = ProtocoloSeguridad.query.filter_by(activo=True).all()
+    org_id = get_current_org_id()
+    protocolos = ProtocoloSeguridad.query.filter_by(activo=True, organizacion_id=org_id).all()
     return render_template('seguridad/protocolos.html', protocolos=protocolos)
 
 @seguridad_bp.route('/crear_protocolo')
@@ -172,13 +189,15 @@ def crear_protocolo():
 def procesar_protocolo():
     """Procesa la creación de un nuevo protocolo"""
     try:
+        org_id = get_current_org_id()
         protocolo = ProtocoloSeguridad(
             nombre=request.form.get('nombre'),
             descripcion=request.form.get('descripcion'),
             categoria=request.form.get('categoria'),
             obligatorio=request.form.get('obligatorio') == 'on',
             frecuencia_revision=safe_int(request.form.get('frecuencia_revision', 30), default=30),
-            normativa_referencia=request.form.get('normativa_referencia')
+            normativa_referencia=request.form.get('normativa_referencia'),
+            organizacion_id=org_id
         )
         
         db.session.add(protocolo)
@@ -189,19 +208,20 @@ def procesar_protocolo():
     
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al crear protocolo: {str(e)}', 'danger')
+        flash('Error al crear protocolo. Intente nuevamente.', 'danger')
         return redirect(url_for('seguridad.crear_protocolo'))
 
 @seguridad_bp.route('/checklists')
 @login_required
 def checklists():
     """Lista de checklists de seguridad"""
+    org_id = get_current_org_id()
     obra_id = request.args.get('obra_id', type=int)
     estado = request.args.get('estado')
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
-    query = ChecklistSeguridad.query
+    query = ChecklistSeguridad.query.filter_by(organizacion_id=org_id)
 
     if obra_id:
         query = query.filter_by(obra_id=obra_id)
@@ -209,7 +229,7 @@ def checklists():
         query = query.filter_by(estado=estado)
 
     checklists = query.order_by(ChecklistSeguridad.fecha_inspeccion.desc()).paginate(page=page, per_page=per_page, error_out=False)
-    obras = Obra.query.all()
+    obras = Obra.query.filter_by(organizacion_id=org_id).all()
 
     return render_template('seguridad/checklists.html', checklists=checklists, obras=obras)
 
@@ -217,8 +237,9 @@ def checklists():
 @login_required
 def nuevo_checklist():
     """Formulario para nuevo checklist"""
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
-    protocolos = ProtocoloSeguridad.query.filter_by(activo=True).all()
+    org_id = get_current_org_id()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.estado.in_(['en_curso', 'planificacion'])).all()
+    protocolos = ProtocoloSeguridad.query.filter_by(activo=True, organizacion_id=org_id).all()
     from datetime import date
     return render_template('seguridad/nuevo_checklist.html', obras=obras, protocolos=protocolos, today=date.today().isoformat())
 
@@ -232,12 +253,14 @@ def procesar_nuevo_checklist():
         fecha_inspeccion_str = request.form.get('fecha_inspeccion')
         fecha_inspeccion = datetime.strptime(fecha_inspeccion_str, '%Y-%m-%d').date() if fecha_inspeccion_str else date.today()
 
+        org_id = get_current_org_id()
         checklist = ChecklistSeguridad(
             obra_id=safe_int(request.form.get('obra_id')),
             protocolo_id=safe_int(request.form.get('protocolo_id')),
             fecha_inspeccion=fecha_inspeccion,
             inspector_id=safe_int(request.form.get('inspector_id', current_user.id)),
-            estado='pendiente'
+            estado='pendiente',
+            organizacion_id=org_id
         )
 
         db.session.add(checklist)
@@ -248,14 +271,15 @@ def procesar_nuevo_checklist():
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al crear checklist: {str(e)}', 'danger')
+        flash('Error al crear checklist. Intente nuevamente.', 'danger')
         return redirect(url_for('seguridad.nuevo_checklist'))
 
 @seguridad_bp.route('/ejecutar_checklist/<int:checklist_id>')
 @login_required
 def ejecutar_checklist(checklist_id):
     """Formulario para ejecutar checklist"""
-    checklist = ChecklistSeguridad.query.get_or_404(checklist_id)
+    org_id = get_current_org_id()
+    checklist = ChecklistSeguridad.query.filter_by(id=checklist_id, organizacion_id=org_id).first_or_404()
     items = generar_items_checklist(checklist.protocolo_id)
     return render_template('seguridad/ejecutar_checklist.html', checklist=checklist, items=items)
 
@@ -264,8 +288,9 @@ def ejecutar_checklist(checklist_id):
 def procesar_checklist(checklist_id):
     """Procesa la ejecución de un checklist"""
     try:
-        checklist = ChecklistSeguridad.query.get_or_404(checklist_id)
-        
+        org_id = get_current_org_id()
+        checklist = ChecklistSeguridad.query.filter_by(id=checklist_id, organizacion_id=org_id).first_or_404()
+
         # Procesar items
         items_conformes = 0
         total_items = 0
@@ -307,36 +332,38 @@ def procesar_checklist(checklist_id):
     
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al procesar checklist: {str(e)}', 'danger')
+        flash('Error al procesar checklist. Intente nuevamente.', 'danger')
         return redirect(url_for('seguridad.ejecutar_checklist', checklist_id=checklist_id))
 
 @seguridad_bp.route('/incidentes')
 @login_required
 def incidentes():
     """Lista de incidentes de seguridad"""
+    org_id = get_current_org_id()
     obra_id = request.args.get('obra_id', type=int)
     gravedad = request.args.get('gravedad')
     estado = request.args.get('estado')
-    
-    query = IncidenteSeguridad.query
-    
+
+    query = IncidenteSeguridad.query.filter_by(organizacion_id=org_id)
+
     if obra_id:
         query = query.filter_by(obra_id=obra_id)
     if gravedad:
         query = query.filter_by(gravedad=gravedad)
     if estado:
         query = query.filter_by(estado=estado)
-    
+
     incidentes = query.order_by(IncidenteSeguridad.fecha_incidente.desc()).all()
-    obras = Obra.query.all()
-    
+    obras = Obra.query.filter_by(organizacion_id=org_id).all()
+
     return render_template('seguridad/incidentes.html', incidentes=incidentes, obras=obras)
 
 @seguridad_bp.route('/reportar_incidente')
 @login_required
 def reportar_incidente():
     """Formulario para reportar incidente"""
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso'])).all()
+    org_id = get_current_org_id()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.estado.in_(['en_curso'])).all()
     return render_template('seguridad/reportar_incidente.html', obras=obras)
 
 @seguridad_bp.route('/reportar_incidente', methods=['POST'])
@@ -344,6 +371,7 @@ def reportar_incidente():
 def procesar_incidente():
     """Procesa el reporte de un incidente"""
     try:
+        org_id = get_current_org_id()
         incidente = IncidenteSeguridad(
             obra_id=request.form.get('obra_id'),
             fecha_incidente=datetime.strptime(request.form.get('fecha_incidente'), '%Y-%m-%d %H:%M'),
@@ -357,7 +385,8 @@ def procesar_incidente():
             atencion_medica=request.form.get('atencion_medica') == 'on',
             dias_perdidos=safe_int(request.form.get('dias_perdidos', 0)),
             acciones_inmediatas=request.form.get('acciones_inmediatas'),
-            responsable_id=current_user.id
+            responsable_id=current_user.id,
+            organizacion_id=org_id
         )
         
         db.session.add(incidente)
@@ -373,17 +402,18 @@ def procesar_incidente():
     
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al reportar incidente: {str(e)}', 'danger')
+        flash('Error al reportar incidente. Intente nuevamente.', 'danger')
         return redirect(url_for('seguridad.reportar_incidente'))
 
 @seguridad_bp.route('/certificaciones')
 @login_required
 def certificaciones():
     """Gestión de certificaciones del personal"""
+    org_id = get_current_org_id()
     usuario_id = request.args.get('usuario_id', type=int)
     obra_id = request.args.get('obra_id', type=int)
 
-    query = CertificacionPersonal.query.filter_by(activo=True)
+    query = CertificacionPersonal.query.filter_by(activo=True, organizacion_id=org_id)
 
     if usuario_id:
         query = query.filter_by(usuario_id=usuario_id)
@@ -393,7 +423,7 @@ def certificaciones():
         Usuario.activo == True,
         Usuario.is_super_admin.is_(False)
     ).all()
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.estado.in_(['en_curso', 'planificacion'])).all()
 
     return render_template('seguridad/certificaciones.html',
                          certificaciones=certificaciones,
@@ -409,10 +439,11 @@ def agregar_certificacion():
         flash('No tienes permisos para agregar certificaciones', 'danger')
         return redirect(url_for('seguridad.certificaciones'))
 
+    org_id = get_current_org_id()
     obra_id = request.args.get('obra_id', type=int)
 
     # Obtener obras activas
-    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
+    obras = Obra.query.filter(Obra.organizacion_id == org_id, Obra.estado.in_(['en_curso', 'planificacion'])).all()
 
     # Si se especifica una obra, obtener operarios asignados a esa obra
     usuarios = []
@@ -454,6 +485,7 @@ def procesar_agregar_certificacion():
         fecha_emision = datetime.strptime(fecha_emision_str, '%Y-%m-%d').date() if fecha_emision_str else date.today()
         fecha_vencimiento = datetime.strptime(fecha_vencimiento_str, '%Y-%m-%d').date() if fecha_vencimiento_str else None
 
+        org_id = get_current_org_id()
         certificacion = CertificacionPersonal(
             usuario_id=safe_int(request.form.get('usuario_id')),
             tipo_certificacion=request.form.get('tipo_certificacion'),
@@ -462,7 +494,8 @@ def procesar_agregar_certificacion():
             fecha_emision=fecha_emision,
             fecha_vencimiento=fecha_vencimiento,
             archivo_certificado=request.form.get('archivo_certificado'),
-            activo=True
+            activo=True,
+            organizacion_id=org_id
         )
 
         db.session.add(certificacion)
@@ -473,7 +506,7 @@ def procesar_agregar_certificacion():
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al agregar certificación: {str(e)}', 'danger')
+        flash('Error al agregar certificación. Intente nuevamente.', 'danger')
         return redirect(url_for('seguridad.agregar_certificacion'))
 
 @seguridad_bp.route('/api/operarios_obra/<int:obra_id>')
@@ -481,6 +514,9 @@ def procesar_agregar_certificacion():
 def api_operarios_obra(obra_id):
     """API para obtener operarios asignados a una obra"""
     try:
+        org_id = get_current_org_id()
+        # Verificar que la obra pertenece a la organización
+        obra = Obra.query.filter_by(id=obra_id, organizacion_id=org_id).first_or_404()
         from models.projects import AsignacionObra
         asignaciones = AsignacionObra.query.filter_by(obra_id=obra_id, activo=True).all()
         usuario_ids = [a.usuario_id for a in asignaciones]
@@ -502,50 +538,60 @@ def api_operarios_obra(obra_id):
 @login_required
 def auditorias():
     """Gestión de auditorías de seguridad"""
-    auditorias = AuditoriaSeguridad.query.order_by(AuditoriaSeguridad.fecha_auditoria.desc()).all()
+    org_id = get_current_org_id()
+    auditorias = AuditoriaSeguridad.query.filter_by(organizacion_id=org_id).order_by(AuditoriaSeguridad.fecha_auditoria.desc()).all()
     return render_template('seguridad/auditorias.html', auditorias=auditorias)
 
 @seguridad_bp.route('/reportes_seguridad')
 @login_required
 def reportes():
     """Reportes y análisis de seguridad"""
-    reporte = generar_reporte_seguridad()
+    org_id = get_current_org_id()
+    reporte = generar_reporte_seguridad(org_id)
     return render_template('seguridad/reportes.html', reporte=reporte)
 
 @seguridad_bp.route('/indicadores_seguridad')
 @login_required
 def indicadores():
     """Indicadores clave de seguridad"""
-    kpis = calcular_kpis_seguridad()
+    org_id = get_current_org_id()
+    kpis = calcular_kpis_seguridad(org_id)
     return render_template('seguridad/indicadores.html', kpis=kpis)
 
 # Funciones auxiliares
 
-def obtener_obras_sin_inspeccion_reciente():
+def obtener_obras_sin_inspeccion_reciente(org_id=None):
     """Obtiene obras que no han tenido inspección en los últimos 15 días"""
+    if org_id is None:
+        org_id = get_current_org_id()
     fecha_limite = date.today() - timedelta(days=15)
-    
+
     obras_con_inspeccion = db.session.query(ChecklistSeguridad.obra_id).filter(
+        ChecklistSeguridad.organizacion_id == org_id,
         ChecklistSeguridad.fecha_inspeccion >= fecha_limite
     ).subquery()
-    
+
     obras_sin_inspeccion = Obra.query.filter(
+        Obra.organizacion_id == org_id,
         Obra.estado == 'en_curso',
         ~Obra.id.in_(obras_con_inspeccion)
     ).all()
-    
+
     return obras_sin_inspeccion
 
-def calcular_estadisticas_seguridad():
+def calcular_estadisticas_seguridad(org_id=None):
     """Calcula estadísticas generales de seguridad"""
+    if org_id is None:
+        org_id = get_current_org_id()
     return {
-        'total_incidentes': IncidenteSeguridad.query.count(),
+        'total_incidentes': IncidenteSeguridad.query.filter_by(organizacion_id=org_id).count(),
         'incidentes_mes': IncidenteSeguridad.query.filter(
+            IncidenteSeguridad.organizacion_id == org_id,
             IncidenteSeguridad.fecha_incidente >= datetime.now().replace(day=1)
         ).count(),
-        'dias_sin_accidentes': calcular_dias_sin_accidentes(),
-        'indice_frecuencia': calcular_indice_frecuencia(),
-        'indice_gravedad': calcular_indice_gravedad()
+        'dias_sin_accidentes': calcular_dias_sin_accidentes(org_id),
+        'indice_frecuencia': calcular_indice_frecuencia(org_id),
+        'indice_gravedad': calcular_indice_gravedad(org_id)
     }
 
 def generar_items_checklist(protocolo_id):
@@ -572,7 +618,10 @@ def generar_items_checklist(protocolo_id):
         ]
     }
     
-    protocolo = ProtocoloSeguridad.query.get(protocolo_id)
+    org_id = get_current_org_id()
+    protocolo = ProtocoloSeguridad.query.filter_by(id=protocolo_id, organizacion_id=org_id).first()
+    if not protocolo:
+        return []
     return items_estandar.get(protocolo.categoria, [])
 
 def enviar_notificacion_incidente_grave(incidente):
@@ -581,144 +630,179 @@ def enviar_notificacion_incidente_grave(incidente):
     # Por ejemplo, email, SMS, etc.
     pass
 
-def calcular_dias_sin_accidentes():
+def calcular_dias_sin_accidentes(org_id=None):
     """Calcula días sin accidentes graves"""
+    if org_id is None:
+        org_id = get_current_org_id()
     ultimo_accidente = IncidenteSeguridad.query.filter(
+        IncidenteSeguridad.organizacion_id == org_id,
         IncidenteSeguridad.tipo_incidente == 'accidente',
         IncidenteSeguridad.gravedad.in_(['grave', 'muy_grave'])
     ).order_by(IncidenteSeguridad.fecha_incidente.desc()).first()
-    
+
     if ultimo_accidente:
         return (date.today() - ultimo_accidente.fecha_incidente.date()).days
     else:
         return 365  # Default si no hay registros
 
-def calcular_indice_frecuencia():
+def calcular_indice_frecuencia(org_id=None):
     """Calcula índice de frecuencia de accidentes"""
+    if org_id is None:
+        org_id = get_current_org_id()
     # IF = (Número de accidentes * 1,000,000) / Horas trabajadas
     # Simplificado para el ejemplo
     accidentes_año = IncidenteSeguridad.query.filter(
+        IncidenteSeguridad.organizacion_id == org_id,
         IncidenteSeguridad.fecha_incidente >= datetime.now().replace(month=1, day=1),
         IncidenteSeguridad.tipo_incidente == 'accidente'
     ).count()
-    
+
     # Estimar horas trabajadas (simplificado)
     horas_estimadas = 2000 * Usuario.query.filter(Usuario.activo == True, Usuario.is_super_admin.is_(False)).count()
-    
+
     return (accidentes_año * 1000000) / horas_estimadas if horas_estimadas > 0 else 0
 
-def calcular_indice_gravedad():
+def calcular_indice_gravedad(org_id=None):
     """Calcula índice de gravedad de accidentes"""
+    if org_id is None:
+        org_id = get_current_org_id()
     # IG = (Días perdidos * 1,000,000) / Horas trabajadas
     dias_perdidos = db.session.query(db.func.sum(IncidenteSeguridad.dias_perdidos)).filter(
+        IncidenteSeguridad.organizacion_id == org_id,
         IncidenteSeguridad.fecha_incidente >= datetime.now().replace(month=1, day=1)
     ).scalar() or 0
-    
+
     horas_estimadas = 2000 * Usuario.query.filter(Usuario.activo == True, Usuario.is_super_admin.is_(False)).count()
-    
+
     return (dias_perdidos * 1000000) / horas_estimadas if horas_estimadas > 0 else 0
 
-def calcular_kpis_seguridad():
+def calcular_kpis_seguridad(org_id=None):
     """Calcula KPIs principales de seguridad"""
+    if org_id is None:
+        org_id = get_current_org_id()
     return {
-        'tasa_accidentalidad': calcular_tasa_accidentalidad(),
-        'cumplimiento_protocolos': calcular_cumplimiento_protocolos(),
-        'capacitaciones_vencidas': calcular_capacitaciones_vencidas(),
-        'obras_conformes': calcular_obras_conformes()
+        'tasa_accidentalidad': calcular_tasa_accidentalidad(org_id),
+        'cumplimiento_protocolos': calcular_cumplimiento_protocolos(org_id),
+        'capacitaciones_vencidas': calcular_capacitaciones_vencidas(org_id),
+        'obras_conformes': calcular_obras_conformes(org_id)
     }
 
-def calcular_tasa_accidentalidad():
+def calcular_tasa_accidentalidad(org_id=None):
     """Calcula tasa de accidentalidad"""
+    if org_id is None:
+        org_id = get_current_org_id()
     accidentes_mes = IncidenteSeguridad.query.filter(
+        IncidenteSeguridad.organizacion_id == org_id,
         IncidenteSeguridad.fecha_incidente >= datetime.now().replace(day=1),
         IncidenteSeguridad.tipo_incidente == 'accidente'
     ).count()
-    
+
     trabajadores_activos = Usuario.query.filter(Usuario.activo == True, Usuario.is_super_admin.is_(False)).count()
-    
+
     return (accidentes_mes / trabajadores_activos * 100) if trabajadores_activos > 0 else 0
 
-def calcular_cumplimiento_protocolos():
+def calcular_cumplimiento_protocolos(org_id=None):
     """Calcula porcentaje de cumplimiento de protocolos"""
-    checklists_completados = ChecklistSeguridad.query.filter_by(estado='completado').count()
-    total_checklists = ChecklistSeguridad.query.count()
-    
+    if org_id is None:
+        org_id = get_current_org_id()
+    checklists_completados = ChecklistSeguridad.query.filter_by(organizacion_id=org_id, estado='completado').count()
+    total_checklists = ChecklistSeguridad.query.filter_by(organizacion_id=org_id).count()
+
     return (checklists_completados / total_checklists * 100) if total_checklists > 0 else 0
 
-def calcular_capacitaciones_vencidas():
+def calcular_capacitaciones_vencidas(org_id=None):
     """Calcula porcentaje de capacitaciones vencidas"""
+    if org_id is None:
+        org_id = get_current_org_id()
     certificaciones_vencidas = CertificacionPersonal.query.filter(
+        CertificacionPersonal.organizacion_id == org_id,
         CertificacionPersonal.fecha_vencimiento < date.today(),
         CertificacionPersonal.activo == True
     ).count()
-    
-    total_certificaciones = CertificacionPersonal.query.filter_by(activo=True).count()
-    
+
+    total_certificaciones = CertificacionPersonal.query.filter_by(activo=True, organizacion_id=org_id).count()
+
     return (certificaciones_vencidas / total_certificaciones * 100) if total_certificaciones > 0 else 0
 
-def calcular_obras_conformes():
+def calcular_obras_conformes(org_id=None):
     """Calcula porcentaje de obras conformes en seguridad"""
+    if org_id is None:
+        org_id = get_current_org_id()
     obras_conformes = db.session.query(ChecklistSeguridad.obra_id).filter(
+        ChecklistSeguridad.organizacion_id == org_id,
         ChecklistSeguridad.puntuacion >= 80
     ).distinct().count()
-    
-    total_obras = Obra.query.filter_by(estado='en_curso').count()
-    
+
+    total_obras = Obra.query.filter_by(organizacion_id=org_id, estado='en_curso').count()
+
     return (obras_conformes / total_obras * 100) if total_obras > 0 else 0
 
-def generar_reporte_seguridad():
+def generar_reporte_seguridad(org_id=None):
     """Genera reporte completo de seguridad"""
+    if org_id is None:
+        org_id = get_current_org_id()
     return {
         'periodo': f"{datetime.now().strftime('%B %Y')}",
-        'incidentes_por_tipo': obtener_incidentes_por_tipo(),
-        'incidentes_por_obra': obtener_incidentes_por_obra(),
+        'incidentes_por_tipo': obtener_incidentes_por_tipo(org_id),
+        'incidentes_por_obra': obtener_incidentes_por_obra(org_id),
         'evolución_indices': obtener_evolucion_indices(),
-        'recomendaciones': generar_recomendaciones_seguridad()
+        'recomendaciones': generar_recomendaciones_seguridad(org_id)
     }
 
-def obtener_incidentes_por_tipo():
+def obtener_incidentes_por_tipo(org_id=None):
     """Obtiene estadísticas de incidentes por tipo"""
+    if org_id is None:
+        org_id = get_current_org_id()
     return db.session.query(
         IncidenteSeguridad.tipo_incidente,
         db.func.count(IncidenteSeguridad.id)
+    ).filter(
+        IncidenteSeguridad.organizacion_id == org_id
     ).group_by(IncidenteSeguridad.tipo_incidente).all()
 
-def obtener_incidentes_por_obra():
+def obtener_incidentes_por_obra(org_id=None):
     """Obtiene estadísticas de incidentes por obra"""
+    if org_id is None:
+        org_id = get_current_org_id()
     return db.session.query(
         Obra.nombre,
         db.func.count(IncidenteSeguridad.id)
-    ).join(IncidenteSeguridad).group_by(Obra.id).all()
+    ).join(IncidenteSeguridad).filter(
+        Obra.organizacion_id == org_id
+    ).group_by(Obra.id).all()
 
 def obtener_evolucion_indices():
     """Obtiene evolución de índices de seguridad"""
     # Implementar lógica para obtener evolución temporal
     return []
 
-def generar_recomendaciones_seguridad():
+def generar_recomendaciones_seguridad(org_id=None):
     """Genera recomendaciones automáticas de seguridad"""
+    if org_id is None:
+        org_id = get_current_org_id()
     recomendaciones = []
-    
+
     # Verificar obras sin inspección
-    obras_sin_inspeccion = obtener_obras_sin_inspeccion_reciente()
+    obras_sin_inspeccion = obtener_obras_sin_inspeccion_reciente(org_id)
     if obras_sin_inspeccion:
         recomendaciones.append(
             f"Programar inspecciones para {len(obras_sin_inspeccion)} obras sin revisión reciente"
         )
-    
+
     # Verificar certificaciones próximas a vencer
     cert_por_vencer = CertificacionPersonal.query.filter(
+        CertificacionPersonal.organizacion_id == org_id,
         CertificacionPersonal.fecha_vencimiento <= date.today() + timedelta(days=30),
         CertificacionPersonal.activo == True
     ).count()
-    
+
     if cert_por_vencer > 0:
         recomendaciones.append(
             f"Renovar {cert_por_vencer} certificaciones que vencen próximamente"
         )
-    
+
     # Verificar incidentes recurrentes
-    if calcular_tasa_accidentalidad() > 5:
+    if calcular_tasa_accidentalidad(org_id) > 5:
         recomendaciones.append("Revisar protocolos de seguridad - tasa de accidentalidad elevada")
-    
+
     return recomendaciones

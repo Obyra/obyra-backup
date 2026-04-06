@@ -570,7 +570,8 @@ def crear():
         error_details = traceback.format_exc()
         current_app.logger.error(f"Error en presupuestos.crear: {e}\n{error_details}")
         # Mostrar error más descriptivo al usuario
-        flash(f'Error al crear el presupuesto: {str(e)}', 'danger')
+        current_app.logger.error(f'Error al crear presupuesto: {e}')
+        flash('Error al crear el presupuesto. Intente nuevamente.', 'danger')
         return redirect(url_for('presupuestos.lista'))
 
 
@@ -1857,7 +1858,6 @@ def confirmar_como_obra(id):
 
 
 @presupuestos_bp.route('/<int:id>/editar-obra', methods=['POST'])
-@csrf.exempt
 @login_required
 def editar_obra(id):
     """Editar información de la obra/proyecto del presupuesto"""
@@ -2034,7 +2034,6 @@ def agregar_item(id):
 
 @presupuestos_bp.route('/item/<int:id>/editar', methods=['POST'])
 @login_required
-@csrf.exempt
 def editar_item(id):
     """Editar item de presupuesto"""
     # Usar método centralizado de permisos
@@ -2162,7 +2161,6 @@ def eliminar_item(id):
 
 
 @presupuestos_bp.route('/<int:id>/eliminar', methods=['POST'])
-@csrf.exempt  # Exentar CSRF para este endpoint que usa AJAX
 @login_required
 @limiter.limit("10 per minute")
 def eliminar(id):
@@ -2228,7 +2226,7 @@ def eliminar(id):
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.eliminar: {str(e)}", exc_info=True)
         db.session.rollback()
-        return jsonify({'error': f'Error al eliminar el presupuesto: {str(e)}'}), 500
+        current_app.logger.error(f'Error al eliminar presupuesto: {e}'); return jsonify({'error': 'Error al eliminar el presupuesto'}), 500
 
 
 @presupuestos_bp.route('/<int:id>/cambiar-estado', methods=['POST'])
@@ -2271,7 +2269,6 @@ def cambiar_estado(id):
 
 
 @presupuestos_bp.route('/<int:id>/revertir-borrador', methods=['POST'])
-@csrf.exempt
 @login_required
 def revertir_borrador(id):
     """Revertir presupuesto a estado borrador (solo administradores)"""
@@ -2350,7 +2347,6 @@ def restaurar(id):
 
 
 @presupuestos_bp.route('/<int:id>/asignar-cliente', methods=['POST'])
-@csrf.exempt
 @login_required
 def asignar_cliente(id):
     """Asignar un cliente existente al presupuesto"""
@@ -2403,7 +2399,6 @@ def asignar_cliente(id):
 
 
 @presupuestos_bp.route('/<int:id>/crear-asignar-cliente', methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_asignar_cliente(id):
     """Crear un cliente nuevo y asignarlo al presupuesto"""
@@ -2474,7 +2469,7 @@ def crear_asignar_cliente(id):
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.crear_asignar_cliente: {e}", exc_info=True)
         db.session.rollback()
-        return jsonify({'exito': False, 'error': f'Error al crear cliente: {str(e)}'}), 500
+        current_app.logger.error(f'Error al crear cliente: {e}'); return jsonify({'exito': False, 'error': 'Error al crear cliente'}), 500
 
 
 @presupuestos_bp.route('/<int:id>/revertir-confirmacion', methods=['POST'])
@@ -2557,7 +2552,7 @@ def revertir_confirmacion_obra(id):
         current_app.logger.error(f"Error en presupuestos.revertir_confirmacion_obra: {e}", exc_info=True)
         db.session.rollback()
         return jsonify({
-            'error': f'❌ Error al revertir la confirmación: {str(e)}'
+            'error': 'Error al revertir la confirmación'
         }), 500
 
 
@@ -2619,11 +2614,10 @@ def guardar_presupuesto():
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.guardar_presupuesto: {e}")
         db.session.rollback()
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/ia/calcular/etapas', methods=['POST'])
-@csrf.exempt
 @login_required
 def calcular_etapas_ia():
     """
@@ -2752,13 +2746,13 @@ def calcular_etapas_ia():
         current_app.logger.error(f"Error de validación en calcular_etapas_ia: {str(e)}")
         return jsonify({
             'ok': False,
-            'error': str(e)
+            'error': 'Error de validación en el cálculo'
         }), 400
     except Exception as e:
         current_app.logger.error(f"Error en calcular_etapas_ia: {str(e)}", exc_info=True)
         return jsonify({
             'ok': False,
-            'error': f'Error al calcular etapas: {str(e)}'
+            'error': 'Error al calcular etapas'
         }), 500
 
 
@@ -2803,7 +2797,7 @@ def api_buscar_precios():
 
     except Exception as e:
         current_app.logger.error(f"Error buscando precios: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/precios/categoria/<path:categoria>')
@@ -2833,7 +2827,7 @@ def api_precios_categoria(categoria):
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo precios de categoria: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/precios/categorias')
@@ -2857,7 +2851,7 @@ def api_listar_categorias():
 
     except Exception as e:
         current_app.logger.error(f"Error listando categorias: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/precios/estadisticas')
@@ -2878,7 +2872,7 @@ def api_estadisticas_precios():
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo estadisticas: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 # ============================================================================
@@ -2904,7 +2898,7 @@ def api_calculadora_etapas():
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo etapas: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/calculadora/calcular-etapa', methods=['POST'])
@@ -2953,7 +2947,7 @@ def api_calculadora_calcular_etapa():
 
     except Exception as e:
         current_app.logger.error(f"Error calculando etapa: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/calculadora/calcular-completo', methods=['POST'])
@@ -2998,7 +2992,7 @@ def api_calculadora_calcular_completo():
 
     except Exception as e:
         current_app.logger.error(f"Error calculando presupuesto completo: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/calculadora/items-etapa/<etapa_slug>')
@@ -3039,7 +3033,7 @@ def api_calculadora_items_etapa(etapa_slug):
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo items de etapa: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 # ============================================================================
@@ -3083,11 +3077,10 @@ def api_precios_mercadolibre():
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo precios ML: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/calculadora/actualizar-precios-ml', methods=['POST'])
-@csrf.exempt
 @login_required
 def api_actualizar_precios_ml():
     """
@@ -3106,7 +3099,7 @@ def api_actualizar_precios_ml():
 
     except Exception as e:
         current_app.logger.error(f"Error actualizando precios ML: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/calculadora/buscar-precio-ml')
@@ -3134,7 +3127,7 @@ def api_buscar_precio_ml():
 
     except Exception as e:
         current_app.logger.error(f"Error buscando precio ML: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @presupuestos_bp.route('/api/calculadora/precios-referencia')
@@ -3154,4 +3147,4 @@ def api_precios_referencia():
         })
     except Exception as e:
         current_app.logger.error(f"Error obteniendo precios referencia: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error presupuestos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500

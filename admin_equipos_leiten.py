@@ -164,7 +164,7 @@ def crear():
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error creando equipo: {e}")
-            flash(f'Error al crear equipo: {str(e)}', 'danger')
+            flash('Error al crear equipo. Intente nuevamente.', 'danger')
 
     categorias = CategoriaEquipoProveedor.query.filter_by(activo=True).order_by(CategoriaEquipoProveedor.nombre).all()
 
@@ -237,7 +237,7 @@ def editar(id):
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error actualizando equipo: {e}")
-            flash(f'Error al actualizar equipo: {str(e)}', 'danger')
+            flash('Error al actualizar equipo. Intente nuevamente.', 'danger')
 
     categorias = CategoriaEquipoProveedor.query.filter_by(activo=True).order_by(CategoriaEquipoProveedor.nombre).all()
 
@@ -260,7 +260,7 @@ def eliminar(id):
         flash(f'Equipo "{equipo.nombre}" eliminado', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al eliminar: {str(e)}', 'danger')
+        flash('Error al eliminar. Intente nuevamente.', 'danger')
 
     return redirect(url_for('admin_equipos.lista'))
 
@@ -444,7 +444,7 @@ def importar_excel():
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error importando Excel: {e}")
-            flash(f'Error al importar: {str(e)}', 'danger')
+            flash('Error al importar. Intente nuevamente.', 'danger')
 
     return render_template('admin/equipos_proveedor/importar.html')
 
@@ -625,7 +625,7 @@ def crear_categoria():
         flash(f'Categoría "{nombre}" creada', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error: {str(e)}', 'danger')
+        flash('Error al procesar la solicitud. Intente nuevamente.', 'danger')
 
     return redirect(url_for('admin_equipos.lista_categorias'))
 

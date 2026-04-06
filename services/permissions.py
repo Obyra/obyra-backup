@@ -347,3 +347,35 @@ def require_not_operario(f):
 
         return f(*args, **kwargs)
     return decorated_function
+
+
+def require_plan(*planes_permitidos):
+    """
+    Decorador que restringe acceso a usuarios con planes específicos.
+
+    Usage:
+        @require_plan('premium', 'full_premium')
+        def feature_premium():
+            ...
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                abort(401)
+
+            if getattr(current_user, 'is_super_admin', False):
+                return f(*args, **kwargs)
+
+            org = getattr(current_user, 'organizacion', None)
+            plan_actual = getattr(org, 'plan_tipo', None) if org else None
+
+            if not plan_actual or plan_actual not in planes_permitidos:
+                if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'ok': False, 'error': 'Tu plan no incluye esta funcionalidad.'}), 403
+                flash('Tu plan no incluye esta funcionalidad. Actualiza tu plan para acceder.', 'warning')
+                return redirect(url_for('planes.mostrar_planes'))
+
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator

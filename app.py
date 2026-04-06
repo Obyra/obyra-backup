@@ -483,23 +483,31 @@ def verificar_periodo_prueba():
             plan_a_verificar = getattr(current_user, "plan_activo", None)
             entidad_con_plan = current_user
 
-        # Verificar si el plan es de prueba y ya expiró
+        # Verificar si el plan ha expirado (prueba o pago)
+        periodo_vencido = False
         if plan_a_verificar == 'prueba' and entidad_con_plan:
-            # Verificar expiración: usar fecha_creacion de la org para calcular 30 días
-            periodo_vencido = False
+            # Plan de prueba: 30 días desde creación
             if hasattr(entidad_con_plan, 'fecha_creacion') and entidad_con_plan.fecha_creacion:
                 from datetime import timedelta
                 fecha_limite = entidad_con_plan.fecha_creacion + timedelta(days=30)
                 periodo_vencido = datetime.utcnow() > fecha_limite
+        elif plan_a_verificar in ('estandar', 'premium', 'full_premium') and entidad_con_plan:
+            # Planes pagos: verificar fecha_fin_plan
+            fecha_fin = getattr(entidad_con_plan, 'fecha_fin_plan', None)
+            if fecha_fin and datetime.utcnow() > fecha_fin:
+                periodo_vencido = True
 
-            if periodo_vencido:
-                if current_user.role == 'admin':
-                    if not request.endpoint or not request.endpoint.startswith('planes.'):
+        if periodo_vencido:
+            if current_user.role == 'admin':
+                if not request.endpoint or not request.endpoint.startswith('planes.'):
+                    if plan_a_verificar == 'prueba':
                         flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
-                    return redirect(url_for('planes.mostrar_planes'))
-                else:
-                    flash('El período de prueba de tu organización ha expirado. Contacta al administrador.', 'warning')
-                    return redirect(url_for('index'))
+                    else:
+                        flash('Tu plan ha expirado. Renueva tu suscripción para continuar.', 'warning')
+                return redirect(url_for('planes.mostrar_planes'))
+            else:
+                flash('El plan de tu organización ha expirado. Contacta al administrador.', 'warning')
+                return redirect(url_for('index'))
 
 @app.route('/offline')
 def offline_page():
@@ -528,6 +536,12 @@ def index():
         return redirect(url_for('reportes.dashboard'))
 
     next_page = request.values.get('next')
+    # Validar que next_page sea una URL interna (prevenir open redirect)
+    if next_page:
+        from urllib.parse import urlparse
+        parsed = urlparse(next_page)
+        if parsed.netloc and parsed.netloc != request.host:
+            next_page = None
     form_data = {
         'email': request.form.get('email', ''),
         'remember': bool(request.form.get('remember')),
@@ -1612,8 +1626,12 @@ with app.app_context():
             db.session.add(admin_org)
             db.session.flush()
 
-            # Obtener contraseña desde variable de entorno (más seguro que hardcodear)
-            admin_password = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
+            # Contraseña OBLIGATORIA desde variable de entorno
+            admin_password = os.environ.get('ADMIN_DEFAULT_PASSWORD')
+            if not admin_password:
+                print('[ADMIN] ERROR: Variable ADMIN_DEFAULT_PASSWORD no configurada. No se creará admin por defecto.')
+                db.session.rollback()
+                return
 
             admin = Usuario(
                 nombre='Administrador',
@@ -1981,9 +1999,50 @@ _refresh_login_view()
 @app.route("/media/<path:relpath>")
 @login_required
 def serve_media(relpath):
-    """Serve authenticated media files from /media/ directory"""
+    """Serve authenticated media files from /media/ directory with org verification."""
+    import re
+    from services.memberships import get_current_org_id
+    from models import Obra
+
     media_dir = Path(app.instance_path) / "media"
+
+    # Verificar que el archivo pertenece a la organización del usuario
+    # Estructura esperada: obras/{obra_id}/... o similar
+    match = re.match(r'obras/(\d+)/', relpath)
+    if match:
+        obra_id = int(match.group(1))
+        org_id = get_current_org_id()
+        if org_id:
+            obra = Obra.query.filter_by(id=obra_id, organizacion_id=org_id).first()
+            if not obra:
+                abort(403)
+
     return send_from_directory(media_dir, relpath)
+
+
+@app.route("/secure-uploads/<path:relpath>")
+@login_required
+def serve_secure_upload(relpath):
+    """Serve upload files with authentication and org verification.
+    This replaces direct access to static/uploads/ which is publicly accessible.
+    """
+    import re
+    from services.memberships import get_current_org_id
+    from models import Obra
+
+    uploads_dir = Path(app.static_folder) / "uploads"
+
+    # Verificar que el archivo pertenece a la organización del usuario
+    match = re.match(r'obras/(\d+)/', relpath)
+    if match:
+        obra_id = int(match.group(1))
+        org_id = get_current_org_id()
+        if org_id:
+            obra = Obra.query.filter_by(id=obra_id, organizacion_id=org_id).first()
+            if not obra:
+                abort(403)
+
+    return send_from_directory(uploads_dir, relpath)
 
 # === SERVICE WORKER ENDPOINT ===
 @app.route("/sw.js")
@@ -1996,325 +2055,10 @@ def service_worker():
     response.headers['Expires'] = '0'
     return response
 
-# === ADMIN FIX ENDPOINT (TEMPORAL) ===
-@app.route("/admin/fix-etapa-nombre")
-@login_required
-def fix_etapa_nombre():
-    """Endpoint temporal para agregar columna etapa_nombre en Railway"""
-    from sqlalchemy import text
-
-    # Solo super admins
-    if not current_user.is_super_admin:
-        return {"error": "Unauthorized"}, 403
-
-    try:
-        # Verificar si la columna existe
-        result = db.session.execute(text("""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            AND table_name = 'items_presupuesto'
-            AND column_name = 'etapa_nombre'
-        """))
-
-        if result.fetchone():
-            return {
-                "status": "already_exists",
-                "message": "La columna 'etapa_nombre' ya existe"
-            }, 200
-
-        # Agregar la columna
-        db.session.execute(text("""
-            ALTER TABLE items_presupuesto
-            ADD COLUMN etapa_nombre VARCHAR(100)
-        """))
-        db.session.commit()
-
-        # Verificar que se agregó
-        result = db.session.execute(text("""
-            SELECT column_name, data_type, character_maximum_length
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            AND table_name = 'items_presupuesto'
-            AND column_name = 'etapa_nombre'
-        """))
-
-        row = result.fetchone()
-        if row:
-            return {
-                "status": "success",
-                "message": "Columna 'etapa_nombre' agregada exitosamente",
-                "details": {
-                    "column_name": row[0],
-                    "data_type": row[1],
-                    "max_length": row[2]
-                }
-            }, 200
-        else:
-            return {
-                "status": "error",
-                "message": "No se pudo verificar la columna después de agregarla"
-            }, 500
-
-    except Exception as e:
-        db.session.rollback()
-        return {
-            "status": "error",
-            "message": str(e)
-        }, 500
-
-@app.route("/admin/fix-security-tables")
-@login_required
-def fix_security_tables():
-    """Endpoint temporal para crear tablas de seguridad en Railway"""
-    from sqlalchemy import text
-
-    # Solo super admins
-    if not current_user.is_super_admin:
-        return {"error": "Unauthorized"}, 403
-
-    try:
-        results = []
-        errors = []
-
-        # 1. protocolos_seguridad
-        try:
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS protocolos_seguridad (
-                    id SERIAL PRIMARY KEY,
-                    nombre VARCHAR(200) NOT NULL,
-                    descripcion TEXT,
-                    categoria VARCHAR(50) NOT NULL,
-                    obligatorio BOOLEAN DEFAULT true,
-                    frecuencia_revision INTEGER DEFAULT 30,
-                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    activo BOOLEAN DEFAULT true,
-                    normativa_referencia VARCHAR(200)
-                )
-            """))
-            results.append("protocolos_seguridad")
-        except Exception as e:
-            errors.append(f"protocolos_seguridad: {str(e)}")
-
-        # 2. checklists_seguridad
-        try:
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS checklists_seguridad (
-                    id SERIAL PRIMARY KEY,
-                    obra_id INTEGER NOT NULL REFERENCES obras(id),
-                    protocolo_id INTEGER NOT NULL REFERENCES protocolos_seguridad(id),
-                    fecha_inspeccion DATE NOT NULL,
-                    inspector_id INTEGER NOT NULL REFERENCES usuarios(id),
-                    estado VARCHAR(20) DEFAULT 'pendiente',
-                    puntuacion INTEGER,
-                    observaciones TEXT,
-                    acciones_correctivas TEXT,
-                    fecha_completado TIMESTAMP
-                )
-            """))
-            results.append("checklists_seguridad")
-        except Exception as e:
-            errors.append(f"checklists_seguridad: {str(e)}")
-
-        # 3. items_checklist
-        try:
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS items_checklist (
-                    id SERIAL PRIMARY KEY,
-                    checklist_id INTEGER NOT NULL REFERENCES checklists_seguridad(id),
-                    descripcion VARCHAR(300) NOT NULL,
-                    conforme BOOLEAN,
-                    observacion TEXT,
-                    criticidad VARCHAR(20) DEFAULT 'media'
-                )
-            """))
-            results.append("items_checklist")
-        except Exception as e:
-            errors.append(f"items_checklist: {str(e)}")
-
-        # 4. incidentes_seguridad
-        try:
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS incidentes_seguridad (
-                    id SERIAL PRIMARY KEY,
-                    obra_id INTEGER NOT NULL REFERENCES obras(id),
-                    fecha_incidente TIMESTAMP NOT NULL,
-                    tipo_incidente VARCHAR(50) NOT NULL,
-                    gravedad VARCHAR(20) NOT NULL,
-                    descripcion TEXT NOT NULL,
-                    ubicacion_exacta VARCHAR(200),
-                    persona_afectada VARCHAR(100),
-                    testigos TEXT,
-                    primeros_auxilios BOOLEAN DEFAULT false,
-                    atencion_medica BOOLEAN DEFAULT false,
-                    dias_perdidos INTEGER DEFAULT 0,
-                    causa_raiz TEXT,
-                    acciones_inmediatas TEXT,
-                    acciones_preventivas TEXT,
-                    responsable_id INTEGER NOT NULL REFERENCES usuarios(id),
-                    estado VARCHAR(20) DEFAULT 'abierto',
-                    fecha_cierre TIMESTAMP
-                )
-            """))
-            results.append("incidentes_seguridad")
-        except Exception as e:
-            errors.append(f"incidentes_seguridad: {str(e)}")
-
-        # 5. certificaciones_personal
-        try:
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS certificaciones_personal (
-                    id SERIAL PRIMARY KEY,
-                    usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
-                    tipo_certificacion VARCHAR(100) NOT NULL,
-                    entidad_emisora VARCHAR(200) NOT NULL,
-                    numero_certificado VARCHAR(50),
-                    fecha_emision DATE NOT NULL,
-                    fecha_vencimiento DATE,
-                    archivo_certificado VARCHAR(500),
-                    activo BOOLEAN DEFAULT true
-                )
-            """))
-            results.append("certificaciones_personal")
-        except Exception as e:
-            errors.append(f"certificaciones_personal: {str(e)}")
-
-        # 6. auditorias_seguridad
-        try:
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS auditorias_seguridad (
-                    id SERIAL PRIMARY KEY,
-                    obra_id INTEGER NOT NULL REFERENCES obras(id),
-                    fecha_auditoria DATE NOT NULL,
-                    auditor_externo VARCHAR(200),
-                    tipo_auditoria VARCHAR(50) NOT NULL,
-                    puntuacion_general INTEGER,
-                    hallazgos_criticos INTEGER DEFAULT 0,
-                    hallazgos_mayores INTEGER DEFAULT 0,
-                    hallazgos_menores INTEGER DEFAULT 0,
-                    informe_path VARCHAR(500),
-                    plan_accion_path VARCHAR(500),
-                    fecha_seguimiento DATE,
-                    estado VARCHAR(20) DEFAULT 'programada'
-                )
-            """))
-            results.append("auditorias_seguridad")
-        except Exception as e:
-            errors.append(f"auditorias_seguridad: {str(e)}")
-
-        # Crear índices
-        try:
-            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_checklists_obra ON checklists_seguridad(obra_id)"))
-            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_checklists_estado ON checklists_seguridad(estado)"))
-            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_incidentes_obra ON incidentes_seguridad(obra_id)"))
-            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_incidentes_fecha ON incidentes_seguridad(fecha_incidente)"))
-            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_incidentes_estado ON incidentes_seguridad(estado)"))
-            results.append("indices_creados")
-        except Exception as e:
-            errors.append(f"indices: {str(e)}")
-
-        db.session.commit()
-
-        return {
-            "status": "success",
-            "message": f"Tablas de seguridad creadas: {len(results)} exitosas, {len(errors)} errores",
-            "tables_created": results,
-            "errors": errors if errors else None
-        }, 200
-
-    except Exception as e:
-        db.session.rollback()
-        return {
-            "status": "error",
-            "message": f"Error crítico: {str(e)}"
-        }, 500
-
-@app.route("/admin/diagnostico")
-@login_required
-def diagnostico():
-    """Endpoint de diagnóstico para ver errores en Railway"""
-    from sqlalchemy import text
-    import traceback
-
-    # Solo super admins
-    if not current_user.is_super_admin:
-        return {"error": "Unauthorized"}, 403
-
-    diagnostics = {
-        "user": {
-            "id": current_user.id,
-            "email": current_user.email,
-            "role": current_user.role,
-            "is_super_admin": current_user.is_super_admin
-        },
-        "database": {},
-        "tables": {},
-        "blueprints": {},
-        "errors": []
-    }
-
-    # Verificar conexión a DB
-    try:
-        db.session.execute(text("SELECT 1"))
-        diagnostics["database"]["status"] = "connected"
-    except Exception as e:
-        diagnostics["database"]["status"] = "error"
-        diagnostics["database"]["error"] = str(e)
-        diagnostics["errors"].append(f"DB: {str(e)}")
-
-    # Verificar tablas de seguridad
-    security_tables = [
-        'protocolos_seguridad',
-        'checklists_seguridad',
-        'items_checklist',
-        'incidentes_seguridad',
-        'certificaciones_personal',
-        'auditorias_seguridad'
-    ]
-
-    for table in security_tables:
-        try:
-            result = db.session.execute(text(f"SELECT COUNT(*) FROM {table}"))
-            count = result.scalar()
-            diagnostics["tables"][table] = {"exists": True, "count": count}
-        except Exception as e:
-            diagnostics["tables"][table] = {"exists": False, "error": str(e)[:100]}
-            diagnostics["errors"].append(f"{table}: {str(e)[:100]}")
-
-    # Verificar blueprints registrados
-    diagnostics["blueprints"]["registered"] = [
-        rule.rule for rule in app.url_map.iter_rules()
-        if 'seguridad' in rule.rule or 'api/offline' in rule.rule
-    ]
-
-    # Test seguridad dashboard
-    try:
-        with app.test_request_context():
-            from seguridad_cumplimiento import calcular_estadisticas_seguridad
-            stats = calcular_estadisticas_seguridad()
-            diagnostics["seguridad_module"] = {"status": "ok", "stats": stats}
-    except Exception as e:
-        diagnostics["seguridad_module"] = {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
-        diagnostics["errors"].append(f"Seguridad module: {str(e)}")
-
-    # Test API offline
-    try:
-        from api_offline import get_current_org_id
-        org_id = get_current_org_id()
-        diagnostics["api_offline"] = {"status": "ok", "org_id": org_id}
-    except Exception as e:
-        diagnostics["api_offline"] = {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
-        diagnostics["errors"].append(f"API offline: {str(e)}")
-
-    return diagnostics, 200
+# === ENDPOINTS TEMPORALES DDL ELIMINADOS POR AUDITORÍA DE SEGURIDAD (2026-04-06) ===
+# /admin/fix-etapa-nombre, /admin/fix-security-tables y /admin/diagnostico
+# fueron removidos por exponer DDL y diagnósticos vía HTTP.
+# Usar migraciones Alembic y CLI de Flask para estas operaciones.
 
 # === HEALTH CHECK ENDPOINTS ===
 @app.route("/health")

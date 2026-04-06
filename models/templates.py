@@ -386,9 +386,12 @@ class LiquidacionMOItem(db.Model):
 class MovimientoCaja(db.Model):
     """Movimiento de caja: transferencias de dinero entre oficina y obras."""
     __tablename__ = 'movimientos_caja'
+    __table_args__ = (
+        db.UniqueConstraint('organizacion_id', 'numero', name='uq_mv_caja_org_numero'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    numero = db.Column(db.String(20), unique=True, nullable=False)  # MV-2026-0001
+    numero = db.Column(db.String(20), nullable=False)  # MV-2026-0001
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
 

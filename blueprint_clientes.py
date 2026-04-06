@@ -275,7 +275,6 @@ def editar(id):
 
 
 @clientes_bp.route('/<int:id>/eliminar', methods=['POST'])
-@csrf.exempt
 @login_required
 def eliminar(id):
     """Eliminar (desactivar) cliente"""
@@ -314,11 +313,10 @@ def eliminar(id):
     except Exception as e:
         current_app.logger.error(f"Error en clientes.eliminar: {e}", exc_info=True)
         db.session.rollback()
-        return jsonify({'error': f'Error al eliminar el cliente: {str(e)}'}), 500
+        return jsonify({'error': 'Error al eliminar el cliente'}), 500
 
 
 @clientes_bp.route('/<int:id>/actualizar-rapido', methods=['POST'])
-@csrf.exempt
 @login_required
 def actualizar_rapido(id):
     """Actualizar datos básicos del cliente (para completar desde modal de confirmación)"""
@@ -388,7 +386,6 @@ def actualizar_rapido(id):
 
 
 @clientes_bp.route('/<int:id>/cambiar-estado', methods=['POST'])
-@csrf.exempt
 @login_required
 def cambiar_estado(id):
     """Cambiar estado activo/inactivo del cliente"""
@@ -455,7 +452,7 @@ def api_listar():
 
     except Exception as e:
         current_app.logger.error(f"Error en clientes.api_listar: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @clientes_bp.route('/api/buscar')
@@ -497,7 +494,7 @@ def api_buscar():
 
     except Exception as e:
         current_app.logger.error(f"Error en clientes.api_buscar: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @clientes_bp.route('/api/crear', methods=['POST'])

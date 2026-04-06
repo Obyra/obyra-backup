@@ -4,7 +4,7 @@ Sistema avanzado de presupuestación con cálculos automáticos de materiales,
 análisis inteligente de costos y estimación por IA.
 """
 
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app
 from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 import json
@@ -79,7 +79,7 @@ def calcular_materiales():
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        current_app.logger.error(f'Error cotización: {e}'); return jsonify({'success': False, 'error': 'Error al procesar la solicitud'}), 400
 
 @cotizacion_bp.route('/paso-revision')
 @login_required
@@ -124,7 +124,7 @@ def generar_pdf():
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error cotización: {e}'); return jsonify({'success': False, 'error': 'Error interno del servidor'}), 500
 
 @cotizacion_bp.route('/optimizar_presupuesto', methods=['POST'])
 @login_required
@@ -142,7 +142,7 @@ def optimizar_presupuesto():
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        current_app.logger.error(f'Error cotización: {e}'); return jsonify({'success': False, 'error': 'Error al procesar la solicitud'}), 400
 
 @cotizacion_bp.route('/analisis_competencia')
 @login_required

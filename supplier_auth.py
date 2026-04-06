@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session
 from werkzeug.security import generate_password_hash
 from app import db
+from extensions import limiter
 from models import Supplier, SupplierUser
 from datetime import datetime
 import re
@@ -124,6 +125,7 @@ def registro():
     return render_template('supplier_auth/registro.html')
 
 @supplier_auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     """Login de proveedor"""
     if request.method == 'POST':
@@ -159,7 +161,12 @@ def login():
         # Redirigir a donde venía o al dashboard
         next_page = request.args.get('next')
         if next_page:
-            return redirect(next_page)
+            from urllib.parse import urlparse
+            parsed = urlparse(next_page)
+            if parsed.netloc and parsed.netloc != request.host:
+                next_page = None
+            if next_page:
+                return redirect(next_page)
         return redirect(url_for('supplier_portal.dashboard'))
     
     return render_template('supplier_auth/login.html')

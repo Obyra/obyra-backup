@@ -306,7 +306,6 @@ def comparar(rc_id):
 # ============================================================
 
 @cotizaciones_bp.route('/<int:id>/elegir', methods=['POST'])
-@csrf.exempt
 @login_required
 def elegir(id):
     from models.proveedores_oc import CotizacionProveedor
@@ -354,7 +353,6 @@ def elegir(id):
 # ============================================================
 
 @cotizaciones_bp.route('/<int:id>/eliminar', methods=['POST'])
-@csrf.exempt
 @login_required
 def eliminar(id):
     from models.proveedores_oc import CotizacionProveedor

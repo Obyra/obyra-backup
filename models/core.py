@@ -354,10 +354,29 @@ class Usuario(UserMixin, db.Model):
     # -----------------------------------------------------
     # Gestión de contraseñas
     # -----------------------------------------------------
-    def set_password(self, password: str) -> None:
-        """Genera y almacena el hash seguro de la contraseña suministrada."""
+    @staticmethod
+    def validar_password(password: str) -> tuple:
+        """Valida que la contraseña cumpla con la política de seguridad.
+        Returns: (es_valida, mensaje_error)
+        """
         if not password:
-            raise ValueError('La contraseña no puede estar vacía.')
+            return False, 'La contraseña no puede estar vacía.'
+        if len(password) < 8:
+            return False, 'La contraseña debe tener al menos 8 caracteres.'
+        if not any(c.isupper() for c in password):
+            return False, 'La contraseña debe incluir al menos una mayúscula.'
+        if not any(c.islower() for c in password):
+            return False, 'La contraseña debe incluir al menos una minúscula.'
+        if not any(c.isdigit() for c in password):
+            return False, 'La contraseña debe incluir al menos un número.'
+        return True, ''
+
+    def set_password(self, password: str, skip_validation: bool = False) -> None:
+        """Genera y almacena el hash seguro de la contraseña suministrada."""
+        if not skip_validation:
+            valida, mensaje = self.validar_password(password)
+            if not valida:
+                raise ValueError(mensaje)
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password: str) -> bool:
@@ -775,7 +794,7 @@ class Notificacion(db.Model):
 
         admins = Usuario.query.filter_by(
             organizacion_id=organizacion_id,
-            rol='administrador',
+            role='admin',
             activo=True
         ).all()
 

@@ -100,6 +100,7 @@ class ProjectSharedService:
         Verifica si el usuario puede gestionar la obra.
 
         Permite crear/editar/gestionar etapas y tareas.
+        Incluye verificación de que la obra pertenezca a la organización del usuario.
 
         Args:
             obra: Objeto Obra
@@ -109,9 +110,15 @@ class ProjectSharedService:
             bool: True si tiene permisos para gestionar
         """
         from models import ObraMiembro
+        from services.memberships import get_current_org_id
 
         if user is None:
             user = current_user
+
+        # CRÍTICO: Verificar que la obra pertenezca a la organización del usuario
+        current_org = get_current_org_id()
+        if current_org and hasattr(obra, 'organizacion_id') and obra.organizacion_id != current_org:
+            return False
 
         if ProjectSharedService.is_admin(user) or ProjectSharedService.is_pm_global(user):
             return True

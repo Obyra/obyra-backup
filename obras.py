@@ -1222,7 +1222,7 @@ def geolocalizar_direccion(direccion):
 @login_required
 def actualizar_coordenadas(id):
     """Actualiza las coordenadas de una obra (usado por geocodificación automática del clima)"""
-    obra = Obra.query.get_or_404(id)
+    obra = Obra.query.filter_by(id=id, organizacion_id=get_current_org_id()).first_or_404()
 
     # Verificar permisos básicos (que el usuario tenga acceso a la obra)
     if not obra.es_visible_para(current_user):
@@ -2154,7 +2154,6 @@ def normalize_unit(unit):
 
 
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_avance(tarea_id):
     """Registrar avance con fotos (operarios desde dashboard)."""
@@ -2173,6 +2172,8 @@ def _crear_avance_impl(tarea_id):
     from pathlib import Path
 
     tarea = TareaEtapa.query.get_or_404(tarea_id)
+    if tarea.etapa.obra.organizacion_id != get_current_org_id():
+        abort(403)
 
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'operario', 'administrador', 'tecnico', 'project_manager'}):
@@ -2882,6 +2883,8 @@ def agregar_tarea(id):
         return redirect(url_for('reportes.dashboard'))
 
     etapa = EtapaObra.query.get_or_404(id)
+    if etapa.obra.organizacion_id != get_current_org_id():
+        abort(403)
 
     horas_estimadas = request.form.get('horas_estimadas')
     responsable_id = request.form.get('responsable_id')
@@ -3990,7 +3993,6 @@ def api_curva_s_tarea(tarea_id):
 
 
 @obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
-@csrf.exempt
 @login_required
 @limiter.limit("20 per minute")
 def eliminar_tarea(tarea_id):
@@ -4170,7 +4172,6 @@ def geocodificar_todas():
 
 
 @obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])
-@csrf.exempt
 @login_required
 @limiter.limit("10 per minute")
 def eliminar_obra(obra_id):
@@ -4338,6 +4339,8 @@ def actualizar_progreso_automatico(id):
 @login_required
 def actualizar_estado_tarea(id):
     tarea = TareaEtapa.query.get_or_404(id)
+    if tarea.etapa.obra.organizacion_id != get_current_org_id():
+        abort(403)
     obra = tarea.etapa.obra
 
     is_admin_like = is_admin() or ('tecnico' in _get_roles_usuario(current_user))
@@ -4582,7 +4585,6 @@ def liquidacion_mo_preview(obra_id):
 
 
 @obras_bp.route('/<int:obra_id>/liquidacion-mo', methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_liquidacion_mo(obra_id):
     """Crear una liquidación de mano de obra."""
@@ -4611,7 +4613,6 @@ def crear_liquidacion_mo(obra_id):
 
 
 @obras_bp.route('/<int:obra_id>/liquidacion-mo/confirmar-y-pagar', methods=['POST'])
-@csrf.exempt
 @login_required
 def confirmar_y_pagar_liquidacion(obra_id):
     """Crea liquidación + marca como pagado + actualiza costo_real en un solo paso."""
@@ -4686,6 +4687,8 @@ def recibo_liquidacion_pdf(item_id):
         return redirect(request.referrer or url_for('index'))
 
     item = LiquidacionMOItem.query.get_or_404(item_id)
+    if item.liquidacion.obra.organizacion_id != get_current_org_id():
+        abort(403)
     liq = item.liquidacion
     obra = liq.obra
     org = obra.organizacion if hasattr(obra, 'organizacion') else None
@@ -4722,6 +4725,8 @@ def recibo_liquidacion_completa_pdf(liq_id):
         return redirect(request.referrer or url_for('index'))
 
     liq = LiqMO.query.get_or_404(liq_id)
+    if liq.obra.organizacion_id != get_current_org_id():
+        abort(403)
     obra = liq.obra
     org = obra.organizacion if hasattr(obra, 'organizacion') else None
     items = liq.items.all()
@@ -4745,11 +4750,15 @@ def recibo_liquidacion_completa_pdf(liq_id):
 
 
 @obras_bp.route('/liquidacion-mo/item/<int:item_id>/pagar', methods=['POST'])
-@csrf.exempt
 @login_required
 def pagar_liquidacion_mo_item(item_id):
     """Registrar pago de un item de liquidación."""
     from services.liquidacion_mo import registrar_pago_item
+    from models.templates import LiquidacionMOItem as LiqMOItem
+    item_check = LiqMOItem.query.get_or_404(item_id)
+    if item_check.liquidacion.obra.organizacion_id != get_current_org_id():
+        abort(403)
+
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
         return jsonify(ok=False, error='Sin permisos'), 403
@@ -4831,6 +4840,8 @@ def desactivar_certificacion(id):
         return redirect(url_for('reportes.dashboard'))
 
     certificacion = CertificacionAvance.query.get_or_404(id)
+    if certificacion.obra.organizacion_id != get_current_org_id():
+        abort(403)
     obra = certificacion.obra
 
     try:
@@ -5013,7 +5024,6 @@ def propagar_fechas(id):
 # ===== ENDPOINTS PARA DEPENDENCIAS Y GANTT =====
 
 @obras_bp.route('/etapas/<int:etapa_id>/editar_fechas', methods=['POST'])
-@csrf.exempt
 @login_required
 def editar_fechas_etapa(etapa_id):
     """Editar fechas de una etapa manualmente (admin/técnico)."""
@@ -5107,7 +5117,6 @@ def editar_fechas_etapa(etapa_id):
 
 
 @obras_bp.route('/etapas/<int:etapa_id>/nivel', methods=['POST'])
-@csrf.exempt
 @login_required
 def cambiar_nivel_etapa(etapa_id):
     """Cambiar nivel de encadenamiento de una etapa."""
@@ -5220,7 +5229,6 @@ def gantt_data(id):
 # ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====
 
 @obras_bp.route("/avances/<int:avance_id>/aprobar", methods=['POST'])
-@csrf.exempt
 @login_required
 def aprobar_avance(avance_id):
     from utils.permissions import can_approve_avance
@@ -5270,7 +5278,6 @@ def aprobar_avance(avance_id):
 
 
 @obras_bp.route("/avances/<int:avance_id>/rechazar", methods=['POST'])
-@csrf.exempt
 @login_required
 def rechazar_avance(avance_id):
     from utils.permissions import can_approve_avance
@@ -5301,7 +5308,6 @@ def rechazar_avance(avance_id):
 
 
 @obras_bp.route("/avances/<int:avance_id>/corregir", methods=['POST'])
-@csrf.exempt
 @login_required
 def corregir_avance(avance_id):
     """Corregir la cantidad de un avance y aprobarlo."""
@@ -5813,7 +5819,6 @@ def wizard_create_tasks():
 # ============================================================
 
 @obras_bp.route('/<int:obra_id>/remitos', methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_remito(obra_id):
     """Crear un remito manualmente."""
@@ -5870,6 +5875,8 @@ def ver_remito(obra_id, remito_id):
     """API: obtener detalle de un remito."""
     from models.inventory import Remito
     remito = Remito.query.get_or_404(remito_id)
+    if remito.obra.organizacion_id != get_current_org_id():
+        abort(403)
     return jsonify(ok=True, remito={
         'id': remito.id,
         'numero_remito': remito.numero_remito,
@@ -5891,7 +5898,6 @@ def ver_remito(obra_id, remito_id):
 
 
 @obras_bp.route('/<int:obra_id>/remitos/<int:remito_id>', methods=['DELETE'])
-@csrf.exempt
 @login_required
 def eliminar_remito(obra_id, remito_id):
     """Eliminar un remito."""
@@ -5901,6 +5907,8 @@ def eliminar_remito(obra_id, remito_id):
         return jsonify(ok=False, error='Sin permisos'), 403
 
     remito = Remito.query.get_or_404(remito_id)
+    if remito.obra.organizacion_id != get_current_org_id():
+        abort(403)
     try:
         db.session.delete(remito)
         db.session.commit()
@@ -6029,7 +6037,6 @@ def escala_salarial_api():
 
 
 @obras_bp.route('/escala-salarial/api', methods=['POST'])
-@csrf.exempt
 @login_required
 def escala_salarial_actualizar():
     """API: actualizar escala salarial."""
@@ -6090,7 +6097,6 @@ def cuadrillas_api():
 
 
 @obras_bp.route('/cuadrillas/api', methods=['POST'])
-@csrf.exempt
 @login_required
 def cuadrillas_guardar():
     """API: crear o actualizar una cuadrilla tipo."""

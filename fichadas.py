@@ -8,12 +8,28 @@ import urllib.request
 from collections import defaultdict
 from datetime import datetime, date, timedelta, timezone
 from flask import (Blueprint, render_template, request, jsonify,
-                   flash, redirect, url_for, current_app)
+                   flash, redirect, url_for, current_app, abort)
 from flask_login import login_required, current_user
 from extensions import db, csrf
 from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
+from services.memberships import get_current_org_id
+
+from services.permissions import require_plan
 
 fichadas_bp = Blueprint('fichadas', __name__, url_prefix='/fichadas')
+
+
+@fichadas_bp.before_request
+@login_required
+def _check_plan_fichadas():
+    """Verificar que la organización tiene plan Premium o Full Premium para fichadas."""
+    if getattr(current_user, 'is_super_admin', False):
+        return None
+    org = getattr(current_user, 'organizacion', None)
+    plan = getattr(org, 'plan_tipo', None) if org else None
+    if plan not in ('premium', 'full_premium'):
+        flash('El fichaje por geolocalización requiere plan Premium o superior.', 'warning')
+        return redirect(url_for('planes.mostrar_planes'))
 
 # Timezone Argentina (UTC-3)
 AR_TZ = timezone(timedelta(hours=-3))
@@ -374,6 +390,8 @@ def index():
 def fichar(obra_id):
     """Página mobile-first para fichar ingreso/egreso."""
     obra = Obra.query.get_or_404(obra_id)
+    if obra.organizacion_id != get_current_org_id():
+        abort(403)
 
     # Verificar que el usuario está asignado (admin/PM acceden a todas)
     if not _es_admin_o_pm(current_user):
@@ -464,6 +482,8 @@ def api_fichar():
     obra = Obra.query.get(obra_id)
     if not obra:
         return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
+    if obra.organizacion_id != get_current_org_id():
+        return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
 
     # Admin/PM puede fichar en nombre de otro usuario
     fichar_usuario_id = current_user.id
@@ -591,6 +611,8 @@ def api_guardar_coords():
     obra = Obra.query.get(obra_id)
     if not obra:
         return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
+    if obra.organizacion_id != get_current_org_id():
+        return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
 
     obra.latitud = float(lat)
     obra.longitud = float(lng)

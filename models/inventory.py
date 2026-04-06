@@ -512,10 +512,13 @@ class InventoryCategory(db.Model):
 
 class InventoryItem(db.Model):
     __tablename__ = 'inventory_item'
+    __table_args__ = (
+        db.UniqueConstraint('company_id', 'sku', name='uq_inventory_item_company_sku'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
-    sku = db.Column(db.String(100), nullable=False, unique=True)
+    sku = db.Column(db.String(100), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=False)
     unidad = db.Column(db.String(20), nullable=False)  # kg, m, u, m2, m3, etc.
@@ -915,9 +918,12 @@ class RequerimientoCompra(db.Model):
     Permite trackear el ciclo completo desde la solicitud hasta la entrega.
     """
     __tablename__ = 'requerimientos_compra'
+    __table_args__ = (
+        db.UniqueConstraint('organizacion_id', 'numero', name='uq_requerimiento_org_numero'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    numero = db.Column(db.String(20), unique=True, nullable=False)  # RC-2024-0001
+    numero = db.Column(db.String(20), nullable=False)  # RC-2024-0001
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     solicitante_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
@@ -1148,9 +1154,12 @@ class RequerimientoCompraItem(db.Model):
 class OrdenCompra(db.Model):
     """Orden de compra formal generada a partir de un requerimiento aprobado."""
     __tablename__ = 'ordenes_compra'
+    __table_args__ = (
+        db.UniqueConstraint('organizacion_id', 'numero', name='uq_oc_org_numero'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    numero = db.Column(db.String(20), unique=True, nullable=False)  # OC-2026-0001
+    numero = db.Column(db.String(20), nullable=False)  # OC-2026-0001
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     requerimiento_id = db.Column(db.Integer, db.ForeignKey('requerimientos_compra.id'), nullable=True)

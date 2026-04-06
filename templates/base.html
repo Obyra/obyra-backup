@@ -594,7 +594,7 @@
     <script src="{{ url_for('static', filename='js/indexed-db.js') }}"></script>
     <script src="{{ url_for('static', filename='js/offline-manager.js') }}"></script>
 
-    <!-- Forzar actualización del Service Worker a v3.2.0 -->
+    <!-- Forzar actualización del Service Worker a v5.0.0 -->
     <script>
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistration().then(function(reg) {
@@ -606,7 +606,7 @@
         if (window.caches) {
             caches.keys().then(function(names) {
                 names.forEach(function(name) {
-                    if (name.startsWith('obyra-') && name.indexOf('v3.2.0') === -1) {
+                    if (name.startsWith('obyra-') && name.indexOf('v5.0.0') === -1) {
                         caches.delete(name);
                     }
                 });

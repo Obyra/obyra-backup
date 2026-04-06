@@ -133,7 +133,7 @@ def mis_obras():
         current_app.logger.error(traceback.format_exc())
         return jsonify({
             'ok': False,
-            'error': str(e),
+            'error': 'Error interno del servidor',
             'traceback': traceback.format_exc() if current_app.debug else None
         }), 500
 
@@ -225,7 +225,7 @@ def mis_tareas():
         current_app.logger.error(traceback.format_exc())
         return jsonify({
             'ok': False,
-            'error': str(e),
+            'error': 'Error interno del servidor',
             'traceback': traceback.format_exc() if current_app.debug else None
         }), 500
 
@@ -237,6 +237,12 @@ def tareas_por_obra(obra_id):
     Obtener todas las tareas de una obra específica.
     """
     try:
+        obra = Obra.query.get(obra_id)
+        if not obra:
+            return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
+        if obra.organizacion_id != get_current_org_id():
+            return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
+
         # Obtener tareas a través de las etapas de la obra
         tareas = db.session.query(TareaEtapa).join(EtapaObra).filter(
             EtapaObra.obra_id == obra_id
@@ -277,7 +283,7 @@ def tareas_por_obra(obra_id):
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo tareas de obra: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        print(f'[API_OFFLINE] Error: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @api_offline_bp.route('/crear-avance', methods=['POST'])
@@ -296,6 +302,8 @@ def crear_avance():
         tarea = TareaEtapa.query.get(tarea_id)
         if not tarea:
             return jsonify({'ok': False, 'error': 'Tarea no encontrada'}), 404
+        if tarea.etapa.obra.organizacion_id != get_current_org_id():
+            return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
 
         # Crear avance
         avance = TareaAvance(
@@ -329,7 +337,7 @@ def crear_avance():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error creando avance: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        print(f'[API_OFFLINE] Error: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @api_offline_bp.route('/actualizar-tarea/<int:tarea_id>', methods=['PUT'])
@@ -342,6 +350,8 @@ def actualizar_tarea(tarea_id):
         tarea = TareaEtapa.query.get(tarea_id)
         if not tarea:
             return jsonify({'ok': False, 'error': 'Tarea no encontrada'}), 404
+        if tarea.etapa.obra.organizacion_id != get_current_org_id():
+            return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
 
         data = request.get_json() or {}
 
@@ -362,7 +372,7 @@ def actualizar_tarea(tarea_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error actualizando tarea: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        print(f'[API_OFFLINE] Error: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @api_offline_bp.route('/inventario-basico')
@@ -400,7 +410,7 @@ def inventario_basico():
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo inventario: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        print(f'[API_OFFLINE] Error: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @api_offline_bp.route('/sync-status')
@@ -436,7 +446,7 @@ def sync_status():
 
     except Exception as e:
         current_app.logger.error(f"Error obteniendo estado sync: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        print(f'[API_OFFLINE] Error: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @api_offline_bp.route('/sync-batch', methods=['POST'])
@@ -521,4 +531,4 @@ def sync_batch():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error en sync batch: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        print(f'[API_OFFLINE] Error: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500

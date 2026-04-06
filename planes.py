@@ -362,26 +362,10 @@ def pago_exitoso():
         except:
             pass
 
+    # No activar el plan aquí — la activación ocurre exclusivamente via webhook.
+    # Esta ruta solo muestra un mensaje al usuario tras ser redirigido por MercadoPago.
     if status == 'approved':
-        # Activar el plan del usuario
-        try:
-            org = current_user.organizacion
-            if org:
-                plan_info = PLANES_CONFIG.get(plan_tipo, PLANES_CONFIG['premium'])
-                org.plan_tipo = plan_tipo
-                org.max_usuarios = plan_info['max_usuarios']
-                org.max_obras = plan_info.get('max_obras', 3)
-                org.fecha_inicio_plan = datetime.utcnow()
-                duracion = plan_info.get('duracion_dias', 365)
-                org.fecha_fin_plan = datetime.utcnow() + timedelta(days=duracion)
-                db.session.commit()
-
-                flash(f'Pago exitoso! Tu plan {plan_info["nombre"]} ha sido activado por {duracion} días.', 'success')
-            else:
-                flash('Pago recibido. Contactanos para activar tu plan.', 'info')
-        except Exception as e:
-            print(f"Error activando plan: {e}")
-            flash('Pago recibido. Estamos procesando tu suscripcion.', 'info')
+        flash('Tu pago fue recibido. El plan se activará automáticamente cuando se confirme el pago.', 'info')
     else:
         flash('El pago fue procesado. Te notificaremos cuando se confirme.', 'info')
 

@@ -76,12 +76,15 @@ class PricingIndex(db.Model):
 
 class Presupuesto(db.Model):
     __tablename__ = 'presupuestos'
+    __table_args__ = (
+        db.UniqueConstraint('organizacion_id', 'numero', name='uq_presupuesto_org_numero'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)  # Ahora puede ser NULL
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)  # Cliente del presupuesto
-    numero = db.Column(db.String(50), unique=True, nullable=False)
+    numero = db.Column(db.String(50), nullable=False)
     fecha = db.Column(db.Date, default=date.today)
     estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado, perdido, eliminado
     confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtió en obra

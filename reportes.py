@@ -296,7 +296,7 @@ def dashboard():
     ).order_by(Obra.fecha_fin_estimada).limit(5).all()
 
     # Rendimiento del equipo (últimos 30 días)
-    rendimiento_equipo = calcular_rendimiento_equipo(fecha_desde_obj, fecha_hasta_obj)
+    rendimiento_equipo = calcular_rendimiento_equipo(fecha_desde_obj, fecha_hasta_obj, org_id=org_id)
     
     # Obras activas para el dashboard
     obras_activas = Obra.query.filter(
@@ -777,9 +777,17 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
         'obras_con_personal': obras_con_personal
     }
 
-def calcular_rendimiento_equipo(fecha_desde, fecha_hasta):
+def calcular_rendimiento_equipo(fecha_desde, fecha_hasta, org_id=None):
     """Calcula el rendimiento del equipo en el período"""
-    
+
+    filtros = [
+        Usuario.activo == True,
+        RegistroTiempo.fecha >= fecha_desde,
+        RegistroTiempo.fecha <= fecha_hasta
+    ]
+    if org_id is not None:
+        filtros.append(Usuario.organizacion_id == org_id)
+
     rendimiento = db.session.query(
         Usuario.id,
         Usuario.nombre,
@@ -788,9 +796,7 @@ def calcular_rendimiento_equipo(fecha_desde, fecha_hasta):
         func.sum(RegistroTiempo.horas_trabajadas).label('total_horas'),
         func.count(RegistroTiempo.id).label('dias_trabajados')
     ).join(RegistroTiempo).filter(
-        Usuario.activo == True,
-        RegistroTiempo.fecha >= fecha_desde,
-        RegistroTiempo.fecha <= fecha_hasta
+        *filtros
     ).group_by(
         Usuario.id, Usuario.nombre, Usuario.apellido, Usuario.rol
     ).order_by(desc('total_horas')).limit(10).all()

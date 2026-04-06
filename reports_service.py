@@ -34,7 +34,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @reports_bp.route('/api/reports/dashboard', methods=['POST'])
-@csrf.exempt  # Exentar CSRF para endpoint de generación de PDF
 @login_required
 def generate_dashboard_report():
     """

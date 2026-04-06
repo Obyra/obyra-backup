@@ -153,7 +153,7 @@ def crear(obra_id=None):
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error creando requerimiento: {e}")
-            flash(f'Error al crear requerimiento: {str(e)}', 'danger')
+            flash('Error al crear requerimiento. Intente nuevamente.', 'danger')
             return redirect(url_for('requerimientos.crear', obra_id=obra_id))
 
     # GET - mostrar formulario
@@ -400,7 +400,7 @@ def eliminar(id):
         flash(f'Requerimiento {numero} eliminado', 'info')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al eliminar: {str(e)}', 'danger')
+        flash('Error al eliminar. Intente nuevamente.', 'danger')
 
     return redirect(url_for('requerimientos.lista'))
 
@@ -566,7 +566,7 @@ def api_crear_desde_obra():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error en api_crear_desde_obra: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error requerimientos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @requerimientos_bp.route('/api/pendientes/count')
@@ -822,4 +822,4 @@ def api_editar_cantidad_item(item_id):
         })
     except Exception as e:
         db.session.rollback()
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(f'Error requerimientos: {e}'); return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500

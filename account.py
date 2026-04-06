@@ -430,7 +430,6 @@ def organizacion():
 
 
 @account_bp.route('/cambiar-password', methods=['POST'])
-@csrf.exempt
 @login_required
 def cambiar_password():
     """Permite al usuario cambiar su contraseña"""

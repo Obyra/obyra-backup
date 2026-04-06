@@ -653,7 +653,6 @@ def editar_item(id):
 
 
 @inventario_bp.route('/<int:id>/categorias-adicionales', methods=['POST'])
-@csrf.exempt
 @login_required
 def categorias_adicionales(id):
     """Gestionar categorías adicionales de un item (many-to-many)."""
@@ -774,7 +773,6 @@ def reclasificar_encofrados():
 
 
 @inventario_bp.route('/mover-categoria-bulk', methods=['POST'])
-@csrf.exempt
 @login_required
 def mover_categoria_bulk():
     """Mover múltiples items a otra categoría."""
@@ -805,7 +803,6 @@ def mover_categoria_bulk():
 
 
 @inventario_bp.route('/eliminar-bulk', methods=['POST'])
-@csrf.exempt
 @login_required
 def eliminar_bulk():
     """Eliminar múltiples items."""
@@ -2556,7 +2553,6 @@ def alertas_stock():
 
 
 @inventario_bp.route('/seed-items-ia', methods=['POST'])
-@csrf.exempt
 @login_required
 def seed_items_ia():
     """Carga items de la calculadora IA al inventario de la organización."""
@@ -2687,7 +2683,6 @@ def seed_items_ia():
 
 
 @inventario_bp.route('/seed-constructoras', methods=['POST'])
-@csrf.exempt
 @login_required
 def seed_constructoras():
     """Carga datos hardcodeados de constructoras de referencia (Cortes y Sistemas).

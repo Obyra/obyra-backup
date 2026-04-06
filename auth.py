@@ -187,7 +187,12 @@ def _determine_onboarding_redirect(usuario: Usuario) -> Optional[str]:
 def _post_login_destination(usuario: Usuario, next_page: Optional[str] = None) -> str:
     """Determina la redirección apropiada tras el login o registro."""
     if next_page:
-        return next_page
+        from urllib.parse import urlparse
+        parsed = urlparse(next_page)
+        if parsed.netloc and parsed.netloc != request.host:
+            next_page = None
+        else:
+            return next_page
 
     onboarding_url = _determine_onboarding_redirect(usuario)
     if onboarding_url:
@@ -450,8 +455,9 @@ def reset_password(token: str):
         if password != confirm:
             flash('Las contraseñas no coinciden.', 'danger')
             return render_form()
-        if len(password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+        valida, msg_password = Usuario.validar_password(password)
+        if not valida:
+            flash(msg_password, 'danger')
             return render_form()
 
         account.set_password(password)
@@ -522,8 +528,9 @@ def register():
             flash('Las contraseñas no coinciden.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
 
-        if len(password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+        valida, msg_password = Usuario.validar_password(password)
+        if not valida:
+            flash(msg_password, 'danger')
             return render_template('auth/register.html', google_available=bool(google))
         
         if Usuario.query.filter(func.lower(Usuario.email) == email.lower()).first():
@@ -669,6 +676,9 @@ def google_callback():
                 if token_invitacion and organizacion_id:
                     organizacion = Organizacion.query.get(organizacion_id)
                     if organizacion and organizacion.token_invitacion == token_invitacion:
+                        if not organizacion.puede_agregar_usuario():
+                            flash('La organización ha alcanzado el límite de usuarios de su plan.', 'warning')
+                            return redirect(url_for('auth.login'))
                         nuevo_usuario = Usuario(
                             nombre=nombre or 'Usuario',
                             apellido=apellido or 'Google',

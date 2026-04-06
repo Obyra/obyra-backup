@@ -180,12 +180,20 @@ def subir(obra_id):
 @login_required
 def descargar(id):
     doc = db.session.execute(
-        db.text("SELECT archivo_path, nombre, obra_id FROM documentos_obra WHERE id = :id"),
-        {'id': id}
+        db.text("""
+            SELECT d.archivo_path, d.nombre, d.obra_id, o.organizacion_id
+            FROM documentos_obra d
+            JOIN obras o ON d.obra_id = o.id
+            WHERE d.id = :id
+        """), {'id': id}
     ).fetchone()
 
     if not doc:
         abort(404)
+
+    from services.memberships import get_current_org_id
+    if doc.organizacion_id != get_current_org_id():
+        abort(403)
 
     filepath = os.path.join(current_app.static_folder, doc.archivo_path)
     if not os.path.exists(filepath):
@@ -207,12 +215,20 @@ def eliminar(id):
         return redirect(url_for('main.dashboard'))
 
     doc = db.session.execute(
-        db.text("SELECT id, archivo_path, obra_id FROM documentos_obra WHERE id = :id"),
-        {'id': id}
+        db.text("""
+            SELECT d.id, d.archivo_path, d.obra_id, o.organizacion_id
+            FROM documentos_obra d
+            JOIN obras o ON d.obra_id = o.id
+            WHERE d.id = :id
+        """), {'id': id}
     ).fetchone()
 
     if not doc:
         abort(404)
+
+    from services.memberships import get_current_org_id
+    if doc.organizacion_id != get_current_org_id():
+        abort(403)
 
     # Eliminar archivo físico
     filepath = os.path.join(current_app.static_folder, doc.archivo_path)

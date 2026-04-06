@@ -518,4 +518,4 @@ async function removeFromSyncQueue(id) {
     });
 }
 
-console.log('[SW] Service Worker v3.2.0 cargado - OBYRA Offline Mode');
+console.log('[SW] Service Worker v5.0.0 cargado - OBYRA Offline Mode');
