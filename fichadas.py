@@ -15,6 +15,7 @@ from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
 from services.memberships import get_current_org_id
 
 from services.permissions import require_plan
+from services.plan_service import require_feature
 
 fichadas_bp = Blueprint('fichadas', __name__, url_prefix='/fichadas')
 
