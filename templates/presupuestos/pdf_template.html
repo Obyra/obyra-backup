@@ -1,6 +1,26 @@
 {# Color primario dinámico de la organización (con fallback al color OBYRA) #}
-{% set color_primario = (organizacion.color_primario if organizacion and organizacion.color_primario else '{{ color_primario }}') %}
+{% set color_primario = (organizacion.color_primario if organizacion and organizacion.color_primario else '#1A374D') %}
 {% set color_acento = '#4CAF50' %}
+
+{# Calcular color de texto contrastado (blanco u oscuro) según luminancia del color primario #}
+{# Fórmula W3C: luminancia = 0.299*R + 0.587*G + 0.114*B (si > 128 → texto oscuro, si no → blanco) #}
+{% set _hex = color_primario.lstrip('#') %}
+{% if _hex|length == 6 %}
+    {% set _r = _hex[0:2]|int(base=16) %}
+    {% set _g = _hex[2:4]|int(base=16) %}
+    {% set _b = _hex[4:6]|int(base=16) %}
+    {% set _luminancia = (_r * 299 + _g * 587 + _b * 114) / 1000 %}
+    {% if _luminancia > 140 %}
+        {% set texto_sobre_primario = '#1a1a1a' %}
+        {% set texto_secundario_sobre_primario = '#444444' %}
+    {% else %}
+        {% set texto_sobre_primario = '#ffffff' %}
+        {% set texto_secundario_sobre_primario = '#cfd9e6' %}
+    {% endif %}
+{% else %}
+    {% set texto_sobre_primario = '#ffffff' %}
+    {% set texto_secundario_sobre_primario = '#cfd9e6' %}
+{% endif %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -51,7 +71,7 @@
         .company-name {
             font-size: 13pt;
             font-weight: bold;
-            color: white;
+            color: {{ texto_sobre_primario }};
             margin-bottom: 2px;
         }
 
@@ -64,7 +84,7 @@
 
         .company-info {
             font-size: 7pt;
-            color: rgba(255,255,255,0.85);
+            color: {{ texto_secundario_sobre_primario }};
         }
 
         .company-info span {
@@ -74,7 +94,7 @@
         .header-presupuesto {
             font-size: 11pt;
             font-weight: bold;
-            color: white;
+            color: {{ texto_sobre_primario }};
         }
 
         .header-numero {
@@ -128,7 +148,7 @@
         /* Tabla de etapas */
         .service-header {
             background: {{ color_primario }};
-            color: white;
+            color: {{ texto_sobre_primario }};
             padding: 4px 10px;
             font-weight: bold;
             font-size: 8pt;
@@ -250,7 +270,7 @@
 
         .total-final-bar .label-col {
             text-align: right;
-            color: white;
+            color: {{ texto_sobre_primario }};
             font-size: 10pt;
             font-weight: bold;
             width: 40%;
@@ -274,7 +294,7 @@
         /* Footer empresa */
         .empresa-footer {
             background: {{ color_primario }};
-            color: white;
+            color: {{ texto_sobre_primario }};
             padding: 8px 15px;
             font-size: 7pt;
             border-top: 1px solid #2d5a7b;
