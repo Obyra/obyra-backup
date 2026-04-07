@@ -127,6 +127,11 @@
                             <li><a class="dropdown-item" href="{{ url_for('obras.lista') }}">
                                 <i class="fas fa-building me-2"></i>Ver Obras
                             </a></li>
+                            {% if has_endpoint('cierre_obra.lista') %}
+                            <li><a class="dropdown-item" href="{{ url_for('cierre_obra.lista') }}">
+                                <i class="fas fa-flag-checkered me-2"></i>Cierres de Obra
+                            </a></li>
+                            {% endif %}
                             {% if has_endpoint('fichadas.index') %}
                                 {% if can_feature('attendance.geo') %}
                                 <li><a class="dropdown-item" href="{{ url_for('fichadas.index') }}">

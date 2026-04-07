@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Acta {{ acta.tipo_display }} - Obra {{ acta.obra.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('cierre_obra.lista') }}">Cierres</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('cierre_obra.detalle', cierre_id=cierre.id) }}">Cierre #{{ cierre.id }}</a></li>
+            <li class="breadcrumb-item active">Acta</li>
+        </ol>
+    </nav>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h3 class="mb-0">
+                <i class="fas fa-file-signature me-2"></i>
+                Acta de Entrega {{ acta.tipo_display }}
+            </h3>
+            <p class="mb-0 mt-1"><small>Obra: <strong>{{ acta.obra.nombre }}</strong></small></p>
+        </div>
+        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <strong>Fecha del acta:</strong>
+                    <p>{{ acta.fecha_acta.strftime('%d de %B de %Y') }}</p>
+                </div>
+                <div class="col-md-6">
+                    <strong>Tipo:</strong>
+                    <p>{{ acta.tipo_display }}</p>
+                </div>
+            </div>
+
+            <hr>
+
+            <h5>Receptor</h5>
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <strong>Nombre:</strong> {{ acta.recibido_por_nombre }}
+                </div>
+                {% if acta.recibido_por_dni %}
+                <div class="col-md-3">
+                    <strong>DNI:</strong> {{ acta.recibido_por_dni }}
+                </div>
+                {% endif %}
+                {% if acta.recibido_por_cargo %}
+                <div class="col-md-3">
+                    <strong>Cargo:</strong> {{ acta.recibido_por_cargo }}
+                </div>
+                {% endif %}
+            </div>
+
+            {% if acta.descripcion %}
+            <hr>
+            <h5>Descripción</h5>
+            <p>{{ acta.descripcion }}</p>
+            {% endif %}
+
+            {% if acta.items_entregados %}
+            <hr>
+            <h5>Items entregados</h5>
+            <pre style="white-space: pre-wrap; font-family: inherit;">{{ acta.items_entregados }}</pre>
+            {% endif %}
+
+            {% if acta.observaciones_cliente %}
+            <hr>
+            <h5>Observaciones del cliente</h5>
+            <div class="alert alert-light">{{ acta.observaciones_cliente }}</div>
+            {% endif %}
+
+            {% if acta.observaciones_internas %}
+            <hr>
+            <h5 class="text-muted">Observaciones internas <small>(no visibles al cliente)</small></h5>
+            <div class="alert alert-warning">{{ acta.observaciones_internas }}</div>
+            {% endif %}
+
+            {% if acta.plazo_garantia_meses %}
+            <hr>
+            <h5><i class="fas fa-shield-alt me-2"></i>Garantía</h5>
+            <p>
+                <strong>{{ acta.plazo_garantia_meses }} meses</strong>
+                a partir del {{ acta.fecha_inicio_garantia.strftime('%d/%m/%Y') if acta.fecha_inicio_garantia else acta.fecha_acta.strftime('%d/%m/%Y') }}
+            </p>
+            {% endif %}
+
+            <hr>
+            <div class="text-muted small">
+                Acta creada el {{ acta.fecha_creacion.strftime('%d/%m/%Y %H:%M') if acta.fecha_creacion else '-' }}
+                {% if acta.creado_por %}por {{ acta.creado_por.nombre }} {{ acta.creado_por.apellido }}{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a href="{{ url_for('cierre_obra.detalle', cierre_id=cierre.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver al cierre
+        </a>
+    </div>
+</div>
+{% endblock %}

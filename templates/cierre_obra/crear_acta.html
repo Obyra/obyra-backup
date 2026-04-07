@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva Acta - Cierre #{{ cierre.id }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('cierre_obra.lista') }}">Cierres</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('cierre_obra.detalle', cierre_id=cierre.id) }}">Cierre #{{ cierre.id }}</a></li>
+            <li class="breadcrumb-item active">Nueva acta</li>
+        </ol>
+    </nav>
+
+    <h2 class="mb-4">
+        <i class="fas fa-file-signature me-2"></i>Nueva Acta de Entrega
+    </h2>
+
+    <form method="POST" action="{{ url_for('cierre_obra.crear_acta', cierre_id=cierre.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <!-- Tipo y fecha -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Datos del acta</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Tipo de acta</label>
+                        <select name="tipo" class="form-select" required>
+                            <option value="definitiva">Definitiva</option>
+                            <option value="provisoria">Provisoria</option>
+                            <option value="parcial">Parcial</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Fecha del acta *</label>
+                        <input type="date" name="fecha_acta" class="form-control"
+                               value="{{ now.strftime('%Y-%m-%d') if now else '' }}" required>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Datos del receptor -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Recibe la obra</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Nombre completo *</label>
+                        <input type="text" name="recibido_por_nombre" class="form-control" required
+                               placeholder="Nombre y apellido de quien recibe">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">DNI</label>
+                        <input type="text" name="recibido_por_dni" class="form-control"
+                               placeholder="12345678">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Cargo</label>
+                        <input type="text" name="recibido_por_cargo" class="form-control"
+                               placeholder="Propietario, Arquitecto, etc">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenido del acta -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Contenido</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Descripción / Resumen</label>
+                    <textarea name="descripcion" class="form-control" rows="3"
+                              placeholder="Descripción general de lo que se entrega"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Items entregados</label>
+                    <textarea name="items_entregados" class="form-control" rows="4"
+                              placeholder="Listado detallado de items, planos, llaves, manuales, etc."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observaciones del cliente</label>
+                    <textarea name="observaciones_cliente" class="form-control" rows="2"
+                              placeholder="Observaciones que dejó el cliente al momento de la entrega"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observaciones internas</label>
+                    <textarea name="observaciones_internas" class="form-control" rows="2"
+                              placeholder="Notas privadas, no visibles al cliente"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Garantía -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Garantía (opcional)</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">Plazo (meses)</label>
+                        <input type="number" name="plazo_garantia_meses" class="form-control" min="0" max="120"
+                               placeholder="12">
+                    </div>
+                    <div class="col-md-8">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            La garantía empieza a contar desde la fecha del acta.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('cierre_obra.detalle', cierre_id=cierre.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i>Crear Acta
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

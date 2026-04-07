@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Cierre #{{ cierre.id }} - {{ cierre.obra.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('cierre_obra.lista') }}">Cierres</a></li>
+            <li class="breadcrumb-item active">Cierre #{{ cierre.id }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-flag-checkered me-2"></i>Cierre de Obra #{{ cierre.id }}
+                <span class="badge {{ cierre.estado_badge_class }} ms-2">{{ cierre.estado_display }}</span>
+            </h2>
+            <p class="text-muted mb-0">
+                <a href="{{ url_for('obras.detalle', id=cierre.obra.id) }}">{{ cierre.obra.nombre }}</a>
+                · Iniciado {{ cierre.fecha_inicio_cierre.strftime('%d/%m/%Y %H:%M') if cierre.fecha_inicio_cierre else '-' }}
+                {% if cierre.iniciado_por %}por {{ cierre.iniciado_por.nombre }}{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Acciones según estado -->
+    {% if cierre.estado == 'borrador' %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center">
+        <div>
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Cierre en proceso.</strong>
+            Cargá las actas de entrega y luego confirmá el cierre.
+        </div>
+        <div>
+            <a href="{{ url_for('cierre_obra.crear_acta', cierre_id=cierre.id) }}" class="btn btn-primary me-2">
+                <i class="fas fa-plus me-1"></i>Nueva Acta
+            </a>
+            <form method="POST" action="{{ url_for('cierre_obra.confirmar', cierre_id=cierre.id) }}"
+                  class="d-inline" onsubmit="return confirm('¿Confirmar el cierre? La obra pasará a estado FINALIZADA.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check me-1"></i>Confirmar Cierre
+                </button>
+            </form>
+        </div>
+    </div>
+    {% elif cierre.estado == 'cerrado' %}
+    <div class="alert alert-success d-flex justify-content-between align-items-center">
+        <div>
+            <i class="fas fa-check-circle me-2"></i>
+            <strong>Obra finalizada.</strong>
+            Cerrada el {{ cierre.fecha_cierre_definitivo.strftime('%d/%m/%Y %H:%M') if cierre.fecha_cierre_definitivo else '-' }}
+            {% if cierre.cerrado_por %}por {{ cierre.cerrado_por.nombre }}{% endif %}.
+        </div>
+        <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#modalAnular">
+            <i class="fas fa-times me-1"></i>Anular Cierre
+        </button>
+    </div>
+    {% elif cierre.estado == 'anulado' %}
+    <div class="alert alert-secondary">
+        <i class="fas fa-ban me-2"></i>
+        <strong>Cierre anulado</strong>
+        el {{ cierre.fecha_anulacion.strftime('%d/%m/%Y %H:%M') if cierre.fecha_anulacion else '-' }}
+        {% if cierre.anulado_por %}por {{ cierre.anulado_por.nombre }}{% endif %}.
+        {% if cierre.motivo_anulacion %}
+        <br><strong>Motivo:</strong> {{ cierre.motivo_anulacion }}
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Columna izquierda: datos del cierre -->
+        <div class="col-md-7">
+            <div class="card mb-3">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Información del Cierre</h5>
+                </div>
+                <div class="card-body">
+                    {% if cierre.observaciones %}
+                    <p><strong>Observaciones:</strong></p>
+                    <p class="text-muted">{{ cierre.observaciones }}</p>
+                    {% endif %}
+
+                    <hr>
+
+                    <h6>Resumen Financiero</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td>Presupuesto inicial</td>
+                            <td class="text-end">${{ "{:,.0f}".format(cierre.presupuesto_inicial or 0) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Total certificado</td>
+                            <td class="text-end">${{ "{:,.0f}".format(cierre.monto_certificado or 0) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Total cobrado</td>
+                            <td class="text-end">${{ "{:,.0f}".format(cierre.monto_cobrado or 0) }}</td>
+                        </tr>
+                    </table>
+
+                    {% if checklist %}
+                    <hr>
+                    <h6>Checklist al iniciar</h6>
+                    <ul class="list-unstyled small">
+                        <li>📋 Tareas: {{ checklist.tareas.completadas }}/{{ checklist.tareas.total }} ({{ checklist.tareas.porcentaje }}%)</li>
+                        <li>📂 Etapas: {{ checklist.etapas.completadas }}/{{ checklist.etapas.total }}</li>
+                        <li>💰 Certificaciones: {{ checklist.certificaciones.total }}</li>
+                        <li>💵 Pagos recibidos: {{ checklist.pagos.total }}</li>
+                        <li>📦 Consumos de inventario: {{ checklist.materiales.consumos }}</li>
+                    </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna derecha: actas -->
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-file-signature me-2"></i>Actas de Entrega</h5>
+                    {% if cierre.estado != 'anulado' %}
+                    <a href="{{ url_for('cierre_obra.crear_acta', cierre_id=cierre.id) }}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if actas %}
+                    {% for acta in actas %}
+                    <div class="border-bottom pb-2 mb-2">
+                        <div class="d-flex justify-content-between">
+                            <strong>Acta {{ acta.tipo_display }}</strong>
+                            <small class="text-muted">{{ acta.fecha_acta.strftime('%d/%m/%Y') }}</small>
+                        </div>
+                        <small class="text-muted d-block">
+                            Recibe: {{ acta.recibido_por_nombre }}
+                            {% if acta.recibido_por_dni %}(DNI {{ acta.recibido_por_dni }}){% endif %}
+                        </small>
+                        {% if acta.plazo_garantia_meses %}
+                        <small class="text-muted d-block">
+                            <i class="fas fa-shield-alt"></i> Garantía: {{ acta.plazo_garantia_meses }} meses
+                        </small>
+                        {% endif %}
+                        <a href="{{ url_for('cierre_obra.ver_acta', cierre_id=cierre.id, acta_id=acta.id) }}"
+                           class="btn btn-sm btn-link p-0">Ver detalle</a>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted text-center mb-0 py-2">
+                        <small>No hay actas creadas.</small>
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if cierre.estado == 'cerrado' %}
+<!-- Modal de anulación -->
+<div class="modal fade" id="modalAnular" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('cierre_obra.anular', cierre_id=cierre.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Anular Cierre</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>La obra volverá a estado <strong>en curso</strong> y el cierre quedará registrado como anulado.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Motivo de anulación *</label>
+                        <textarea name="motivo" class="form-control" rows="3" required
+                                  placeholder="Ej: Se encontraron observaciones del cliente que deben corregirse"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Anular Cierre</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

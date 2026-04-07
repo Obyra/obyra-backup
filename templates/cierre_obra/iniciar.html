@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Iniciar Cierre - {{ obra.nombre }} - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('obras.lista') }}">Obras</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('obras.detalle', id=obra.id) }}">{{ obra.nombre }}</a></li>
+            <li class="breadcrumb-item active">Iniciar cierre</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-flag-checkered me-2"></i>Iniciar Cierre de Obra
+        </h2>
+    </div>
+
+    <!-- Stepper visual -->
+    <div class="card mb-4">
+        <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-center text-center">
+                <div class="flex-fill">
+                    <div class="d-inline-block rounded-circle bg-primary text-white" style="width:40px;height:40px;line-height:40px;">1</div>
+                    <p class="mb-0 mt-2"><strong>Verificar Estado</strong></p>
+                    <small class="text-muted">Revisá el checklist</small>
+                </div>
+                <div class="flex-fill">
+                    <i class="fas fa-arrow-right text-muted"></i>
+                </div>
+                <div class="flex-fill">
+                    <div class="d-inline-block rounded-circle bg-light text-muted" style="width:40px;height:40px;line-height:40px;">2</div>
+                    <p class="mb-0 mt-2 text-muted">Cargar Acta</p>
+                    <small class="text-muted">Datos del cliente</small>
+                </div>
+                <div class="flex-fill">
+                    <i class="fas fa-arrow-right text-muted"></i>
+                </div>
+                <div class="flex-fill">
+                    <div class="d-inline-block rounded-circle bg-light text-muted" style="width:40px;height:40px;line-height:40px;">3</div>
+                    <p class="mb-0 mt-2 text-muted">Confirmar</p>
+                    <small class="text-muted">Obra finalizada</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Datos de la obra -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-hard-hat me-2"></i>Datos de la Obra</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <strong>Nombre:</strong> {{ obra.nombre }}
+                </div>
+                <div class="col-md-6">
+                    <strong>Cliente:</strong> {{ obra.cliente or '-' }}
+                </div>
+                <div class="col-md-6">
+                    <strong>Estado actual:</strong>
+                    <span class="badge bg-warning text-dark">{{ obra.estado }}</span>
+                </div>
+                <div class="col-md-6">
+                    <strong>Avance:</strong> {{ obra.progreso or 0 }}%
+                </div>
+                <div class="col-md-6">
+                    <strong>Inicio:</strong> {{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra.fecha_inicio else '-' }}
+                </div>
+                <div class="col-md-6">
+                    <strong>Fin previsto:</strong> {{ obra.fecha_fin.strftime('%d/%m/%Y') if obra.fecha_fin else '-' }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checklist -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-clipboard-check me-2"></i>Checklist Pre-Cierre</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <!-- Tareas -->
+                <div class="col-md-6">
+                    <div class="border rounded p-3">
+                        <h6 class="text-muted mb-2"><i class="fas fa-tasks me-1"></i>Tareas</h6>
+                        <h3 class="mb-1">{{ checklist.tareas.completadas }} / {{ checklist.tareas.total }}</h3>
+                        <small class="text-muted">{{ checklist.tareas.porcentaje }}% completadas</small>
+                        <div class="progress mt-2" style="height:6px;">
+                            <div class="progress-bar bg-success" style="width: {{ checklist.tareas.porcentaje }}%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etapas -->
+                <div class="col-md-6">
+                    <div class="border rounded p-3">
+                        <h6 class="text-muted mb-2"><i class="fas fa-layer-group me-1"></i>Etapas</h6>
+                        <h3 class="mb-1">{{ checklist.etapas.completadas }} / {{ checklist.etapas.total }}</h3>
+                        <small class="text-muted">completadas</small>
+                    </div>
+                </div>
+
+                <!-- Certificaciones -->
+                <div class="col-md-6">
+                    <div class="border rounded p-3">
+                        <h6 class="text-muted mb-2"><i class="fas fa-file-invoice-dollar me-1"></i>Certificaciones</h6>
+                        <h3 class="mb-1">{{ checklist.certificaciones.total }}</h3>
+                        <small class="text-muted">${{ "{:,.0f}".format(checklist.certificaciones.monto_total) }}</small>
+                    </div>
+                </div>
+
+                <!-- Pagos -->
+                <div class="col-md-6">
+                    <div class="border rounded p-3">
+                        <h6 class="text-muted mb-2"><i class="fas fa-money-bill-wave me-1"></i>Pagos recibidos</h6>
+                        <h3 class="mb-1">{{ checklist.pagos.total }}</h3>
+                        <small class="text-muted">${{ "{:,.0f}".format(checklist.pagos.monto_total) }}</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advertencias -->
+            {% if checklist.advertencias %}
+            <div class="alert alert-warning mt-4 mb-0">
+                <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Advertencias</h6>
+                <ul class="mb-0">
+                    {% for adv in checklist.advertencias %}
+                    <li>{{ adv }}</li>
+                    {% endfor %}
+                </ul>
+                <hr>
+                <small class="mb-0">
+                    Estas advertencias <strong>no son bloqueantes</strong> — podés iniciar el cierre igualmente.
+                    Pero te recomendamos revisarlas antes de finalizar la obra.
+                </small>
+            </div>
+            {% else %}
+            <div class="alert alert-success mt-4 mb-0">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Todo listo para cerrar la obra.</strong> No hay advertencias.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Form de inicio -->
+    <form method="POST" action="{{ url_for('cierre_obra.iniciar', obra_id=obra.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-pencil-alt me-2"></i>Observaciones (opcional)</h5>
+            </div>
+            <div class="card-body">
+                <textarea name="observaciones" class="form-control" rows="3"
+                          placeholder="Ej: Obra finalizada según pliego original. Pendiente coordinar entrega con el cliente."></textarea>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-flag-checkered me-1"></i>Iniciar Cierre
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

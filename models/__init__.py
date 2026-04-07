@@ -172,6 +172,9 @@ from models.utils import (
 # Audit log
 from models.audit import AuditLog, registrar_audit
 
+# Cierre formal de obra y acta de entrega
+from models.cierre_obra import CierreObra, ActaEntrega
+
 
 def seed_default_role_permissions():
     """Seed permisos por defecto para roles"""
@@ -326,6 +329,9 @@ __all__ = [
     # Utils
     'RegistroTiempo',
     'ConsultaAgente',
+    # Cierre de obra
+    'CierreObra',
+    'ActaEntrega',
     # Functions
     'seed_default_role_permissions',
 ]

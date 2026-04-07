@@ -35,6 +35,12 @@
                         {{ obra.estado.replace('_', ' ').title() }}
                     </span>
                     <br>
+                    {% if obra.estado == 'en_curso' and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and has_endpoint('cierre_obra.iniciar') %}
+                    <a href="{{ url_for('cierre_obra.iniciar', obra_id=obra.id) }}" class="btn btn-success me-1"
+                       title="Iniciar el cierre formal de esta obra">
+                        <i class="fas fa-flag-checkered me-1"></i>Cerrar Obra
+                    </a>
+                    {% endif %}
                     <a href="{{ url_for('obras.lista') }}" class="btn btn-secondary">
                         <i class="fas fa-arrow-left me-1"></i>Volver
                     </a>
