@@ -1,8 +1,14 @@
 """
 Tests for database models.
+
+NOTA: Estos tests están desactualizados (usan campos viejos como `username`,
+`razon_social`). Se mantienen como referencia pero están skipped.
+Los tests actuales están en tests/test_models_v2.py
 """
 import pytest
 from werkzeug.security import check_password_hash
+
+pytestmark = pytest.mark.skip(reason="Tests obsoletos — ver test_models_v2.py")
 
 
 @pytest.mark.unit

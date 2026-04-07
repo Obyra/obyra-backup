@@ -167,23 +167,30 @@ if "neon.tech" in database_url and "sslmode=" not in database_url:
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 
-# PostgreSQL-optimized connection pooling
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 20,           # Conexiones en el pool (escalable)
-    "max_overflow": 50,        # Conexiones adicionales si el pool está lleno
-    "pool_timeout": 30,        # Timeout para obtener conexión del pool
-    "pool_recycle": 1800,      # Reciclar conexiones cada 30 min
-    "pool_pre_ping": True,     # Verificar conexión antes de usarla
-    "connect_args": {
-        "application_name": "obyra_app",  # Identificar en pg_stat_activity
-        "options": "-c statement_timeout=30000",  # 30s timeout por query
-        "connect_timeout": 10,
-        "keepalives": 1,
-        "keepalives_idle": 600,
-        "keepalives_interval": 30,
-        "keepalives_count": 3,
+# Connection pooling: PostgreSQL en producción, SQLite simplificado en tests
+if database_url.startswith("sqlite"):
+    # SQLite no soporta los connect_args de PostgreSQL
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
     }
-}
+else:
+    # PostgreSQL-optimized connection pooling
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_size": 20,           # Conexiones en el pool (escalable)
+        "max_overflow": 50,        # Conexiones adicionales si el pool está lleno
+        "pool_timeout": 30,        # Timeout para obtener conexión del pool
+        "pool_recycle": 1800,      # Reciclar conexiones cada 30 min
+        "pool_pre_ping": True,     # Verificar conexión antes de usarla
+        "connect_args": {
+            "application_name": "obyra_app",  # Identificar en pg_stat_activity
+            "options": "-c statement_timeout=30000",  # 30s timeout por query
+            "connect_timeout": 10,
+            "keepalives": 1,
+            "keepalives_idle": 600,
+            "keepalives_interval": 30,
+            "keepalives_count": 3,
+        }
+    }
 
 # Feature flags
 app.config["WIZARD_BUDGET_BREAKDOWN_ENABLED"] = _env_flag("WIZARD_BUDGET_BREAKDOWN_ENABLED", False)
