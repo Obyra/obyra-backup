@@ -184,6 +184,7 @@ def get_organizaciones_detalle() -> list:
 
         orgs = db.session.query(Organizacion).order_by(Organizacion.id.desc()).all()
         result = []
+        ahora = datetime.utcnow()
         for o in orgs:
             try:
                 num_users = db.session.query(func.count(Usuario.id)).filter_by(
@@ -196,17 +197,42 @@ def get_organizaciones_detalle() -> list:
                 num_users = 0
                 num_obras = 0
 
+            plan_tipo = getattr(o, 'plan_tipo', None) or 'prueba'
+
+            # Calcular fecha de vencimiento
+            fecha_vence = None
+            dias_restantes = None
+            vencido = False
+
+            if plan_tipo == 'prueba':
+                # Plan de prueba: 30 días desde fecha_creacion
+                if getattr(o, 'fecha_creacion', None):
+                    fecha_vence_dt = o.fecha_creacion + timedelta(days=30)
+                    fecha_vence = fecha_vence_dt.isoformat()
+                    delta = fecha_vence_dt - ahora
+                    dias_restantes = delta.days
+                    vencido = delta.total_seconds() < 0
+            else:
+                # Planes pagos: usar fecha_fin_plan si existe
+                if getattr(o, 'fecha_fin_plan', None):
+                    fecha_vence = o.fecha_fin_plan.isoformat()
+                    delta = o.fecha_fin_plan - ahora
+                    dias_restantes = delta.days
+                    vencido = delta.total_seconds() < 0
+
             result.append({
                 'id': o.id,
                 'nombre': o.nombre,
-                'plan_tipo': getattr(o, 'plan_tipo', None) or 'prueba',
+                'plan_tipo': plan_tipo,
                 'activa': getattr(o, 'activa', True),
                 'fecha_creacion': o.fecha_creacion.isoformat() if getattr(o, 'fecha_creacion', None) else None,
                 'max_usuarios': getattr(o, 'max_usuarios', None),
                 'max_obras': getattr(o, 'max_obras', None),
                 'num_usuarios': num_users,
                 'num_obras': num_obras,
-                'fecha_fin_plan': o.fecha_fin_plan.isoformat() if getattr(o, 'fecha_fin_plan', None) else None,
+                'fecha_fin_plan': fecha_vence,
+                'dias_restantes': dias_restantes,
+                'vencido': vencido,
             })
         return result
     except Exception as e:

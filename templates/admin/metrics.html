@@ -195,7 +195,20 @@
                                     <td>{{ org.num_usuarios }}{% if org.max_usuarios %} / {{ org.max_usuarios }}{% endif %}</td>
                                     <td>{{ org.num_obras }}{% if org.max_obras %} / {{ org.max_obras }}{% endif %}</td>
                                     <td><small class="text-muted">{{ org.fecha_creacion[:10] if org.fecha_creacion else '-' }}</small></td>
-                                    <td><small class="text-muted">{{ org.fecha_fin_plan[:10] if org.fecha_fin_plan else '-' }}</small></td>
+                                    <td>
+                                        {% if org.fecha_fin_plan %}
+                                            <small class="{% if org.vencido %}text-danger fw-bold{% elif org.dias_restantes is not none and org.dias_restantes <= 7 %}text-warning fw-bold{% else %}text-muted{% endif %}">
+                                                {{ org.fecha_fin_plan[:10] }}
+                                                {% if org.vencido %}
+                                                    <br><i class="fas fa-exclamation-triangle"></i> Vencido
+                                                {% elif org.dias_restantes is not none %}
+                                                    <br><span>({{ org.dias_restantes }} días)</span>
+                                                {% endif %}
+                                            </small>
+                                        {% else %}
+                                            <small class="text-muted">-</small>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% else %}
                                 <tr><td colspan="8" class="text-center text-muted">Sin datos</td></tr>
