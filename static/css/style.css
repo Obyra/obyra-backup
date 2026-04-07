@@ -117,20 +117,16 @@ body {
     background: var(--primary) !important;
     padding: 0 !important;
     margin: 0 !important;
-    width: 100vw !important;
-    max-width: none !important;
+    width: 100%;
+    max-width: 100%;
     position: relative;
-    left: 50%;
-    right: 50%;
-    margin-left: -50vw !important;
-    margin-right: -50vw !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     border-bottom: 3px solid var(--accent);
 }
 
 .navbar .container-fluid {
-    max-width: none !important;
-    width: 100vw !important;
+    max-width: 100%;
+    width: 100%;
     padding: 0.5rem 1.5rem !important;
     margin: 0 !important;
     display: flex !important;

@@ -35,24 +35,55 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=7.0">
+    <!-- Anti-overflow horizontal y responsive del navbar -->
+    <style>
+        html, body {
+            overflow-x: hidden !important;
+            max-width: 100%;
+        }
+        .navbar-brand {
+            max-width: calc(100% - 60px);
+            overflow: hidden;
+        }
+        .navbar-brand img {
+            max-height: 38px;
+            object-fit: contain;
+        }
+        /* Logo de la org en mobile: más chico y permitir wrap */
+        @media (max-width: 991.98px) {
+            .navbar-brand img {
+                max-height: 32px !important;
+                max-width: 100px !important;
+            }
+            .navbar-brand .org-separator,
+            .navbar-brand .org-name-text {
+                display: none !important;
+            }
+        }
+        @media (max-width: 575.98px) {
+            .navbar-brand img.org-logo {
+                display: none !important;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold d-flex align-items-center" href="{{ url_for('obras.mis_tareas') if current_user.is_authenticated and current_user.role=='operario' else url_for('index') }}">
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="OBYRA IA" height="38" class="me-2" style="max-width: 160px; object-fit: contain;">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="OBYRA IA" height="38" class="me-2" style="max-width: 130px; object-fit: contain;">
                 {% if current_user.is_authenticated and org_branding and org_branding.logo_url %}
-                <span class="d-none d-md-inline mx-2" style="color:rgba(255,255,255,0.4); font-size: 1.5rem; font-weight: 100;">|</span>
+                <span class="org-separator d-none d-lg-inline mx-2" style="color:rgba(255,255,255,0.4); font-size: 1.5rem; font-weight: 100;">|</span>
                 <img src="{{ url_for('static', filename=org_branding.logo_url) }}"
                      alt="{{ org_branding.nombre_display }}"
-                     height="36"
-                     class="d-none d-md-inline"
-                     style="max-width: 140px; object-fit: contain; background: white; padding: 2px 6px; border-radius: 4px;"
+                     height="34"
+                     class="org-logo d-none d-lg-inline"
+                     style="max-width: 110px; object-fit: contain; background: white; padding: 2px 6px; border-radius: 4px;"
                      title="{{ org_branding.nombre_display }}">
                 {% elif current_user.is_authenticated and org_branding and org_branding.nombre_fantasia %}
-                <span class="d-none d-md-inline mx-2" style="color:rgba(255,255,255,0.4); font-size: 1.5rem; font-weight: 100;">|</span>
-                <span class="d-none d-md-inline text-white" style="font-size: 0.9rem; opacity: 0.85;">{{ org_branding.nombre_fantasia }}</span>
+                <span class="org-separator d-none d-lg-inline mx-2" style="color:rgba(255,255,255,0.4); font-size: 1.5rem; font-weight: 100;">|</span>
+                <span class="org-name-text d-none d-lg-inline text-white" style="font-size: 0.9rem; opacity: 0.85;">{{ org_branding.nombre_fantasia }}</span>
                 {% endif %}
             </a>
             
