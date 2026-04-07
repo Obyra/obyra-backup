@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, date
 from decimal import Decimal
 import os
 from werkzeug.utils import secure_filename
-from app import db
+from extensions import db
 from models import Usuario
 from models.core import Organizacion
 from config.billing_config import BILLING

@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 import json
 from utils.pagination import Pagination
-from app import db
+from extensions import db
 from models import *
 from utils import *
 from services.memberships import get_current_org_id

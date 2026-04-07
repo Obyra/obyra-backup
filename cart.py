@@ -5,7 +5,8 @@ Blueprint del Carrito de Compras
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import current_user
 from sqlalchemy import func
-from app import db, _login_redirect
+from extensions import db
+from app import _login_redirect
 from models import Cart, CartItem, ProductVariant, Product, Supplier, Order, OrderItem, OrderCommission
 from commission_utils import get_commission_summary
 from decimal import Decimal

@@ -174,7 +174,7 @@ class ProjectSharedService:
             bool: True si es miembro
         """
         from models import ObraMiembro, TareaMiembro, TareaEtapa, EtapaObra
-        from app import db
+        from extensions import db
 
         if ProjectSharedService.is_pm_global():
             return True
@@ -215,7 +215,7 @@ class ProjectSharedService:
             JSON response con resultado de la operación
         """
         from models import TareaEtapa, TareaAvance, TareaAvanceFoto
-        from app import db
+        from extensions import db
 
         tarea = TareaEtapa.query.get_or_404(tarea_id)
 
@@ -347,7 +347,7 @@ class ProjectSharedService:
             Response apropiada (template o JSON)
         """
         from models import Obra, WorkCertification
-        from app import db
+        from extensions import db
         from flask import render_template, flash, redirect, url_for
         from services.memberships import get_current_org_id, get_current_membership
 
@@ -595,7 +595,7 @@ class ProjectSharedService:
             JSON response con estadísticas de creación
         """
         from models import Obra, EtapaObra, TareaEtapa, ObraMiembro, TareaMiembro
-        from app import db
+        from extensions import db
 
         obra = Obra.query.get_or_404(obra_id)
         if not ProjectSharedService.can_manage_obra(obra):

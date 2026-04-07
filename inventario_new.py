@@ -17,7 +17,8 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from app import db, _login_redirect
+from extensions import db
+from app import _login_redirect
 
 from models import (
     InventoryCategory,

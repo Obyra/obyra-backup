@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from datetime import datetime
 from decimal import Decimal
 from utils.pagination import Pagination
-from app import db
+from extensions import db
 from models import Proveedor, CategoriaProveedor, SolicitudCotizacion, Usuario
 from utils import safe_decimal
 

@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from flask_login import current_user
 
-from app import db
+from extensions import db
 from models import (
     Obra, EtapaObra, TareaEtapa, TareaAvance, AsignacionObra,
     Usuario, ItemPresupuesto,
