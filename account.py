@@ -373,7 +373,7 @@ Por favor, verificar el comprobante adjunto y procesar el pago.
 @login_required
 def organizacion():
     """Configuración de la organización"""
-    from helpers import get_current_org_id
+    from services.memberships import get_current_org_id
     from models import Organizacion
 
     org_id = get_current_org_id()
