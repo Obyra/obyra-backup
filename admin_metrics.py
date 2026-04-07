@@ -177,3 +177,236 @@ def rls_status():
         result['error'] = str(e)
 
     return jsonify(result)
+
+
+@admin_metrics_bp.route('/rls-apply')
+@login_required
+def rls_apply():
+    """
+    Aplica la migración RLS de forma controlada paso a paso.
+    Solo super admin. Idempotente: puede ejecutarse múltiples veces sin problema.
+
+    Para revertir: GET /admin/metrics/rls-rollback
+    """
+    _require_super_admin()
+    from extensions import db
+    from sqlalchemy import text
+
+    log = []
+    errors = []
+
+    try:
+        # ─────────────────────────────────────────────────────────────
+        # PASO 1: Crear funciones helper
+        # ─────────────────────────────────────────────────────────────
+        log.append("=== PASO 1: Creando funciones helper ===")
+
+        try:
+            db.session.execute(text("""
+                CREATE OR REPLACE FUNCTION app_current_org_id()
+                RETURNS INTEGER AS $$
+                BEGIN
+                    RETURN NULLIF(current_setting('app.current_org_id', true), '')::INTEGER;
+                EXCEPTION WHEN OTHERS THEN
+                    RETURN NULL;
+                END;
+                $$ LANGUAGE plpgsql STABLE;
+            """))
+            db.session.commit()
+            log.append("[OK] Función app_current_org_id() creada")
+        except Exception as e:
+            db.session.rollback()
+            errors.append(f"app_current_org_id: {e}")
+            log.append(f"[ERROR] app_current_org_id: {e}")
+
+        try:
+            db.session.execute(text("""
+                CREATE OR REPLACE FUNCTION app_is_super_admin()
+                RETURNS BOOLEAN AS $$
+                BEGIN
+                    RETURN COALESCE(current_setting('app.is_super_admin', true), 'false')::BOOLEAN;
+                EXCEPTION WHEN OTHERS THEN
+                    RETURN FALSE;
+                END;
+                $$ LANGUAGE plpgsql STABLE;
+            """))
+            db.session.commit()
+            log.append("[OK] Función app_is_super_admin() creada")
+        except Exception as e:
+            db.session.rollback()
+            errors.append(f"app_is_super_admin: {e}")
+            log.append(f"[ERROR] app_is_super_admin: {e}")
+
+        # ─────────────────────────────────────────────────────────────
+        # PASO 2: Aplicar RLS a tablas con organizacion_id
+        # ─────────────────────────────────────────────────────────────
+        log.append("")
+        log.append("=== PASO 2: Habilitando RLS en tablas con organizacion_id ===")
+
+        tables_org = [
+            'audit_log', 'clientes', 'consultas_agente', 'cotizaciones_proveedor',
+            'cuadrillas_tipo', 'escala_salarial_uocra', 'global_material_usage',
+            'items_inventario', 'items_referencia_constructora', 'liquidaciones_mo',
+            'locations', 'movimientos_caja', 'notificaciones', 'obras',
+            'ordenes_compra', 'presupuestos', 'proveedores', 'proveedores_oc',
+            'remitos', 'requerimientos_compra', 'work_certifications', 'work_payments',
+        ]
+
+        ok_org = 0
+        for table in tables_org:
+            try:
+                # Verificar que la tabla existe
+                exists = db.session.execute(text(
+                    "SELECT 1 FROM information_schema.tables WHERE table_name = :t"
+                ), {'t': table}).fetchone()
+                if not exists:
+                    log.append(f"[SKIP] Tabla no existe: {table}")
+                    continue
+
+                # Habilitar RLS
+                db.session.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;"))
+
+                # Crear policy (drop si existe)
+                db.session.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table};"))
+                db.session.execute(text(f"""
+                    CREATE POLICY tenant_isolation ON {table}
+                        USING (
+                            app_is_super_admin()
+                            OR organizacion_id = app_current_org_id()
+                            OR app_current_org_id() IS NULL
+                        );
+                """))
+                db.session.commit()
+                log.append(f"[OK] {table}")
+                ok_org += 1
+            except Exception as e:
+                db.session.rollback()
+                errors.append(f"{table}: {e}")
+                log.append(f"[ERROR] {table}: {str(e)[:100]}")
+
+        log.append(f"[INFO] {ok_org}/{len(tables_org)} tablas con organizacion_id aplicadas")
+
+        # ─────────────────────────────────────────────────────────────
+        # PASO 3: Aplicar RLS a tablas con company_id
+        # ─────────────────────────────────────────────────────────────
+        log.append("")
+        log.append("=== PASO 3: Habilitando RLS en tablas con company_id ===")
+
+        tables_company = [
+            'equipment', 'equipment_movement', 'events', 'inventory_category',
+            'inventory_item', 'order', 'warehouse',
+        ]
+
+        ok_company = 0
+        for table in tables_company:
+            try:
+                exists = db.session.execute(text(
+                    "SELECT 1 FROM information_schema.tables WHERE table_name = :t"
+                ), {'t': table}).fetchone()
+                if not exists:
+                    log.append(f"[SKIP] Tabla no existe: {table}")
+                    continue
+
+                db.session.execute(text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY;'))
+                db.session.execute(text(f'DROP POLICY IF EXISTS tenant_isolation ON "{table}";'))
+                db.session.execute(text(f'''
+                    CREATE POLICY tenant_isolation ON "{table}"
+                        USING (
+                            app_is_super_admin()
+                            OR company_id = app_current_org_id()
+                            OR app_current_org_id() IS NULL
+                        );
+                '''))
+                db.session.commit()
+                log.append(f"[OK] {table}")
+                ok_company += 1
+            except Exception as e:
+                db.session.rollback()
+                errors.append(f"{table}: {e}")
+                log.append(f"[ERROR] {table}: {str(e)[:100]}")
+
+        log.append(f"[INFO] {ok_company}/{len(tables_company)} tablas con company_id aplicadas")
+
+        # ─────────────────────────────────────────────────────────────
+        # RESUMEN
+        # ─────────────────────────────────────────────────────────────
+        log.append("")
+        log.append("=== RESUMEN ===")
+        log.append(f"Total tablas con RLS aplicado: {ok_org + ok_company}")
+        log.append(f"Errores: {len(errors)}")
+
+        if len(errors) == 0:
+            log.append("")
+            log.append("✓ RLS APLICADO EXITOSAMENTE")
+            log.append("Verificar con: GET /admin/metrics/rls-status")
+
+        return jsonify({
+            'ok': len(errors) == 0,
+            'tables_org_applied': ok_org,
+            'tables_company_applied': ok_company,
+            'total_applied': ok_org + ok_company,
+            'errors_count': len(errors),
+            'errors': errors[:10],  # Primeros 10 errores
+            'log': log,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'ok': False,
+            'error': f'Fallo crítico: {e}',
+            'log': log,
+        }), 500
+
+
+@admin_metrics_bp.route('/rls-rollback')
+@login_required
+def rls_rollback():
+    """
+    Revierte completamente RLS: elimina policies y deshabilita RLS.
+    Solo super admin. Para emergencias.
+    """
+    _require_super_admin()
+    from extensions import db
+    from sqlalchemy import text
+
+    log = []
+    errors = []
+
+    all_tables = [
+        'audit_log', 'clientes', 'consultas_agente', 'cotizaciones_proveedor',
+        'cuadrillas_tipo', 'escala_salarial_uocra', 'global_material_usage',
+        'items_inventario', 'items_referencia_constructora', 'liquidaciones_mo',
+        'locations', 'movimientos_caja', 'notificaciones', 'obras',
+        'ordenes_compra', 'presupuestos', 'proveedores', 'proveedores_oc',
+        'remitos', 'requerimientos_compra', 'work_certifications', 'work_payments',
+        'equipment', 'equipment_movement', 'events', 'inventory_category',
+        'inventory_item', 'order', 'warehouse',
+    ]
+
+    for table in all_tables:
+        try:
+            db.session.execute(text(f'DROP POLICY IF EXISTS tenant_isolation ON "{table}";'))
+            db.session.execute(text(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY;'))
+            db.session.commit()
+            log.append(f"[OK] RLS deshabilitado: {table}")
+        except Exception as e:
+            db.session.rollback()
+            errors.append(f"{table}: {str(e)[:100]}")
+
+    # Eliminar funciones helper
+    try:
+        db.session.execute(text("DROP FUNCTION IF EXISTS app_current_org_id();"))
+        db.session.execute(text("DROP FUNCTION IF EXISTS app_is_super_admin();"))
+        db.session.commit()
+        log.append("[OK] Funciones helper eliminadas")
+    except Exception as e:
+        db.session.rollback()
+        errors.append(f"funciones helper: {e}")
+
+    return jsonify({
+        'ok': len(errors) == 0,
+        'log': log,
+        'errors': errors,
+        'message': 'RLS revertido. Verificar con /admin/metrics/rls-status',
+    })
