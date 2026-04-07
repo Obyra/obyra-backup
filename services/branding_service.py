@@ -127,8 +127,12 @@ def delete_logo(org_id: int, logo_url: Optional[str] = None) -> bool:
 
 def get_logo_absolute_path(logo_url: Optional[str]) -> Optional[str]:
     """
-    Convierte una logo_url relativa en path absoluto del filesystem.
+    Convierte una logo_url en path absoluto del filesystem.
     Útil para PDFs (ReportLab necesita path absoluto).
+
+    Soporta:
+    - Storage local: busca el archivo en static/
+    - Storage S3/R2: descarga temporalmente el archivo a /tmp y devuelve el path
 
     Returns:
         Path absoluto o None si el logo no existe.
@@ -136,16 +140,54 @@ def get_logo_absolute_path(logo_url: Optional[str]) -> Optional[str]:
     if not logo_url:
         return None
 
+    import os
+
+    # Determinar backend actual
+    backend = os.environ.get('STORAGE_BACKEND', 'local').lower()
+
     # Limpiar el path
     clean = logo_url.lstrip('/')
     if clean.startswith('static/'):
         clean = clean[len('static/'):]
 
-    base = Path(current_app.static_folder or 'static')
-    abs_path = base / clean
-    if abs_path.exists() and abs_path.is_file():
-        return str(abs_path)
-    return None
+    # Caso 1: Backend local — buscar en filesystem
+    if backend == 'local':
+        base = Path(current_app.static_folder or 'static')
+        # Probar con el path tal cual (formato nuevo: orgs/<id>/logo.png)
+        abs_path = base / clean
+        if abs_path.exists() and abs_path.is_file():
+            return str(abs_path)
+        # Probar con prefijo uploads/ (formato legacy)
+        abs_path_legacy = base / 'uploads' / clean
+        if abs_path_legacy.exists() and abs_path_legacy.is_file():
+            return str(abs_path_legacy)
+        return None
+
+    # Caso 2: Backend S3/R2 — descargar temporalmente
+    try:
+        from services.storage_service import storage
+        import tempfile
+
+        content = storage.read(clean)
+        if not content:
+            return None
+
+        # Determinar extensión
+        ext = clean.rsplit('.', 1)[-1].lower() if '.' in clean else 'png'
+        if ext == 'jpeg':
+            ext = 'jpg'
+
+        # Crear archivo temporal
+        tmp = tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False)
+        tmp.write(content)
+        tmp.close()
+        return tmp.name
+    except Exception as e:
+        try:
+            current_app.logger.warning(f'No se pudo descargar logo desde storage: {e}')
+        except Exception:
+            pass
+        return None
 
 
 def validate_color(hex_color: Optional[str]) -> Optional[str]:

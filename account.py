@@ -398,31 +398,38 @@ def organizacion():
         except Exception as _color_e:
             flash(str(_color_e), 'warning')
 
-        # Manejar upload de logo
+        # Manejar upload de logo (usa storage_service: local o S3/R2)
         logo_file = request.files.get('logo')
         if logo_file and logo_file.filename:
             allowed_ext = {'png', 'jpg', 'jpeg', 'webp'}
             ext = logo_file.filename.rsplit('.', 1)[-1].lower() if '.' in logo_file.filename else ''
             if ext in allowed_ext:
-                logo_dir = os.path.join(current_app.static_folder, 'uploads', 'logos', str(org_id))
-                os.makedirs(logo_dir, exist_ok=True)
-                # Eliminar logo anterior si existe
-                if organizacion.logo_url:
-                    old_path = os.path.join(current_app.static_folder, organizacion.logo_url)
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-                safe_name = f"logo_{uuid.uuid4().hex[:8]}.{ext}"
-                filepath = os.path.join(logo_dir, safe_name)
-                logo_file.save(filepath)
-                organizacion.logo_url = f"uploads/logos/{org_id}/{safe_name}"
+                try:
+                    from services.storage_service import storage
+                    # Eliminar logo anterior si existe
+                    if organizacion.logo_url:
+                        try:
+                            storage.delete(organizacion.logo_url)
+                        except Exception:
+                            pass
+                    # Guardar nuevo logo con key estable: orgs/<id>/logo.<ext>
+                    key = f"orgs/{org_id}/logo.{ext}"
+                    content_type = f"image/{'jpeg' if ext == 'jpg' else ext}"
+                    storage.save(logo_file, key=key, content_type=content_type)
+                    organizacion.logo_url = key
+                except Exception as _upload_err:
+                    current_app.logger.error(f'Error subiendo logo: {_upload_err}')
+                    flash(f'No se pudo subir el logo: {_upload_err}', 'danger')
             else:
                 flash('El logo debe ser PNG, JPG o WEBP', 'warning')
 
         # Eliminar logo si se pidió
         if request.form.get('eliminar_logo') == '1' and organizacion.logo_url:
-            old_path = os.path.join(current_app.static_folder, organizacion.logo_url)
-            if os.path.exists(old_path):
-                os.remove(old_path)
+            try:
+                from services.storage_service import storage
+                storage.delete(organizacion.logo_url)
+            except Exception as _del_err:
+                current_app.logger.warning(f'No se pudo eliminar logo del storage: {_del_err}')
             organizacion.logo_url = None
 
         try:

@@ -108,15 +108,27 @@ def enviar_acta_por_email(acta, destinatario_override: Optional[str] = None) -> 
             'email': None,
         }
 
-    # Resolver URL absoluta del logo si existe
+    # Embeber logo como data URI base64 (funciona en todos los clientes de email)
+    # Soporta storage local y S3/R2 a través de storage_service
     branding['logo_absolute_url'] = None
     if branding.get('logo_url'):
         try:
-            from flask import url_for
-            base_url = current_app.config.get('BASE_URL', 'https://app.obyra.com.ar').rstrip('/')
-            branding['logo_absolute_url'] = f"{base_url}/static/{branding['logo_url']}"
-        except Exception:
-            pass
+            import base64
+            from services.storage_service import storage
+            content = storage.read(branding['logo_url'])
+            if content:
+                # Detectar tipo MIME por extensión
+                ext = branding['logo_url'].rsplit('.', 1)[-1].lower() if '.' in branding['logo_url'] else 'png'
+                mime_type = {
+                    'png': 'image/png',
+                    'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg',
+                    'webp': 'image/webp',
+                }.get(ext, 'image/png')
+                b64 = base64.b64encode(content).decode('utf-8')
+                branding['logo_absolute_url'] = f'data:{mime_type};base64,{b64}'
+        except Exception as _logo_err:
+            current_app.logger.warning(f'No se pudo embeber logo en email: {_logo_err}')
 
     texto_sobre_primario = _calcular_texto_contraste(branding.get('color_primario'))
 

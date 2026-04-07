@@ -124,14 +124,15 @@ def generar_pdf(id):
                 etapas_ordenadas[etapa] = total
 
         # Cargar logo como base64 para embeber en el PDF
+        # Usa storage_service que soporta local + S3/R2
         logo_base64 = None
         if organizacion.logo_url:
             try:
                 import base64
-                logo_path = os.path.join(current_app.static_folder, organizacion.logo_url)
-                if os.path.exists(logo_path):
-                    with open(logo_path, 'rb') as f:
-                        logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+                from services.storage_service import storage
+                content = storage.read(organizacion.logo_url)
+                if content:
+                    logo_base64 = base64.b64encode(content).decode('utf-8')
             except Exception as e:
                 current_app.logger.warning(f"No se pudo cargar logo para PDF: {e}")
 
