@@ -128,6 +128,39 @@
                 <i class="fas fa-save me-1"></i>Crear Acta
             </button>
         </div>
+
+        <!-- Sección de envío por email -->
+        <div class="card mb-3 mt-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-envelope me-2"></i>Enviar al cliente por email
+                    <span class="badge bg-secondary">Opcional</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="enviar_email_cliente"
+                           name="enviar_email_cliente" value="1"
+                           onchange="document.getElementById('email_dest_field').style.display = this.checked ? 'block' : 'none';">
+                    <label class="form-check-label" for="enviar_email_cliente">
+                        <strong>Enviar el acta por email automáticamente</strong>
+                        <br><small class="text-muted">
+                            Se generará el PDF y se enviará al cliente como adjunto.
+                            Incluye el branding de tu empresa.
+                        </small>
+                    </label>
+                </div>
+
+                <div id="email_dest_field" style="display: none;">
+                    <label class="form-label">Email del destinatario</label>
+                    <input type="email" name="email_destinatario" class="form-control"
+                           placeholder="cliente@ejemplo.com (dejá vacío para usar el email registrado del cliente)">
+                    <small class="form-text text-muted">
+                        Si dejás esto vacío, se usará el email del cliente registrado en la obra.
+                    </small>
+                </div>
+            </div>
+        </div>
     </form>
 </div>
 {% endblock %}

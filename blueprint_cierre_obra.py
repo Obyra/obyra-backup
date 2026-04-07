@@ -222,6 +222,21 @@ def crear_acta(cierre_id):
                 datos=datos,
             )
             flash('Acta de entrega creada correctamente.', 'success')
+
+            # Envío automático por email si el usuario lo seleccionó
+            if request.form.get('enviar_email_cliente') == '1':
+                try:
+                    from services.acta_email_service import enviar_acta_por_email
+                    email_override = (request.form.get('email_destinatario') or '').strip() or None
+                    result = enviar_acta_por_email(acta, destinatario_override=email_override)
+                    if result['ok']:
+                        flash(f'📧 Email enviado a {result["destinatario"]}', 'info')
+                    else:
+                        flash(f'⚠️ Acta creada pero el email no se envió: {result["message"]}', 'warning')
+                except Exception as _email_e:
+                    current_app.logger.error(f'Error enviando email del acta: {_email_e}')
+                    flash('⚠️ Acta creada pero hubo un error al enviar el email.', 'warning')
+
             return redirect(url_for('cierre_obra.detalle', cierre_id=cierre_id))
         except CierreObraError as e:
             flash(str(e), 'danger')
@@ -251,6 +266,34 @@ def ver_acta(cierre_id, acta_id):
         acta=acta,
         cierre=acta.cierre,
     )
+
+
+@cierre_obra_bp.route('/<int:cierre_id>/acta/<int:acta_id>/enviar-email', methods=['POST'])
+@login_required
+def acta_enviar_email(cierre_id, acta_id):
+    """Reenvía el acta de entrega por email al cliente."""
+    _require_admin_or_pm()
+    org_id = get_current_org_id()
+    acta = ActaEntrega.query.filter_by(
+        id=acta_id,
+        cierre_id=cierre_id,
+        organizacion_id=org_id,
+    ).first_or_404()
+
+    email_override = (request.form.get('email_destinatario') or '').strip() or None
+
+    try:
+        from services.acta_email_service import enviar_acta_por_email
+        result = enviar_acta_por_email(acta, destinatario_override=email_override)
+        if result['ok']:
+            flash(f'📧 Email enviado a {result["destinatario"]}', 'success')
+        else:
+            flash(f'⚠️ No se pudo enviar el email: {result["message"]}', 'warning')
+    except Exception as e:
+        current_app.logger.error(f'Error enviando acta por email: {e}')
+        flash('Error al enviar el email del acta.', 'danger')
+
+    return redirect(url_for('cierre_obra.ver_acta', cierre_id=cierre_id, acta_id=acta_id))
 
 
 @cierre_obra_bp.route('/<int:cierre_id>/acta/<int:acta_id>/pdf')

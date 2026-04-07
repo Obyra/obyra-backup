@@ -96,10 +96,51 @@
         <a href="{{ url_for('cierre_obra.detalle', cierre_id=cierre.id) }}" class="btn btn-secondary">
             <i class="fas fa-arrow-left me-1"></i>Volver al cierre
         </a>
-        <a href="{{ url_for('cierre_obra.acta_pdf', cierre_id=cierre.id, acta_id=acta.id) }}"
-           class="btn btn-success" target="_blank">
-            <i class="fas fa-file-pdf me-1"></i>Descargar PDF
-        </a>
+        <div>
+            <button type="button" class="btn btn-primary me-2"
+                    data-bs-toggle="modal" data-bs-target="#modalEnviarEmail">
+                <i class="fas fa-envelope me-1"></i>Enviar por email
+            </button>
+            <a href="{{ url_for('cierre_obra.acta_pdf', cierre_id=cierre.id, acta_id=acta.id) }}"
+               class="btn btn-success" target="_blank">
+                <i class="fas fa-file-pdf me-1"></i>Descargar PDF
+            </a>
+        </div>
+    </div>
+
+    <!-- Modal envío email -->
+    <div class="modal fade" id="modalEnviarEmail" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="{{ url_for('cierre_obra.acta_enviar_email', cierre_id=cierre.id, acta_id=acta.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-envelope me-2"></i>Enviar acta por email
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Se enviará el acta como PDF adjunto al destinatario indicado.</p>
+                        <p class="text-muted small">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Si dejás el campo vacío, se usará el email del cliente registrado en la obra.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label">Email del destinatario</label>
+                            <input type="email" name="email_destinatario" class="form-control"
+                                   placeholder="cliente@ejemplo.com">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-paper-plane me-1"></i>Enviar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
