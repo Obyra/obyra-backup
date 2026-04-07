@@ -1,3 +1,6 @@
+{# Color primario dinámico de la organización (con fallback al color OBYRA) #}
+{% set color_primario = (organizacion.color_primario if organizacion and organizacion.color_primario else '{{ color_primario }}') %}
+{% set color_acento = '#4CAF50' %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -24,7 +27,7 @@
 
         /* Header compacto */
         .header-wrapper {
-            background: #1A374D;
+            background: {{ color_primario }};
             padding: 10px 18px;
             margin: -8mm -12mm 8px -12mm;
             width: calc(100% + 24mm);
@@ -124,7 +127,7 @@
 
         /* Tabla de etapas */
         .service-header {
-            background: #1A374D;
+            background: {{ color_primario }};
             color: white;
             padding: 4px 10px;
             font-weight: bold;
@@ -184,7 +187,7 @@
             margin-top: 6px;
             padding: 5px 8px;
             background: #f8f8f8;
-            border-left: 3px solid #1A374D;
+            border-left: 3px solid {{ color_primario }};
             page-break-inside: avoid;
             font-size: 7.5pt;
         }
@@ -232,7 +235,7 @@
 
         /* Total final */
         .total-final-bar {
-            background: #1A374D;
+            background: {{ color_primario }};
             padding: 8px 10px;
         }
 
@@ -270,7 +273,7 @@
 
         /* Footer empresa */
         .empresa-footer {
-            background: #1A374D;
+            background: {{ color_primario }};
             color: white;
             padding: 8px 15px;
             font-size: 7pt;
@@ -333,7 +336,7 @@
                 {% else %}
                 <svg width="20" height="20" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;">
                     <circle cx="12" cy="12" r="12" fill="white"/>
-                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ nombre_org[0] }}</text>
+                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="{{ color_primario }}">{{ nombre_org[0] }}</text>
                 </svg>
                 {% endif %}
                 {{ nombre_org }}
