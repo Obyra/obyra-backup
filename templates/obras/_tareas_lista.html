@@ -188,7 +188,7 @@
                             </div>
                             
                             <!-- Avances: botones para Admin/PM -->
-                            {% if current_user.role in ['admin', 'pm'] and tarea.estado != 'completada' and tarea.porcentaje_avance < 100 %}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and tarea.estado != 'completada' and tarea.porcentaje_avance < 100 %}
                                 {% set avances_pendientes = tarea.avances|selectattr('status', 'equalto', 'pendiente')|list %}
                                 <div class="mt-2 d-flex gap-1 flex-wrap">
                                     {% if avances_pendientes %}
@@ -244,7 +244,7 @@
                         <div class="d-flex flex-column align-items-end gap-1">
                             {% set badge_class = 'bg-success' if tarea.estado in ('completada', 'finalizada') else ('bg-primary' if tarea.estado == 'en_curso' else ('bg-warning' if tarea.estado == 'en_progreso' else ('bg-secondary' if tarea.estado == 'pausada' else 'bg-info'))) %}
                             <span class="badge {{ badge_class }} text-uppercase">{{ tarea.estado|replace('_', ' ') }}</span>
-                            {% if current_user.role in ['admin', 'pm'] %}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                             <button class="btn btn-sm btn-outline-danger" 
                                     onclick="confirmarEliminarTarea({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')" 
                                     title="Eliminar tarea">

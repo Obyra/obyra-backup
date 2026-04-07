@@ -194,7 +194,7 @@
                 </div><!-- /collapse -->
             </div>
 
-            {% if requerimiento.estado in ['en_proceso', 'aprobado'] and current_user.role in ['admin', 'pm'] %}
+            {% if requerimiento.estado in ['en_proceso', 'aprobado'] and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
             <!-- Cargar precios de compra -->
             <div class="card mt-4">
                 <div class="card-header bg-success text-white">
@@ -365,7 +365,7 @@
                 </div>
                 <div class="card-body">
                     {% if requerimiento.estado == 'pendiente' %}
-                        {% if current_user.role in ['admin', 'pm'] %}
+                        {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                         <!-- Botones de aprobacion -->
                         <form method="POST" action="{{ url_for('requerimientos.aprobar', id=requerimiento.id) }}" class="mb-3">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -401,7 +401,7 @@
                         {% endif %}
 
                     {% elif requerimiento.estado == 'aprobado' %}
-                        {% if current_user.role in ['admin', 'pm'] %}
+                        {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                         {% if has_endpoint('cotizaciones.gestionar') %}
                         <a href="{{ url_for('cotizaciones.gestionar', rc_id=requerimiento.id) }}" class="btn btn-info w-100 mb-2">
                             <i class="fas fa-balance-scale me-1"></i>Solicitar Cotizaciones
@@ -428,7 +428,7 @@
                         {% endif %}
 
                     {% elif requerimiento.estado == 'en_proceso' %}
-                        {% if current_user.role in ['admin', 'pm'] %}
+                        {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                         {% if not requerimiento.ordenes_compra %}
                         {% if has_endpoint('cotizaciones.gestionar') %}
                         <a href="{{ url_for('cotizaciones.gestionar', rc_id=requerimiento.id) }}" class="btn btn-info w-100 mb-2">
@@ -478,7 +478,7 @@
                         </div>
                     {% endif %}
 
-                    {% if requerimiento.estado != 'completado' and (current_user.role in ['admin', 'pm'] or requerimiento.solicitante_id == current_user.id) %}
+                    {% if requerimiento.estado != 'completado' and (current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] or requerimiento.solicitante_id == current_user.id) %}
                     <hr>
                     <form method="POST" action="{{ url_for('requerimientos.eliminar', id=requerimiento.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

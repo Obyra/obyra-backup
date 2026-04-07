@@ -3,7 +3,7 @@
 {% block title %}Gestión de Equipos - OBYRA IA{% endblock %}
 
 {% block content %}
-{% set can_manage_equipo = current_user.es_admin() or current_user.role in ['admin', 'pm'] %}
+{% set can_manage_equipo = current_user.es_admin() or current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-12">
@@ -185,7 +185,7 @@
 
 {% block scripts %}
 {{ super() }}
-{% if current_user.es_admin() or current_user.role in ['admin', 'pm'] %}
+{% if current_user.es_admin() or current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
 {% include 'auth/_nuevo_integrante_modal_script.html' %}
 {% endif %}
 {% endblock %}

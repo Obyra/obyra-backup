@@ -84,7 +84,7 @@
                     {# ===== NAVBAR NORMAL: admin, pm, tecnico ===== #}
 
                     {# 1. Dashboard - solo para admin/pm #}
-                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
+                    {% if current_user.is_authenticated and current_user.role in ['admin','administrador','pm','project_manager'] %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('reportes.dashboard') }}">
                             <i class="fas fa-tachometer-alt me-1"></i>Dashboard
@@ -102,7 +102,7 @@
                             <li><a class="dropdown-item" href="{{ url_for('presupuestos.lista') }}">
                                 <i class="fas fa-list me-2"></i>Ver Presupuestos
                             </a></li>
-                            {% if current_user.role in ['admin', 'pm'] and has_endpoint('presupuestos.crear') %}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and has_endpoint('presupuestos.crear') %}
                             <li><a class="dropdown-item" href="{{ url_for('presupuestos.crear') }}">
                                 <i class="fas fa-plus me-2"></i>Nuevo Presupuesto
                             </a></li>
@@ -204,7 +204,7 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('equipos.lista') }}">Ver Equipo</a></li>
-                            {% if current_user.role in ['admin', 'pm'] %}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                             <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_listar') }}">
                                 <i class="fas fa-users-cog me-2"></i>Gestión de Usuarios
                             </a></li>
@@ -250,11 +250,11 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_obras') }}">Reporte de Obras</a></li>
-                            {% if current_user.role in ['admin', 'pm'] %}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_costos') }}">Reporte de Costos</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_inventario') }}">Reporte de Inventario</a></li>
-                            {% if current_user.role in ['admin', 'pm'] %}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_financiero') }}"><i class="fas fa-chart-line me-1"></i>Reporte Financiero</a></li>
                             {% endif %}
