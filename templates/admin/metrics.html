@@ -132,6 +132,187 @@
     </div>
     {% endif %}
 
+    <!-- Tabs con tablas detalladas -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <ul class="nav nav-tabs card-header-tabs" id="metricsTab" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-orgs" type="button">
+                        <i class="fas fa-building me-1"></i>Organizaciones
+                        <span class="badge bg-primary ms-1">{{ organizaciones|length }}</span>
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-users" type="button">
+                        <i class="fas fa-users me-1"></i>Usuarios
+                        <span class="badge bg-success ms-1">{{ usuarios|length }}</span>
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-obras" type="button">
+                        <i class="fas fa-hard-hat me-1"></i>Obras
+                        <span class="badge bg-warning ms-1">{{ obras|length }}</span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content">
+
+                <!-- ORGANIZACIONES -->
+                <div class="tab-pane fade show active" id="tab-orgs">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nombre</th>
+                                    <th>Plan</th>
+                                    <th>Estado</th>
+                                    <th>Usuarios</th>
+                                    <th>Obras</th>
+                                    <th>Creada</th>
+                                    <th>Vence</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for org in organizaciones %}
+                                <tr>
+                                    <td>{{ org.id }}</td>
+                                    <td><strong>{{ org.nombre }}</strong></td>
+                                    <td>
+                                        <span class="badge {% if org.plan_tipo == 'full_premium' %}bg-success{% elif org.plan_tipo == 'premium' %}bg-info{% elif org.plan_tipo == 'estandar' %}bg-primary{% else %}bg-secondary{% endif %}">
+                                            {{ org.plan_tipo }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if org.activa %}
+                                            <span class="text-success"><i class="fas fa-check-circle"></i> Activa</span>
+                                        {% else %}
+                                            <span class="text-muted"><i class="fas fa-times-circle"></i> Inactiva</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ org.num_usuarios }}{% if org.max_usuarios %} / {{ org.max_usuarios }}{% endif %}</td>
+                                    <td>{{ org.num_obras }}{% if org.max_obras %} / {{ org.max_obras }}{% endif %}</td>
+                                    <td><small class="text-muted">{{ org.fecha_creacion[:10] if org.fecha_creacion else '-' }}</small></td>
+                                    <td><small class="text-muted">{{ org.fecha_fin_plan[:10] if org.fecha_fin_plan else '-' }}</small></td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="8" class="text-center text-muted">Sin datos</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- USUARIOS -->
+                <div class="tab-pane fade" id="tab-users">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nombre</th>
+                                    <th>Email</th>
+                                    <th>Rol</th>
+                                    <th>Organización</th>
+                                    <th>Estado</th>
+                                    <th>Último login</th>
+                                    <th>Creado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in usuarios %}
+                                <tr>
+                                    <td>{{ u.id }}</td>
+                                    <td>
+                                        <strong>{{ u.nombre or '-' }}</strong>
+                                        {% if u.is_super_admin %}
+                                        <i class="fas fa-crown text-warning ms-1" title="Super Admin"></i>
+                                        {% endif %}
+                                    </td>
+                                    <td><small>{{ u.email }}</small></td>
+                                    <td><span class="badge bg-secondary">{{ u.role or '-' }}</span></td>
+                                    <td><small>{{ u.organizacion_nombre or '-' }}</small></td>
+                                    <td>
+                                        {% if u.activo %}
+                                            <span class="text-success"><i class="fas fa-check"></i></span>
+                                        {% else %}
+                                            <span class="text-muted"><i class="fas fa-times"></i></span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small class="text-muted">{{ u.last_login[:16].replace('T', ' ') if u.last_login else '-' }}</small></td>
+                                    <td><small class="text-muted">{{ u.fecha_creacion[:10] if u.fecha_creacion else '-' }}</small></td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="8" class="text-center text-muted">Sin datos</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- OBRAS -->
+                <div class="tab-pane fade" id="tab-obras">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nombre</th>
+                                    <th>Cliente</th>
+                                    <th>Organización</th>
+                                    <th>Estado</th>
+                                    <th>Inicio</th>
+                                    <th>Fin</th>
+                                    <th>Progreso</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for o in obras %}
+                                <tr>
+                                    <td>{{ o.id }}</td>
+                                    <td><strong>{{ o.nombre }}</strong></td>
+                                    <td><small>{{ o.cliente or '-' }}</small></td>
+                                    <td><small>{{ o.organizacion_nombre or '-' }}</small></td>
+                                    <td>
+                                        {% if o.estado == 'en_curso' %}
+                                            <span class="badge bg-warning text-dark">En curso</span>
+                                        {% elif o.estado == 'finalizada' %}
+                                            <span class="badge bg-success">Finalizada</span>
+                                        {% elif o.estado == 'pausada' %}
+                                            <span class="badge bg-secondary">Pausada</span>
+                                        {% elif o.estado == 'cancelada' %}
+                                            <span class="badge bg-danger">Cancelada</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">{{ o.estado or '-' }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small class="text-muted">{{ o.fecha_inicio[:10] if o.fecha_inicio else '-' }}</small></td>
+                                    <td><small class="text-muted">{{ o.fecha_fin[:10] if o.fecha_fin else '-' }}</small></td>
+                                    <td>
+                                        {% if o.progreso is not none %}
+                                            <div class="progress" style="height: 6px; min-width: 80px;">
+                                                <div class="progress-bar bg-success" style="width: {{ o.progreso }}%"></div>
+                                            </div>
+                                            <small class="text-muted">{{ o.progreso }}%</small>
+                                        {% else %}
+                                            <small class="text-muted">-</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="8" class="text-center text-muted">Sin datos</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
     <!-- JSON Raw -->
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">

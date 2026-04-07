@@ -168,3 +168,119 @@ def format_prometheus(metrics: Dict[str, Any]) -> str:
             lines.append(f'obyra_organizaciones_por_plan{{plan="{plan}"}} {count}')
 
     return '\n'.join(lines) + '\n'
+
+
+# ============================================================
+# FUNCIONES DE DETALLE — listas para mostrar en tablas
+# ============================================================
+
+def get_organizaciones_detalle() -> list:
+    """Lista detallada de organizaciones con métricas asociadas."""
+    from extensions import db
+    from sqlalchemy import func
+
+    try:
+        from models import Organizacion, Usuario, Obra
+
+        orgs = db.session.query(Organizacion).order_by(Organizacion.id.desc()).all()
+        result = []
+        for o in orgs:
+            try:
+                num_users = db.session.query(func.count(Usuario.id)).filter_by(
+                    organizacion_id=o.id
+                ).scalar() or 0
+                num_obras = db.session.query(func.count(Obra.id)).filter_by(
+                    organizacion_id=o.id
+                ).scalar() or 0
+            except Exception:
+                num_users = 0
+                num_obras = 0
+
+            result.append({
+                'id': o.id,
+                'nombre': o.nombre,
+                'plan_tipo': getattr(o, 'plan_tipo', None) or 'prueba',
+                'activa': getattr(o, 'activa', True),
+                'fecha_creacion': o.fecha_creacion.isoformat() if getattr(o, 'fecha_creacion', None) else None,
+                'max_usuarios': getattr(o, 'max_usuarios', None),
+                'max_obras': getattr(o, 'max_obras', None),
+                'num_usuarios': num_users,
+                'num_obras': num_obras,
+                'fecha_fin_plan': o.fecha_fin_plan.isoformat() if getattr(o, 'fecha_fin_plan', None) else None,
+            })
+        return result
+    except Exception as e:
+        logger.error(f'Error obteniendo detalle de organizaciones: {e}')
+        return []
+
+
+def get_usuarios_detalle(limit: int = 100) -> list:
+    """Lista detallada de usuarios."""
+    from extensions import db
+
+    try:
+        from models import Usuario, Organizacion
+
+        usuarios = db.session.query(Usuario).order_by(Usuario.id.desc()).limit(limit).all()
+        result = []
+        for u in usuarios:
+            org_nombre = None
+            try:
+                if u.organizacion_id:
+                    org = db.session.query(Organizacion).get(u.organizacion_id)
+                    org_nombre = org.nombre if org else None
+            except Exception:
+                pass
+
+            result.append({
+                'id': u.id,
+                'nombre': f"{u.nombre or ''} {u.apellido or ''}".strip(),
+                'email': u.email,
+                'role': getattr(u, 'role', None),
+                'organizacion_id': u.organizacion_id,
+                'organizacion_nombre': org_nombre,
+                'activo': getattr(u, 'activo', True),
+                'is_super_admin': getattr(u, 'is_super_admin', False),
+                'last_login': u.last_login.isoformat() if getattr(u, 'last_login', None) else None,
+                'fecha_creacion': u.fecha_creacion.isoformat() if getattr(u, 'fecha_creacion', None) else None,
+            })
+        return result
+    except Exception as e:
+        logger.error(f'Error obteniendo detalle de usuarios: {e}')
+        return []
+
+
+def get_obras_detalle(limit: int = 100) -> list:
+    """Lista detallada de obras."""
+    from extensions import db
+
+    try:
+        from models import Obra, Organizacion
+
+        obras = db.session.query(Obra).order_by(Obra.id.desc()).limit(limit).all()
+        result = []
+        for o in obras:
+            org_nombre = None
+            try:
+                if o.organizacion_id:
+                    org = db.session.query(Organizacion).get(o.organizacion_id)
+                    org_nombre = org.nombre if org else None
+            except Exception:
+                pass
+
+            result.append({
+                'id': o.id,
+                'nombre': o.nombre,
+                'estado': getattr(o, 'estado', None),
+                'organizacion_id': o.organizacion_id,
+                'organizacion_nombre': org_nombre,
+                'fecha_inicio': o.fecha_inicio.isoformat() if getattr(o, 'fecha_inicio', None) else None,
+                'fecha_fin': o.fecha_fin.isoformat() if getattr(o, 'fecha_fin', None) else None,
+                'progreso': getattr(o, 'progreso', None),
+                'cliente': getattr(o, 'cliente', None) or getattr(o, 'cliente_nombre', None),
+            })
+        return result
+    except Exception as e:
+        logger.error(f'Error obteniendo detalle de obras: {e}')
+        return []
+

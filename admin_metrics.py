@@ -18,6 +18,9 @@ from services.metrics_service import (
     get_cached_metrics,
     get_business_metrics,
     format_prometheus,
+    get_organizaciones_detalle,
+    get_usuarios_detalle,
+    get_obras_detalle,
 )
 
 
@@ -38,7 +41,16 @@ def metrics_view():
     """Vista HTML de métricas para super admin."""
     _require_super_admin()
     metrics = get_cached_metrics()
-    return render_template('admin/metrics.html', metrics=metrics)
+    organizaciones = get_organizaciones_detalle()
+    usuarios = get_usuarios_detalle(limit=200)
+    obras = get_obras_detalle(limit=200)
+    return render_template(
+        'admin/metrics.html',
+        metrics=metrics,
+        organizaciones=organizaciones,
+        usuarios=usuarios,
+        obras=obras,
+    )
 
 
 @admin_metrics_bp.route('/json')
