@@ -34,6 +34,28 @@ def run_runtime_migrations(db, app):
         except Exception as e:
             print(f"[WARN] Railway db.create_all() error: {e}")
 
+    # Migración automática: branding (nombre_fantasia, color_primario)
+    try:
+        branding_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='nombre_fantasia') THEN
+                ALTER TABLE organizaciones ADD COLUMN nombre_fantasia VARCHAR(200);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='color_primario') THEN
+                ALTER TABLE organizaciones ADD COLUMN color_primario VARCHAR(7);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(branding_sql))
+        db.session.commit()
+        print("[OK] Branding columns ensured (nombre_fantasia, color_primario)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Branding migration error: {e}")
+
     # Migración automática: agregar columnas de planes a organizaciones
     try:
         plan_columns_sql = """
