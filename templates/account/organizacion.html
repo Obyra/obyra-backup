@@ -50,19 +50,44 @@
                         </div>
 
                         <div class="row g-3">
-                            <div class="col-12">
-                                <label for="nombre" class="form-label">Nombre de la Organización *</label>
+                            <div class="col-md-6">
+                                <label for="nombre" class="form-label">Razón Social *</label>
                                 <input type="text" class="form-control" id="nombre" name="nombre" required
                                        value="{{ organizacion.nombre }}">
-                                <div class="form-text">Nombre comercial o razón social de tu empresa</div>
+                                <div class="form-text">Nombre legal de la empresa</div>
                             </div>
 
-                            <div class="col-12">
+                            <div class="col-md-6">
+                                <label for="nombre_fantasia" class="form-label">Nombre Fantasía</label>
+                                <input type="text" class="form-control" id="nombre_fantasia" name="nombre_fantasia"
+                                       placeholder="Nombre comercial (opcional)"
+                                       value="{{ organizacion.nombre_fantasia or '' }}">
+                                <div class="form-text">Si lo cargás, este nombre aparece en los PDFs y el navbar</div>
+                            </div>
+
+                            <div class="col-md-9">
                                 <label for="descripcion" class="form-label">Descripción / Tagline</label>
                                 <input type="text" class="form-control" id="descripcion" name="descripcion"
                                        placeholder="Ej: Construcciones de calidad en Buenos Aires"
                                        value="{{ organizacion.descripcion or '' }}">
                                 <div class="form-text">Slogan o descripción breve de tu empresa</div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label for="color_primario" class="form-label">Color principal</label>
+                                <div class="input-group">
+                                    <input type="color" class="form-control form-control-color"
+                                           id="color_primario_picker"
+                                           value="{{ organizacion.color_primario or '#1a3556' }}"
+                                           style="max-width: 60px;"
+                                           onchange="document.getElementById('color_primario').value = this.value;">
+                                    <input type="text" class="form-control" id="color_primario" name="color_primario"
+                                           placeholder="#1a3556"
+                                           pattern="^#[0-9a-fA-F]{6}$"
+                                           value="{{ organizacion.color_primario or '' }}"
+                                           oninput="document.getElementById('color_primario_picker').value = this.value;">
+                                </div>
+                                <div class="form-text">Color de marca para PDFs (opcional)</div>
                             </div>
 
                             <div class="col-md-6">

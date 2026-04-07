@@ -317,7 +317,12 @@
     </style>
 </head>
 <body>
-    {% set nombre_org = organizacion.nombre|replace('Organizacion de ', '')|replace('Organizacion de ', '') if organizacion.nombre else 'Empresa' %}
+    {# Usar nombre_fantasia si existe, sino el nombre legal limpio #}
+    {% if organizacion.nombre_fantasia %}
+        {% set nombre_org = organizacion.nombre_fantasia %}
+    {% else %}
+        {% set nombre_org = organizacion.nombre|replace('Organizacion de ', '')|replace('Organizacion de ', '') if organizacion.nombre else 'Empresa' %}
+    {% endif %}
 
     <!-- Header compacto -->
     <div class="header-wrapper">

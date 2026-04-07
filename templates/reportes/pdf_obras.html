@@ -326,7 +326,7 @@
     <div class="header-wrapper">
         <div class="header-content">
             <div class="company-logo">
-                {{ organizacion.nombre if organizacion else 'OBYRA' }}
+                {{ (organizacion.nombre_fantasia or organizacion.nombre) if organizacion else 'OBYRA' }}
             </div>
             <div class="company-info">
                 {% if organizacion %}

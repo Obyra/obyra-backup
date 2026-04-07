@@ -387,6 +387,17 @@ def organizacion():
         organizacion.telefono = request.form.get('telefono', '').strip()
         organizacion.email = request.form.get('email', '').strip()
 
+        # Branding nuevo (Fase Branding 2026-04)
+        organizacion.nombre_fantasia = request.form.get('nombre_fantasia', '').strip() or None
+
+        # Validar color hex
+        try:
+            from services.branding_service import validate_color, BrandingError
+            color = request.form.get('color_primario', '').strip()
+            organizacion.color_primario = validate_color(color)
+        except Exception as _color_e:
+            flash(str(_color_e), 'warning')
+
         # Manejar upload de logo
         logo_file = request.files.get('logo')
         if logo_file and logo_file.filename:

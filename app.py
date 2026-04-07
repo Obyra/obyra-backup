@@ -683,6 +683,17 @@ def utility_processor():
     def has_endpoint(endpoint_name: str) -> bool:
         return endpoint_name in app.view_functions
 
+    def get_org_branding():
+        """Devuelve el branding de la org actual del usuario para usar en templates."""
+        try:
+            from services.branding_service import get_branding_dict
+            if current_user and current_user.is_authenticated:
+                org = getattr(current_user, 'organizacion', None)
+                return get_branding_dict(org)
+        except Exception:
+            pass
+        return get_branding_dict(None)
+
     def tiene_rol_helper(rol: str) -> bool:
         if not current_user.is_authenticated:
             return False
@@ -736,6 +747,16 @@ def utility_processor():
     except Exception:
         plan_ctx = {'plan_info': {}, 'can_feature': lambda f: True}
 
+    # Branding de la org actual (logo, nombre fantasía, color)
+    try:
+        org_branding = get_org_branding()
+    except Exception:
+        org_branding = {
+            'nombre_display': 'OBYRA',
+            'logo_url': None,
+            'color_primario': '#1a3556',
+        }
+
     result = dict(
         obtener_tareas_para_etapa=obtener_tareas_para_etapa,
         has_endpoint=has_endpoint,
@@ -745,6 +766,7 @@ def utility_processor():
         current_membership=membership,
         current_organization=current_org,
         current_org_id=get_current_org_id,
+        org_branding=org_branding,
     )
     result.update(plan_ctx)
     return result

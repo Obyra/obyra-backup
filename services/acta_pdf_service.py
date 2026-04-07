@@ -21,12 +21,12 @@ from reportlab.lib.colors import HexColor, black, gray, white
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    PageBreak, KeepTogether
+    PageBreak, KeepTogether, Image
 )
 
 
-# Colores de marca
-COLOR_PRIMARY = HexColor('#1a3556')   # Azul marino OBYRA
+# Colores defaults (se sobrescriben con branding de la org)
+DEFAULT_PRIMARY = '#1a3556'
 COLOR_ACCENT = HexColor('#4caf50')    # Verde accent
 COLOR_LIGHT = HexColor('#f5f7fa')
 COLOR_BORDER = HexColor('#dce0e8')
@@ -57,6 +57,27 @@ def generar_pdf_acta(acta) -> bytes:
     Returns:
         bytes del PDF generado
     """
+    # Obtener branding de la organización
+    try:
+        from services.branding_service import get_branding_dict
+        branding = get_branding_dict(acta.obra.organizacion if acta.obra else None)
+    except Exception:
+        branding = {
+            'nombre_display': 'OBYRA',
+            'logo_path': None,
+            'color_primario': DEFAULT_PRIMARY,
+            'cuit': None,
+            'direccion': None,
+            'telefono': None,
+            'email': None,
+        }
+
+    # Color primario dinámico
+    try:
+        COLOR_PRIMARY = HexColor(branding.get('color_primario') or DEFAULT_PRIMARY)
+    except Exception:
+        COLOR_PRIMARY = HexColor(DEFAULT_PRIMARY)
+
     buffer = BytesIO()
 
     doc = SimpleDocTemplate(
@@ -67,7 +88,7 @@ def generar_pdf_acta(acta) -> bytes:
         topMargin=2 * cm,
         bottomMargin=2 * cm,
         title=f"Acta de Entrega - Obra {acta.obra.nombre}",
-        author="OBYRA",
+        author=branding.get('nombre_display') or 'OBYRA',
     )
 
     # ─── Estilos ───
@@ -129,20 +150,34 @@ def generar_pdf_acta(acta) -> bytes:
 
     story = []
 
-    # ─── ENCABEZADO ───
-    # Tabla con logo (texto por ahora) y número de acta
-    org_nombre = ''
-    try:
-        if acta.obra and acta.obra.organizacion:
-            org_nombre = acta.obra.organizacion.nombre
-    except Exception:
-        pass
+    # ─── ENCABEZADO con branding de la organización ───
+    nombre_display = branding.get('nombre_display') or 'OBYRA'
+    logo_path = branding.get('logo_path')
+
+    # Celda izquierda: logo (si existe) + nombre. Sino, solo nombre grande.
+    if logo_path:
+        try:
+            logo_img = Image(logo_path, width=4 * cm, height=2 * cm, kind='proportional')
+            celda_izq = [
+                logo_img,
+                Spacer(1, 4),
+                Paragraph(f'<font size="9" color="{COLOR_MUTED.hexval()}">{nombre_display}</font>',
+                          style_normal),
+            ]
+        except Exception:
+            celda_izq = Paragraph(
+                f'<b><font color="{COLOR_PRIMARY.hexval()}" size="16">{nombre_display}</font></b>',
+                style_normal,
+            )
+    else:
+        celda_izq = Paragraph(
+            f'<b><font color="{COLOR_PRIMARY.hexval()}" size="16">{nombre_display}</font></b>',
+            style_normal,
+        )
 
     encabezado_data = [
         [
-            Paragraph(f'<b><font color="{COLOR_PRIMARY.hexval()}" size="16">OBYRA</font></b><br/>'
-                      f'<font color="{COLOR_MUTED.hexval()}" size="8">{org_nombre}</font>',
-                      style_normal),
+            celda_izq,
             Paragraph(f'<para alignment="right"><b>ACTA Nº {acta.id:05d}</b><br/>'
                       f'<font size="8" color="{COLOR_MUTED.hexval()}">{_format_fecha(acta.fecha_acta)}</font></para>',
                       style_normal),
@@ -156,6 +191,9 @@ def generar_pdf_acta(acta) -> bytes:
     ]))
     story.append(encabezado_tabla)
     story.append(Spacer(1, 16))
+
+    # Variable de compatibilidad con el resto del código
+    org_nombre = nombre_display
 
     # ─── TÍTULO ───
     tipo_titulo = (acta.tipo or 'definitiva').upper()
@@ -276,11 +314,28 @@ def generar_pdf_acta(acta) -> bytes:
     ]))
     story.append(firmas_tabla)
 
-    # ─── PIE ───
+    # ─── PIE con datos de la empresa ───
     story.append(Spacer(1, 24))
+
+    # Línea 1: datos de contacto de la organización si existen
+    contacto_partes = []
+    if branding.get('cuit'):
+        contacto_partes.append(f"CUIT: {branding['cuit']}")
+    if branding.get('direccion'):
+        contacto_partes.append(branding['direccion'])
+    if branding.get('telefono'):
+        contacto_partes.append(f"Tel: {branding['telefono']}")
+    if branding.get('email'):
+        contacto_partes.append(branding['email'])
+
+    if contacto_partes:
+        story.append(Paragraph(' · '.join(contacto_partes), style_footer))
+        story.append(Spacer(1, 6))
+
+    # Línea 2: metadata del documento
     pie = (
         f'Documento generado el {datetime.utcnow().strftime("%d/%m/%Y %H:%M")} UTC '
-        f'por OBYRA · Acta Nº {acta.id:05d} · Cierre Nº {acta.cierre_id}'
+        f'· Acta Nº {acta.id:05d} · Cierre Nº {acta.cierre_id}'
     )
     story.append(Paragraph(pie, style_footer))
 
