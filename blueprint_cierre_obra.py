@@ -251,3 +251,34 @@ def ver_acta(cierre_id, acta_id):
         acta=acta,
         cierre=acta.cierre,
     )
+
+
+@cierre_obra_bp.route('/<int:cierre_id>/acta/<int:acta_id>/pdf')
+@login_required
+def acta_pdf(cierre_id, acta_id):
+    """Genera y descarga el PDF del acta de entrega."""
+    from io import BytesIO
+    org_id = get_current_org_id()
+    acta = ActaEntrega.query.filter_by(
+        id=acta_id,
+        cierre_id=cierre_id,
+        organizacion_id=org_id,
+    ).first_or_404()
+
+    try:
+        from services.acta_pdf_service import generar_pdf_acta
+        pdf_bytes = generar_pdf_acta(acta)
+    except Exception as e:
+        current_app.logger.error(f'Error generando PDF acta {acta_id}: {e}')
+        flash('Error al generar el PDF. Intentá nuevamente.', 'danger')
+        return redirect(url_for('cierre_obra.ver_acta', cierre_id=cierre_id, acta_id=acta_id))
+
+    obra_nombre = (acta.obra.nombre or 'obra').replace(' ', '_').lower()
+    filename = f'acta_entrega_{obra_nombre}_{acta.id:05d}.pdf'
+
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=filename,
+    )
