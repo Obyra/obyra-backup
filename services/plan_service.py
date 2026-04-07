@@ -562,6 +562,25 @@ def change_plan(org, new_plan_tipo, days=365, contract_type='subscription', chan
     if hasattr(org, 'contract_type'):
         org.contract_type = contract_type
 
+    # Sincronizar campo legacy plan_activo en TODOS los usuarios de la org
+    # Esto evita la inconsistencia "Plan Full Premium" en navbar vs "Prueba: 0 días" en dropdown
+    try:
+        from models.core import Usuario
+        Usuario.query.filter_by(organizacion_id=org.id).update(
+            {
+                Usuario.plan_activo: new_plan_tipo,
+                Usuario.fecha_expiracion_plan: org.fecha_fin_plan,
+            },
+            synchronize_session=False,
+        )
+    except Exception as _sync_err:
+        # No bloquear el cambio de plan si el sync falla
+        try:
+            from flask import current_app
+            current_app.logger.warning(f'No se pudo sincronizar plan_activo de usuarios: {_sync_err}')
+        except Exception:
+            pass
+
     db.session.commit()
 
     # Log del cambio

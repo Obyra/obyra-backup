@@ -34,6 +34,28 @@ def run_runtime_migrations(db, app):
         except Exception as e:
             print(f"[WARN] Railway db.create_all() error: {e}")
 
+    # Backfill: sincronizar plan_activo de usuarios con plan_tipo de su org
+    # Soluciona inconsistencia donde super admin activó planes manualmente
+    # actualizando solo organizacion.plan_tipo y dejando usuarios con plan_activo='prueba'
+    try:
+        sync_plan_sql = """
+        UPDATE usuarios u
+        SET plan_activo = o.plan_tipo,
+            fecha_expiracion_plan = o.fecha_fin_plan
+        FROM organizaciones o
+        WHERE u.organizacion_id = o.id
+          AND o.plan_tipo IS NOT NULL
+          AND o.plan_tipo != 'prueba'
+          AND (u.plan_activo IS NULL OR u.plan_activo != o.plan_tipo);
+        """
+        result = db.session.execute(text(sync_plan_sql))
+        db.session.commit()
+        if result.rowcount:
+            print(f"[OK] Sincronizado plan_activo en {result.rowcount} usuarios")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Sync plan_activo skipped: {e}")
+
     # Migración automática: branding (nombre_fantasia, color_primario)
     try:
         branding_sql = """
