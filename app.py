@@ -288,6 +288,19 @@ setup_request_timing(app)
 from middleware.security_headers import setup_security_headers
 setup_security_headers(app)
 
+# Setup Row Level Security middleware (Fase A — sin policies aún)
+# Setea SET app.current_org_id en cada checkout de conexión PostgreSQL.
+# Activable con RLS_ENABLED=true en .env.
+# - Si RLS_ENABLED no está seteado: NO hace nada (default seguro)
+# - Si RLS_ENABLED=true sin policies: tampoco afecta (solo setea variables)
+# - Si RLS_ENABLED=true con policies (Fase B): activa la 2da capa de defensa
+if os.environ.get('RLS_ENABLED', 'false').lower() == 'true':
+    try:
+        from middleware.rls_middleware import setup_rls_middleware
+        setup_rls_middleware(app, db)
+    except Exception as _rls_e:
+        app.logger.warning(f'[RLS] No se pudo activar middleware: {_rls_e}')
+
 # CORS Configuration - Solo permite orígenes específicos en producción
 _cors_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
 if _cors_origins:
