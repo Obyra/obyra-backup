@@ -262,7 +262,8 @@ migrate = Migrate(app, db)
 # Setup rate limiter
 from config.rate_limiter_config import setup_rate_limiter
 import extensions
-extensions.limiter = setup_rate_limiter(app)
+_real_limiter = setup_rate_limiter(app)
+extensions.limiter._set_real(_real_limiter)
 
 # Setup request timing middleware
 from middleware.request_timing import setup_request_timing
