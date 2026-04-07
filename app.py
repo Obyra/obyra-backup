@@ -143,6 +143,14 @@ def _env_flag(name: str, default: bool = False) -> bool:
 from config.logging_config import setup_logging
 setup_logging(app)
 
+# Si LOG_FORMAT=json está seteado, convertir todos los handlers a JSON
+# (compatible con Loki, ELK, CloudWatch, Datadog)
+try:
+    from config.structured_logging import setup_structured_logging
+    setup_structured_logging(app)
+except Exception as _e:
+    app.logger.warning(f'[Logging] No se pudo activar JSON structured logging: {_e}')
+
 # ---------------- POSTGRESQL DATABASE CONFIG ----------------
 database_url = os.environ.get("DATABASE_URL")
 
