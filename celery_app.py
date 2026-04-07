@@ -16,7 +16,11 @@ def make_celery(app_name=__name__):
         app_name,
         broker=broker_url,
         backend=result_backend,
-        include=[]  # Add task modules here when you create them
+        include=[
+            'tasks.emails',
+            'tasks.pdfs',
+            'tasks.ia',
+        ]
     )
 
     # Celery configuration
