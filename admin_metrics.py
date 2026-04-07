@@ -359,6 +359,102 @@ def rls_apply():
         }), 500
 
 
+@admin_metrics_bp.route('/whoami')
+@login_required
+def whoami():
+    """
+    Endpoint de diagnóstico personal.
+    Cualquier usuario logueado puede ver su propio contexto:
+    - user_id, email, role
+    - organizacion_id principal
+    - membresías activas (si pertenece a múltiples orgs)
+    - current_org_id de la sesión
+    - app.current_org_id de PostgreSQL (RLS context)
+    """
+    from extensions import db
+    from sqlalchemy import text
+
+    result = {
+        'user': {
+            'id': current_user.id,
+            'email': current_user.email,
+            'nombre': f"{current_user.nombre or ''} {current_user.apellido or ''}".strip(),
+            'role': getattr(current_user, 'role', None),
+            'rol': getattr(current_user, 'rol', None),
+            'is_super_admin': bool(getattr(current_user, 'is_super_admin', False)),
+            'organizacion_id': getattr(current_user, 'organizacion_id', None),
+            'primary_org_id': getattr(current_user, 'primary_org_id', None),
+        },
+        'session': {},
+        'memberships': [],
+        'postgres_context': {},
+    }
+
+    # Sesión
+    try:
+        from flask import session
+        result['session']['current_org_id'] = session.get('current_org_id')
+        result['session']['_user_id'] = session.get('_user_id')
+    except Exception as e:
+        result['session']['error'] = str(e)
+
+    # get_current_org_id()
+    try:
+        from services.memberships import get_current_org_id
+        result['session']['get_current_org_id_result'] = get_current_org_id()
+    except Exception as e:
+        result['session']['get_current_org_id_error'] = str(e)
+
+    # Membresías del usuario
+    try:
+        from models import OrgMembership, Organizacion
+        memberships = db.session.query(OrgMembership).filter_by(
+            user_id=current_user.id
+        ).all()
+        for m in memberships:
+            org = db.session.get(Organizacion, m.org_id)
+            result['memberships'].append({
+                'id': m.id,
+                'org_id': m.org_id,
+                'org_nombre': org.nombre if org else None,
+                'role': getattr(m, 'role', None),
+                'archived': bool(getattr(m, 'archived', False)),
+            })
+    except Exception as e:
+        result['memberships'] = f'error: {e}'
+
+    # Contexto PostgreSQL (RLS)
+    try:
+        row = db.session.execute(text(
+            "SELECT current_setting('app.current_org_id', true)"
+        )).fetchone()
+        result['postgres_context']['current_org_id'] = row[0] if row else None
+    except Exception as e:
+        result['postgres_context']['current_org_id_error'] = str(e)
+
+    try:
+        row = db.session.execute(text(
+            "SELECT current_setting('app.is_super_admin', true)"
+        )).fetchone()
+        result['postgres_context']['is_super_admin'] = row[0] if row else None
+    except Exception as e:
+        result['postgres_context']['is_super_admin_error'] = str(e)
+
+    # Cuántas obras "ve" este usuario
+    try:
+        from models import Obra
+        obras_visibles = db.session.query(Obra).all()
+        result['obras_visibles_count'] = len(obras_visibles)
+        result['obras_visibles_sample'] = [
+            {'id': o.id, 'nombre': o.nombre, 'organizacion_id': o.organizacion_id}
+            for o in obras_visibles[:10]
+        ]
+    except Exception as e:
+        result['obras_visibles_error'] = str(e)
+
+    return jsonify(result)
+
+
 @admin_metrics_bp.route('/rls-rollback')
 @login_required
 def rls_rollback():
