@@ -552,16 +552,18 @@ def verificar_periodo_prueba():
 
         # Verificar si el plan ha expirado (prueba o pago)
         periodo_vencido = False
+        # Importar datetime y timedelta dentro del scope para evitar NameError
+        from datetime import datetime as _dt, timedelta
+
         if plan_a_verificar == 'prueba' and entidad_con_plan:
             # Plan de prueba: 30 días desde creación
             if hasattr(entidad_con_plan, 'fecha_creacion') and entidad_con_plan.fecha_creacion:
-                from datetime import timedelta
                 fecha_limite = entidad_con_plan.fecha_creacion + timedelta(days=30)
-                periodo_vencido = datetime.utcnow() > fecha_limite
+                periodo_vencido = _dt.utcnow() > fecha_limite
         elif plan_a_verificar in ('estandar', 'premium', 'full_premium') and entidad_con_plan:
             # Planes pagos: verificar fecha_fin_plan
             fecha_fin = getattr(entidad_con_plan, 'fecha_fin_plan', None)
-            if fecha_fin and datetime.utcnow() > fecha_fin:
+            if fecha_fin and _dt.utcnow() > fecha_fin:
                 periodo_vencido = True
 
         if periodo_vencido:
