@@ -889,6 +889,7 @@ for module_name, attr_name, prefix in [
     ('blueprint_requerimientos', 'requerimientos_bp', None),  # Requerimientos de compra desde obras
     ('blueprint_notificaciones', 'notificaciones_bp', None),  # Sistema de notificaciones
     ('agent_local', 'agent_bp', None),
+    ('admin_metrics', 'admin_metrics_bp', None),  # Métricas de negocio para super admin
 ]:
     try:
         blueprint = _import_blueprint(module_name, attr_name)
