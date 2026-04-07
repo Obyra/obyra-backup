@@ -370,6 +370,11 @@
                                 <li><a class="dropdown-item text-danger" href="{{ url_for('superadmin.panel') }}">
                                     <i class="fas fa-crown me-2"></i>Panel Super Admin
                                 </a></li>
+                                {% if has_endpoint('admin_metrics.metrics_view') %}
+                                <li><a class="dropdown-item" href="{{ url_for('admin_metrics.metrics_view') }}">
+                                    <i class="fas fa-chart-line me-2"></i>Métricas de Negocio
+                                </a></li>
+                                {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                             {% endif %}
                             {% if current_user.is_super_admin %}
