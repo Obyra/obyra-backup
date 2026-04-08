@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Mi Suscripcion - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <h1 class="h3 mb-4"><i class="fas fa-receipt me-2 text-primary"></i>Mi Suscripcion</h1>
+
+            {% if sub_activa %}
+            <div class="card border-0 shadow-sm border-start border-success border-4 mb-4">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h4 class="mb-1">{{ sub_activa.plan_nombre }}</h4>
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Activa</span>
+                        </div>
+                        <div class="text-end">
+                            <div class="h3 mb-0 text-primary fw-bold">${{ '{:,.0f}'.format(sub_activa.monto_ars|float) }}</div>
+                            <small class="text-muted">ARS / mes</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <dl class="row mb-0 small">
+                        <dt class="col-sm-4 text-muted">Iniciada</dt>
+                        <dd class="col-sm-8">{{ sub_activa.created_at.strftime('%d/%m/%Y') }}</dd>
+                        {% if sub_activa.next_payment_date %}
+                        <dt class="col-sm-4 text-muted">Proximo cobro</dt>
+                        <dd class="col-sm-8">{{ sub_activa.next_payment_date.strftime('%d/%m/%Y') }}</dd>
+                        {% endif %}
+                        <dt class="col-sm-4 text-muted">Email del pagador</dt>
+                        <dd class="col-sm-8">{{ sub_activa.mp_payer_email or '-' }}</dd>
+                        <dt class="col-sm-4 text-muted">ID Mercado Pago</dt>
+                        <dd class="col-sm-8"><code class="small">{{ sub_activa.mp_preapproval_id }}</code></dd>
+                    </dl>
+                    <hr>
+                    <form method="POST" action="{{ url_for('mp_subs.cancelar') }}" onsubmit="return confirm('¿Seguro que queres cancelar tu suscripcion? Vas a poder seguir usando OBYRA hasta el final del periodo facturado.');">
+                        {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="fas fa-times-circle me-1"></i>Cancelar suscripcion
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 text-center">
+                    <i class="fas fa-info-circle text-muted mb-3" style="font-size: 3rem;"></i>
+                    <h4>No tenes una suscripcion activa</h4>
+                    <p class="text-muted">Activa tu suscripcion para tener acceso completo a OBYRA Profesional.</p>
+                    <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-primary">
+                        <i class="fas fa-rocket me-1"></i>Ver planes
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if historial %}
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-history me-2 text-muted"></i>Historial</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Plan</th>
+                                    <th>Monto</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in historial %}
+                                <tr>
+                                    <td><small>{{ s.created_at.strftime('%d/%m/%Y') }}</small></td>
+                                    <td>{{ s.plan_nombre }}</td>
+                                    <td>${{ '{:,.0f}'.format(s.monto_ars|float) }} ARS</td>
+                                    <td>
+                                        {% if s.status == 'authorized' %}
+                                        <span class="badge bg-success">Activa</span>
+                                        {% elif s.status == 'pending' %}
+                                        <span class="badge bg-warning text-dark">Pendiente</span>
+                                        {% elif s.status == 'cancelled' %}
+                                        <span class="badge bg-secondary">Cancelada</span>
+                                        {% elif s.status == 'paused' %}
+                                        <span class="badge bg-info">Pausada</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark">{{ s.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

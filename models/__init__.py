@@ -75,6 +75,9 @@ from models.clients import Cliente
 # Subcontratistas
 from models.subcontratista import Subcontratista, DocumentoSubcontratista
 
+# Suscripciones (Mercado Pago Preapproval)
+from models.subscription import Subscription
+
 # Proveedores OC models
 from models.proveedores_oc import (
     ProveedorOC, HistorialPrecioProveedor,

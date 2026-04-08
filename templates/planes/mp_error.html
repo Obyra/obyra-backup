@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Error en la suscripcion - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-lg text-center p-5">
+                <div class="mb-4">
+                    <i class="fas fa-exclamation-triangle text-warning" style="font-size: 5rem;"></i>
+                </div>
+                <h1 class="h3 mb-3">No pudimos completar tu suscripcion</h1>
+                <p class="text-muted mb-4">
+                    Hubo un problema procesando el pago en Mercado Pago. Tu cuenta sigue activa
+                    y podes volver a intentar cuando quieras.
+                </p>
+                <div class="d-flex justify-content-center gap-2">
+                    <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-primary">
+                        <i class="fas fa-redo me-1"></i>Reintentar
+                    </a>
+                    <a href="https://wa.me/5491173685175" target="_blank" class="btn btn-outline-success">
+                        <i class="fab fa-whatsapp me-1"></i>Hablar con soporte
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

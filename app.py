@@ -1125,6 +1125,13 @@ try:
 except Exception as exc:
     app.logger.warning("blueprint_legal no disponible: %s", exc)
 
+# --- Mercado Pago Subscriptions ----------------------------------------
+try:
+    from blueprint_mp_subscriptions import mp_subs_bp
+    app.register_blueprint(mp_subs_bp)
+except Exception as exc:
+    app.logger.warning("blueprint_mp_subscriptions no disponible: %s", exc)
+
 # --- Manual de usuario ---
 if 'manual' not in app.view_functions:
     app.add_url_rule('/manual', endpoint='manual',
