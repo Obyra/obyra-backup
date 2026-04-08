@@ -226,10 +226,15 @@ def procesar_webhook(payload):
     }
     nuevo_status = status_map.get(mp_status, sub.status)
 
+    status_anterior = sub.status
     sub.status = nuevo_status
     sub.last_event_payload = json.dumps({'webhook': payload, 'mp_data': mp_data})[:5000]
     if nuevo_status == 'cancelled' and not sub.cancelled_at:
         sub.cancelled_at = datetime.utcnow()
+
+    primera_activacion = (status_anterior != 'authorized' and nuevo_status == 'authorized')
+    fue_cancelada = (status_anterior != 'cancelled' and nuevo_status == 'cancelled')
+
     if nuevo_status == 'authorized':
         # Si MP ya tiene fechas de pago, las copiamos
         if mp_data.get('next_payment_date'):
@@ -248,7 +253,82 @@ def procesar_webhook(payload):
             current_app.logger.exception("Error activando plan tras autorizacion")
 
     db.session.commit()
+
+    # Notificaciones email (post-commit, fail-safe)
+    if primera_activacion:
+        try:
+            _notificar_admin_nueva_suscripcion(sub)
+        except Exception:
+            current_app.logger.exception("Error enviando notificacion admin de nueva suscripcion")
+    if fue_cancelada:
+        try:
+            _notificar_admin_cancelacion(sub)
+        except Exception:
+            current_app.logger.exception("Error enviando notificacion admin de cancelacion")
+
     return {'ok': True, 'subscription_id': sub.id, 'status': sub.status}
+
+
+def _notificar_admin_nueva_suscripcion(subscription):
+    """Envia un email al admin de OBYRA cuando se activa una nueva suscripcion."""
+    from services.email_service import send_email
+
+    admin_email = os.environ.get('ADMIN_NOTIFICATION_EMAIL') or os.environ.get('FROM_EMAIL_REPLY_TO')
+    if not admin_email:
+        current_app.logger.warning("ADMIN_NOTIFICATION_EMAIL no configurado, no se notifica nueva suscripcion")
+        return
+
+    org = subscription.organizacion
+    org_nombre = org.nombre if org else 'Sin org'
+    monto_str = '${:,.0f} ARS'.format(float(subscription.monto_ars or 0))
+    fecha_str = subscription.created_at.strftime('%d/%m/%Y %H:%M') if subscription.created_at else '-'
+
+    subject = f'[OBYRA] Nuevo cliente: {org_nombre} - {monto_str}/mes'
+    html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <h2 style="color: #198754;">Nueva suscripcion activa</h2>
+        <p>Se acaba de activar una nueva suscripcion en OBYRA.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Organizacion</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{org_nombre}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Plan</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{subscription.plan_nombre}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Monto mensual</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{monto_str}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Email del pagador</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{subscription.mp_payer_email or '-'}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>ID Mercado Pago</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;"><code>{subscription.mp_preapproval_id}</code></td></tr>
+            <tr><td style="padding: 8px;"><strong>Fecha</strong></td><td style="padding: 8px;">{fecha_str}</td></tr>
+        </table>
+        <p style="color: #6c757d; font-size: 12px;">Notificacion automatica de OBYRA</p>
+    </div>
+    '''
+    send_email(to_email=admin_email, subject=subject, html_content=html)
+
+
+def _notificar_admin_cancelacion(subscription):
+    """Envia un email al admin cuando un cliente cancela su suscripcion."""
+    from services.email_service import send_email
+
+    admin_email = os.environ.get('ADMIN_NOTIFICATION_EMAIL') or os.environ.get('FROM_EMAIL_REPLY_TO')
+    if not admin_email:
+        return
+
+    org = subscription.organizacion
+    org_nombre = org.nombre if org else 'Sin org'
+    monto_str = '${:,.0f} ARS'.format(float(subscription.monto_ars or 0))
+
+    subject = f'[OBYRA] Cancelacion: {org_nombre}'
+    html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <h2 style="color: #dc3545;">Suscripcion cancelada</h2>
+        <p>Un cliente cancelo su suscripcion en OBYRA.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Organizacion</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{org_nombre}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Plan</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{subscription.plan_nombre}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Monto perdido</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">{monto_str}/mes</td></tr>
+            <tr><td style="padding: 8px;"><strong>Email del pagador</strong></td><td style="padding: 8px;">{subscription.mp_payer_email or '-'}</td></tr>
+        </table>
+        <p style="color: #6c757d; font-size: 12px;">Considera contactar al cliente para entender el motivo.</p>
+    </div>
+    '''
+    send_email(to_email=admin_email, subject=subject, html_content=html)
 
 
 def get_subscription_activa(organizacion):

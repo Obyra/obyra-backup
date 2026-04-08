@@ -168,8 +168,8 @@ PLANES_CONFIG = {
     }
 }
 
-# Precio legacy (mantener compatibilidad)
-PLAN_PRECIO_USD = Decimal('250.00')
+# Precio del plan unico OBYRA Profesional
+PLAN_PRECIO_USD = Decimal('399.00')
 
 
 def obtener_cotizacion_bna():
@@ -216,7 +216,7 @@ def api_cotizacion():
     return jsonify({
         'cotizacion': cotizacion,
         'plan': {
-            'nombre': 'OBYRA Pro',
+            'nombre': 'OBYRA Profesional',
             'precio_usd': float(PLAN_PRECIO_USD),
             'precio_ars': float(precio_ars.quantize(Decimal('0.01'))),
         }

@@ -87,6 +87,7 @@ class BillingConfig:
     # Datos del titular
     BANK_HOLDER_NAME: str = 'Brenda Priscila Koldobsky'
     BANK_HOLDER_DNI: str = '34722707'
+    BANK_HOLDER_CUIT: str = '27-34722707-8'
     BANK_NAME: str = 'Banco Galicia'
 
     # Cuenta en DÓLARES (USD)
@@ -185,6 +186,7 @@ class BillingConfig:
             'enabled': cls.BANK_TRANSFER_ENABLED,
             'holder_name': cls.BANK_HOLDER_NAME,
             'holder_dni': cls.BANK_HOLDER_DNI,
+            'holder_cuit': cls.BANK_HOLDER_CUIT,
             'bank_name': cls.BANK_NAME,
             'usd': {
                 'cbu': cls.BANK_USD_CBU,
