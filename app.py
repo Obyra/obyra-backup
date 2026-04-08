@@ -1127,8 +1127,10 @@ except Exception as exc:
 
 # --- Mercado Pago Subscriptions ----------------------------------------
 try:
-    from blueprint_mp_subscriptions import mp_subs_bp
+    from blueprint_mp_subscriptions import mp_subs_bp, webhook as _mp_webhook_view
     app.register_blueprint(mp_subs_bp)
+    # El webhook de MP es publico (sin sesion ni CSRF) - excluir de CSRF
+    csrf.exempt(_mp_webhook_view)
 except Exception as exc:
     app.logger.warning("blueprint_mp_subscriptions no disponible: %s", exc)
 
