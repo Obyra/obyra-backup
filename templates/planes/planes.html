@@ -21,7 +21,12 @@
                 <div class="alert alert-info d-inline-block mt-3">
                     <i class="fas fa-building me-2"></i>
                     <strong>{{ org_info.nombre }}</strong> &mdash;
-                    Plan actual: <span class="badge bg-primary">{{ org_info.plan_tipo|title }}</span>
+                    Plan actual:
+                    {% if org_info.plan_tipo == 'prueba' %}
+                    <span class="badge bg-warning text-dark">Prueba gratuita</span>
+                    {% else %}
+                    <span class="badge bg-success">OBYRA Profesional</span>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
