@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}{{ sub.razon_social }} - Subcontratista{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('subcontratistas.lista') }}" class="btn btn-link text-decoration-none me-2">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h2 class="mb-0">{{ sub.razon_social }}</h2>
+            {% if not sub.activo %}<span class="badge bg-secondary ms-2">Inactivo</span>{% endif %}
+        </div>
+        <div>
+            <a href="{{ url_for('subcontratistas.editar', sub_id=sub.id) }}" class="btn btn-outline-primary">
+                <i class="fas fa-edit me-1"></i>Editar
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- Datos -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-info-circle me-2 text-primary"></i>Datos generales</h6>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-5 text-muted">Rubro</dt><dd class="col-7">{{ sub.rubro or '-' }}</dd>
+                        <dt class="col-5 text-muted">CUIT</dt><dd class="col-7">{{ sub.cuit or '-' }}</dd>
+                        <dt class="col-5 text-muted">Contacto</dt><dd class="col-7">{{ sub.nombre_contacto or '-' }}</dd>
+                        <dt class="col-5 text-muted">Email</dt><dd class="col-7">{{ sub.email or '-' }}</dd>
+                        <dt class="col-5 text-muted">Telefono</dt><dd class="col-7">{{ sub.telefono or '-' }}</dd>
+                        <dt class="col-5 text-muted">Direccion</dt><dd class="col-7">{{ sub.direccion or '-' }}</dd>
+                        <dt class="col-5 text-muted">Ciudad</dt><dd class="col-7">{{ sub.ciudad or '-' }}</dd>
+                        <dt class="col-5 text-muted">Provincia</dt><dd class="col-7">{{ sub.provincia or '-' }}</dd>
+                    </dl>
+                    {% if sub.notas %}
+                    <hr>
+                    <small class="text-muted">Notas:</small>
+                    <p class="mb-0">{{ sub.notas }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Documentos -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-folder-open me-2 text-warning"></i>Documentacion</h6>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalSubirDoc">
+                        <i class="fas fa-upload me-1"></i>Subir documento
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tipo</th>
+                                    <th>Descripcion</th>
+                                    <th>Emision</th>
+                                    <th>Vencimiento</th>
+                                    <th>Estado</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for d in documentos %}
+                                <tr>
+                                    <td><strong>{{ dict(tipos_documento).get(d.tipo, d.tipo) }}</strong></td>
+                                    <td>{{ d.descripcion or '-' }}</td>
+                                    <td>{{ d.fecha_emision.strftime('%d/%m/%Y') if d.fecha_emision else '-' }}</td>
+                                    <td>{{ d.fecha_vencimiento.strftime('%d/%m/%Y') if d.fecha_vencimiento else '-' }}</td>
+                                    <td>
+                                        {% if d.fecha_vencimiento %}
+                                            {% set dias = d.dias_para_vencer %}
+                                            {% if dias < 0 %}
+                                                <span class="badge bg-danger">Vencido hace {{ -dias }}d</span>
+                                            {% elif dias <= 30 %}
+                                                <span class="badge bg-warning text-dark">Vence en {{ dias }}d</span>
+                                            {% else %}
+                                                <span class="badge bg-success">Vigente</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-secondary">Sin venc.</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if d.archivo_url %}
+                                        <a href="{{ url_for('subcontratistas.descargar_documento', sub_id=sub.id, doc_id=d.id) }}" class="btn btn-sm btn-outline-primary" title="Descargar">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                        {% endif %}
+                                        <form method="POST" action="{{ url_for('subcontratistas.eliminar_documento', sub_id=sub.id, doc_id=d.id) }}" class="d-inline" onsubmit="return confirm('Eliminar documento?');">
+                                            {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        No hay documentos cargados
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal subir documento -->
+<div class="modal fade" id="modalSubirDoc" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="POST" action="{{ url_for('subcontratistas.subir_documento', sub_id=sub.id) }}" enctype="multipart/form-data" class="modal-content">
+            {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+            <div class="modal-header">
+                <h5 class="modal-title">Subir documento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Tipo de documento *</label>
+                    <select name="tipo" class="form-select" required>
+                        {% for value, label in tipos_documento %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Descripcion</label>
+                    <input type="text" name="descripcion" class="form-control" placeholder="Opcional">
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label">Fecha emision</label>
+                        <input type="date" name="fecha_emision" class="form-control">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Fecha vencimiento</label>
+                        <input type="date" name="fecha_vencimiento" class="form-control">
+                    </div>
+                </div>
+                <div class="mb-3 mt-3">
+                    <label class="form-label">Archivo *</label>
+                    <input type="file" name="archivo" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" required>
+                    <small class="text-muted">PDF, JPG, PNG o DOCX</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-upload me-1"></i>Subir</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

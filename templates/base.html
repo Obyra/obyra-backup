@@ -169,6 +169,11 @@
                                 <i class="fas fa-flag-checkered me-2"></i>Cierres de Obra
                             </a></li>
                             {% endif %}
+                            {% if has_endpoint('subcontratistas.lista') %}
+                            <li><a class="dropdown-item" href="{{ url_for('subcontratistas.lista') }}">
+                                <i class="fas fa-hard-hat me-2"></i>Subcontratistas
+                            </a></li>
+                            {% endif %}
                             {% if has_endpoint('fichadas.index') %}
                                 {% if can_feature('attendance.geo') %}
                                 <li><a class="dropdown-item" href="{{ url_for('fichadas.index') }}">

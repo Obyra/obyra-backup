@@ -72,6 +72,9 @@ from models.budgets import (
 # Client models
 from models.clients import Cliente
 
+# Subcontratistas
+from models.subcontratista import Subcontratista, DocumentoSubcontratista
+
 # Proveedores OC models
 from models.proveedores_oc import (
     ProveedorOC, HistorialPrecioProveedor,

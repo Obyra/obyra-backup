@@ -943,6 +943,7 @@ for module_name, attr_name, prefix in [
     ('agent_local', 'agent_bp', None),
     ('admin_metrics', 'admin_metrics_bp', None),  # Métricas de negocio para super admin
     ('blueprint_cierre_obra', 'cierre_obra_bp', None),  # Cierre formal de obra + actas de entrega
+    ('blueprint_subcontratistas', 'subcontratistas_bp', None),  # Subcontratistas + documentacion legal
 ]:
     try:
         blueprint = _import_blueprint(module_name, attr_name)

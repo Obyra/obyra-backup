@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Editar Subcontratista{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex align-items-center mb-4">
+        <a href="{{ url_for('subcontratistas.detalle', sub_id=sub.id) }}" class="btn btn-link text-decoration-none me-2">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <h2 class="mb-0">Editar: {{ sub.razon_social }}</h2>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <form method="POST">
+                {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label">Razon Social *</label>
+                        <input type="text" name="razon_social" class="form-control" value="{{ sub.razon_social }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">CUIT</label>
+                        <input type="text" name="cuit" class="form-control" value="{{ sub.cuit or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Rubro</label>
+                        <input type="text" name="rubro" class="form-control" value="{{ sub.rubro or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Persona de contacto</label>
+                        <input type="text" name="nombre_contacto" class="form-control" value="{{ sub.nombre_contacto or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" value="{{ sub.email or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Telefono</label>
+                        <input type="text" name="telefono" class="form-control" value="{{ sub.telefono or '' }}">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Direccion</label>
+                        <input type="text" name="direccion" class="form-control" value="{{ sub.direccion or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Ciudad</label>
+                        <input type="text" name="ciudad" class="form-control" value="{{ sub.ciudad or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Provincia</label>
+                        <input type="text" name="provincia" class="form-control" value="{{ sub.provincia or '' }}">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Notas</label>
+                        <textarea name="notas" class="form-control" rows="3">{{ sub.notas or '' }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="activo" id="activo" {% if sub.activo %}checked{% endif %}>
+                            <label class="form-check-label" for="activo">Subcontratista activo</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar cambios
+                    </button>
+                    <a href="{{ url_for('subcontratistas.detalle', sub_id=sub.id) }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
