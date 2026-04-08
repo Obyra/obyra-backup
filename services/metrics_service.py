@@ -96,6 +96,74 @@ def get_business_metrics() -> Dict[str, Any]:
         except Exception:
             metrics['presupuestos'] = {'error': 'No se pudo calcular'}
 
+        # ============================================================
+        # REVENUE / SUSCRIPCIONES (Mercado Pago Preapproval)
+        # ============================================================
+        try:
+            from models.subscription import Subscription
+            from sqlalchemy import func
+
+            inicio_mes_dt = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            hace_30_dias = datetime.utcnow() - timedelta(days=30)
+
+            # Suscripciones por estado
+            subs_authorized = db.session.query(Subscription).filter_by(status='authorized').count()
+            subs_pending = db.session.query(Subscription).filter_by(status='pending').count()
+            subs_cancelled = db.session.query(Subscription).filter_by(status='cancelled').count()
+            subs_total = db.session.query(Subscription).count()
+
+            # MRR: suma de monto_ars de las suscripciones activas
+            mrr_query = db.session.query(func.coalesce(func.sum(Subscription.monto_ars), 0)).filter(
+                Subscription.status == 'authorized'
+            )
+            mrr = float(mrr_query.scalar() or 0)
+
+            # ARR (Annual Recurring Revenue) = MRR * 12
+            arr = mrr * 12
+
+            # Nuevas suscripciones del mes actual
+            nuevas_mes = db.session.query(Subscription).filter(
+                Subscription.created_at >= inicio_mes_dt,
+                Subscription.status.in_(['authorized', 'pending'])
+            ).count()
+
+            # Cancelaciones ultimos 30 dias
+            cancelaciones_30d = db.session.query(Subscription).filter(
+                Subscription.cancelled_at >= hace_30_dias
+            ).count()
+
+            # Churn rate (cancelaciones / activas al inicio del mes)
+            base_churn = subs_authorized + cancelaciones_30d
+            churn_rate = round((cancelaciones_30d / base_churn) * 100, 2) if base_churn > 0 else 0
+
+            # Signups del mes (organizaciones nuevas)
+            signups_mes = db.session.query(Organizacion).filter(
+                Organizacion.fecha_creacion >= inicio_mes_dt
+            ).count() if hasattr(Organizacion, 'fecha_creacion') else 0
+
+            metrics['revenue'] = {
+                'mrr_ars': mrr,
+                'mrr_formatted': '${:,.0f}'.format(mrr),
+                'arr_ars': arr,
+                'arr_formatted': '${:,.0f}'.format(arr),
+                'subscriptions_active': subs_authorized,
+                'subscriptions_pending': subs_pending,
+                'subscriptions_cancelled': subs_cancelled,
+                'subscriptions_total': subs_total,
+                'new_this_month': nuevas_mes,
+                'cancelled_30d': cancelaciones_30d,
+                'churn_rate_pct': churn_rate,
+                'signups_this_month': signups_mes,
+            }
+        except Exception as e:
+            logger.warning(f'No se pudieron calcular metricas de revenue: {e}')
+            metrics['revenue'] = {
+                'mrr_ars': 0,
+                'mrr_formatted': '$0',
+                'subscriptions_active': 0,
+                'error': str(e),
+            }
+
     except Exception as e:
         logger.error(f'Error calculando métricas de negocio: {e}')
         metrics['error'] = 'Error parcial al calcular métricas'

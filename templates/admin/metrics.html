@@ -37,6 +37,72 @@
     </div>
     {% endif %}
 
+    {# ========== REVENUE / SUSCRIPCIONES MERCADO PAGO ========== #}
+    {% if metrics.revenue %}
+    <div class="card border-0 shadow-sm border-start border-success border-4 mb-4">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-dollar-sign text-success me-2"></i>Revenue & Suscripciones
+            </h5>
+            <span class="badge bg-success bg-opacity-10 text-success">Mercado Pago</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3 col-6">
+                    <div class="border rounded p-3 h-100 text-center bg-success bg-opacity-10">
+                        <div class="small text-muted mb-1">MRR (Monthly Recurring Revenue)</div>
+                        <div class="h2 mb-0 fw-bold text-success">{{ metrics.revenue.mrr_formatted }}</div>
+                        <small class="text-muted">ARS / mes</small>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="border rounded p-3 h-100 text-center">
+                        <div class="small text-muted mb-1">ARR proyectado</div>
+                        <div class="h3 mb-0 fw-bold">{{ metrics.revenue.arr_formatted }}</div>
+                        <small class="text-muted">ARS / año</small>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="border rounded p-3 h-100 text-center">
+                        <div class="small text-muted mb-1">Suscripciones activas</div>
+                        <div class="h2 mb-0 fw-bold text-primary">{{ metrics.revenue.subscriptions_active }}</div>
+                        <small class="text-muted">de {{ metrics.revenue.subscriptions_total }} totales</small>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="border rounded p-3 h-100 text-center">
+                        <div class="small text-muted mb-1">Churn (30 dias)</div>
+                        <div class="h2 mb-0 fw-bold {% if metrics.revenue.churn_rate_pct > 5 %}text-danger{% elif metrics.revenue.churn_rate_pct > 0 %}text-warning{% else %}text-success{% endif %}">
+                            {{ metrics.revenue.churn_rate_pct }}%
+                        </div>
+                        <small class="text-muted">{{ metrics.revenue.cancelled_30d }} cancelaciones</small>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mt-2">
+                <div class="col-md-4 col-6">
+                    <div class="d-flex justify-content-between p-2 border-bottom">
+                        <span class="text-muted small"><i class="fas fa-user-plus me-1"></i>Signups este mes</span>
+                        <strong>{{ metrics.revenue.signups_this_month }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-4 col-6">
+                    <div class="d-flex justify-content-between p-2 border-bottom">
+                        <span class="text-muted small"><i class="fas fa-credit-card me-1"></i>Nuevas subs este mes</span>
+                        <strong class="text-success">{{ metrics.revenue.new_this_month }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-4 col-6">
+                    <div class="d-flex justify-content-between p-2 border-bottom">
+                        <span class="text-muted small"><i class="fas fa-clock me-1"></i>Subs pendientes</span>
+                        <strong class="text-warning">{{ metrics.revenue.subscriptions_pending }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- KPIs principales -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
