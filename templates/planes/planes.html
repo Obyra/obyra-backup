@@ -120,6 +120,21 @@
                                 <div class="card-footer bg-transparent p-4">
                                     <form method="POST" action="{{ url_for('mp_subs.subscribirme') }}">
                                         {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                                        <div class="mb-3">
+                                            <label for="payer_email" class="form-label small fw-semibold">
+                                                <i class="fas fa-envelope me-1"></i>Email de tu cuenta de Mercado Pago
+                                            </label>
+                                            <input type="email"
+                                                   id="payer_email"
+                                                   name="payer_email"
+                                                   class="form-control"
+                                                   value="{{ current_user.email if current_user.is_authenticated else '' }}"
+                                                   placeholder="tu-email@ejemplo.com"
+                                                   required>
+                                            <small class="text-muted">
+                                                Si tu cuenta de Mercado Pago usa otro email, ingresalo aca.
+                                            </small>
+                                        </div>
                                         <button type="submit" class="btn btn-primary btn-lg w-100">
                                             <i class="fas fa-credit-card me-2"></i>SUSCRIBIRME CON MERCADO PAGO
                                         </button>
