@@ -40,7 +40,9 @@ def subscribirme():
         flash('Solo el administrador puede activar la suscripcion', 'warning')
         return redirect(url_for('planes.mostrar_planes'))
 
-    payer_email = current_user.email
+    # Permitir que el usuario indique un email distinto para MP
+    # (su cuenta de Mercado Pago puede usar otro email que el de OBYRA)
+    payer_email = (request.form.get('payer_email') or '').strip() or current_user.email
     if not payer_email:
         flash('Tu cuenta no tiene email registrado', 'danger')
         return redirect(url_for('planes.mostrar_planes'))
