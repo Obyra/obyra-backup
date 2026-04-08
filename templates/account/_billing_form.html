@@ -68,16 +68,15 @@
             <input type="text" class="form-control" id="country" name="country"
                    value="{{ request.form.get('country', billing_profile.country if billing_profile and billing_profile.country else 'Argentina') }}">
         </div>
+        {% if require_card %}
         <div class="col-md-6">
             <label for="cardholder_name" class="form-label">Titular de la tarjeta</label>
-            <input type="text" class="form-control" id="cardholder_name" name="cardholder_name"
-                   {% if require_card %}required{% endif %}
+            <input type="text" class="form-control" id="cardholder_name" name="cardholder_name" required
                    value="{{ request.form.get('cardholder_name', billing_profile.cardholder_name if billing_profile else usuario.nombre_completo) }}">
         </div>
         <div class="col-md-6">
             <label for="card_number" class="form-label">Número de tarjeta</label>
-            <input type="text" class="form-control" id="card_number" name="card_number" inputmode="numeric"
-                   {% if require_card or not (billing_profile and billing_profile.card_last4) %}required{% endif %}
+            <input type="text" class="form-control" id="card_number" name="card_number" inputmode="numeric" required
                    placeholder="4242 4242 4242 4242"
                    autocomplete="off">
             <div class="form-text">
@@ -87,16 +86,15 @@
         </div>
         <div class="col-md-3">
             <label for="exp_month" class="form-label">Mes vencimiento</label>
-            <input type="text" class="form-control" id="exp_month" name="exp_month" maxlength="2" inputmode="numeric"
-                   {% if require_card %}required{% endif %}
+            <input type="text" class="form-control" id="exp_month" name="exp_month" maxlength="2" inputmode="numeric" required
                    value="{{ request.form.get('exp_month', billing_profile.card_exp_month if billing_profile else '') }}">
         </div>
         <div class="col-md-3">
             <label for="exp_year" class="form-label">Año vencimiento</label>
-            <input type="text" class="form-control" id="exp_year" name="exp_year" maxlength="4" inputmode="numeric"
-                   {% if require_card %}required{% endif %}
+            <input type="text" class="form-control" id="exp_year" name="exp_year" maxlength="4" inputmode="numeric" required
                    value="{{ request.form.get('exp_year', billing_profile.card_exp_year if billing_profile else '') }}">
         </div>
+        {% endif %}
     </div>
     <div class="d-flex justify-content-end gap-2 mt-4">
         {% if cancel_url %}

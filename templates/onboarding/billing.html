@@ -7,19 +7,30 @@
         <div class="col-lg-8">
             <div class="text-center mb-4">
                 <span class="badge bg-primary rounded-pill px-3 py-2">Paso 2 de 2</span>
-                <h1 class="h3 mt-3">Datos de facturación y pago</h1>
-                <p class="text-muted mb-0">Guardamos los datos mínimos para habilitar tu suscripción. Podrás modificarlos cuando quieras.</p>
+                <h1 class="h3 mt-3">Datos de facturación</h1>
+                <p class="text-muted mb-0">Solo guardamos los datos mínimos para emitir tu factura cuando actives la suscripción.</p>
             </div>
+
+            <div class="alert alert-success border-0 shadow-sm mb-4">
+                <div class="d-flex align-items-start">
+                    <i class="fas fa-gift fa-2x me-3 text-success"></i>
+                    <div>
+                        <h5 class="alert-heading mb-1">30 días de prueba gratis - sin tarjeta</h5>
+                        <p class="mb-0 small">No te pedimos los datos de tu tarjeta para empezar. Cuando se acerque el final del periodo de prueba te vamos a contactar por email para activar la suscripción de forma segura a través de Mercado Pago.</p>
+                    </div>
+                </div>
+            </div>
+
             <div class="card shadow-sm border-0">
                 <div class="card-body p-4">
-                    {% set submit_label = 'Finalizar y entrar a OBYRA' %}
-                    {% set require_card = true %}
+                    {% set submit_label = 'Empezar prueba gratis' %}
+                    {% set require_card = false %}
                     {% set cancel_url = None %}
                     {% include 'account/_billing_form.html' with context %}
                 </div>
             </div>
             <div class="text-center text-muted small mt-3">
-                <i class="fas fa-shield-alt me-1"></i>Usamos proveedores certificados (Stripe/Mercado Pago). No almacenamos el número completo de tu tarjeta.
+                <i class="fas fa-lock me-1"></i>Tus datos estan protegidos. Cumplimos con la Ley 25.326 de Proteccion de Datos Personales.
             </div>
         </div>
     </div>

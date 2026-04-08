@@ -123,9 +123,15 @@ def billing():
         return redirect(_resolve_after_onboarding())
 
     if request.method == 'POST':
-        exito, mensaje = update_billing_from_form(current_user, request.form, require_card=True)
+        # Mitigacion: durante el trial NO pedimos tarjeta. Solo guardamos
+        # los datos de facturacion (razon social, CUIT, email, direccion)
+        # para emitir factura cuando active la suscripcion.
+        exito, mensaje = update_billing_from_form(current_user, request.form, require_card=False)
         if exito:
-            flash('Datos de facturación guardados. ¡Ya podés comenzar a usar OBYRA IA!', 'success')
+            status.mark_billing_completed()
+            from extensions import db
+            db.session.commit()
+            flash('Datos guardados. Comenza a usar OBYRA gratis durante 30 dias. Antes de que termine te contactamos para activar tu suscripcion.', 'success')
             return redirect(_resolve_after_onboarding())
         flash(mensaje, 'danger')
 
