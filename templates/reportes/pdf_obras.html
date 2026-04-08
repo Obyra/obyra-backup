@@ -25,10 +25,25 @@
         .header-wrapper {
             position: relative;
             height: 100px;
-            background: linear-gradient(135deg, #1A374D 0%, #1A374D 65%, #4CAF50 65%, #4CAF50 100%);
+            background: linear-gradient(135deg, {{ color_primario }} 0%, {{ color_primario }} 65%, #4CAF50 65%, #4CAF50 100%);
             padding: 15px 25px;
             margin: -10mm -15mm 15px -15mm;
             width: calc(100% + 30mm);
+        }
+
+        .header-logo {
+            position: absolute;
+            top: 15px;
+            left: 25px;
+            max-height: 70px;
+            max-width: 140px;
+            background: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .header-logo + .header-content {
+            margin-left: 160px;
         }
 
         .header-content {
@@ -93,7 +108,7 @@
         .kpi-value {
             font-size: 16pt;
             font-weight: bold;
-            color: #1A374D;
+            color: {{ color_primario }};
         }
 
         .kpi-label {
@@ -123,7 +138,7 @@
         }
 
         table.report-table thead {
-            background: #1A374D;
+            background: {{ color_primario }};
         }
 
         table.report-table th {
@@ -228,7 +243,7 @@
 
         .finance-section h3 {
             font-size: 10pt;
-            color: #1A374D;
+            color: {{ color_primario }};
             border-bottom: 2px solid #4CAF50;
             padding-bottom: 4px;
             margin-bottom: 8px;
@@ -257,7 +272,7 @@
         .finance-card-title {
             font-size: 9pt;
             font-weight: bold;
-            color: #1A374D;
+            color: {{ color_primario }};
             margin-bottom: 5px;
             padding: 4px 8px;
             background: #f0f0f0;
@@ -297,7 +312,7 @@
         }
 
         table.summary-table thead {
-            background: #1A374D;
+            background: {{ color_primario }};
         }
 
         table.summary-table th {
@@ -324,6 +339,9 @@
 <body>
     <!-- Header -->
     <div class="header-wrapper">
+        {% if logo_base64 %}
+        <img src="data:{{ logo_mime }};base64,{{ logo_base64 }}" class="header-logo" alt="Logo">
+        {% endif %}
         <div class="header-content">
             <div class="company-logo">
                 {{ (organizacion.nombre_fantasia or organizacion.nombre) if organizacion else 'OBYRA' }}

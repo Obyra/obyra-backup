@@ -1871,6 +1871,25 @@ def exportar_obras_pdf():
     except Exception:
         db.session.rollback()
 
+    # Cargar logo como base64 (soporta local + S3/R2)
+    logo_base64 = None
+    logo_mime = 'image/png'
+    if organizacion and getattr(organizacion, 'logo_url', None):
+        try:
+            import base64
+            from services.storage_service import storage
+            content = storage.read(organizacion.logo_url)
+            if content:
+                logo_base64 = base64.b64encode(content).decode('utf-8')
+                ext = (organizacion.logo_url.rsplit('.', 1)[-1] or '').lower()
+                logo_mime = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+                             'png': 'image/png', 'webp': 'image/webp',
+                             'svg': 'image/svg+xml'}.get(ext, 'image/png')
+        except Exception as e:
+            current_app.logger.warning(f"No se pudo cargar logo para reporte PDF: {e}")
+
+    color_primario = (getattr(organizacion, 'color_primario', None) or '#1A374D') if organizacion else '#1A374D'
+
     # Renderizar HTML
     html_content = render_template('reportes/pdf_obras.html',
                                    obras_data=obras_data,
@@ -1880,6 +1899,9 @@ def exportar_obras_pdf():
                                    usuario=current_user,
                                    desglose_presupuesto=desglose_presupuesto,
                                    desglose_real=desglose_real,
+                                   logo_base64=logo_base64,
+                                   logo_mime=logo_mime,
+                                   color_primario=color_primario,
                                    fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
 
     # Convertir a PDF
