@@ -589,6 +589,20 @@ def register():
             login_user(nuevo_usuario)
             log_login_attempt(email.lower(), True)
             current_app.logger.info(f'Nuevo usuario registrado: {email.lower()} - Organizacion: {nueva_organizacion.id}')
+
+            # Email de bienvenida (fail-safe, no rompe el registro)
+            try:
+                from services.email_service import send_email
+                from flask import render_template as _rt
+                html = _rt('emails/bienvenida.html', nombre=nombre)
+                send_email(
+                    to_email=email.lower(),
+                    subject='Bienvenido a OBYRA - 30 dias gratis',
+                    html_content=html,
+                )
+            except Exception:
+                current_app.logger.exception('Error enviando email de bienvenida')
+
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada. Tenes 30 dias gratis para probar todas las funcionalidades.', 'success')
             destino = _post_login_destination(nuevo_usuario)
             return redirect(destino)

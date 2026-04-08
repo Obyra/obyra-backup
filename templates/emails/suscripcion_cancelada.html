@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Suscripcion cancelada - OBYRA</title>
+</head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;color:#2c2c2c;">
+    <div style="max-width:600px;margin:0 auto;background:#ffffff;">
+        <div style="background:#6c757d;padding:30px 25px;text-align:center;">
+            <h1 style="color:#ffffff;margin:0;font-size:24px;">Suscripcion cancelada</h1>
+        </div>
+        <div style="padding:30px 25px;">
+            <p style="font-size:16px;line-height:1.6;">Hola <strong>{{ nombre or 'cliente' }}</strong>,</p>
+            <p style="font-size:16px;line-height:1.6;">
+                Confirmamos que tu suscripcion a <strong>{{ plan_nombre or 'OBYRA Profesional' }}</strong> fue cancelada.
+            </p>
+            <p style="font-size:15px;line-height:1.6;">
+                <strong>No te vamos a hacer mas cobros.</strong> Vas a poder seguir usando OBYRA hasta el final
+                del periodo facturado actual. Despues, tu cuenta queda en modo lectura por 30 dias para que
+                puedas exportar tu informacion si lo necesitas.
+            </p>
+
+            <div style="background:#fff3cd;border-left:4px solid #ffc107;padding:15px;margin:25px 0;border-radius:4px;">
+                <p style="margin:0;font-size:14px;">
+                    <strong>Cambiaste de opinion?</strong> Podes reactivar tu suscripcion en cualquier momento
+                    desde la pantalla de planes.
+                </p>
+            </div>
+
+            <p style="font-size:15px;line-height:1.6;">
+                Nos encantaria saber por que decidiste cancelar. Tu feedback nos ayuda a mejorar.
+                Respondenos este email o escribinos por WhatsApp y te leemos con atencion.
+            </p>
+
+            <div style="text-align:center;margin:30px 0;">
+                <a href="https://wa.me/5491173685175"
+                   style="display:inline-block;background:#198754;color:#ffffff;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;">
+                    Hablar por WhatsApp
+                </a>
+            </div>
+        </div>
+        <div style="background:#f8f9fa;padding:20px 25px;text-align:center;border-top:1px solid #e9ecef;">
+            <p style="margin:0;font-size:12px;color:#6c757d;">
+                Gracias por haber sido parte de OBYRA.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Suscripcion activa - OBYRA</title>
+</head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;color:#2c2c2c;">
+    <div style="max-width:600px;margin:0 auto;background:#ffffff;">
+        <div style="background:#198754;padding:30px 25px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:8px;">✓</div>
+            <h1 style="color:#ffffff;margin:0;font-size:24px;">Suscripcion activada</h1>
+        </div>
+        <div style="padding:30px 25px;">
+            <p style="font-size:16px;line-height:1.6;">Hola <strong>{{ nombre or 'cliente' }}</strong>,</p>
+            <p style="font-size:16px;line-height:1.6;">
+                Tu suscripcion a <strong>{{ plan_nombre or 'OBYRA Profesional' }}</strong> esta activa.
+                Gracias por elegirnos.
+            </p>
+
+            <div style="background:#f8f9fa;border-radius:6px;padding:20px;margin:25px 0;">
+                <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                    <tr>
+                        <td style="padding:8px 0;color:#6c757d;">Plan</td>
+                        <td style="padding:8px 0;text-align:right;font-weight:bold;">{{ plan_nombre or 'OBYRA Profesional' }}</td>
+                    </tr>
+                    <tr style="border-top:1px solid #dee2e6;">
+                        <td style="padding:8px 0;color:#6c757d;">Monto mensual</td>
+                        <td style="padding:8px 0;text-align:right;font-weight:bold;">{{ monto_str }}</td>
+                    </tr>
+                    <tr style="border-top:1px solid #dee2e6;">
+                        <td style="padding:8px 0;color:#6c757d;">Frecuencia</td>
+                        <td style="padding:8px 0;text-align:right;">Mensual automatico (Mercado Pago)</td>
+                    </tr>
+                    {% if next_payment %}
+                    <tr style="border-top:1px solid #dee2e6;">
+                        <td style="padding:8px 0;color:#6c757d;">Proximo cobro</td>
+                        <td style="padding:8px 0;text-align:right;">{{ next_payment }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+
+            <p style="font-size:14px;color:#6c757d;line-height:1.6;">
+                Podes ver el detalle de tu suscripcion, modificar tus datos o cancelar cuando quieras desde
+                <a href="https://app.obyra.com.ar/account/subscription" style="color:#0d6efd;">tu panel de cuenta</a>.
+            </p>
+
+            <div style="text-align:center;margin:30px 0 10px;">
+                <a href="https://app.obyra.com.ar"
+                   style="display:inline-block;background:#198754;color:#ffffff;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">
+                    Ir a OBYRA
+                </a>
+            </div>
+        </div>
+        <div style="background:#f8f9fa;padding:20px 25px;text-align:center;border-top:1px solid #e9ecef;">
+            <p style="margin:0;font-size:12px;color:#6c757d;">
+                Comprobante automatico de Mercado Pago llega por separado a tu email.<br>
+                Dudas? Escribinos a <a href="mailto:info@obyra.com.ar" style="color:#6c757d;">info@obyra.com.ar</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

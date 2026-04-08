@@ -260,13 +260,85 @@ def procesar_webhook(payload):
             _notificar_admin_nueva_suscripcion(sub)
         except Exception:
             current_app.logger.exception("Error enviando notificacion admin de nueva suscripcion")
+        try:
+            _notificar_cliente_suscripcion_activa(sub)
+        except Exception:
+            current_app.logger.exception("Error enviando notificacion cliente de activacion")
     if fue_cancelada:
         try:
             _notificar_admin_cancelacion(sub)
         except Exception:
             current_app.logger.exception("Error enviando notificacion admin de cancelacion")
+        try:
+            _notificar_cliente_cancelacion(sub)
+        except Exception:
+            current_app.logger.exception("Error enviando notificacion cliente de cancelacion")
 
     return {'ok': True, 'subscription_id': sub.id, 'status': sub.status}
+
+
+def _notificar_cliente_suscripcion_activa(subscription):
+    """Email al cliente confirmando que su suscripcion fue activada."""
+    from services.email_service import send_email
+    from flask import render_template
+
+    if not subscription.mp_payer_email:
+        return
+
+    # Buscar nombre del usuario que creo la sub o admin de la org
+    nombre = 'cliente'
+    try:
+        from models import Usuario
+        if subscription.created_by_id:
+            u = Usuario.query.get(subscription.created_by_id)
+            if u:
+                nombre = u.nombre or 'cliente'
+    except Exception:
+        pass
+
+    monto_str = '${:,.0f} ARS'.format(float(subscription.monto_ars or 0))
+    next_payment = subscription.next_payment_date.strftime('%d/%m/%Y') if subscription.next_payment_date else None
+
+    html = render_template('emails/suscripcion_activa.html',
+        nombre=nombre,
+        plan_nombre=subscription.plan_nombre,
+        monto_str=monto_str,
+        next_payment=next_payment,
+    )
+    send_email(
+        to_email=subscription.mp_payer_email,
+        subject='Tu suscripcion a OBYRA esta activa',
+        html_content=html,
+    )
+
+
+def _notificar_cliente_cancelacion(subscription):
+    """Email al cliente confirmando que su suscripcion fue cancelada."""
+    from services.email_service import send_email
+    from flask import render_template
+
+    if not subscription.mp_payer_email:
+        return
+
+    nombre = 'cliente'
+    try:
+        from models import Usuario
+        if subscription.created_by_id:
+            u = Usuario.query.get(subscription.created_by_id)
+            if u:
+                nombre = u.nombre or 'cliente'
+    except Exception:
+        pass
+
+    html = render_template('emails/suscripcion_cancelada.html',
+        nombre=nombre,
+        plan_nombre=subscription.plan_nombre,
+    )
+    send_email(
+        to_email=subscription.mp_payer_email,
+        subject='Tu suscripcion a OBYRA fue cancelada',
+        html_content=html,
+    )
 
 
 def _notificar_admin_nueva_suscripcion(subscription):
