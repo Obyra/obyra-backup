@@ -510,10 +510,11 @@
                 </p>
                 <p class="mb-0">
                     <small>
-                        <a href="#" style="color: #1A374D;" class="text-decoration-none">Términos y condiciones</a>
-|
-                        <a href="#" style="color: #1A374D;" class="text-decoration-none">Política de privacidad</a>
-
+                        <a href="{{ url_for('legal.terminos') }}" style="color: #1A374D;" class="text-decoration-none">Términos y Condiciones</a>
+                        |
+                        <a href="{{ url_for('legal.privacidad') }}" style="color: #1A374D;" class="text-decoration-none">Política de Privacidad</a>
+                        |
+                        <a href="{{ url_for('legal.cookies') }}" style="color: #1A374D;" class="text-decoration-none">Cookies</a>
                     </small>
                 </p>
             </div>

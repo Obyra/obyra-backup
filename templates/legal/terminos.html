@@ -1,108 +1,74 @@
-{% extends "base.html" %}
+{% extends "legal/_base_legal.html" %}
+{% block title %}Terminos y Condiciones - OBYRA{% endblock %}
 
-{% block title %}Términos y Condiciones - OBYRA IA{% endblock %}
+{% block legal_content %}
+<h1 class="mb-4">Terminos y Condiciones de Uso</h1>
 
-{% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header">
-                    <h1 class="h3 mb-0">
-                        <i class="fas fa-file-contract me-2"></i>Términos y Condiciones y Contacto
-                    </h1>
-                </div>
-                <div class="card-body">
-                    <div class="mb-4">
-                        <p class="lead">Bienvenido a OBYRA IA. Al utilizar esta plataforma aceptás nuestros términos:</p>
-                    </div>
+<p>Bienvenido a <strong>OBYRA</strong>. Estos Terminos y Condiciones (en adelante, los "Terminos") regulan el acceso y uso de la plataforma de software como servicio (SaaS) ofrecida por OBYRA (en adelante, "OBYRA", "nosotros" o "el Servicio") a traves del sitio web <a href="https://app.obyra.com.ar">app.obyra.com.ar</a> y dominios relacionados.</p>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-check-circle text-success me-2"></i>Uso de la Plataforma</h5>
-                        <ul class="list-unstyled ps-4">
-                            <li class="mb-2">
-                                <i class="fas fa-chevron-right text-primary me-2"></i>
-                                Esta plataforma está diseñada para facilitar la planificación, compras y control de avance en obras de construcción.
-                            </li>
-                        </ul>
-                    </div>
+<p>Al registrarse, acceder o utilizar el Servicio, el Usuario acepta expresamente estar sujeto a estos Terminos y a la <a href="{{ url_for('legal.privacidad') }}">Politica de Privacidad</a>. Si no esta de acuerdo, debe abstenerse de utilizar la plataforma.</p>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-exclamation-triangle text-warning me-2"></i>Limitaciones de Responsabilidad</h5>
-                        <ul class="list-unstyled ps-4">
-                            <li class="mb-2">
-                                <i class="fas fa-chevron-right text-primary me-2"></i>
-                                OBYRA IA no se responsabiliza por errores humanos en la carga de datos o certificaciones.
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-chevron-right text-primary me-2"></i>
-                                Las recomendaciones son de carácter informativo. Las decisiones finales dependen del usuario.
-                            </li>
-                        </ul>
-                    </div>
+<h2 class="h4 mt-4">1. Definiciones</h2>
+<ul>
+    <li><strong>Servicio:</strong> la plataforma OBYRA destinada a la gestion integral de obras de construccion, presupuestos, equipos, inventario y administracion.</li>
+    <li><strong>Usuario:</strong> persona humana o juridica que se registra y utiliza el Servicio.</li>
+    <li><strong>Organizacion:</strong> empresa o entidad bajo la cual el Usuario opera dentro de la plataforma.</li>
+    <li><strong>Contenido del Usuario:</strong> datos, archivos, imagenes, presupuestos, obras y cualquier informacion cargada por el Usuario.</li>
+</ul>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-edit text-info me-2"></i>Modificaciones y Uso</h5>
-                        <ul class="list-unstyled ps-4">
-                            <li class="mb-2">
-                                <i class="fas fa-chevron-right text-primary me-2"></i>
-                                Nos reservamos el derecho de modificar las condiciones sin previo aviso.
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-chevron-right text-primary me-2"></i>
-                                El uso indebido o fraudulento del sistema puede implicar la suspensión de la cuenta.
-                            </li>
-                        </ul>
-                    </div>
+<h2 class="h4 mt-4">2. Registro y Cuenta</h2>
+<p>Para utilizar el Servicio, el Usuario debe registrarse proporcionando informacion veridica, exacta y actualizada. El Usuario es responsable de mantener la confidencialidad de sus credenciales y de toda actividad realizada bajo su cuenta. Debe notificar inmediatamente a OBYRA cualquier uso no autorizado.</p>
+<p>El Usuario declara ser mayor de edad (18 anos) y tener capacidad legal para contratar conforme a la legislacion argentina.</p>
 
-                    <hr class="my-4">
+<h2 class="h4 mt-4">3. Planes, Precios y Pagos</h2>
+<p>OBYRA ofrece distintos planes de suscripcion (incluyendo un plan de prueba gratuito) con caracteristicas y limites especificos. Los precios vigentes se publican en el sitio y pueden ser modificados con preaviso de 30 dias a los Usuarios activos.</p>
+<p>Los pagos se procesan a traves de pasarelas de pago de terceros (Mercado Pago u otros). El Usuario autoriza el cobro automatico recurrente segun el plan contratado. La falta de pago habilita a OBYRA a suspender o cancelar el acceso al Servicio.</p>
+<p>Las facturas se emiten en pesos argentinos (ARS), incluyen los impuestos aplicables y se entregan electronicamente al email registrado.</p>
 
-                    <div class="mb-4">
-                        <h4><i class="fas fa-phone text-success me-2"></i>Contacto</h4>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="card bg-light border-0">
-                                    <div class="card-body">
-                                        <h6><i class="fas fa-envelope text-primary me-2"></i>Email</h6>
-                                        <p class="mb-0">
-                                            <a href="mailto:info@obyra.com.ar" class="text-decoration-none">
-                                                info@obyra.com.ar
-                                            </a>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="card bg-light border-0">
-                                    <div class="card-body">
-                                        <h6><i class="fab fa-whatsapp text-success me-2"></i>WhatsApp</h6>
-                                        <p class="mb-0">
-                                            <a href="https://wa.me/5491173685175" class="text-decoration-none" target="_blank">
-                                                +54 9 11 7368-5175
-                                            </a>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mt-3">
-                            <div class="card bg-light border-0">
-                                <div class="card-body">
-                                    <h6><i class="fas fa-map-marker-alt text-danger me-2"></i>Dirección</h6>
-                                    <p class="mb-0">Caseros, Provincia de Buenos Aires, Argentina</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+<h2 class="h4 mt-4">4. Periodo de Prueba y Cancelacion</h2>
+<p>El periodo de prueba gratuito tiene una duracion limitada definida en el plan. Al finalizar, el Usuario podra contratar un plan pago o su acceso quedara restringido.</p>
+<p>El Usuario puede cancelar su suscripcion en cualquier momento desde su panel. La cancelacion surte efecto al finalizar el periodo facturado en curso. No se realizan reembolsos por periodos parciales, salvo lo dispuesto por la legislacion vigente.</p>
 
-                    <div class="text-center mt-4">
-                        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-primary">
-                            <i class="fas fa-arrow-left me-2"></i>Volver al Dashboard
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<h2 class="h4 mt-4">5. Uso Aceptable</h2>
+<p>El Usuario se compromete a utilizar el Servicio conforme a la ley, la moral y las buenas costumbres. Queda prohibido:</p>
+<ul>
+    <li>Utilizar el Servicio para fines ilicitos o no autorizados.</li>
+    <li>Cargar contenido que infrinja derechos de propiedad intelectual de terceros.</li>
+    <li>Intentar acceder sin autorizacion a sistemas, datos de otros Usuarios o realizar ingenieria inversa.</li>
+    <li>Sobrecargar, danar o interferir con el funcionamiento del Servicio.</li>
+    <li>Compartir credenciales con terceros ajenos a la Organizacion.</li>
+</ul>
+
+<h2 class="h4 mt-4">6. Propiedad Intelectual</h2>
+<p>El Servicio, su codigo fuente, diseno, marcas, logos y materiales son propiedad exclusiva de OBYRA y estan protegidos por las leyes argentinas e internacionales de propiedad intelectual. Su uso no otorga derechos de propiedad alguno al Usuario, mas alla del derecho de uso conforme a estos Terminos.</p>
+<p>El Contenido del Usuario es y permanece de su exclusiva propiedad. El Usuario otorga a OBYRA una licencia limitada, no exclusiva, para almacenar, procesar y mostrar dicho contenido con el unico fin de prestar el Servicio.</p>
+
+<h2 class="h4 mt-4">7. Disponibilidad y Soporte</h2>
+<p>OBYRA realiza esfuerzos razonables para mantener el Servicio disponible 24/7, pero no garantiza una disponibilidad ininterrumpida. Pueden existir cortes programados por mantenimiento, los cuales seran notificados con antelacion cuando sea posible.</p>
+<p>El soporte tecnico se brinda por email a <a href="mailto:soporte@obyra.com.ar">soporte@obyra.com.ar</a> en horarios habiles, segun el plan contratado.</p>
+
+<h2 class="h4 mt-4">8. Limitacion de Responsabilidad</h2>
+<p>El Servicio se provee "tal cual" y "segun disponibilidad". OBYRA no garantiza que el Servicio este libre de errores ni que se ajuste a las necesidades especificas del Usuario.</p>
+<p>En ningun caso OBYRA sera responsable por danos indirectos, lucro cesante, perdida de datos, perdida de oportunidades comerciales o cualquier otro dano consecuente derivado del uso o imposibilidad de uso del Servicio. La responsabilidad maxima de OBYRA, en cualquier caso, no excedera el monto efectivamente pagado por el Usuario en los ultimos 12 meses.</p>
+
+<h2 class="h4 mt-4">9. Backup y Conservacion de Datos</h2>
+<p>OBYRA realiza copias de seguridad periodicas del Contenido del Usuario, sin embargo, el Usuario es responsable de mantener sus propias copias de respaldo. Tras la cancelacion de la cuenta, los datos seran conservados por un periodo de 30 dias para permitir su exportacion, luego de lo cual seran eliminados de forma irreversible.</p>
+
+<h2 class="h4 mt-4">10. Modificaciones</h2>
+<p>OBYRA se reserva el derecho de modificar estos Terminos en cualquier momento. Las modificaciones sustanciales seran notificadas al Usuario por email o mediante aviso en la plataforma con al menos 15 dias de anticipacion. El uso continuado del Servicio tras la entrada en vigencia implica aceptacion de los nuevos Terminos.</p>
+
+<h2 class="h4 mt-4">11. Suspension y Terminacion</h2>
+<p>OBYRA podra suspender o terminar el acceso al Servicio, total o parcialmente, en caso de incumplimiento de estos Terminos, falta de pago, uso fraudulento o por orden judicial. El Usuario sera notificado salvo en casos de urgencia o cuando la notificacion comprometa investigaciones legales.</p>
+
+<h2 class="h4 mt-4">12. Ley Aplicable y Jurisdiccion</h2>
+<p>Estos Terminos se rigen por las leyes de la Republica Argentina. Para cualquier controversia derivada de la interpretacion o aplicacion de los mismos, las partes se someten a la jurisdiccion exclusiva de los Tribunales Ordinarios de la Ciudad Autonoma de Buenos Aires, renunciando a cualquier otro fuero o jurisdiccion que pudiera corresponderles.</p>
+
+<h2 class="h4 mt-4">13. Contacto</h2>
+<p>Cualquier consulta, reclamo o notificacion debe dirigirse a:</p>
+<ul>
+    <li><strong>OBYRA</strong></li>
+    <li>Email: <a href="mailto:info@obyra.com.ar">info@obyra.com.ar</a></li>
+    <li>WhatsApp: <a href="https://wa.me/5491173685175">+54 9 11 7368-5175</a></li>
+    <li>Sitio web: <a href="https://www.obyra.com.ar">www.obyra.com.ar</a></li>
+</ul>
 {% endblock %}

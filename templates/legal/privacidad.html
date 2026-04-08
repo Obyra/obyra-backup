@@ -1,116 +1,98 @@
-{% extends "base.html" %}
+{% extends "legal/_base_legal.html" %}
+{% block title %}Politica de Privacidad - OBYRA{% endblock %}
 
-{% block title %}Política de Privacidad - OBYRA IA{% endblock %}
+{% block legal_content %}
+<h1 class="mb-4">Politica de Privacidad</h1>
 
-{% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header">
-                    <h1 class="h3 mb-0">
-                        <i class="fas fa-shield-alt me-2"></i>Política de Privacidad
-                    </h1>
-                </div>
-                <div class="card-body">
-                    <div class="mb-4">
-                        <p class="lead">En OBYRA IA valoramos tu privacidad:</p>
-                    </div>
+<p>En <strong>OBYRA</strong> respetamos y protegemos la privacidad de nuestros Usuarios. Esta Politica describe que datos personales recopilamos, con que finalidad, como los protegemos y cuales son los derechos del Usuario, en cumplimiento de la <strong>Ley 25.326 de Proteccion de Datos Personales</strong> de la Republica Argentina y normativa concordante.</p>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-database text-primary me-2"></i>Información que Guardamos</h5>
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle me-2"></i>
-                            Guardamos únicamente la información necesaria para operar la plataforma (nombre, mail, obras activas, usuarios, etc.).
-                        </div>
-                    </div>
+<h2 class="h4 mt-4">1. Responsable del Tratamiento</h2>
+<p>El responsable del tratamiento de los datos personales recopilados a traves del Servicio es <strong>OBYRA</strong>, con domicilio en Caseros, Provincia de Buenos Aires, Republica Argentina. Para cualquier consulta relacionada con esta Politica o el ejercicio de sus derechos, puede contactarnos a <a href="mailto:info@obyra.com.ar">info@obyra.com.ar</a>.</p>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-user-shield text-success me-2"></i>Protección de Datos</h5>
-                        <ul class="list-unstyled ps-4">
-                            <li class="mb-2">
-                                <i class="fas fa-chevron-right text-primary me-2"></i>
-                                No compartimos tu información con terceros, salvo requerimiento legal.
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-chevron-right text-primary me-2"></i>
-                                Protegemos tus datos con buenas prácticas de seguridad y encriptación.
-                            </li>
-                        </ul>
-                    </div>
+<h2 class="h4 mt-4">2. Datos que Recopilamos</h2>
+<p>Recopilamos los siguientes tipos de datos personales:</p>
+<ul>
+    <li><strong>Datos de registro:</strong> nombre, apellido, email, telefono, contrasena (almacenada en forma encriptada), nombre de la empresa, CUIT, direccion.</li>
+    <li><strong>Datos de uso:</strong> obras creadas, presupuestos, inventarios, equipos, fichadas, documentos cargados.</li>
+    <li><strong>Datos tecnicos:</strong> direccion IP, tipo de navegador, sistema operativo, paginas visitadas, fecha y hora de acceso.</li>
+    <li><strong>Datos de pago:</strong> los datos de tarjeta o medio de pago son procesados directamente por nuestras pasarelas (Mercado Pago u otros) y no son almacenados en nuestros servidores.</li>
+    <li><strong>Datos de geolocalizacion:</strong> en el modulo de fichadas, con consentimiento expreso del Usuario para validar la presencia en obra.</li>
+</ul>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-trash-alt text-warning me-2"></i>Eliminación de Datos</h5>
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Podés solicitar la eliminación de tus datos en cualquier momento escribiendo a 
-                            <strong>soporte@obyra.com.ar</strong>
-                        </div>
-                    </div>
+<h2 class="h4 mt-4">3. Finalidad del Tratamiento</h2>
+<p>Los datos personales recopilados se utilizan para:</p>
+<ul>
+    <li>Prestar el Servicio contratado y permitir el funcionamiento de la plataforma.</li>
+    <li>Procesar pagos y emitir facturas.</li>
+    <li>Brindar soporte tecnico y comunicarnos con el Usuario.</li>
+    <li>Enviar notificaciones operativas (alertas, recordatorios, vencimientos).</li>
+    <li>Mejorar el Servicio mediante analisis estadisticos agregados y anonimos.</li>
+    <li>Cumplir con obligaciones legales, fiscales y regulatorias.</li>
+    <li>Enviar comunicaciones comerciales relacionadas con OBYRA, las cuales el Usuario puede desactivar en cualquier momento.</li>
+</ul>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-cookie-bite text-info me-2"></i>Cookies</h5>
-                        <div class="alert alert-light border">
-                            <i class="fas fa-cookie me-2"></i>
-                            Utilizamos cookies mínimas para mejorar la experiencia de usuario.
-                        </div>
-                    </div>
+<h2 class="h4 mt-4">4. Base Legal del Tratamiento</h2>
+<p>El tratamiento de los datos personales se realiza con base en:</p>
+<ul>
+    <li>El consentimiento expreso del Usuario otorgado al registrarse.</li>
+    <li>La ejecucion del contrato de prestacion de servicios.</li>
+    <li>El cumplimiento de obligaciones legales aplicables.</li>
+    <li>El interes legitimo de OBYRA en mejorar y proteger el Servicio.</li>
+</ul>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-lock text-dark me-2"></i>Seguridad</h5>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="card bg-light border-0 h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-key fa-2x text-primary mb-2"></i>
-                                        <h6>Encriptación</h6>
-                                        <p class="small text-muted">Datos protegidos con encriptación avanzada</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="card bg-light border-0 h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-server fa-2x text-success mb-2"></i>
-                                        <h6>Servidores Seguros</h6>
-                                        <p class="small text-muted">Infraestructura con estándares de seguridad</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+<h2 class="h4 mt-4">5. Conservacion de los Datos</h2>
+<p>Los datos personales se conservan mientras la cuenta del Usuario permanezca activa. Tras la cancelacion, los datos seran conservados por un periodo de 30 dias para permitir su eventual recuperacion o exportacion, luego de lo cual seran eliminados de forma irreversible, salvo aquellos que deban conservarse por obligacion legal (por ejemplo, datos contables y fiscales por el plazo de Ley).</p>
 
-                    <div class="mb-4">
-                        <h5><i class="fas fa-envelope text-primary me-2"></i>Contacto sobre Privacidad</h5>
-                        <p>Si tenés preguntas sobre esta política de privacidad, contactanos en:</p>
-                        <div class="card bg-light border-0">
-                            <div class="card-body">
-                                <p class="mb-1">
-                                    <i class="fas fa-envelope me-2"></i>
-                                    <strong>Email:</strong> 
-                                    <a href="mailto:soporte@obyra.com.ar" class="text-decoration-none">
-                                        soporte@obyra.com.ar
-                                    </a>
-                                </p>
-                                <p class="mb-0">
-                                    <i class="fab fa-whatsapp me-2"></i>
-                                    <strong>WhatsApp:</strong> 
-                                    <a href="https://wa.me/5491173685175" class="text-decoration-none" target="_blank">
-                                        +54 9 11 7368-5175
-                                    </a>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+<h2 class="h4 mt-4">6. Comparticion con Terceros</h2>
+<p>OBYRA <strong>no vende, alquila ni comercializa</strong> datos personales. Los datos pueden ser compartidos con los siguientes terceros, exclusivamente para la prestacion del Servicio:</p>
+<ul>
+    <li><strong>Proveedores de infraestructura:</strong> Railway, Cloudflare R2 (almacenamiento), Sentry (monitoreo de errores).</li>
+    <li><strong>Servicios de email transaccional:</strong> Resend.</li>
+    <li><strong>Pasarelas de pago:</strong> Mercado Pago.</li>
+    <li><strong>Autoridades competentes:</strong> en cumplimiento de requerimientos legales o judiciales.</li>
+</ul>
+<p>Todos los proveedores cumplen estandares de seguridad y privacidad equivalentes o superiores a los exigidos por la legislacion argentina.</p>
 
-                    <div class="text-center mt-4">
-                        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-primary">
-                            <i class="fas fa-arrow-left me-2"></i>Volver al Dashboard
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<h2 class="h4 mt-4">7. Transferencias Internacionales</h2>
+<p>Algunos de los proveedores con los que trabajamos pueden almacenar datos en servidores ubicados fuera de la Republica Argentina. En todos los casos, dichas transferencias se realizan a paises con un nivel de proteccion adecuado o bajo clausulas contractuales que garantizan la proteccion equivalente a la legislacion argentina.</p>
+
+<h2 class="h4 mt-4">8. Seguridad de los Datos</h2>
+<p>OBYRA implementa medidas tecnicas y organizativas razonables para proteger los datos personales contra acceso no autorizado, perdida, alteracion o divulgacion, incluyendo:</p>
+<ul>
+    <li>Conexiones cifradas (HTTPS/TLS) en toda la plataforma.</li>
+    <li>Contrasenas almacenadas con algoritmos de hashing seguros.</li>
+    <li>Aislamiento multi-tenant a nivel de aplicacion y base de datos.</li>
+    <li>Copias de seguridad periodicas.</li>
+    <li>Monitoreo continuo de seguridad.</li>
+    <li>Acceso restringido a datos sensibles por parte del personal autorizado.</li>
+</ul>
+
+<h2 class="h4 mt-4">9. Derechos del Usuario (ARCO)</h2>
+<p>Conforme a la Ley 25.326, el Usuario tiene los siguientes derechos:</p>
+<ul>
+    <li><strong>Acceso:</strong> conocer que datos personales se tratan.</li>
+    <li><strong>Rectificacion:</strong> solicitar la correccion de datos inexactos o incompletos.</li>
+    <li><strong>Cancelacion (Supresion):</strong> solicitar la eliminacion de los datos personales.</li>
+    <li><strong>Oposicion:</strong> oponerse al tratamiento de los datos en determinados casos.</li>
+</ul>
+<p>Para ejercer estos derechos, el Usuario puede enviar una solicitud por email a <a href="mailto:info@obyra.com.ar">info@obyra.com.ar</a> indicando el derecho que desea ejercer, su identificacion y la informacion relevante. OBYRA respondera en un plazo maximo de 10 dias habiles.</p>
+<p>El Usuario tambien puede presentar denuncias ante la <strong>Agencia de Acceso a la Informacion Publica (AAIP)</strong>, organismo de control de la Ley de Proteccion de Datos Personales: <a href="https://www.argentina.gob.ar/aaip">www.argentina.gob.ar/aaip</a>.</p>
+
+<h2 class="h4 mt-4">10. Cookies y Tecnologias Similares</h2>
+<p>OBYRA utiliza cookies tecnicas necesarias para el funcionamiento del Servicio (autenticacion, sesion, preferencias) y cookies analiticas opcionales para mejorar la experiencia del Usuario. El Usuario puede configurar su navegador para rechazar cookies, pero esto puede afectar el correcto funcionamiento de la plataforma. Para mas informacion, ver nuestra <a href="{{ url_for('legal.cookies') }}">Politica de Cookies</a>.</p>
+
+<h2 class="h4 mt-4">11. Menores de Edad</h2>
+<p>El Servicio esta dirigido exclusivamente a personas mayores de 18 anos. OBYRA no recopila intencionalmente datos personales de menores de edad. Si tomamos conocimiento de haber recopilado datos de un menor sin el consentimiento de sus padres o tutores, los eliminaremos de forma inmediata.</p>
+
+<h2 class="h4 mt-4">12. Modificaciones</h2>
+<p>OBYRA podra modificar esta Politica en cualquier momento. Las modificaciones sustanciales seran notificadas al Usuario por email o mediante aviso en la plataforma con al menos 15 dias de anticipacion a su entrada en vigencia.</p>
+
+<h2 class="h4 mt-4">13. Contacto</h2>
+<p>Para cualquier consulta sobre esta Politica de Privacidad o el tratamiento de sus datos personales, contactenos a:</p>
+<ul>
+    <li><strong>OBYRA</strong></li>
+    <li>Email: <a href="mailto:info@obyra.com.ar">info@obyra.com.ar</a></li>
+    <li>WhatsApp: <a href="https://wa.me/5491173685175">+54 9 11 7368-5175</a></li>
+    <li>Sitio web: <a href="https://www.obyra.com.ar">www.obyra.com.ar</a></li>
+</ul>
 {% endblock %}

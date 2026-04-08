@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 900px;">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-4 p-md-5">
+            <div class="text-muted small mb-3">
+                Vigencia: {{ vigencia.strftime('%d/%m/%Y') }}
+            </div>
+            {% block legal_content %}{% endblock %}
+
+            <hr class="my-4">
+            <div class="text-muted small">
+                Si tenés consultas sobre este documento, escribinos a
+                <a href="mailto:info@obyra.com.ar">info@obyra.com.ar</a>.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

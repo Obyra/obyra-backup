@@ -1118,14 +1118,12 @@ except ImportError as e:
 
 _refresh_login_view()
 
-# --- Public legal pages fallbacks ---------------------------------------
-if 'terminos' not in app.view_functions:
-    app.add_url_rule('/terminos', endpoint='terminos',
-                     view_func=lambda: render_template('legal/terminos.html'))
-
-if 'privacidad' not in app.view_functions:
-    app.add_url_rule('/privacidad', endpoint='privacidad',
-                     view_func=lambda: render_template('legal/privacidad.html'))
+# --- Public legal pages (Terminos, Privacidad, Cookies) ----------------
+try:
+    from blueprint_legal import legal_bp
+    app.register_blueprint(legal_bp)
+except Exception as exc:
+    app.logger.warning("blueprint_legal no disponible: %s", exc)
 
 # --- Manual de usuario ---
 if 'manual' not in app.view_functions:
