@@ -91,10 +91,10 @@ PLAN_FEATURES = {
         'features': set(_STANDARD_FEATURES),
     },
     'premium': {
-        'nombre': 'Plan Premium',
+        'nombre': 'OBYRA Profesional',
         'precio_usd': 399,
-        'max_obras': 5,
-        'max_usuarios': 15,
+        'max_obras': 999,
+        'max_usuarios': 999,
         'duracion_dias': 365,
         'contract_type': 'subscription',
         'features': set(_PREMIUM_FEATURES),

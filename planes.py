@@ -144,13 +144,13 @@ PLANES_CONFIG = {
         'features': FEATURES_STANDARD
     },
     'premium': {
-        'nombre': 'Plan Premium',
+        'nombre': 'OBYRA Profesional',
         'precio_usd': Decimal('399.00'),
         'precio_mensual_usd': Decimal('399.00'),
-        'max_usuarios': 15,
-        'max_obras': 5,
+        'max_usuarios': 999,
+        'max_obras': 999,
         'duracion_dias': 365,
-        'descripcion': 'Para empresas en crecimiento',
+        'descripcion': 'Acceso completo sin restricciones',
         'features': FEATURES_STANDARD + FEATURES_PREMIUM_EXTRA,
         'features_new': FEATURES_PREMIUM_EXTRA,
         'popular': True
