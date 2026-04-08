@@ -713,7 +713,7 @@
     <script src="{{ url_for('static', filename='js/indexed-db.js') }}"></script>
     <script src="{{ url_for('static', filename='js/offline-manager.js') }}"></script>
 
-    <!-- Forzar actualización del Service Worker a v5.0.0 -->
+    <!-- Chequear updates del SW en cada navegacion (auto-reload manejado por offline-manager) -->
     <script>
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistration().then(function(reg) {
@@ -722,15 +722,6 @@
                 if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
             }
         });
-        if (window.caches) {
-            caches.keys().then(function(names) {
-                names.forEach(function(name) {
-                    if (name.startsWith('obyra-') && name.indexOf('v5.0.0') === -1) {
-                        caches.delete(name);
-                    }
-                });
-            });
-        }
     }
     </script>
 </body>

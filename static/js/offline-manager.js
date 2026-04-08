@@ -58,10 +58,24 @@ const OfflineManager = {
                     const newWorker = registration.installing;
                     newWorker.addEventListener('statechange', () => {
                         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            this.showUpdateNotification();
+                            // Hay una version nueva esperando: forzar activacion inmediata
+                            console.log('[Offline] Nueva version del SW detectada, activando...');
+                            newWorker.postMessage({ type: 'SKIP_WAITING' });
                         }
                     });
                 });
+
+                // Cuando el nuevo SW toma control, recargar la pagina una sola vez
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (refreshing) return;
+                    refreshing = true;
+                    console.log('[Offline] SW actualizado, recargando pagina...');
+                    window.location.reload();
+                });
+
+                // Chequear updates periodicamente (cada 30 min) para usuarios con sesion larga
+                setInterval(() => registration.update().catch(() => {}), 30 * 60 * 1000);
 
                 this.serviceWorkerReady = true;
             } catch (error) {
