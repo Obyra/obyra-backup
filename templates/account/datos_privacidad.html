@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Datos y Privacidad - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <h1 class="h3 mb-4"><i class="fas fa-shield-alt me-2 text-primary"></i>Datos y Privacidad</h1>
+            <p class="text-muted">Gestiona tus datos personales y ejercé tus derechos conforme a la Ley 25.326 de Proteccion de Datos Personales.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endwith %}
+
+            <!-- Exportar datos -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0"><i class="fas fa-download text-primary me-2"></i>Exportar tus datos</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Descargá un archivo JSON con todos tus datos personales: perfil, datos de facturacion,
+                        organizacion, obras y suscripciones. Es tu derecho de portabilidad de datos.
+                    </p>
+                    <a href="{{ url_for('account.exportar_datos') }}" class="btn btn-primary">
+                        <i class="fas fa-file-download me-1"></i>Descargar mis datos (JSON)
+                    </a>
+                </div>
+            </div>
+
+            <!-- Cambiar contraseña -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0"><i class="fas fa-key text-warning me-2"></i>Cambiar contraseña</h5>
+                </div>
+                <div class="card-body">
+                    <form id="formChangePassword" method="POST" action="{{ url_for('account.cambiar_password') }}">
+                        {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                        <div class="mb-3">
+                            <label class="form-label">Contraseña actual</label>
+                            <input type="password" name="password_actual" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nueva contraseña</label>
+                            <input type="password" name="password_nueva" class="form-control" minlength="6" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirmar nueva contraseña</label>
+                            <input type="password" name="password_confirmar" class="form-control" minlength="6" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-key me-1"></i>Cambiar contraseña
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Eliminar cuenta -->
+            <div class="card border-0 shadow-sm border-start border-danger border-4">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0 text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Eliminar mi cuenta</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Esta accion es <strong>irreversible</strong>. Tu acceso a OBYRA queda cancelado inmediatamente
+                        y tus datos personales (nombre, email, telefono) son anonimizados. El historial transaccional
+                        (facturas, suscripciones) se conserva por obligaciones contables y fiscales.
+                    </p>
+                    <div class="alert alert-warning small">
+                        <strong>Antes de eliminar:</strong> exportá tus datos arriba si querés conservar una copia.
+                    </div>
+                    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalEliminar">
+                        <i class="fas fa-trash me-1"></i>Eliminar mi cuenta
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal eliminar -->
+<div class="modal fade" id="modalEliminar" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="POST" action="{{ url_for('account.eliminar_cuenta') }}" class="modal-content">
+            {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Confirmar eliminacion</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Esta accion no se puede deshacer.</strong></p>
+                <p class="text-muted small">
+                    Tus datos personales seran anonimizados, perderas acceso inmediato a la plataforma
+                    y no podras recuperar la cuenta.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">Tu contraseña actual</label>
+                    <input type="password" name="password" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Para confirmar, escribi: <code>ELIMINAR MI CUENTA</code></label>
+                    <input type="text" name="confirmacion" class="form-control" placeholder="ELIMINAR MI CUENTA" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-danger">
+                    <i class="fas fa-trash me-1"></i>Eliminar definitivamente
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Convertir cambiar password (que devuelve JSON) a flash message
+document.getElementById('formChangePassword').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var formData = new FormData(this);
+    try {
+        var resp = await fetch(this.action, { method: 'POST', body: formData });
+        var data = await resp.json();
+        alert(data.message || (data.success ? 'OK' : 'Error'));
+        if (data.success) this.reset();
+    } catch (err) {
+        alert('Error al cambiar contraseña');
+    }
+});
+</script>
+{% endblock %}

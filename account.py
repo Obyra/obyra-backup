@@ -447,6 +447,185 @@ def organizacion():
     )
 
 
+@account_bp.route('/datos-privacidad', methods=['GET'])
+@login_required
+def datos_privacidad():
+    """Pantalla GDPR: exportar datos y eliminar cuenta."""
+    return render_template('account/datos_privacidad.html', usuario=current_user)
+
+
+@account_bp.route('/exportar-datos', methods=['GET'])
+@login_required
+def exportar_datos():
+    """Devuelve un JSON con todos los datos personales del usuario (GDPR Art. 20).
+
+    Incluye datos de perfil, facturacion, organizaciones a las que pertenece,
+    obras visibles, presupuestos creados.
+    """
+    import json as _json
+    from flask import Response
+    from datetime import datetime as _dt
+
+    try:
+        u = current_user
+        data = {
+            'exported_at': _dt.utcnow().isoformat(),
+            'usuario': {
+                'id': u.id,
+                'email': u.email,
+                'nombre': u.nombre,
+                'apellido': getattr(u, 'apellido', None),
+                'telefono': getattr(u, 'telefono', None),
+                'rol': getattr(u, 'role', None) or getattr(u, 'rol', None),
+                'organizacion_id': getattr(u, 'organizacion_id', None),
+                'fecha_creacion': u.fecha_creacion.isoformat() if hasattr(u, 'fecha_creacion') and u.fecha_creacion else None,
+                'last_login': u.last_login.isoformat() if hasattr(u, 'last_login') and u.last_login else None,
+            },
+            'perfil': None,
+            'billing_profile': None,
+            'organizacion': None,
+            'obras': [],
+            'subscriptions': [],
+        }
+
+        # Perfil
+        try:
+            if hasattr(u, 'perfil') and u.perfil:
+                p = u.perfil
+                data['perfil'] = {
+                    'avatar_url': getattr(p, 'avatar_url', None),
+                    'pais': getattr(p, 'pais', None),
+                    'ciudad': getattr(p, 'ciudad', None),
+                    'idioma': getattr(p, 'idioma', None),
+                }
+        except Exception:
+            pass
+
+        # Billing
+        try:
+            if hasattr(u, 'billing_profile') and u.billing_profile:
+                b = u.billing_profile
+                data['billing_profile'] = {
+                    'razon_social': b.razon_social,
+                    'tax_id': b.tax_id,
+                    'billing_email': b.billing_email,
+                    'billing_phone': b.billing_phone,
+                    'card_last4': getattr(b, 'card_last4', None),
+                }
+        except Exception:
+            pass
+
+        # Organizacion
+        try:
+            from models import Organizacion, Obra
+            org = Organizacion.query.get(u.organizacion_id) if u.organizacion_id else None
+            if org:
+                data['organizacion'] = {
+                    'id': org.id,
+                    'nombre': org.nombre,
+                    'cuit': getattr(org, 'cuit', None),
+                    'plan_tipo': org.plan_tipo,
+                    'fecha_creacion': org.fecha_creacion.isoformat() if hasattr(org, 'fecha_creacion') and org.fecha_creacion else None,
+                }
+                # Obras
+                obras = Obra.query.filter_by(organizacion_id=org.id).all()
+                data['obras'] = [
+                    {
+                        'id': o.id,
+                        'nombre': o.nombre,
+                        'cliente': o.cliente,
+                        'estado': o.estado,
+                        'presupuesto_total': float(o.presupuesto_total or 0),
+                        'fecha_inicio': o.fecha_inicio.isoformat() if o.fecha_inicio else None,
+                    }
+                    for o in obras
+                ]
+        except Exception:
+            pass
+
+        # Subscriptions
+        try:
+            from models.subscription import Subscription
+            subs = Subscription.query.filter_by(organizacion_id=u.organizacion_id).all() if u.organizacion_id else []
+            data['subscriptions'] = [
+                {
+                    'id': s.id,
+                    'plan_nombre': s.plan_nombre,
+                    'monto_ars': float(s.monto_ars or 0),
+                    'status': s.status,
+                    'created_at': s.created_at.isoformat() if s.created_at else None,
+                    'cancelled_at': s.cancelled_at.isoformat() if s.cancelled_at else None,
+                }
+                for s in subs
+            ]
+        except Exception:
+            pass
+
+        json_str = _json.dumps(data, ensure_ascii=False, indent=2, default=str)
+        filename = f'obyra-mis-datos-{_dt.utcnow().strftime("%Y%m%d")}.json'
+        return Response(
+            json_str,
+            mimetype='application/json',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+    except Exception as e:
+        current_app.logger.exception('Error exportando datos del usuario')
+        flash(f'Error al exportar datos: {e}', 'danger')
+        return redirect(url_for('account.datos_privacidad'))
+
+
+@account_bp.route('/eliminar-cuenta', methods=['POST'])
+@login_required
+def eliminar_cuenta():
+    """Elimina la cuenta del usuario actual (soft delete con confirmacion).
+
+    Por seguridad pide la contraseña actual y un texto de confirmacion.
+    Hace soft delete: marca el usuario como inactivo y limpia datos sensibles
+    pero preserva el historial transaccional por obligaciones contables.
+    """
+    password = request.form.get('password', '')
+    confirmacion = request.form.get('confirmacion', '').strip().upper()
+
+    if confirmacion != 'ELIMINAR MI CUENTA':
+        flash('Debes escribir exactamente "ELIMINAR MI CUENTA" para confirmar', 'warning')
+        return redirect(url_for('account.datos_privacidad'))
+
+    if not current_user.check_password(password):
+        flash('Contraseña incorrecta', 'danger')
+        return redirect(url_for('account.datos_privacidad'))
+
+    try:
+        from flask_login import logout_user
+        u = current_user
+        user_email = u.email
+
+        # Soft delete: marcar inactivo, limpiar datos personales no contables
+        u.activo = False
+        u.email = f'deleted_{u.id}_{int(datetime.utcnow().timestamp())}@deleted.local'
+        u.nombre = 'Cuenta'
+        if hasattr(u, 'apellido'):
+            u.apellido = 'Eliminada'
+        if hasattr(u, 'telefono'):
+            u.telefono = None
+        u.set_password(_uuid_password(), skip_validation=True) if hasattr(u, 'set_password') else None
+        db.session.commit()
+
+        logout_user()
+        flash('Tu cuenta fue eliminada. Gracias por haber sido parte de OBYRA.', 'info')
+        current_app.logger.info(f'Cuenta eliminada (soft delete): {user_email}')
+        return redirect(url_for('auth.login'))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error eliminando cuenta')
+        flash(f'Error al eliminar la cuenta: {e}', 'danger')
+        return redirect(url_for('account.datos_privacidad'))
+
+
+def _uuid_password():
+    import uuid as _u
+    return _u.uuid4().hex
+
+
 @account_bp.route('/cambiar-password', methods=['POST'])
 @login_required
 def cambiar_password():

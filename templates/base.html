@@ -441,6 +441,16 @@
                             <li><a class="dropdown-item" href="{{ url_for('account.facturacion') }}">
                                 <i class="fas fa-file-invoice-dollar me-2"></i>Facturación
                             </a></li>
+                            {% if has_endpoint('mp_subs.ver_subscription') %}
+                            <li><a class="dropdown-item" href="{{ url_for('mp_subs.ver_subscription') }}">
+                                <i class="fas fa-receipt me-2"></i>Mi Suscripción
+                            </a></li>
+                            {% endif %}
+                            {% endif %}
+                            {% if has_endpoint('account.datos_privacidad') %}
+                            <li><a class="dropdown-item" href="{{ url_for('account.datos_privacidad') }}">
+                                <i class="fas fa-shield-alt me-2"></i>Datos y Privacidad
+                            </a></li>
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}" onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage({type:'LOGOUT'})}">
