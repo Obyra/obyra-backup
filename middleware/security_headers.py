@@ -87,8 +87,8 @@ def setup_security_headers(app):
             "https://www.google.com "
             "https://maps.google.com "
             "https://maps.googleapis.com",
-            # Formularios: solo a self
-            "form-action 'self'",
+            # Formularios: self + Mercado Pago (para subscripciones via Preapproval)
+            "form-action 'self' https://www.mercadopago.com.ar https://www.mercadopago.com https://api.mercadopago.com",
             # Base URI: solo self
             "base-uri 'self'",
             # Object/embed: ninguno (previene Flash, etc.)
