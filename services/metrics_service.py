@@ -171,6 +171,42 @@ def get_business_metrics() -> Dict[str, Any]:
     return metrics
 
 
+def get_subscriptions_detalle(limit: int = 200):
+    """Devuelve el detalle de todas las suscripciones con datos de la org."""
+    from extensions import db
+    from models.subscription import Subscription
+    from models import Organizacion
+
+    try:
+        rows = (
+            db.session.query(Subscription, Organizacion)
+            .outerjoin(Organizacion, Subscription.organizacion_id == Organizacion.id)
+            .order_by(Subscription.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        result = []
+        for sub, org in rows:
+            result.append({
+                'id': sub.id,
+                'organizacion': org.nombre if org else f'org#{sub.organizacion_id}',
+                'organizacion_id': sub.organizacion_id,
+                'plan': sub.plan_nombre or sub.plan_codigo,
+                'monto_ars': float(sub.monto_ars or 0),
+                'monto_formatted': '${:,.0f}'.format(float(sub.monto_ars or 0)),
+                'status': sub.status,
+                'mp_payer_email': sub.mp_payer_email or '-',
+                'mp_preapproval_id': sub.mp_preapproval_id or '-',
+                'created_at': sub.created_at.strftime('%d/%m/%Y %H:%M') if sub.created_at else '-',
+                'next_payment_date': sub.next_payment_date.strftime('%d/%m/%Y') if sub.next_payment_date else '-',
+                'cancelled_at': sub.cancelled_at.strftime('%d/%m/%Y') if sub.cancelled_at else None,
+            })
+        return result
+    except Exception as e:
+        logger.warning(f'Error obteniendo detalle suscripciones: {e}')
+        return []
+
+
 def get_cached_metrics() -> Dict[str, Any]:
     """
     Devuelve métricas con caché en Redis (TTL 5 min).

@@ -40,16 +40,19 @@ def _require_super_admin():
 def metrics_view():
     """Vista HTML de métricas para super admin."""
     _require_super_admin()
+    from services.metrics_service import get_subscriptions_detalle
     metrics = get_cached_metrics()
     organizaciones = get_organizaciones_detalle()
     usuarios = get_usuarios_detalle(limit=200)
     obras = get_obras_detalle(limit=200)
+    suscripciones = get_subscriptions_detalle(limit=200)
     return render_template(
         'admin/metrics.html',
         metrics=metrics,
         organizaciones=organizaciones,
         usuarios=usuarios,
         obras=obras,
+        suscripciones=suscripciones,
     )
 
 

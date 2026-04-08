@@ -103,6 +103,83 @@
     </div>
     {% endif %}
 
+    {# ========== TABLA DETALLE DE SUSCRIPCIONES ========== #}
+    {% if suscripciones %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="fas fa-list me-2 text-primary"></i>Detalle de Suscripciones ({{ suscripciones|length }})</h6>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary active" data-filter="all">Todas</button>
+                <button type="button" class="btn btn-outline-success" data-filter="authorized">Activas</button>
+                <button type="button" class="btn btn-outline-warning" data-filter="pending">Pendientes</button>
+                <button type="button" class="btn btn-outline-danger" data-filter="cancelled">Canceladas</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle" id="subs-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="small">Organizacion</th>
+                            <th class="small">Plan</th>
+                            <th class="small text-end">Monto</th>
+                            <th class="small">Email pagador</th>
+                            <th class="small">Estado</th>
+                            <th class="small">Creada</th>
+                            <th class="small">Proximo cobro</th>
+                            <th class="small">ID MP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in suscripciones %}
+                        <tr data-status="{{ s.status }}">
+                            <td><strong>{{ s.organizacion }}</strong></td>
+                            <td class="small">{{ s.plan }}</td>
+                            <td class="text-end fw-bold">{{ s.monto_formatted }}</td>
+                            <td class="small">{{ s.mp_payer_email }}</td>
+                            <td>
+                                {% if s.status == 'authorized' %}
+                                <span class="badge bg-success"><i class="fas fa-check me-1"></i>Activa</span>
+                                {% elif s.status == 'pending' %}
+                                <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pendiente</span>
+                                {% elif s.status == 'cancelled' %}
+                                <span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Cancelada</span>
+                                {% if s.cancelled_at %}<br><small class="text-muted">{{ s.cancelled_at }}</small>{% endif %}
+                                {% elif s.status == 'paused' %}
+                                <span class="badge bg-info">Pausada</span>
+                                {% else %}
+                                <span class="badge bg-light text-dark">{{ s.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="small">{{ s.created_at }}</td>
+                            <td class="small">{{ s.next_payment_date }}</td>
+                            <td class="small font-monospace text-muted">{{ s.mp_preapproval_id[:16] if s.mp_preapproval_id and s.mp_preapproval_id != '-' else '-' }}{% if s.mp_preapproval_id and s.mp_preapproval_id|length > 16 %}...{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.querySelectorAll('[data-filter]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var filter = this.dataset.filter;
+            document.querySelectorAll('[data-filter]').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            document.querySelectorAll('#subs-table tbody tr').forEach(function(row) {
+                if (filter === 'all' || row.dataset.status === filter) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    });
+    </script>
+    {% endif %}
+
     <!-- KPIs principales -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
