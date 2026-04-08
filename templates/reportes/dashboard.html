@@ -184,6 +184,82 @@
     </div>
     {% endif %}
 
+    <!-- Obras Finalizadas (Cierre Formal) -->
+    {% if cierre_kpis and cierre_kpis.total > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm border-start border-success border-4">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-flag-checkered text-success me-2"></i>Obras Finalizadas</h6>
+                    <a href="{{ url_for('cierre_obra.lista') }}" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-list me-1"></i>Ver todas
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-md-3 col-6 mb-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="h3 mb-0 text-success fw-bold">{{ cierre_kpis.mes_actual }}</div>
+                                <small class="text-muted">Este mes</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="h3 mb-0 text-primary fw-bold">{{ cierre_kpis.anio_actual }}</div>
+                                <small class="text-muted">Este año</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="h3 mb-0 fw-bold">{{ cierre_kpis.tiempo_promedio_dias }}d</div>
+                                <small class="text-muted">Tiempo prom. cierre</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="h3 mb-0 fw-bold {% if cierre_kpis.desvio_promedio > 0 %}text-danger{% elif cierre_kpis.desvio_promedio < 0 %}text-success{% endif %}">
+                                    {{ '{:+.1f}'.format(cierre_kpis.desvio_promedio) }}%
+                                </div>
+                                <small class="text-muted">Desvío promedio</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% if cierre_kpis.ultimas %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Obra</th>
+                                    <th>Cerrada</th>
+                                    <th class="text-end">Presupuesto</th>
+                                    <th class="text-end">Certificado</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in cierre_kpis.ultimas %}
+                                <tr>
+                                    <td><strong>{{ c.obra.nombre }}</strong></td>
+                                    <td><small>{{ c.fecha_cierre_definitivo.strftime('%d/%m/%Y') if c.fecha_cierre_definitivo else '-' }}</small></td>
+                                    <td class="text-end">{{ '$ {:,.0f}'.format(c.presupuesto_inicial|float) if c.presupuesto_inicial else '-' }}</td>
+                                    <td class="text-end">{{ '$ {:,.0f}'.format(c.monto_certificado|float) if c.monto_certificado else '-' }}</td>
+                                    <td>
+                                        <a href="{{ url_for('cierre_obra.detalle', cierre_id=c.id) }}" class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Gráficos Financieros -->
     <div class="row mb-4">
         {% if datos_financieros and datos_financieros.presupuesto_vs_real %}

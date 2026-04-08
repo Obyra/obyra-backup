@@ -376,6 +376,56 @@ def dashboard():
     # Datos financieros para gráficos
     datos_financieros = calcular_datos_financieros(obras_activas, org_id)
 
+    # KPIs de obras finalizadas (módulo cierre de obra)
+    cierre_kpis = {
+        'total': 0, 'mes_actual': 0, 'anio_actual': 0,
+        'tiempo_promedio_dias': 0, 'desvio_promedio': 0,
+        'ultimas': []
+    }
+    try:
+        from models.cierre_obra import CierreObra
+        from sqlalchemy import extract
+        hoy_dt = date.today()
+
+        base_q = CierreObra.query.filter(
+            CierreObra.organizacion_id == org_id,
+            CierreObra.estado == 'cerrado'
+        )
+        cierre_kpis['total'] = base_q.count()
+        cierre_kpis['mes_actual'] = base_q.filter(
+            extract('month', CierreObra.fecha_cierre_definitivo) == hoy_dt.month,
+            extract('year', CierreObra.fecha_cierre_definitivo) == hoy_dt.year
+        ).count()
+        cierre_kpis['anio_actual'] = base_q.filter(
+            extract('year', CierreObra.fecha_cierre_definitivo) == hoy_dt.year
+        ).count()
+
+        cierres_cerrados = base_q.filter(
+            CierreObra.fecha_cierre_definitivo.isnot(None),
+            CierreObra.fecha_inicio_cierre.isnot(None)
+        ).all()
+        if cierres_cerrados:
+            dias_total = sum(
+                max(0, (c.fecha_cierre_definitivo - c.fecha_inicio_cierre).days)
+                for c in cierres_cerrados
+            )
+            cierre_kpis['tiempo_promedio_dias'] = round(dias_total / len(cierres_cerrados), 1)
+
+            desvios = []
+            for c in cierres_cerrados:
+                if c.presupuesto_inicial and float(c.presupuesto_inicial) > 0 and c.monto_certificado is not None:
+                    pi = float(c.presupuesto_inicial)
+                    desvios.append(((float(c.monto_certificado) - pi) / pi) * 100)
+            if desvios:
+                cierre_kpis['desvio_promedio'] = round(sum(desvios) / len(desvios), 1)
+
+        cierre_kpis['ultimas'] = base_q.order_by(
+            desc(CierreObra.fecha_cierre_definitivo)
+        ).limit(5).all()
+    except Exception as e:
+        current_app.logger.warning(f"No se pudieron calcular KPIs de cierre: {e}")
+        db.session.rollback()
+
     # Entregas próximas de OC (próximos 7 días)
     entregas_proximas = []
     try:
@@ -407,6 +457,7 @@ def dashboard():
                          encargados_obra=encargados_obra,
                          datos_financieros=datos_financieros,
                          entregas_proximas=entregas_proximas,
+                         cierre_kpis=cierre_kpis,
                          fecha_hoy=date.today())
 
 
