@@ -447,6 +447,63 @@ def generar_preview_unificado(obra_id, desde, hasta):
     }
 
 
+def generar_liquidacion_desde_fichadas(obra_id, desde, hasta, notas=None, commit=True):
+    """Genera automaticamente una LiquidacionMO a partir de fichadas aprobadas.
+
+    Lee las fichadas del periodo + obra, agrupa por operario, calcula horas
+    contra la tarifa default de la obra y crea la liquidacion en un solo paso.
+    No requiere preview ni edicion manual.
+
+    Args:
+        obra_id: ID de la obra
+        desde, hasta: fechas del periodo (date)
+        notas: notas opcionales
+        commit: si True hace commit inmediato
+
+    Returns:
+        tuple (LiquidacionMO, dict con resumen) o (None, dict con error)
+    """
+    obra = Obra.query.get(obra_id)
+    if not obra:
+        return None, {'error': 'Obra no encontrada'}
+
+    tarifa_default = obtener_tarifa_default_obra(obra)
+    if tarifa_default <= 0:
+        return None, {'error': 'No se pudo determinar la tarifa hora. Configura el costo de mano de obra en el presupuesto.'}
+
+    operarios = buscar_operarios_obra(obra_id, desde, hasta)
+    if not operarios:
+        return None, {'error': 'No hay operarios con fichadas/avances en el periodo seleccionado'}
+
+    items_data = []
+    operarios_sin_horas = []
+    for uid, usuario in operarios.items():
+        fichada_data = calcular_horas_fichadas_operario(obra_id, uid, desde, hasta)
+        horas = fichada_data['total_horas']
+        if horas <= 0:
+            operarios_sin_horas.append(usuario.nombre_completo)
+            continue
+
+        monto = _q2(_decimal(horas) * tarifa_default)
+        items_data.append({
+            'operario_id': uid,
+            'horas_liquidadas': float(horas),
+            'tarifa_hora': float(tarifa_default),
+            'monto': float(monto),
+        })
+
+    if not items_data:
+        return None, {'error': 'Ningun operario tiene fichadas registradas en el periodo'}
+
+    liq = crear_liquidacion(obra_id, desde, hasta, items_data, notas=notas, commit=commit)
+    return liq, {
+        'operarios_liquidados': len(items_data),
+        'operarios_sin_horas': operarios_sin_horas,
+        'tarifa_hora': float(tarifa_default),
+        'monto_total': float(liq.monto_total),
+    }
+
+
 def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None, commit=True):
     """Crea una liquidación con sus items.
 

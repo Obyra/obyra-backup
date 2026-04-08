@@ -213,6 +213,55 @@ def crear_liquidacion_mo(obra_id):
         return jsonify(ok=False, error=str(e)), 500
 
 
+@obras_bp.route('/<int:obra_id>/liquidacion-mo/auto-fichadas', methods=['POST'])
+@login_required
+def auto_liquidacion_desde_fichadas(obra_id):
+    """Genera automaticamente una liquidacion MO a partir de las fichadas del periodo.
+
+    Body JSON: { periodo_desde, periodo_hasta, notas? }
+    No requiere preview ni edicion: lee fichadas, calcula con tarifa default
+    de la obra y crea la liquidacion en un solo paso.
+    """
+    validate_obra_ownership(obra_id)
+    from services.liquidacion_mo import generar_liquidacion_desde_fichadas
+    roles = _get_roles_usuario(current_user)
+    if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
+        return jsonify(ok=False, error='Sin permisos para crear liquidaciones'), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(ok=False, error='Datos invalidos'), 400
+
+    try:
+        desde = date.fromisoformat(data['periodo_desde'])
+        hasta = date.fromisoformat(data['periodo_hasta'])
+    except (KeyError, ValueError):
+        return jsonify(ok=False, error='Formato de fecha invalido (YYYY-MM-DD)'), 400
+
+    if desde > hasta:
+        return jsonify(ok=False, error='La fecha desde debe ser anterior a hasta'), 400
+
+    try:
+        liq, resumen = generar_liquidacion_desde_fichadas(
+            obra_id, desde, hasta, notas=data.get('notas')
+        )
+        if liq is None:
+            return jsonify(ok=False, error=resumen.get('error', 'Error desconocido')), 400
+
+        return jsonify(
+            ok=True,
+            liquidacion_id=liq.id,
+            monto_total=resumen['monto_total'],
+            operarios_liquidados=resumen['operarios_liquidados'],
+            operarios_sin_horas=resumen['operarios_sin_horas'],
+            tarifa_hora=resumen['tarifa_hora'],
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error generando liquidacion auto desde fichadas")
+        return jsonify(ok=False, error=str(e)), 500
+
+
 @obras_bp.route('/<int:obra_id>/liquidacion-mo/confirmar-y-pagar', methods=['POST'])
 @login_required
 def confirmar_y_pagar_liquidacion(obra_id):
