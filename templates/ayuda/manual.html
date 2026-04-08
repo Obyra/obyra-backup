@@ -46,6 +46,36 @@
                 </div>
                 <div class="card-body">
                     <p class="lead text-muted">Plataforma de Gestion Inteligente para Construccion</p>
+
+                    <!-- Buscador en el manual -->
+                    <div class="input-group mt-3">
+                        <span class="input-group-text bg-light border-end-0">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" id="manual-search" class="form-control border-start-0"
+                               placeholder="Buscar en el manual... (ej: cronograma, presupuesto, fichada)"
+                               autocomplete="off">
+                        <button class="btn btn-outline-secondary" type="button" id="manual-search-clear" style="display:none;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="manual-search-status" class="small text-muted mt-2" style="display:none;"></div>
+
+                    <!-- CTA WhatsApp -->
+                    <div class="alert alert-success border-0 mt-3 mb-0">
+                        <div class="d-flex align-items-center">
+                            <i class="fab fa-whatsapp fa-2x text-success me-3"></i>
+                            <div class="flex-grow-1">
+                                <strong>No encontras lo que buscas?</strong>
+                                <div class="small text-muted">Nuestro equipo te responde por WhatsApp en horario laboral</div>
+                            </div>
+                            <a href="https://wa.me/5491173685175?text=Hola%2C%20necesito%20ayuda%20con%20OBYRA"
+                               target="_blank"
+                               class="btn btn-success btn-sm ms-2">
+                                <i class="fab fa-whatsapp me-1"></i>Hablar ahora
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -481,6 +511,58 @@ document.addEventListener('DOMContentLoaded', function() {
             if (link.getAttribute('href') === '#' + current) link.classList.add('active');
         });
     });
+
+    // ============ Buscador del manual ============
+    var searchInput = document.getElementById('manual-search');
+    var clearBtn = document.getElementById('manual-search-clear');
+    var statusDiv = document.getElementById('manual-search-status');
+    if (searchInput) {
+        var allCards = document.querySelectorAll('.col-lg-9.col-md-8 > .card[id]');
+
+        function doSearch(term) {
+            term = (term || '').trim().toLowerCase();
+            if (!term) {
+                allCards.forEach(function(c) { c.style.display = ''; clearHighlights(c); });
+                statusDiv.style.display = 'none';
+                clearBtn.style.display = 'none';
+                return;
+            }
+            clearBtn.style.display = '';
+            var matches = 0;
+            allCards.forEach(function(card) {
+                var text = card.textContent.toLowerCase();
+                if (text.indexOf(term) >= 0) {
+                    card.style.display = '';
+                    matches++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            statusDiv.style.display = '';
+            statusDiv.innerHTML = matches > 0
+                ? '<i class="fas fa-check-circle text-success me-1"></i>' + matches + ' seccion(es) coinciden con "' + escapeHtml(term) + '"'
+                : '<i class="fas fa-exclamation-circle text-warning me-1"></i>Sin resultados para "' + escapeHtml(term) + '". Probá con otra palabra o consultanos por WhatsApp.';
+        }
+        function escapeHtml(s) {
+            return s.replace(/[&<>"']/g, function(c) {
+                return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+            });
+        }
+        function clearHighlights(card) {
+            // placeholder por si despues queremos highlight inline
+        }
+
+        var debounce;
+        searchInput.addEventListener('input', function(e) {
+            clearTimeout(debounce);
+            debounce = setTimeout(function() { doSearch(e.target.value); }, 200);
+        });
+        clearBtn.addEventListener('click', function() {
+            searchInput.value = '';
+            doSearch('');
+            searchInput.focus();
+        });
+    }
 });
 </script>
 {% endblock %}
