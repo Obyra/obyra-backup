@@ -68,13 +68,20 @@ def crear_preapproval(organizacion, payer_email, created_by=None):
     monto = _get_precio_ars()
     base_url = _get_base_url()
 
-    # Si la org ya tiene una sub pending, la reusamos para no llenar MP de basura
+    # Si la org ya tiene una sub pending CON EL MISMO MONTO, la reusamos.
+    # Si el monto cambio (ej: admin cambio MP_PRECIO_ARS), descartamos la vieja
+    # y creamos una nueva para no servir un init_url con el precio incorrecto.
     sub_pendiente = Subscription.query.filter_by(
         organizacion_id=organizacion.id,
         status='pending'
     ).order_by(Subscription.created_at.desc()).first()
     if sub_pendiente and sub_pendiente.init_url:
-        return sub_pendiente, sub_pendiente.init_url
+        if Decimal(str(sub_pendiente.monto_ars)) == monto:
+            return sub_pendiente, sub_pendiente.init_url
+        # Monto distinto: marcar la vieja como cancelled
+        sub_pendiente.status = 'cancelled'
+        sub_pendiente.cancelled_at = datetime.utcnow()
+        db.session.commit()
 
     # External reference para encontrar la sub en webhooks
     external_ref = f'org_{organizacion.id}_{int(datetime.utcnow().timestamp())}'
