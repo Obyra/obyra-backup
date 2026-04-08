@@ -4,6 +4,56 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Onboarding Checklist - solo se muestra hasta completar todos los pasos -->
+    {% if onboarding_checklist %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm border-start border-primary border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h5 class="mb-1"><i class="fas fa-rocket text-primary me-2"></i>Bienvenido a OBYRA - Primeros pasos</h5>
+                            <small class="text-muted">Completa estos pasos para sacar el maximo provecho de la plataforma</small>
+                        </div>
+                        <div class="text-end">
+                            <div class="h4 mb-0 fw-bold text-primary">{{ onboarding_checklist.completados }}/{{ onboarding_checklist.total }}</div>
+                            <small class="text-muted">{{ onboarding_checklist.porcentaje }}% completado</small>
+                        </div>
+                    </div>
+                    <div class="progress mb-3" style="height: 8px;">
+                        <div class="progress-bar bg-primary" role="progressbar" style="width: {{ onboarding_checklist.porcentaje }}%"></div>
+                    </div>
+                    <div class="row g-2">
+                        {% for paso in onboarding_checklist.pasos %}
+                        <div class="col-md-6 col-lg-4">
+                            <a href="{{ paso.url }}" class="text-decoration-none">
+                                <div class="d-flex align-items-center p-2 rounded {% if paso.done %}bg-success bg-opacity-10{% else %}bg-light{% endif %}">
+                                    {% if paso.done %}
+                                        <i class="fas fa-check-circle text-success fs-4 me-2"></i>
+                                    {% else %}
+                                        <i class="fas {{ paso.icon }} text-muted fs-4 me-2"></i>
+                                    {% endif %}
+                                    <span class="{% if paso.done %}text-success text-decoration-line-through{% else %}text-dark{% endif %}">{{ paso.label }}</span>
+                                </div>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3 d-flex gap-2 flex-wrap">
+                        <form method="POST" action="{{ url_for('onboarding.cargar_demo') }}" class="d-inline">
+                            {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-magic me-1"></i>Cargar obra demo de ejemplo
+                            </button>
+                        </form>
+                        <small class="text-muted align-self-center">Esto crea una obra completa con etapas y tareas para que explores la plataforma sin partir de cero.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Header Principal -->
     <div class="row mb-4">
         <div class="col-12">

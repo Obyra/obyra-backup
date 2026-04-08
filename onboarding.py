@@ -1,10 +1,57 @@
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for, current_app
 from flask_login import current_user, login_required
 from werkzeug.routing import BuildError
 
 from account import update_billing_from_form, update_profile_from_form
 
 onboarding_bp = Blueprint('onboarding', __name__)
+
+
+@onboarding_bp.route('/cargar-demo', methods=['POST'])
+@login_required
+def cargar_demo():
+    """Crea una obra demo en la organizacion del usuario actual."""
+    from services.demo_data_service import crear_obra_demo
+    from services.memberships import get_current_org_id
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        flash('No tenes una organizacion activa', 'warning')
+        return redirect(url_for('reportes.dashboard'))
+
+    try:
+        obra, created = crear_obra_demo(org_id, user_id=current_user.id)
+        if created:
+            flash(f'Obra demo "{obra.nombre}" creada con exito. Explorala desde el listado de obras.', 'success')
+        else:
+            flash('Ya existe una obra demo en tu organizacion.', 'info')
+        return redirect(url_for('obras.detalle', id=obra.id))
+    except Exception as e:
+        current_app.logger.exception('Error creando obra demo')
+        flash(f'Error al cargar datos demo: {e}', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+
+@onboarding_bp.route('/eliminar-demo', methods=['POST'])
+@login_required
+def eliminar_demo():
+    """Elimina la obra demo de la organizacion."""
+    from services.demo_data_service import eliminar_obra_demo
+    from services.memberships import get_current_org_id
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        return redirect(url_for('reportes.dashboard'))
+
+    try:
+        if eliminar_obra_demo(org_id):
+            flash('Obra demo eliminada correctamente.', 'success')
+        else:
+            flash('No habia obra demo para eliminar.', 'info')
+    except Exception as e:
+        current_app.logger.exception('Error eliminando obra demo')
+        flash(f'Error: {e}', 'danger')
+    return redirect(url_for('reportes.dashboard'))
 
 
 def _resolve_after_onboarding() -> str:

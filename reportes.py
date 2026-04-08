@@ -376,6 +376,68 @@ def dashboard():
     # Datos financieros para gráficos
     datos_financieros = calcular_datos_financieros(obras_activas, org_id)
 
+    # Checklist de onboarding (primeros pasos para usuario nuevo)
+    onboarding_checklist = None
+    try:
+        from models import Organizacion as _Org, Cliente as _Cliente
+        organizacion = db.session.get(_Org, org_id) if org_id else None
+        total_obras = Obra.query.filter(
+            Obra.organizacion_id == org_id,
+            Obra.deleted_at.is_(None)
+        ).count()
+        total_usuarios = Usuario.query.filter_by(organizacion_id=org_id, activo=True).count()
+        try:
+            total_clientes = _Cliente.query.filter_by(organizacion_id=org_id).count()
+        except Exception:
+            total_clientes = 0
+        try:
+            from models.subcontratista import Subcontratista as _Sub
+            total_subs = _Sub.query.filter_by(organizacion_id=org_id).count()
+        except Exception:
+            total_subs = 0
+
+        def _safe_url(endpoint, **kwargs):
+            try:
+                return url_for(endpoint, **kwargs)
+            except Exception:
+                return '#'
+
+        tiene_logo = bool(organizacion and getattr(organizacion, 'logo_url', None))
+        tiene_obra = total_obras > 0
+        tiene_equipo = total_usuarios > 1
+        tiene_cliente = total_clientes > 0
+        tiene_sub = total_subs > 0
+
+        pasos = [
+            {'id': 'logo', 'label': 'Subir logo de tu empresa', 'done': tiene_logo,
+             'url': _safe_url('account.organizacion'), 'icon': 'fa-image'},
+            {'id': 'cliente', 'label': 'Crear tu primer cliente', 'done': tiene_cliente,
+             'url': _safe_url('clientes.crear') if 'clientes.crear' in current_app.view_functions else _safe_url('clientes.lista'),
+             'icon': 'fa-user-tie'},
+            {'id': 'obra', 'label': 'Crear tu primera obra (o cargar demo)', 'done': tiene_obra,
+             'url': _safe_url('obras.lista'), 'icon': 'fa-building'},
+            {'id': 'equipo', 'label': 'Invitar a tu equipo', 'done': tiene_equipo,
+             'url': _safe_url('auth.usuarios_admin'), 'icon': 'fa-users'},
+            {'id': 'sub', 'label': 'Agregar un subcontratista', 'done': tiene_sub,
+             'url': _safe_url('subcontratistas.lista'), 'icon': 'fa-hard-hat'},
+        ]
+
+        completados = sum(1 for p in pasos if p['done'])
+        total_pasos = len(pasos)
+        porcentaje = int((completados / total_pasos) * 100) if total_pasos else 0
+
+        # Mostrar solo si NO esta todo completado
+        if completados < total_pasos:
+            onboarding_checklist = {
+                'pasos': pasos,
+                'completados': completados,
+                'total': total_pasos,
+                'porcentaje': porcentaje,
+            }
+    except Exception as e:
+        current_app.logger.warning(f"No se pudo calcular onboarding checklist: {e}")
+        db.session.rollback()
+
     # KPIs de obras finalizadas (módulo cierre de obra)
     cierre_kpis = {
         'total': 0, 'mes_actual': 0, 'anio_actual': 0,
@@ -458,6 +520,7 @@ def dashboard():
                          datos_financieros=datos_financieros,
                          entregas_proximas=entregas_proximas,
                          cierre_kpis=cierre_kpis,
+                         onboarding_checklist=onboarding_checklist,
                          fecha_hoy=date.today())
 
 
