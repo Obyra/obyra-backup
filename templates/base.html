@@ -68,6 +68,9 @@
     </style>
 </head>
 <body>
+    <!-- Skip to content (accesibilidad: navegacion por teclado) -->
+    <a href="#main-content" class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-primary" style="z-index: 9999;">Saltar al contenido principal</a>
+
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
@@ -483,7 +486,7 @@
     </div>
 
     <!-- Main Content -->
-    <main class="container-fluid">
+    <main id="main-content" class="container-fluid" tabindex="-1">
         {% block content %}{% endblock %}
     </main>
 
@@ -712,6 +715,35 @@
     <!-- Offline Mode Scripts -->
     <script src="{{ url_for('static', filename='js/indexed-db.js') }}"></script>
     <script src="{{ url_for('static', filename='js/offline-manager.js') }}"></script>
+
+    <!-- Lazy loading + a11y: aplica loading="lazy" a imagenes y aria-label a botones icon-only -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Lazy loading para todas las imagenes que no tengan loading explicito
+        document.querySelectorAll('img:not([loading])').forEach(function(img) {
+            img.loading = 'lazy';
+            if (!img.hasAttribute('decoding')) img.decoding = 'async';
+        });
+
+        // Accesibilidad: dar aria-label a botones/links que solo tienen icono
+        document.querySelectorAll('button, a').forEach(function(el) {
+            if (el.hasAttribute('aria-label') || el.getAttribute('aria-hidden') === 'true') return;
+            var text = (el.textContent || '').trim();
+            if (text.length > 0) return;
+            var icon = el.querySelector('i[class*="fa-"]');
+            if (!icon) return;
+            var title = el.getAttribute('title');
+            if (title) {
+                el.setAttribute('aria-label', title);
+                return;
+            }
+            var iconClass = Array.from(icon.classList).find(function(c) { return c.startsWith('fa-') && c !== 'fa-fw'; });
+            if (iconClass) {
+                el.setAttribute('aria-label', iconClass.replace('fa-', '').replace(/-/g, ' '));
+            }
+        });
+    });
+    </script>
 
     <!-- Chequear updates del SW en cada navegacion (auto-reload manejado por offline-manager) -->
     <script>
