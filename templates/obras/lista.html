@@ -159,10 +159,10 @@
                                                 <span class="d-none d-md-inline ms-1">Mapa</span>
                                             </button>
                                             {% elif obra.direccion %}
-                                            <a class="btn btn-sm btn-outline-info d-flex align-items-center" href="https://www.google.com/maps/search/?api=1&query={{ obra.direccion|urlencode }}" target="_blank" rel="noopener" title="Abrir en Google Maps">
+                                            <button class="btn btn-sm btn-outline-info d-flex align-items-center" onclick="geocodificarYCentrar({{ obra.id }}, '{{ obra.direccion|replace("'", "\\'") }}')" title="Buscar en mapa">
                                                 <i class="fas fa-map-marker-alt"></i>
                                                 <span class="d-none d-md-inline ms-1">Mapa</span>
-                                            </a>
+                                            </button>
                                             {% endif %}
                                             {% if current_user.role == 'admin' %}
                                             <button class="btn btn-sm btn-outline-danger d-flex align-items-center" onclick="confirmarEliminarObra({{ obra.id }}, '{{ obra.nombre }}')" title="Eliminar obra">
@@ -453,6 +453,53 @@ function centrarEnObra(obraId) {
 
 function verDetallesObra(obraId) {
     window.location.href = '/obras/' + obraId;
+}
+
+async function geocodificarYCentrar(obraId, direccion) {
+    if (!mapa) return;
+    try {
+        var response = await fetch('/obras/api/buscar-direcciones?q=' + encodeURIComponent(direccion));
+        if (!response.ok) throw new Error('Error buscando dirección');
+        var data = await response.json();
+        var resultados = data.results || data;
+        if (!resultados || resultados.length === 0) {
+            alert('No se pudo encontrar la ubicación de: ' + direccion);
+            return;
+        }
+        var lat = parseFloat(resultados[0].lat);
+        var lng = parseFloat(resultados[0].lng || resultados[0].lon);
+
+        // Scrollear al mapa
+        document.getElementById('mapa').scrollIntoView({behavior: 'smooth', block: 'center'});
+
+        // Agregar marcador y centrar
+        if (mapaEngine === 'google') {
+            var marker = new google.maps.Marker({
+                position: {lat: lat, lng: lng},
+                map: mapa,
+                title: direccion,
+                icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+            });
+            mapa.setZoom(16);
+            mapa.panTo({lat: lat, lng: lng});
+            var iw = new google.maps.InfoWindow({content: '<strong>' + direccion + '</strong>'});
+            iw.open(mapa, marker);
+        } else {
+            var m = L.marker([lat, lng]).addTo(mapa).bindPopup('<strong>' + direccion + '</strong>').openPopup();
+            mapa.setView([lat, lng], 16);
+        }
+
+        // Guardar coordenadas en background
+        fetch('/obras/' + obraId + '/actualizar-coordenadas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+            body: JSON.stringify({latitud: lat, longitud: lng})
+        }).catch(function(e) { console.warn('No se pudieron guardar coordenadas:', e); });
+
+    } catch (err) {
+        console.error('Error geocodificando:', err);
+        alert('No se pudo encontrar la ubicación. Probá editando la dirección de la obra.');
+    }
 }
 
 // Función para abrir ventana de clima en pantalla completa
