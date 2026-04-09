@@ -961,17 +961,18 @@ class RequerimientoCompra(db.Model):
 
     @classmethod
     def generar_numero(cls, organizacion_id):
-        """Genera un número único para el requerimiento"""
+        """Genera un número único para el requerimiento.
+        Busca el ultimo numero GLOBAL (no por org) para evitar colision
+        con el constraint unique en la columna numero."""
         year = datetime.utcnow().year
         ultimo = cls.query.filter(
-            cls.organizacion_id == organizacion_id,
             cls.numero.like(f'RC-{year}-%')
         ).order_by(cls.id.desc()).first()
 
         if ultimo and ultimo.numero:
             try:
                 ultimo_num = int(ultimo.numero.split('-')[-1])
-            except:
+            except Exception:
                 ultimo_num = 0
         else:
             ultimo_num = 0
