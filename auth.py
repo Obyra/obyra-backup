@@ -989,7 +989,7 @@ def crear_integrante_desde_panel():
 
             if membership_existente and membership_existente.archived:
                 membership_existente.archived = False
-                membership_existente.status = 'pending'
+                membership_existente.status = 'active'
                 membership_existente.invited_by = current_user.id
                 membership_existente.invited_at = datetime.utcnow()
                 membership_nuevo = membership_existente
@@ -998,7 +998,7 @@ def crear_integrante_desde_panel():
                     org_id=org_id,
                     user_id=usuario_objetivo.id,
                     role=role_front,
-                    status='pending',
+                    status='active',
                     invited_by=current_user.id,
                 )
                 db.session.add(membership_nuevo)
