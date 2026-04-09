@@ -23,14 +23,9 @@ fichadas_bp = Blueprint('fichadas', __name__, url_prefix='/fichadas')
 @fichadas_bp.before_request
 @login_required
 def _check_plan_fichadas():
-    """Verificar que la organización tiene plan Premium o Full Premium para fichadas."""
-    if getattr(current_user, 'is_super_admin', False):
-        return None
-    org = getattr(current_user, 'organizacion', None)
-    plan = getattr(org, 'plan_tipo', None) if org else None
-    if plan not in ('premium', 'full_premium'):
-        flash('El fichaje por geolocalización requiere plan Premium o superior.', 'warning')
-        return redirect(url_for('planes.mostrar_planes'))
+    """Con el plan unificado OBYRA Profesional, fichadas esta disponible para todos."""
+    # Fichadas incluida en todos los planes (prueba incluida)
+    return None
 
 # Timezone Argentina (UTC-3)
 AR_TZ = timezone(timedelta(hours=-3))
@@ -330,7 +325,6 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
 
 @fichadas_bp.route('/')
 @login_required
-@require_feature('attendance.geo')
 def index():
     """Página principal: muestra obras asignadas con estado de fichada."""
     obras = _obras_asignadas(current_user)
@@ -485,7 +479,6 @@ def fichar(obra_id):
 
 @fichadas_bp.route('/api/fichar', methods=['POST'])
 @login_required
-@require_feature('attendance.geo')
 def api_fichar():
     """Registra una fichada de ingreso o egreso."""
     data = request.get_json(silent=True) or {}
