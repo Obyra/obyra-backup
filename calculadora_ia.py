@@ -165,11 +165,15 @@ def _to_decimal(value: Any, default: str = '0') -> Decimal:
         return Decimal(default)
 
 
-def _quantize_currency(value: Decimal) -> Decimal:
+def _quantize_currency(value) -> Decimal:
+    if not isinstance(value, Decimal):
+        value = Decimal(str(value))
     return value.quantize(CURRENCY_QUANT, rounding=ROUND_HALF_UP)
 
 
-def _quantize_quantity(value: Decimal) -> Decimal:
+def _quantize_quantity(value) -> Decimal:
+    if not isinstance(value, Decimal):
+        value = Decimal(str(value))
     return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
 
 
