@@ -175,15 +175,9 @@
                             </a></li>
                             {% endif %}
                             {% if has_endpoint('fichadas.index') %}
-                                {% if can_feature('attendance.geo') %}
-                                <li><a class="dropdown-item" href="{{ url_for('fichadas.index') }}">
-                                    <i class="fas fa-clock me-2"></i>Fichada
-                                </a></li>
-                                {% else %}
-                                <li><a class="dropdown-item text-muted" href="{{ url_for('planes.mostrar_planes') }}" title="Disponible en Plan Full Premium">
-                                    <i class="fas fa-lock me-2"></i>Fichada <span class="badge bg-success" style="font-size: 0.55rem;">Full Premium</span>
-                                </a></li>
-                                {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('fichadas.index') }}">
+                                <i class="fas fa-clock me-2"></i>Fichada
+                            </a></li>
                             {% endif %}
                             {% if has_endpoint('caja.dashboard') %}
                             <li><a class="dropdown-item" href="{{ url_for('caja.dashboard') }}">
