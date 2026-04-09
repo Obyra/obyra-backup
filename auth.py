@@ -1003,7 +1003,13 @@ def crear_integrante_desde_panel():
                 db.session.add(membership_nuevo)
 
             perfil = usuario_objetivo.perfil
-            if perfil and perfil.cuit and perfil.cuit != cuit_normalizado:
+
+            # Si el usuario estaba inactivo (dado de baja), permitir actualizar
+            # TODOS sus datos como si fuera una re-invitacion completa.
+            # Si estaba activo, solo permitir CUIT identico.
+            es_reactivacion = not usuario_objetivo.activo
+
+            if not es_reactivacion and perfil and perfil.cuit and perfil.cuit != cuit_normalizado:
                 return jsonify({
                     'success': False,
                     'message': f'El correo {email} ya pertenece a {usuario_objetivo.nombre or ""} {usuario_objetivo.apellido or ""} '
@@ -1015,12 +1021,24 @@ def crear_integrante_desde_panel():
                 perfil = PerfilUsuario(usuario_id=usuario_objetivo.id)
                 db.session.add(perfil)
 
-            perfil.cuit = perfil.cuit or cuit_normalizado
-            if direccion:
-                perfil.direccion = direccion
+            # En reactivacion: sobreescribir datos. En vinculacion: solo llenar vacios.
+            if es_reactivacion:
+                perfil.cuit = cuit_normalizado
+                if direccion:
+                    perfil.direccion = direccion
+            else:
+                perfil.cuit = perfil.cuit or cuit_normalizado
+                if direccion:
+                    perfil.direccion = direccion
 
-            usuario_objetivo.nombre = usuario_objetivo.nombre or nombre
-            usuario_objetivo.apellido = usuario_objetivo.apellido or apellido
+            # En reactivacion: actualizar nombre/apellido siempre.
+            # En vinculacion: solo si estaban vacios.
+            if es_reactivacion:
+                usuario_objetivo.nombre = nombre
+                usuario_objetivo.apellido = apellido
+            else:
+                usuario_objetivo.nombre = usuario_objetivo.nombre or nombre
+                usuario_objetivo.apellido = usuario_objetivo.apellido or apellido
             usuario_objetivo.telefono = telefono_sanitizado
             usuario_objetivo.rol = rol_interno  # Campo legacy requerido por la BD
             usuario_objetivo.role = role_front  # Campo unificado
