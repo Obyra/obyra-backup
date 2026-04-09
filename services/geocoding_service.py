@@ -781,8 +781,13 @@ def search(query: str, *, provider: Optional[str] = None, limit: int = 5) -> Lis
     # Normalizar dirección argentina para mejorar precisión
     normalized_query = _normalize_argentina_address(query)
 
-    # Generar variantes de búsqueda
+    # Generar variantes de búsqueda, pero SIEMPRE intentar la query original primero
     variants = _generate_search_variants(normalized_query)
+    # Prepend: la query original sin normalizar va primero (Google Maps la entiende mejor)
+    if query.strip() not in variants:
+        variants.insert(0, query.strip())
+    if normalized_query not in variants:
+        variants.insert(1, normalized_query)
 
     current_app.logger.info(f"🔍 Buscando dirección con {len(variants)} variantes: {variants}")
 
