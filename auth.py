@@ -1004,7 +1004,12 @@ def crear_integrante_desde_panel():
 
             perfil = usuario_objetivo.perfil
             if perfil and perfil.cuit and perfil.cuit != cuit_normalizado:
-                return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
+                return jsonify({
+                    'success': False,
+                    'message': f'El correo {email} ya pertenece a {usuario_objetivo.nombre or ""} {usuario_objetivo.apellido or ""} '
+                               f'con CUIT/CUIL diferente ({perfil.cuit}). '
+                               f'Si querés agregar otra persona, usá un email distinto.'
+                }), 409
 
             if not perfil:
                 perfil = PerfilUsuario(usuario_id=usuario_objetivo.id)
@@ -1031,8 +1036,15 @@ def crear_integrante_desde_panel():
 
             usuario_objetivo.ensure_onboarding_status()
         else:
-            if PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first():
-                return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
+            perfil_existente_cuit = PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first()
+            if perfil_existente_cuit:
+                otro_user = Usuario.query.get(perfil_existente_cuit.usuario_id)
+                nombre_otro = f'{otro_user.nombre or ""} {otro_user.apellido or ""}' if otro_user else 'otro usuario'
+                return jsonify({
+                    'success': False,
+                    'message': f'El CUIT/CUIL {cuit_normalizado} ya está registrado para {nombre_otro.strip()}. '
+                               f'Verificá el dato o usá un CUIT diferente.'
+                }), 409
 
             temp_password = generate_temporary_password()
             usuario_objetivo = Usuario(
