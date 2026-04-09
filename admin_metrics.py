@@ -56,6 +56,52 @@ def metrics_view():
     )
 
 
+@admin_metrics_bp.route('/reset-onboarding/<int:org_id>', methods=['POST'])
+@login_required
+def reset_onboarding(org_id):
+    """Resetea el onboarding de una organizacion: limpia perfil, logo,
+    clientes, obras demo, subcontratistas para que vuelva a 0/5.
+    Solo super admin."""
+    _require_super_admin()
+    from extensions import db
+    from models import Organizacion, Usuario, OnboardingStatus
+
+    org = Organizacion.query.get_or_404(org_id)
+
+    try:
+        # Resetear onboarding status de todos los usuarios de la org
+        usuarios = Usuario.query.filter_by(organizacion_id=org_id).all()
+        for u in usuarios:
+            status = OnboardingStatus.query.filter_by(usuario_id=u.id).first()
+            if status:
+                status.profile_completed = False
+                status.billing_completed = False
+                status.completed_at = None
+
+        # Limpiar logo de la org
+        org.logo_url = None
+
+        # Eliminar obras demo
+        from models import Obra
+        demos = Obra.query.filter(
+            Obra.organizacion_id == org_id,
+            Obra.nombre.like('[DEMO]%')
+        ).all()
+        for d in demos:
+            d.soft_delete()
+
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'message': f'Onboarding reseteado para {org.nombre}. '
+                       f'Usuarios afectados: {len(usuarios)}. '
+                       f'Obras demo eliminadas: {len(demos)}.'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @admin_metrics_bp.route('/json')
 @login_required
 def metrics_json():
