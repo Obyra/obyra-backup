@@ -974,6 +974,13 @@
                                             Desde {{ (miembro.fecha_asignacion or miembro.created_at).strftime('%d/%m/%Y') }}
                                         </small>
                                         {% endif %}
+                                        {% if can_manage %}
+                                        <div class="mt-2">
+                                            <button class="btn btn-outline-danger btn-sm w-100" onclick="quitarUsuarioDeObra({{ miembro.usuario_id }}, '{{ miembro.usuario.nombre_completo }}')">
+                                                <i class="fas fa-user-minus me-1"></i>Quitar de la obra
+                                            </button>
+                                        </div>
+                                        {% endif %}
                                     </div>
                                 </div>
                                 {% endfor %}
@@ -4931,6 +4938,30 @@ async function confirmarConsumoBatch() {
         </div>
     </div>
 </div>
+
+<script>
+async function quitarUsuarioDeObra(userId, userName) {
+    if (!confirm('¿Seguro que querés quitar a ' + userName + ' de esta obra?\n\nSe desvinculará de todas las tareas y etapas asignadas.')) return;
+    try {
+        var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        var resp = await fetch('/obras/{{ obra.id }}/quitar_usuario', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({usuario_id: userId})
+        });
+        var data = await resp.json();
+        if (data.ok) {
+            alert(data.message || 'Usuario quitado de la obra');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo quitar'));
+        }
+    } catch (err) {
+        alert('Error de conexión');
+        console.error(err);
+    }
+}
+</script>
 
 {% endblock %}
 

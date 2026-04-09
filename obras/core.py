@@ -1221,6 +1221,75 @@ def asignar_usuario(obra_id):
             return redirect(url_for('obras.detalle', id=obra_id))
 
 
+@obras_bp.route('/<int:obra_id>/quitar_usuario', methods=['POST'])
+@login_required
+def quitar_usuario(obra_id):
+    """Quita un usuario de la obra y desvincular de todas sus tareas/etapas."""
+    if not is_admin():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True) or {}
+    usuario_id = data.get('usuario_id')
+    if not usuario_id:
+        return jsonify(ok=False, error='usuario_id requerido'), 400
+
+    try:
+        usuario_id = int(usuario_id)
+
+        # 1. Quitar de AsignacionObra
+        asignaciones = AsignacionObra.query.filter_by(obra_id=obra_id, usuario_id=usuario_id).all()
+        for a in asignaciones:
+            a.activo = False
+        asig_count = len(asignaciones)
+
+        # 2. Quitar de obra_miembros (tabla directa)
+        try:
+            result = db.session.execute(
+                text("DELETE FROM obra_miembros WHERE obra_id = :o AND usuario_id = :u"),
+                {"o": obra_id, "u": usuario_id}
+            )
+            miembros_count = result.rowcount
+        except Exception:
+            miembros_count = 0
+
+        # 3. Quitar como responsable de tareas de esta obra
+        tareas_obra = TareaEtapa.query.join(EtapaObra).filter(
+            EtapaObra.obra_id == obra_id,
+            TareaEtapa.responsable_id == usuario_id
+        ).all()
+        for tarea in tareas_obra:
+            tarea.responsable_id = None
+        tareas_count = len(tareas_obra)
+
+        # 4. Quitar de TareaMiembro para tareas de esta obra
+        from models.projects import TareaMiembro
+        tarea_ids = [t.id for t in TareaEtapa.query.join(EtapaObra).filter(EtapaObra.obra_id == obra_id).all()]
+        if tarea_ids:
+            miembros_tarea = TareaMiembro.query.filter(
+                TareaMiembro.tarea_id.in_(tarea_ids),
+                TareaMiembro.user_id == usuario_id
+            ).all()
+            for mt in miembros_tarea:
+                db.session.delete(mt)
+            tm_count = len(miembros_tarea)
+        else:
+            tm_count = 0
+
+        db.session.commit()
+
+        usuario = Usuario.query.get(usuario_id)
+        nombre = usuario.nombre_completo if usuario else f'Usuario #{usuario_id}'
+
+        return jsonify(
+            ok=True,
+            message=f'{nombre} fue quitado de la obra. Se desvincularon {tareas_count} tareas y {tm_count} asignaciones de miembro.'
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Error quitando usuario {usuario_id} de obra {obra_id}")
+        return jsonify(ok=False, error=str(e)), 500
+
+
 @obras_bp.route('/<int:id>/etapa', methods=['POST'])
 @login_required
 def agregar_etapa(id):
