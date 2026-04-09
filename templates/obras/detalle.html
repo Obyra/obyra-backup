@@ -35,6 +35,11 @@
                         {{ obra.estado.replace('_', ' ').title() }}
                     </span>
                     <br>
+                    {% if can_manage %}
+                    <button type="button" class="btn btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#editarObraModal" title="Editar datos de la obra">
+                        <i class="fas fa-edit me-1"></i>Editar
+                    </button>
+                    {% endif %}
                     {% if obra.estado == 'en_curso' and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and has_endpoint('cierre_obra.iniciar') %}
                     <a href="{{ url_for('cierre_obra.iniciar', obra_id=obra.id) }}" class="btn btn-success me-1"
                        title="Iniciar el cierre formal de esta obra">
