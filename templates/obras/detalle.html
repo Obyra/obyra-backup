@@ -3605,14 +3605,24 @@ function renderAnalisisMateriales(data) {
 
     // ── Sin vincular ──
     if (data.sin_vincular.length > 0) {
+        hayComprables = true;
         html += '<div class="mb-3">';
-        html += '<div class="d-flex align-items-center mb-2 px-3"><span class="badge bg-secondary me-2">' + data.sin_vincular.length + '</span><span class="text-muted">Sin vincular al inventario</span></div>';
-        html += '<div class="px-3"><small class="text-muted">Estos materiales del presupuesto no estan vinculados al inventario. Vincularlos para gestionar stock.</small>';
-        html += '<ul class="list-unstyled mt-1 mb-0">';
-        data.sin_vincular.forEach(function(m) {
-            html += '<li class="small text-muted"><i class="fas fa-unlink me-1"></i>' + m.descripcion + ' (' + m.cantidad + ' ' + m.unidad + ')</li>';
+        html += '<div class="d-flex align-items-center justify-content-between mb-2 px-3">';
+        html += '<div><span class="badge bg-secondary me-2">' + data.sin_vincular.length + '</span><strong>Sin vincular al inventario</strong></div>';
+        html += '<button class="btn btn-xs btn-outline-secondary" onclick="toggleAllCheckboxes(\'chk-sinvincular\')" style="font-size:0.7rem; padding:2px 8px;">Seleccionar/Deseleccionar todos</button>';
+        html += '</div>';
+        html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
+        html += '<thead class="table-secondary"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Cantidad</th><th class="text-center">Unidad</th></tr></thead><tbody>';
+        data.sin_vincular.forEach(function(m, idx) {
+            var yaPedido = false;
+            html += '<tr>';
+            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-sinvincular chk-comprar" data-idx="sv-' + idx + '" data-base=\'' + JSON.stringify({item_inventario_id: null, descripcion: m.descripcion, codigo: m.codigo || '', cantidad_planificada: m.cantidad, cantidad_actual_obra: 0, tipo: 'material'}).replace(/'/g, '&#39;') + '\' checked></td>';
+            html += '<td><strong class="small">' + m.descripcion + '</strong></td>';
+            html += '<td class="text-center"><input type="number" class="form-control form-control-sm text-center input-cantidad-pedir" id="cant-sv-' + idx + '" value="' + m.cantidad + '" min="1" style="width:80px; display:inline-block;"></td>';
+            html += '<td class="text-center">' + buildUnidadSelect('uni-sv-' + idx, m.unidad) + '</td>';
+            html += '</tr>';
         });
-        html += '</ul></div></div>';
+        html += '</tbody></table></div></div>';
     }
 
     // ── Sin materiales ──
