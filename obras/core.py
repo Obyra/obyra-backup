@@ -1221,6 +1221,84 @@ def asignar_usuario(obra_id):
             return redirect(url_for('obras.detalle', id=obra_id))
 
 
+@obras_bp.route('/<int:obra_id>/asignar_tareas_batch', methods=['POST'])
+@login_required
+def asignar_tareas_batch(obra_id):
+    """Asigna un usuario como responsable de múltiples tareas de una vez.
+
+    Body JSON: {usuario_id, tarea_ids: [1, 2, 3]}
+    Pone responsable_id en cada tarea y crea TareaMiembro si no existe.
+    """
+    if not is_admin():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True) or {}
+    usuario_id = data.get('usuario_id')
+    tarea_ids = data.get('tarea_ids', [])
+
+    if not usuario_id or not tarea_ids:
+        return jsonify(ok=False, error='usuario_id y tarea_ids son requeridos'), 400
+
+    try:
+        usuario_id = int(usuario_id)
+        tarea_ids = [int(t) for t in tarea_ids]
+
+        usuario = Usuario.query.get(usuario_id)
+        if not usuario:
+            return jsonify(ok=False, error='Usuario no encontrado'), 404
+
+        asignadas = 0
+        for tarea_id in tarea_ids:
+            tarea = TareaEtapa.query.get(tarea_id)
+            if not tarea:
+                continue
+            # Verificar que la tarea pertenece a esta obra
+            etapa = EtapaObra.query.get(tarea.etapa_id)
+            if not etapa or etapa.obra_id != obra_id:
+                continue
+
+            tarea.responsable_id = usuario_id
+
+            # Crear TareaMiembro si no existe
+            existe = TareaMiembro.query.filter_by(tarea_id=tarea_id, user_id=usuario_id).first()
+            if not existe:
+                db.session.add(TareaMiembro(tarea_id=tarea_id, user_id=usuario_id))
+
+            asignadas += 1
+
+        db.session.commit()
+        return jsonify(
+            ok=True,
+            message=f'{asignadas} tarea(s) asignadas a {usuario.nombre_completo}'
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Error en asignar_tareas_batch obra {obra_id}")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/<int:obra_id>/api/tareas_por_etapa', methods=['GET'])
+@login_required
+def api_tareas_por_etapa(obra_id):
+    """Devuelve las tareas agrupadas por etapa para el modal de asignación batch."""
+    etapas = EtapaObra.query.filter_by(obra_id=obra_id).order_by(EtapaObra.orden).all()
+    resultado = []
+    for etapa in etapas:
+        tareas = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
+        resultado.append({
+            'etapa_id': etapa.id,
+            'etapa_nombre': etapa.nombre,
+            'tareas': [{
+                'id': t.id,
+                'nombre': t.nombre,
+                'estado': t.estado,
+                'responsable_id': t.responsable_id,
+                'responsable_nombre': t.responsable.nombre_completo if t.responsable else None,
+            } for t in tareas]
+        })
+    return jsonify(ok=True, etapas=resultado)
+
+
 @obras_bp.route('/<int:obra_id>/quitar_usuario', methods=['POST'])
 @login_required
 def quitar_usuario(obra_id):

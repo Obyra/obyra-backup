@@ -949,9 +949,14 @@
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5 class="mb-0">Equipo Asignado</h5>
                                 {% if can_manage %}
-                                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#asignarUsuarioModal">
-                                    <i class="fas fa-user-plus me-1"></i>Asignar
-                                </button>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#asignarUsuarioModal">
+                                        <i class="fas fa-user-plus me-1"></i>Asignar
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="abrirAsignarTareasBatch()">
+                                        <i class="fas fa-tasks me-1"></i>Asignar Tareas
+                                    </button>
+                                </div>
                                 {% endif %}
                             </div>
                             {% if miembros %}
@@ -4938,6 +4943,125 @@ async function confirmarConsumoBatch() {
         </div>
     </div>
 </div>
+
+<!-- Modal Asignar Tareas Batch -->
+<div class="modal fade" id="asignarTareasBatchModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-tasks me-2"></i>Asignar Tareas a un Usuario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Seleccionar usuario</label>
+                    <select class="form-select" id="batchUsuarioSelect">
+                        <option value="">Seleccionar usuario...</option>
+                        {% for usuario in usuarios_disponibles %}
+                        <option value="{{ usuario.id }}">{{ usuario.nombre_completo }} ({{ usuario.rol }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2 d-flex justify-content-between align-items-center">
+                    <label class="form-label fw-bold mb-0">Seleccionar tareas</label>
+                    <div>
+                        <button class="btn btn-xs btn-outline-secondary" onclick="toggleAllBatchTareas(true)" style="font-size:0.75rem;">Todas</button>
+                        <button class="btn btn-xs btn-outline-secondary" onclick="toggleAllBatchTareas(false)" style="font-size:0.75rem;">Ninguna</button>
+                    </div>
+                </div>
+                <div id="batchTareasContainer" style="max-height:400px; overflow-y:auto;">
+                    <div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Cargando tareas...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <span id="batchTareasCount" class="me-auto text-muted small">0 tareas seleccionadas</span>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="ejecutarAsignarTareasBatch()">
+                    <i class="fas fa-check me-1"></i>Asignar seleccionadas
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function abrirAsignarTareasBatch() {
+    var container = document.getElementById('batchTareasContainer');
+    container.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Cargando tareas...</div>';
+    new bootstrap.Modal(document.getElementById('asignarTareasBatchModal')).show();
+
+    try {
+        var resp = await fetch('/obras/{{ obra.id }}/api/tareas_por_etapa');
+        var data = await resp.json();
+        if (!data.ok) throw new Error('Error cargando tareas');
+
+        var html = '';
+        data.etapas.forEach(function(etapa) {
+            if (etapa.tareas.length === 0) return;
+            html += '<div class="mb-3">';
+            html += '<h6 class="bg-light p-2 rounded mb-1"><i class="fas fa-layer-group me-1 text-primary"></i>' + etapa.etapa_nombre + ' <span class="badge bg-secondary">' + etapa.tareas.length + '</span></h6>';
+            etapa.tareas.forEach(function(tarea) {
+                var asignado = tarea.responsable_nombre ? ' <small class="text-muted">(' + tarea.responsable_nombre + ')</small>' : '';
+                var estadoBadge = '';
+                if (tarea.estado === 'completada') estadoBadge = '<span class="badge bg-success ms-1">Completada</span>';
+                else if (tarea.estado === 'en_curso') estadoBadge = '<span class="badge bg-primary ms-1">En curso</span>';
+
+                html += '<div class="form-check ms-3 py-1">';
+                html += '<input class="form-check-input batch-tarea-check" type="checkbox" value="' + tarea.id + '" id="bt-' + tarea.id + '" onchange="actualizarContadorBatch()">';
+                html += '<label class="form-check-label" for="bt-' + tarea.id + '">' + tarea.nombre + asignado + estadoBadge + '</label>';
+                html += '</div>';
+            });
+            html += '</div>';
+        });
+
+        if (!html) html = '<p class="text-muted text-center py-3">No hay tareas en esta obra</p>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="text-danger text-center">Error al cargar tareas</p>';
+        console.error(err);
+    }
+}
+
+function toggleAllBatchTareas(checked) {
+    document.querySelectorAll('.batch-tarea-check').forEach(function(cb) { cb.checked = checked; });
+    actualizarContadorBatch();
+}
+
+function actualizarContadorBatch() {
+    var count = document.querySelectorAll('.batch-tarea-check:checked').length;
+    document.getElementById('batchTareasCount').textContent = count + ' tarea(s) seleccionadas';
+}
+
+async function ejecutarAsignarTareasBatch() {
+    var usuarioId = document.getElementById('batchUsuarioSelect').value;
+    if (!usuarioId) { alert('Seleccioná un usuario'); return; }
+
+    var tareaIds = [];
+    document.querySelectorAll('.batch-tarea-check:checked').forEach(function(cb) {
+        tareaIds.push(parseInt(cb.value));
+    });
+    if (tareaIds.length === 0) { alert('Seleccioná al menos una tarea'); return; }
+
+    try {
+        var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        var resp = await fetch('/obras/{{ obra.id }}/asignar_tareas_batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({usuario_id: parseInt(usuarioId), tarea_ids: tareaIds})
+        });
+        var data = await resp.json();
+        if (data.ok) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo asignar'));
+        }
+    } catch (err) {
+        alert('Error de conexión');
+        console.error(err);
+    }
+}
+</script>
 
 <script>
 async function quitarUsuarioDeObra(userId, userName) {
