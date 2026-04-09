@@ -785,23 +785,46 @@ def usuarios_crear():
     else:
         rol_legado = 'operario'
 
-    u = Usuario(
-        nombre=f.get('nombre', '').strip(),
-        apellido=f.get('apellido', '').strip(),
-        email=f.get('email', '').lower().strip(),
-        role=normalized_role,
-        rol=rol_legado,  # Mantener rol legado por compatibilidad
-        organizacion_id=org_id,
-        primary_org_id=org_id,
-        auth_provider='manual',
-    )
+    email_nuevo = f.get('email', '').lower().strip()
 
-    try:
-        u.set_password(raw_password)
-    except ValueError:
-        return jsonify(ok=False, error="La contraseña no puede estar vacía."), 400
+    # Verificar si el email ya existe
+    from sqlalchemy import func
+    usuario_existente = Usuario.query.filter(func.lower(Usuario.email) == email_nuevo).first()
 
-    db.session.add(u)
+    if usuario_existente:
+        # Si el usuario existe, re-vincularlo a esta organizacion
+        u = usuario_existente
+        u.nombre = f.get('nombre', '').strip() or u.nombre
+        u.apellido = f.get('apellido', '').strip() or u.apellido
+        u.role = normalized_role
+        u.rol = rol_legado
+        u.activo = True
+        if not u.organizacion_id:
+            u.organizacion_id = org_id
+        if not getattr(u, 'primary_org_id', None):
+            u.primary_org_id = org_id
+        if raw_password and raw_password != 'temp123456':
+            try:
+                u.set_password(raw_password)
+            except ValueError:
+                pass
+    else:
+        u = Usuario(
+            nombre=f.get('nombre', '').strip(),
+            apellido=f.get('apellido', '').strip(),
+            email=email_nuevo,
+            role=normalized_role,
+            rol=rol_legado,
+            organizacion_id=org_id,
+            primary_org_id=org_id,
+            auth_provider='manual',
+        )
+        try:
+            u.set_password(raw_password)
+        except ValueError:
+            return jsonify(ok=False, error="La contraseña no puede estar vacía."), 400
+        db.session.add(u)
+
     try:
         db.session.flush()
 
@@ -817,7 +840,7 @@ def usuarios_crear():
         return jsonify(ok=True)
     except IntegrityError:
         db.session.rollback()
-        return jsonify(ok=False, error="El email ya existe"), 400
+        return jsonify(ok=False, error="Error al crear el usuario. Intentá de nuevo."), 400
 
 @equipos_bp.route('/usuarios/<int:uid>/rol', methods=['POST'])
 @login_required
