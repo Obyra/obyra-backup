@@ -244,7 +244,7 @@ def api_analizar_materiales(obra_id):
                     'descripcion': material.descripcion,
                     'cantidad': cantidad_necesaria,
                     'unidad': material.unidad or 'unidad',
-                    'codigo': material.codigo or ''
+                    'codigo': getattr(material, 'codigo_excel', '') or ''
                 })
                 continue
 
@@ -254,7 +254,7 @@ def api_analizar_materiales(obra_id):
                     'descripcion': material.descripcion,
                     'cantidad': cantidad_necesaria,
                     'unidad': material.unidad or 'unidad',
-                    'codigo': material.codigo or ''
+                    'codigo': getattr(material, 'codigo_excel', '') or ''
                 })
                 continue
 
