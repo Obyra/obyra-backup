@@ -512,8 +512,8 @@ async function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
                     <p class="mb-2">Esta obra no tiene una dirección configurada.</p>
                     <p class="mb-0">Por favor, edita la obra y agrega una dirección para ver la información climática.</p>
                     <hr>
-                    <a href="/obras/${obraId}/editar" class="btn btn-warning btn-sm">
-                        <i class="fas fa-edit me-1"></i>Editar Obra
+                    <a href="/obras/${obraId}" class="btn btn-warning btn-sm">
+                        <i class="fas fa-edit me-1"></i>Ver Obra
                     </a>
                 </div>
             `;
@@ -526,10 +526,11 @@ async function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
             // Intentar geocodificar la dirección
             const response = await fetch(`/obras/api/buscar-direcciones?q=${encodeURIComponent(direccion)}`);
             if (response.ok) {
-                const resultados = await response.json();
+                const data = await response.json();
+                const resultados = data.results || data;
                 if (resultados && resultados.length > 0) {
                     lat = resultados[0].lat;
-                    lng = resultados[0].lng;
+                    lng = resultados[0].lng || resultados[0].lon;
                     console.log(`✅ Geocodificación exitosa: ${lat}, ${lng}`);
 
                     // Actualizar coordenadas en la base de datos (en background)
@@ -556,8 +557,8 @@ async function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
                     <p class="mb-0"><strong>Dirección registrada:</strong> ${direccion}</p>
                     <hr>
                     <p class="small mb-2">Prueba editando la obra con una dirección más específica (ej: "Av. Corrientes 1234, Buenos Aires").</p>
-                    <a href="/obras/${obraId}/editar" class="btn btn-warning btn-sm">
-                        <i class="fas fa-edit me-1"></i>Editar Obra
+                    <a href="/obras/${obraId}" class="btn btn-warning btn-sm">
+                        <i class="fas fa-edit me-1"></i>Ver Obra
                     </a>
                 </div>
             `;
