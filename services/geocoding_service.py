@@ -824,6 +824,18 @@ def search(query: str, *, provider: Optional[str] = None, limit: int = 5) -> Lis
             current_app.logger.warning(f"Fallo al consultar geocodificador con variante {i}: {exc}")
             continue  # Intentar siguiente variante
 
+    if not results and GOOGLE_MAPS_API_KEY:
+        # Ultimo intento: query original sin modificar, directo a Google Maps
+        # A veces las variantes rompen la dirección que Google SI entiende tal cual
+        try:
+            clean_query = query.strip()
+            current_app.logger.info(f"🔄 Ultimo intento con query limpia: {clean_query}")
+            results = _fetch_google_maps(clean_query, limit=limit)
+            if results:
+                current_app.logger.info(f"✅ Query limpia encontró {len(results)} resultados")
+        except Exception as e:
+            current_app.logger.warning(f"Ultimo intento falló: {e}")
+
     if not results:
         current_app.logger.warning(f"❌ No se encontraron resultados para ninguna variante de: {query}")
         return []
