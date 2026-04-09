@@ -87,6 +87,21 @@ def confirmar_como_obra(id):
         obra.geocode_raw = presupuesto.geocode_raw
         obra.geocode_actualizado = presupuesto.geocode_actualizado
 
+        # Si la geocodificacion del presupuesto quedo pendiente, intentar ahora
+        if (not obra.latitud or not obra.longitud) and obra.direccion:
+            try:
+                from services.geocoding_service import geocode_address
+                geo_result = geocode_address(obra.direccion)
+                if geo_result and geo_result.get('lat') and geo_result.get('lng'):
+                    obra.latitud = geo_result['lat']
+                    obra.longitud = geo_result['lng']
+                    obra.geocode_status = 'ok'
+                    obra.geocode_provider = geo_result.get('provider', 'unknown')
+                    obra.direccion_normalizada = geo_result.get('formatted_address') or obra.direccion
+                    current_app.logger.info(f"Geocodificacion exitosa al confirmar presupuesto: {obra.direccion}")
+            except Exception as geo_err:
+                current_app.logger.warning(f"Geocodificacion fallo al confirmar: {geo_err}")
+
         # Presupuesto y fechas
         obra.presupuesto_total = presupuesto.total_con_iva
         obra.fecha_inicio = date.today()
