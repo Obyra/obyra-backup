@@ -1974,12 +1974,116 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Usuario</label>
-                        <select class="form-select" name="usuario_id" required>
+                        <select class="form-select" name="usuario_id" id="selectUsuarioAsignar" required>
                             <option value="">Seleccionar usuario...</option>
                             {% for usuario in usuarios_disponibles %}
                             <option value="{{ usuario.id }}">{{ usuario.nombre_completo }} ({{ usuario.rol }})</option>
                             {% endfor %}
                         </select>
+                        <div class="mt-2">
+                            <a href="#" class="small text-primary" id="btnCrearUsuarioInline" onclick="document.getElementById('formNuevoUsuarioInline').style.display='block'; this.style.display='none'; return false;">
+                                <i class="fas fa-plus-circle me-1"></i>Crear nuevo usuario
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Formulario inline para crear usuario rapido -->
+                    <div id="formNuevoUsuarioInline" style="display:none;" class="border rounded p-3 mb-3 bg-light">
+                        <h6 class="mb-2"><i class="fas fa-user-plus text-success me-1"></i>Nuevo integrante</h6>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="text" class="form-control form-control-sm" id="nuevoNombre" placeholder="Nombre *" required>
+                            </div>
+                            <div class="col-6">
+                                <input type="text" class="form-control form-control-sm" id="nuevoApellido" placeholder="Apellido *" required>
+                            </div>
+                            <div class="col-12">
+                                <input type="email" class="form-control form-control-sm" id="nuevoEmail" placeholder="Email *" required>
+                            </div>
+                            <div class="col-6">
+                                <input type="text" class="form-control form-control-sm" id="nuevoCuit" placeholder="CUIL/CUIT">
+                            </div>
+                            <div class="col-6">
+                                <input type="text" class="form-control form-control-sm" id="nuevoTelefono" placeholder="Telefono">
+                            </div>
+                            <div class="col-6">
+                                <select class="form-select form-select-sm" id="nuevoRol">
+                                    <option value="operario">Operario</option>
+                                    <option value="pm">Project Manager</option>
+                                    <option value="admin">Administrador</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <button type="button" class="btn btn-success btn-sm w-100" onclick="crearUsuarioRapido()">
+                                    <i class="fas fa-check me-1"></i>Crear
+                                </button>
+                            </div>
+                        </div>
+                        <div id="nuevoUsuarioMsg" class="mt-2 small"></div>
+                        <script>
+                        async function crearUsuarioRapido() {
+                            var nombre = document.getElementById('nuevoNombre').value.trim();
+                            var apellido = document.getElementById('nuevoApellido').value.trim();
+                            var email = document.getElementById('nuevoEmail').value.trim();
+                            var cuit = document.getElementById('nuevoCuit').value.trim();
+                            var telefono = document.getElementById('nuevoTelefono').value.trim();
+                            var rol = document.getElementById('nuevoRol').value;
+                            var msgDiv = document.getElementById('nuevoUsuarioMsg');
+
+                            if (!nombre || !apellido || !email) {
+                                msgDiv.innerHTML = '<span class="text-danger">Nombre, apellido y email son obligatorios</span>';
+                                return;
+                            }
+
+                            msgDiv.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Creando...</span>';
+
+                            try {
+                                var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+                                var resp = await fetch('/auth/usuarios/integrantes', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRFToken': csrfToken
+                                    },
+                                    body: JSON.stringify({
+                                        nombre: nombre,
+                                        apellido: apellido,
+                                        email: email,
+                                        cuit: cuit,
+                                        telefono: telefono,
+                                        role: rol
+                                    })
+                                });
+                                var data = await resp.json();
+                                if (data.success) {
+                                    msgDiv.innerHTML = '<span class="text-success"><i class="fas fa-check me-1"></i>' + (data.message || 'Usuario creado') + '</span>';
+                                    // Agregar al select
+                                    var select = document.getElementById('selectUsuarioAsignar');
+                                    var opt = document.createElement('option');
+                                    opt.value = data.usuario_id || data.user_id || '';
+                                    opt.textContent = nombre + ' ' + apellido + ' (' + rol + ')';
+                                    opt.selected = true;
+                                    select.appendChild(opt);
+                                    // Limpiar form
+                                    document.getElementById('nuevoNombre').value = '';
+                                    document.getElementById('nuevoApellido').value = '';
+                                    document.getElementById('nuevoEmail').value = '';
+                                    document.getElementById('nuevoCuit').value = '';
+                                    document.getElementById('nuevoTelefono').value = '';
+                                    // Ocultar form inline
+                                    setTimeout(function() {
+                                        document.getElementById('formNuevoUsuarioInline').style.display = 'none';
+                                        document.getElementById('btnCrearUsuarioInline').style.display = '';
+                                    }, 1500);
+                                } else {
+                                    msgDiv.innerHTML = '<span class="text-danger"><i class="fas fa-times me-1"></i>' + (data.message || 'Error al crear') + '</span>';
+                                }
+                            } catch (err) {
+                                msgDiv.innerHTML = '<span class="text-danger">Error de conexion</span>';
+                                console.error(err);
+                            }
+                        }
+                        </script>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Etapa Específica (Opcional)</label>
