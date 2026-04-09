@@ -924,15 +924,18 @@ def crear_integrante_desde_panel():
     email = (payload.get('email') or '').strip().lower()
     rol_solicitado = (payload.get('rol') or 'operario').strip().lower()
 
-    if not all([nombre, apellido, cuit_raw, telefono, email]):
-        return jsonify({'success': False, 'message': 'Por favor, completa todos los campos obligatorios.'}), 400
+    if not all([nombre, apellido, email]):
+        return jsonify({'success': False, 'message': 'Nombre, apellido y email son obligatorios.'}), 400
 
     if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
         return jsonify({'success': False, 'message': 'El email ingresado no es válido.'}), 400
 
-    cuit_normalizado = normalizar_cuit(cuit_raw)
-    if not validar_cuit(cuit_normalizado):
-        return jsonify({'success': False, 'message': 'El CUIT/CUIL ingresado no es válido.'}), 400
+    # CUIT es opcional para creacion rapida desde modal de obra
+    cuit_normalizado = ''
+    if cuit_raw:
+        cuit_normalizado = normalizar_cuit(cuit_raw)
+        if not validar_cuit(cuit_normalizado):
+            return jsonify({'success': False, 'message': 'El CUIT/CUIL ingresado no es válido.'}), 400
 
     rol_map = {
         'administrador': ('administrador', 'admin'),
@@ -943,9 +946,7 @@ def crear_integrante_desde_panel():
         return jsonify({'success': False, 'message': 'El rol seleccionado no es válido.'}), 400
 
     rol_interno, role_front = rol_map[rol_solicitado]
-    telefono_sanitizado = re.sub(r'[^0-9+\s-]', '', telefono)
-    if not telefono_sanitizado.strip():
-        return jsonify({'success': False, 'message': 'El teléfono ingresado no es válido.'}), 400
+    telefono_sanitizado = re.sub(r'[^0-9+\s-]', '', telefono) if telefono else ''
 
     membership = get_current_membership()
     if not membership:
