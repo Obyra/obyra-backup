@@ -423,20 +423,20 @@ class MovimientoCaja(db.Model):
     confirmado_por = db.relationship('Usuario', foreign_keys=[confirmado_por_id])
 
     @classmethod
-    def generar_numero(cls, organizacion_id):
+    def generar_numero(cls, organizacion_id=None):
+        """Genera numero unico GLOBAL para evitar colision con unique constraint."""
         year = datetime.utcnow().year
-        ultimo = cls.query.filter(
-            cls.organizacion_id == organizacion_id,
-            cls.numero.like(f'MV-{year}-%')
-        ).order_by(cls.id.desc()).first()
-        if ultimo and ultimo.numero:
+        prefix = f'MV-{year}-'
+        todos = cls.query.filter(cls.numero.like(f'{prefix}%')).all()
+        max_num = 0
+        for r in todos:
             try:
-                ultimo_num = int(ultimo.numero.split('-')[-1])
-            except Exception:
-                ultimo_num = 0
-        else:
-            ultimo_num = 0
-        return f'MV-{year}-{str(ultimo_num + 1).zfill(4)}'
+                num = int(r.numero.replace(prefix, ''))
+                if num > max_num:
+                    max_num = num
+            except (ValueError, AttributeError):
+                continue
+        return f'{prefix}{str(max_num + 1).zfill(4)}'
 
     @property
     def tipo_display(self):
