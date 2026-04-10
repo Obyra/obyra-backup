@@ -445,9 +445,27 @@ function recalcularTotales() {
 }
 
 // Precargar items si vienen del requerimiento
+// Separar items CON precio (van a la OC) y SIN precio (quedan pendientes)
 document.addEventListener('DOMContentLoaded', function() {
     if (itemsPrecarga.length > 0) {
-        itemsPrecarga.forEach(item => agregarItem(item));
+        var conPrecio = itemsPrecarga.filter(item => parseFloat(item.precio_unitario || 0) > 0);
+        var sinPrecio = itemsPrecarga.filter(item => !parseFloat(item.precio_unitario || 0));
+
+        if (conPrecio.length > 0) {
+            conPrecio.forEach(item => agregarItem(item));
+        }
+
+        // Mostrar aviso de items pendientes si hay
+        if (sinPrecio.length > 0) {
+            var aviso = document.createElement('div');
+            aviso.className = 'alert alert-warning mt-2 mx-3 small';
+            aviso.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i><strong>' + sinPrecio.length + ' item(s) sin precio</strong> no fueron incluidos en la OC. Completa los precios en la cotizacion/comparativa y volve a generar la OC, o agregalos manualmente con "+ Agregar Item".';
+            document.getElementById('tablaItems').parentNode.appendChild(aviso);
+        }
+
+        if (conPrecio.length === 0) {
+            agregarItem(); // Fila vacia para empezar
+        }
     } else {
         agregarItem();
     }

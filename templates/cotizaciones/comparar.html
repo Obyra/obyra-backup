@@ -47,7 +47,25 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {# Items CON al menos un precio cotizado #}
+                        {% set items_con_precio = [] %}
+                        {% set items_sin_precio = [] %}
                         {% for fila in comparacion %}
+                            {% set tiene_precio = [] %}
+                            {% for cot in cotizaciones %}
+                                {% set pd = fila.precios.get(cot.id, {}) %}
+                                {% if pd.precio_unitario and pd.precio_unitario > 0 %}
+                                    {% if tiene_precio.append(1) %}{% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if tiene_precio %}
+                                {% if items_con_precio.append(fila) %}{% endif %}
+                            {% else %}
+                                {% if items_sin_precio.append(fila) %}{% endif %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {% for fila in items_con_precio %}
                         <tr>
                             <td>
                                 <strong>{{ fila.item.descripcion }}</strong>
@@ -83,6 +101,31 @@
                             {% endfor %}
                         </tr>
                         {% endfor %}
+
+                        {# Separador visual si hay items pendientes #}
+                        {% if items_sin_precio %}
+                        <tr class="table-warning">
+                            <td colspan="{{ 3 + cotizaciones|length }}" class="text-center py-2">
+                                <i class="fas fa-clock me-1"></i>
+                                <strong>{{ items_sin_precio|length }} item(s) pendientes de cotizar</strong>
+                                <button class="btn btn-xs btn-outline-secondary ms-2" onclick="document.querySelectorAll('.fila-pendiente').forEach(r => r.style.display = r.style.display === 'none' ? '' : 'none');" style="font-size:0.75rem;">
+                                    Mostrar/Ocultar
+                                </button>
+                            </td>
+                        </tr>
+                        {% for fila in items_sin_precio %}
+                        <tr class="fila-pendiente" style="display:none; opacity:0.6;">
+                            <td>
+                                <span class="text-muted">{{ fila.item.descripcion }}</span>
+                            </td>
+                            <td class="text-center text-muted">{{ '{:g}'.format(fila.item.cantidad|float) }}</td>
+                            <td class="text-center text-muted">{{ fila.item.unidad }}</td>
+                            {% for cot in cotizaciones %}
+                            <td class="text-center text-muted">-</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        {% endif %}
                     </tbody>
                     <tfoot>
                         <tr class="table-light fw-bold">
