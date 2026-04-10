@@ -406,17 +406,28 @@ def api_gestionar_materiales(obra_id):
             from datetime import datetime as dt
             org_id = current_user.organizacion_id
 
-            requerimiento = RequerimientoCompra(
-                numero=RequerimientoCompra.generar_numero(org_id),
-                organizacion_id=org_id,
-                obra_id=obra.id,
-                solicitante_id=current_user.id,
-                motivo=motivo,
-                prioridad=prioridad,
-                fecha_necesidad=dt.strptime(fecha_necesidad_str, '%Y-%m-%d').date() if fecha_necesidad_str else None
-            )
-            db.session.add(requerimiento)
-            db.session.flush()
+            # Generar numero con retry para evitar colision de unique constraint
+            from sqlalchemy.exc import IntegrityError as _IntegrityError
+            requerimiento = None
+            for _intento in range(5):
+                try:
+                    requerimiento = RequerimientoCompra(
+                        numero=RequerimientoCompra.generar_numero(org_id),
+                        organizacion_id=org_id,
+                        obra_id=obra.id,
+                        solicitante_id=current_user.id,
+                        motivo=motivo,
+                        prioridad=prioridad,
+                        fecha_necesidad=dt.strptime(fecha_necesidad_str, '%Y-%m-%d').date() if fecha_necesidad_str else None
+                    )
+                    db.session.add(requerimiento)
+                    db.session.flush()
+                    break
+                except _IntegrityError:
+                    db.session.rollback()
+                    continue
+            if not requerimiento or not requerimiento.id:
+                return jsonify({'ok': False, 'error': 'No se pudo generar número de requerimiento. Intentá de nuevo.'}), 500
 
             for item_data in items_comprar:
                 item = RequerimientoCompraItem(

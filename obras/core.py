@@ -1266,6 +1266,27 @@ def asignar_tareas_batch(obra_id):
 
             asignadas += 1
 
+        # Crear AsignacionObra si no existe (para que aparezca en "Equipo Asignado")
+        asig_existe = AsignacionObra.query.filter_by(
+            obra_id=obra_id, usuario_id=usuario_id, activo=True
+        ).first()
+        if not asig_existe:
+            db.session.add(AsignacionObra(
+                obra_id=obra_id,
+                usuario_id=usuario_id,
+                rol_en_obra='operario',
+                activo=True
+            ))
+
+        # Crear en obra_miembros si no existe
+        try:
+            db.session.execute(
+                text("INSERT INTO obra_miembros (obra_id, usuario_id, rol_en_obra) VALUES (:o, :u, :r) ON CONFLICT (obra_id, usuario_id) DO NOTHING"),
+                {"o": obra_id, "u": usuario_id, "r": "operario"}
+            )
+        except Exception:
+            pass
+
         db.session.commit()
         return jsonify(
             ok=True,
