@@ -56,14 +56,14 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Sync plan_activo skipped: {e}")
 
-    # Backfill: bump limites de organizaciones premium a sin-restricciones (999/999)
+    # Backfill: bump limites de TODAS las organizaciones a sin-restricciones (999/999)
     # OBYRA migro a un solo plan unificado sin restricciones de obras ni usuarios.
+    # Incluye prueba, estandar, premium y full_premium.
     try:
         bump_limits_sql = """
         UPDATE organizaciones
         SET max_obras = 999, max_usuarios = 999
-        WHERE plan_tipo IN ('premium', 'full_premium')
-          AND (max_obras < 999 OR max_usuarios < 999);
+        WHERE (max_obras < 999 OR max_usuarios < 999);
         """
         result = db.session.execute(text(bump_limits_sql))
         db.session.commit()

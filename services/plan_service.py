@@ -75,8 +75,8 @@ PLAN_FEATURES = {
     'prueba': {
         'nombre': 'Prueba Gratuita',
         'precio_usd': 0,
-        'max_obras': 1,
-        'max_usuarios': 5,
+        'max_obras': 999,
+        'max_usuarios': 999,
         'duracion_dias': 30,
         'contract_type': 'trial',
         'features': set(_STANDARD_FEATURES),
@@ -84,8 +84,8 @@ PLAN_FEATURES = {
     'estandar': {
         'nombre': 'Plan Standard',
         'precio_usd': 199,
-        'max_obras': 3,
-        'max_usuarios': 5,
+        'max_obras': 999,
+        'max_usuarios': 999,
         'duracion_dias': 365,
         'contract_type': 'subscription',
         'features': set(_STANDARD_FEATURES),
@@ -102,8 +102,8 @@ PLAN_FEATURES = {
     'full_premium': {
         'nombre': 'Plan Full Premium',
         'precio_usd': 799,
-        'max_obras': 15,
-        'max_usuarios': 35,
+        'max_obras': 999,
+        'max_usuarios': 999,
         'duracion_dias': 365,
         'contract_type': 'subscription',
         'features': set(_FULL_PREMIUM_FEATURES),
