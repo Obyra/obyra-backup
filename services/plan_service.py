@@ -399,21 +399,16 @@ def get_plan_summary(org=None):
 def require_feature(feature_name):
     """
     Decorator que requiere una feature específica del plan.
-
-    Uso:
-        @require_feature('inventory.full')
-        def inventario():
-            ...
+    Con el plan unificado OBYRA Profesional, todas las features
+    están incluidas en todos los planes — este decorator se
+    mantiene por compatibilidad pero siempre deja pasar.
     """
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
                 abort(401)
-
-            if not can_access_feature(feature_name):
-                return _handle_plan_blocked(feature_name)
-
+            # Plan unificado: todas las features incluidas
             return f(*args, **kwargs)
         return decorated_function
     return decorator

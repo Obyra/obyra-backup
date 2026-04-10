@@ -1476,17 +1476,13 @@
                 if (loading) loading.style.display = 'none';
                 if (!container) return;
                 container.style.display = 'block';
-                var saldo = data.ok ? data.saldo : 0;
                 var transferido = data.transferido || 0;
-                var gastado = data.gastado || 0;
-                var color = saldo > 0 ? 'success' : (saldo < 0 ? 'danger' : 'muted');
                 var fmt = function(n) { return '$' + Math.abs(n).toLocaleString('es-AR', {minimumFractionDigits:2}); };
-                var html = '<div class="row text-center mb-3">';
-                html += '<div class="col-4"><div class="border rounded p-3"><div class="small text-muted">Transferido</div><div class="h4 text-success mb-0">' + fmt(transferido) + '</div></div></div>';
-                html += '<div class="col-4"><div class="border rounded p-3"><div class="small text-muted">Gastado</div><div class="h4 text-danger mb-0">' + fmt(gastado) + '</div></div></div>';
-                html += '<div class="col-4"><div class="border rounded p-3"><div class="small text-muted">Saldo</div><div class="h4 text-' + color + ' mb-0">' + fmt(saldo) + '</div></div></div>';
+                var html = '<div class="text-center mb-3">';
+                html += '<div class="h2 text-success mb-1">' + fmt(transferido) + '</div>';
+                html += '<p class="text-muted mb-3">Fondos transferidos a esta obra</p>';
+                html += '<a href="/caja/obra/' + obraId + '" class="btn btn-outline-success"><i class="fas fa-list me-1"></i>Ver Movimientos</a>';
                 html += '</div>';
-                html += '<div class="text-center"><a href="/caja/obra/' + obraId + '" class="btn btn-outline-success"><i class="fas fa-list me-1"></i>Ver Movimientos</a></div>';
                 container.innerHTML = html;
             })
             .catch(function() {
