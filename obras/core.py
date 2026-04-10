@@ -868,9 +868,13 @@ def detalle(id):
         current_app.logger.error(f"Error cargando equipos en obra {obra.id}: {e}")
         flash(f'Error al cargar maquinaria: {e}', 'warning')
 
+    # Diccionario etapa_id -> etapa para mostrar nombres en equipo asignado
+    etapas_by_id = {e.id: e for e in etapas}
+
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
+                         etapas_by_id=etapas_by_id,
                          remitos_count=remitos_count,
                          remitos_list=remitos_list,
                          ordenes_compra_list=ordenes_compra_list,

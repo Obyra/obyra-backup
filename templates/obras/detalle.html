@@ -970,7 +970,8 @@
                                         {% endif %}
                                         {% if miembro.etapa_id %}
                                         <div class="mb-2">
-                                            <span class="badge bg-info">Etapa {{ miembro.etapa_id }}</span>
+                                            {% set etapa_asig = etapas_by_id.get(miembro.etapa_id) if etapas_by_id is defined else None %}
+                                            <span class="badge bg-info">{{ etapa_asig.nombre if etapa_asig else ('Etapa ' ~ miembro.etapa_id) }}</span>
                                         </div>
                                         {% endif %}
                                         {% if miembro.fecha_asignacion or miembro.created_at %}

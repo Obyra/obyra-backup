@@ -960,24 +960,25 @@ class RequerimientoCompra(db.Model):
         return f'<RequerimientoCompra {self.numero}>'
 
     @classmethod
-    def generar_numero(cls, organizacion_id):
+    def generar_numero(cls, organizacion_id=None):
         """Genera un número único para el requerimiento.
-        Busca el ultimo numero GLOBAL (no por org) para evitar colision
-        con el constraint unique en la columna numero."""
+        Busca el numero mas alto GLOBAL para evitar colision."""
+        from sqlalchemy import func as _func
         year = datetime.utcnow().year
-        ultimo = cls.query.filter(
-            cls.numero.like(f'RC-{year}-%')
-        ).order_by(cls.id.desc()).first()
+        prefix = f'RC-{year}-'
 
-        if ultimo and ultimo.numero:
+        # Buscar TODOS los numeros del año y extraer el maximo
+        todos = cls.query.filter(cls.numero.like(f'{prefix}%')).all()
+        max_num = 0
+        for r in todos:
             try:
-                ultimo_num = int(ultimo.numero.split('-')[-1])
-            except Exception:
-                ultimo_num = 0
-        else:
-            ultimo_num = 0
+                num = int(r.numero.replace(prefix, ''))
+                if num > max_num:
+                    max_num = num
+            except (ValueError, AttributeError):
+                continue
 
-        return f'RC-{year}-{str(ultimo_num + 1).zfill(4)}'
+        return f'{prefix}{str(max_num + 1).zfill(4)}'
 
     @property
     def estado_display(self):
