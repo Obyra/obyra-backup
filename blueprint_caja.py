@@ -280,6 +280,14 @@ def gasto():
             fecha_confirmacion=datetime.utcnow(),
         )
         db.session.add(mov)
+
+        # Actualizar costo_real de la obra con el gasto
+        if tipo in ('gasto_obra', 'pago_proveedor'):
+            from models.projects import Obra
+            obra = Obra.query.get(obra_id)
+            if obra:
+                obra.costo_real = float(obra.costo_real or 0) + float(monto)
+
         db.session.commit()
 
         flash(f'Gasto {mov.numero} registrado por ${monto:,.2f}', 'success')
@@ -330,5 +338,23 @@ def api_saldo(obra_id):
     if not _tiene_permiso_caja():
         return jsonify(ok=False, error='Sin permisos'), 403
 
-    saldo = saldo_caja_obra(obra_id)
-    return jsonify(ok=True, saldo=saldo)
+    from models.templates import MovimientoCaja
+
+    transferido = float(db.session.query(
+        func.coalesce(func.sum(MovimientoCaja.monto), 0)
+    ).filter(
+        MovimientoCaja.obra_id == obra_id,
+        MovimientoCaja.estado == 'confirmado',
+        MovimientoCaja.tipo == 'transferencia_a_obra'
+    ).scalar())
+
+    gastado = float(db.session.query(
+        func.coalesce(func.sum(MovimientoCaja.monto), 0)
+    ).filter(
+        MovimientoCaja.obra_id == obra_id,
+        MovimientoCaja.estado == 'confirmado',
+        MovimientoCaja.tipo.in_(['devolucion_obra', 'pago_proveedor', 'gasto_obra'])
+    ).scalar())
+
+    saldo = transferido - gastado
+    return jsonify(ok=True, saldo=saldo, transferido=transferido, gastado=gastado)
