@@ -547,6 +547,73 @@ def _notificar_fichada_pendiente(usuario_id, org_id, tipo_fichada, tareas_str):
         db.session.rollback()
 
 
+def obtener_alertas_movimientos_caja(org_id, limite=5):
+    """Alertas de movimientos de caja recientes (últimas 48 horas)."""
+    try:
+        from models.templates import MovimientoCaja
+        from datetime import datetime, timedelta
+
+        hace_48h = datetime.utcnow() - timedelta(hours=48)
+        movimientos = MovimientoCaja.query.filter(
+            MovimientoCaja.organizacion_id == org_id,
+            MovimientoCaja.created_at >= hace_48h,
+            MovimientoCaja.estado == 'confirmado'
+        ).order_by(MovimientoCaja.created_at.desc()).limit(limite).all()
+
+        alertas = []
+        for m in movimientos:
+            es_gasto = m.tipo in ('gasto_obra', 'pago_proveedor')
+            obra_nombre = m.obra.nombre if m.obra else 'Sin obra'
+            monto_str = '${:,.0f}'.format(float(m.monto or 0))
+            alertas.append({
+                'tipo': 'caja',
+                'severidad': 'media' if es_gasto else 'baja',
+                'titulo': f'{"Gasto" if es_gasto else "Transferencia"}: {monto_str}',
+                'detalle': f'{m.concepto or m.tipo} - {obra_nombre}',
+                'fecha': m.created_at,
+                'icono': 'fa-cash-register',
+                'color': 'danger' if es_gasto else 'success',
+            })
+        return alertas
+    except Exception:
+        return []
+
+
+def obtener_alertas_entregas_proximas(org_id, limite=5):
+    """Alertas de entregas de OC que llegan en los próximos 7 días."""
+    try:
+        from models.inventory import OrdenCompra
+        from datetime import date, timedelta
+
+        hoy = date.today()
+        en_7_dias = hoy + timedelta(days=7)
+
+        ocs = OrdenCompra.query.filter(
+            OrdenCompra.organizacion_id == org_id,
+            OrdenCompra.estado.in_(['emitida', 'recibida_parcial']),
+            OrdenCompra.fecha_entrega_estimada.isnot(None),
+            OrdenCompra.fecha_entrega_estimada <= en_7_dias,
+            OrdenCompra.fecha_entrega_estimada >= hoy,
+        ).order_by(OrdenCompra.fecha_entrega_estimada).limit(limite).all()
+
+        alertas = []
+        for oc in ocs:
+            dias = (oc.fecha_entrega_estimada - hoy).days
+            obra_nombre = oc.obra.nombre if oc.obra else 'Sin obra'
+            alertas.append({
+                'tipo': 'entrega_material',
+                'severidad': 'alta' if dias <= 2 else 'media',
+                'titulo': f'Entrega {oc.numero} en {dias} día(s)',
+                'detalle': f'{oc.proveedor} → {obra_nombre}',
+                'fecha': oc.fecha_entrega_estimada,
+                'icono': 'fa-truck',
+                'color': 'warning' if dias <= 2 else 'info',
+            })
+        return alertas
+    except Exception:
+        return []
+
+
 def obtener_todas_alertas(org_id, limite_por_tipo=3):
     """
     Obtiene todas las alertas del sistema agrupadas y ordenadas por severidad.
@@ -564,6 +631,8 @@ def obtener_todas_alertas(org_id, limite_por_tipo=3):
     alertas.extend(obtener_alertas_fichadas(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_liquidaciones_pendientes(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_equipos_transito(org_id, limite_por_tipo))
+    alertas.extend(obtener_alertas_movimientos_caja(org_id, limite_por_tipo))
+    alertas.extend(obtener_alertas_entregas_proximas(org_id, limite_por_tipo))
 
     # Ordenar por severidad
     orden_severidad = {'critica': 0, 'alta': 1, 'media': 2, 'baja': 3}

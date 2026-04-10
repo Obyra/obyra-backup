@@ -1328,6 +1328,27 @@ def reporte_costos():
     except Exception:
         pass
 
+    # ========== COSTOS DE CAJA (MovimientoCaja) ==========
+    gastos_caja = []
+    costo_total_caja = 0
+    try:
+        from models.templates import MovimientoCaja
+        caja_query = MovimientoCaja.query.join(Obra).filter(
+            MovimientoCaja.organizacion_id == org_id,
+            MovimientoCaja.estado == 'confirmado',
+            MovimientoCaja.tipo.in_(['gasto_obra', 'pago_proveedor'])
+        )
+        if obra_id:
+            caja_query = caja_query.filter(MovimientoCaja.obra_id == obra_id)
+        if fecha_desde_obj:
+            caja_query = caja_query.filter(MovimientoCaja.fecha_movimiento >= fecha_desde_obj)
+        if fecha_hasta_obj:
+            caja_query = caja_query.filter(MovimientoCaja.fecha_movimiento <= fecha_hasta_obj)
+        gastos_caja = caja_query.order_by(desc(MovimientoCaja.fecha_movimiento)).all()
+        costo_total_caja = sum(float(g.monto or 0) for g in gastos_caja)
+    except Exception:
+        pass
+
     # ========== COSTOS DE EQUIPOS (EquipmentUsage) ==========
     usos_equipos = []
     try:
@@ -1464,6 +1485,40 @@ def reporte_costos():
             if mes_key not in costos_por_mes:
                 costos_por_mes[mes_key] = {'display': mes_display, 'ars': 0, 'usd': 0, 'items': 0}
             costos_por_mes[mes_key]['ars'] += costo_eq
+            costos_por_mes[mes_key]['items'] += 1
+
+    # ========== PROCESAR GASTOS DE CAJA ==========
+    for gasto in gastos_caja:
+        costo_g = float(gasto.monto or 0)
+        costo_total_ars += costo_g
+
+        obra_obj = gasto.obra if hasattr(gasto, 'obra') and gasto.obra else None
+        obra_nombre = obra_obj.nombre if obra_obj else 'Sin obra'
+        if obra_nombre not in costos_por_obra:
+            costos_por_obra[obra_nombre] = {
+                'ars': 0, 'usd': 0, 'items': 0,
+                'materiales': 0, 'mano_obra': 0, 'equipos': 0, 'caja': 0,
+                'presupuesto': float(obra_obj.presupuesto_total or 0) if obra_obj else 0,
+                'obra_id': obra_obj.id if obra_obj else None
+            }
+        if 'caja' not in costos_por_obra[obra_nombre]:
+            costos_por_obra[obra_nombre]['caja'] = 0
+        costos_por_obra[obra_nombre]['ars'] += costo_g
+        costos_por_obra[obra_nombre]['caja'] += costo_g
+        costos_por_obra[obra_nombre]['items'] += 1
+
+        cat_caja = 'Gastos de Caja'
+        if cat_caja not in costos_por_categoria:
+            costos_por_categoria[cat_caja] = {'ars': 0, 'usd': 0, 'items': 0}
+        costos_por_categoria[cat_caja]['ars'] += costo_g
+        costos_por_categoria[cat_caja]['items'] += 1
+
+        if gasto.fecha_movimiento:
+            mes_key = gasto.fecha_movimiento.strftime('%Y-%m')
+            mes_display = gasto.fecha_movimiento.strftime('%B %Y')
+            if mes_key not in costos_por_mes:
+                costos_por_mes[mes_key] = {'display': mes_display, 'ars': 0, 'usd': 0, 'items': 0}
+            costos_por_mes[mes_key]['ars'] += costo_g
             costos_por_mes[mes_key]['items'] += 1
 
     # Ordenar top materiales por costo
