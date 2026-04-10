@@ -800,7 +800,22 @@ def detalle(id):
     except Exception:
         db.session.rollback()
 
-    costo_real_calc = float(Decimal(str(costo_materiales)) + costo_mano_obra + costo_maquinaria)
+    # Gastos de caja (transferencias gastadas en la obra)
+    costo_caja = Decimal('0')
+    try:
+        from models.templates import MovimientoCaja
+        gastos_caja = db.session.query(
+            func.coalesce(func.sum(MovimientoCaja.monto), 0)
+        ).filter(
+            MovimientoCaja.obra_id == obra.id,
+            MovimientoCaja.estado == 'confirmado',
+            MovimientoCaja.tipo.in_(['gasto_obra', 'pago_proveedor'])
+        ).scalar()
+        costo_caja = Decimal(str(gastos_caja or 0))
+    except Exception:
+        db.session.rollback()
+
+    costo_real_calc = float(Decimal(str(costo_materiales)) + costo_mano_obra + costo_maquinaria + costo_caja)
     if obra.costo_real != costo_real_calc:
         obra.costo_real = costo_real_calc
         db.session.commit()
@@ -812,6 +827,7 @@ def detalle(id):
         'costo_hora': float(costo_hora),
         'maquinaria': float(costo_maquinaria),
         'horas_maquinaria': float(horas_maquinaria),
+        'caja': float(costo_caja),
         'total': costo_real_calc
     }
 

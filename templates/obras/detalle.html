@@ -349,6 +349,12 @@
                             <small>({{ "%.1f"|format(costos_desglosados.horas_maquinaria) }} hs de uso aprobado)</small>
                         </div>
                         {% endif %}
+                        {% if costos_desglosados.caja is defined and costos_desglosados.caja > 0 %}
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small><i class="fas fa-cash-register text-danger me-1"></i>Gastos de caja:</small>
+                            <small class="fw-bold">{{ "$ {:,.2f}".format(costos_desglosados.caja) }}</small>
+                        </div>
+                        {% endif %}
                     </div>
                     {% endif %}
 
@@ -1477,12 +1483,34 @@
                 if (!container) return;
                 container.style.display = 'block';
                 var transferido = data.transferido || 0;
+                var gastado = data.gastado || 0;
+                var saldo = data.saldo || 0;
+                var movs = data.movimientos || [];
                 var fmt = function(n) { return '$' + Math.abs(n).toLocaleString('es-AR', {minimumFractionDigits:2}); };
-                var html = '<div class="text-center mb-3">';
-                html += '<div class="h2 text-success mb-1">' + fmt(transferido) + '</div>';
-                html += '<p class="text-muted mb-3">Fondos transferidos a esta obra</p>';
-                html += '<a href="/caja/obra/' + obraId + '" class="btn btn-outline-success"><i class="fas fa-list me-1"></i>Ver Movimientos</a>';
+                var colorSaldo = saldo > 0 ? 'success' : (saldo < 0 ? 'danger' : 'muted');
+
+                var html = '<div class="row text-center mb-3">';
+                html += '<div class="col-4"><div class="border rounded p-2"><small class="text-muted d-block">Transferido</small><strong class="text-success">' + fmt(transferido) + '</strong></div></div>';
+                html += '<div class="col-4"><div class="border rounded p-2"><small class="text-muted d-block">Gastado</small><strong class="text-danger">' + fmt(gastado) + '</strong></div></div>';
+                html += '<div class="col-4"><div class="border rounded p-2"><small class="text-muted d-block">Saldo</small><strong class="text-' + colorSaldo + '">' + fmt(saldo) + '</strong></div></div>';
                 html += '</div>';
+
+                if (movs.length > 0) {
+                    html += '<table class="table table-sm table-hover mb-2"><thead class="table-light"><tr><th>Num</th><th>Tipo</th><th>Concepto</th><th class="text-end">Monto</th><th>Fecha</th></tr></thead><tbody>';
+                    movs.forEach(function(m) {
+                        var esIngreso = m.tipo === 'transferencia_a_obra';
+                        var montoColor = esIngreso ? 'text-success' : 'text-danger';
+                        var signo = esIngreso ? '+' : '-';
+                        html += '<tr><td class="small">' + m.numero + '</td>';
+                        html += '<td><span class="badge bg-' + (esIngreso ? 'success' : 'danger') + '" style="font-size:0.65rem;">' + (m.tipo_display || m.tipo) + '</span></td>';
+                        html += '<td class="small">' + (m.concepto || '-') + '</td>';
+                        html += '<td class="text-end small ' + montoColor + ' fw-bold">' + signo + fmt(m.monto) + '</td>';
+                        html += '<td class="small">' + m.fecha + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                }
+
+                html += '<div class="text-center"><a href="/caja/obra/' + obraId + '" class="btn btn-sm btn-outline-success"><i class="fas fa-list me-1"></i>Ver todos los movimientos</a></div>';
                 container.innerHTML = html;
             })
             .catch(function() {

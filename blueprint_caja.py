@@ -357,4 +357,19 @@ def api_saldo(obra_id):
     ).scalar())
 
     saldo = transferido - gastado
-    return jsonify(ok=True, saldo=saldo, transferido=transferido, gastado=gastado)
+
+    # Ultimos movimientos para mostrar inline en la tab
+    movimientos = MovimientoCaja.query.filter_by(
+        obra_id=obra_id
+    ).order_by(MovimientoCaja.id.desc()).limit(10).all()
+    movs_list = [{
+        'numero': m.numero,
+        'tipo': m.tipo,
+        'tipo_display': m.tipo_display if hasattr(m, 'tipo_display') else m.tipo,
+        'concepto': m.concepto,
+        'monto': float(m.monto or 0),
+        'estado': m.estado,
+        'fecha': m.fecha_movimiento.strftime('%d/%m/%Y') if m.fecha_movimiento else '-',
+    } for m in movimientos]
+
+    return jsonify(ok=True, saldo=saldo, transferido=transferido, gastado=gastado, movimientos=movs_list)
