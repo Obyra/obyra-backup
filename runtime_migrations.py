@@ -1054,6 +1054,31 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Error creando campos de plan en organizaciones: {e}")
 
+    # Migración: agregar organizacion_id a tablas de seguridad que no la tienen
+    seguridad_tables = [
+        'protocolos_seguridad',
+        'checklists_seguridad',
+        'incidentes_seguridad',
+        'certificaciones_personal',
+        'auditorias_seguridad',
+    ]
+    for tabla in seguridad_tables:
+        try:
+            db.session.execute(text(f"""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                              WHERE table_name='{tabla}' AND column_name='organizacion_id') THEN
+                    ALTER TABLE {tabla} ADD COLUMN organizacion_id INTEGER REFERENCES organizaciones(id);
+                    CREATE INDEX IF NOT EXISTS idx_{tabla}_org_id ON {tabla}(organizacion_id);
+                END IF;
+            END $$;
+            """))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] Migración seguridad {tabla}: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado
