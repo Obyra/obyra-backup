@@ -313,3 +313,22 @@ msgstr "5-Jahres-Lizenz"
 
 msgid "Ya tienes cuenta?"
 msgstr "Bereits ein Konto?"
+
+# ============ Landing / Home ============
+msgid "Pedir Demo"
+msgstr "Demo anfordern"
+
+msgid "PLATAFORMA DE GESTIÓN PARA CONSTRUCTORAS"
+msgstr "MANAGEMENTPLATTFORM FÜR BAUUNTERNEHMEN"
+
+msgid "Gestiona tus obras con inteligencia artificial"
+msgstr "Verwalten Sie Ihre Bauprojekte mit künstlicher Intelligenz"
+
+msgid "Centraliza presupuestos, coordina equipos, controla inventario y automatiza compras desde una sola plataforma."
+msgstr "Budgets zentralisieren, Teams koordinieren, Inventar kontrollieren und Einkauf automatisieren — alles auf einer Plattform."
+
+msgid "PEDIR DEMO GRATIS"
+msgstr "KOSTENLOSE DEMO ANFORDERN"
+
+msgid "Sin compromiso - Respuesta en menos de 24hs"
+msgstr "Unverbindlich - Antwort innerhalb von 24 Stunden"
