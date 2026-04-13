@@ -348,11 +348,11 @@
                         <a class="nav-link py-1 px-2" href="#" id="navbarLang" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Idioma">
                             {% if current_lang == 'en' %}<img src="{{ flag_base }}/gb.png" alt="EN" style="width:24px;height:18px;">
                             {% elif current_lang == 'de' %}<img src="{{ flag_base }}/de.png" alt="DE" style="width:24px;height:18px;">
-                            {% else %}<img src="{{ flag_base }}/ar.png" alt="ES" style="width:24px;height:18px;">{% endif %}
+                            {% else %}<img src="{{ flag_base }}/es.png" alt="ES" style="width:24px;height:18px;">{% endif %}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" style="min-width: 160px;" aria-labelledby="navbarLang">
                             <li><a class="dropdown-item d-flex align-items-center {% if current_lang == 'es' %}active{% endif %}" href="{{ url_for('set_language', lang='es') }}">
-                                <img src="{{ flag_base }}/ar.png" alt="AR" class="me-2" style="width:24px;height:18px;"> Español
+                                <img src="{{ flag_base }}/es.png" alt="AR" class="me-2" style="width:24px;height:18px;"> Español
                             </a></li>
                             <li><a class="dropdown-item d-flex align-items-center {% if current_lang == 'en' %}active{% endif %}" href="{{ url_for('set_language', lang='en') }}">
                                 <img src="{{ flag_base }}/gb.png" alt="GB" class="me-2" style="width:24px;height:18px;"> English
