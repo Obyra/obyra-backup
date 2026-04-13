@@ -1,0 +1,140 @@
+# German translations for OBYRA
+msgid ""
+msgstr ""
+"Language: de\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+# Navbar
+msgid "Dashboard"
+msgstr "Übersicht"
+
+msgid "Presupuestos"
+msgstr "Angebote"
+
+msgid "Obras"
+msgstr "Bauprojekte"
+
+msgid "Inventario"
+msgstr "Inventar"
+
+msgid "Equipos"
+msgstr "Teams"
+
+msgid "Reportes"
+msgstr "Berichte"
+
+msgid "Seguridad"
+msgstr "Sicherheit"
+
+msgid "Manual"
+msgstr "Handbuch"
+
+# Dashboard
+msgid "Dashboard Principal"
+msgstr "Hauptübersicht"
+
+msgid "Resumen de tus obras activas y métricas clave"
+msgstr "Zusammenfassung Ihrer aktiven Projekte und Kennzahlen"
+
+msgid "Obras Activas"
+msgstr "Aktive Projekte"
+
+msgid "Presupuesto Total"
+msgstr "Gesamtbudget"
+
+msgid "Avance Promedio"
+msgstr "Durchschnittlicher Fortschritt"
+
+msgid "Personal Activo"
+msgstr "Aktive Mitarbeiter"
+
+# Onboarding
+msgid "Bienvenido a OBYRA - Primeros pasos"
+msgstr "Willkommen bei OBYRA - Erste Schritte"
+
+msgid "Subir logo de tu empresa"
+msgstr "Firmenlogo hochladen"
+
+msgid "Crear tu primer cliente"
+msgstr "Ersten Kunden anlegen"
+
+msgid "Crear tu primera obra (o cargar demo)"
+msgstr "Erstes Projekt anlegen (oder Demo laden)"
+
+msgid "Invitar a tu equipo"
+msgstr "Team einladen"
+
+msgid "Agregar un subcontratista"
+msgstr "Subunternehmer hinzufügen"
+
+msgid "Cargar obra demo de ejemplo"
+msgstr "Demo-Projekt laden"
+
+# Login/Register
+msgid "Iniciar sesión"
+msgstr "Anmelden"
+
+msgid "Crear cuenta"
+msgstr "Konto erstellen"
+
+msgid "Correo electrónico"
+msgstr "E-Mail"
+
+msgid "Contraseña"
+msgstr "Passwort"
+
+msgid "Olvidaste tu contraseña?"
+msgstr "Passwort vergessen?"
+
+msgid "Comenzar prueba gratis"
+msgstr "Kostenlose Testversion starten"
+
+# Planes
+msgid "Planes y Precios"
+msgstr "Pläne & Preise"
+
+msgid "Suscripción Mensual"
+msgstr "Monatsabonnement"
+
+msgid "Licencia 5 Años"
+msgstr "5-Jahres-Lizenz"
+
+msgid "Sin restricciones de usuarios ni obras"
+msgstr "Keine Benutzer- oder Projektbeschränkungen"
+
+msgid "SUSCRIBIRME CON MERCADO PAGO"
+msgstr "MIT MERCADO PAGO ABONNIEREN"
+
+# Common
+msgid "Guardar"
+msgstr "Speichern"
+
+msgid "Cancelar"
+msgstr "Abbrechen"
+
+msgid "Editar"
+msgstr "Bearbeiten"
+
+msgid "Eliminar"
+msgstr "Löschen"
+
+msgid "Crear"
+msgstr "Erstellen"
+
+msgid "Buscar"
+msgstr "Suchen"
+
+msgid "Filtrar"
+msgstr "Filtern"
+
+msgid "Volver"
+msgstr "Zurück"
+
+msgid "Ver detalles"
+msgstr "Details anzeigen"
+
+msgid "Cerrar"
+msgstr "Schließen"
+
+msgid "Aceptar"
+msgstr "Akzeptieren"

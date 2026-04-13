@@ -34,7 +34,7 @@ from services.memberships import (
     get_current_org_id,
 )
 
-from extensions import db, login_manager, csrf
+from extensions import db, login_manager, csrf, babel
 from flask_migrate import Migrate
 
 
@@ -267,6 +267,22 @@ login_manager.init_app(app)
 
 # CSRF Protection
 csrf.init_app(app)
+
+# Internacionalización (i18n) - Flask-Babel
+app.config['BABEL_DEFAULT_LOCALE'] = 'es'
+app.config['BABEL_SUPPORTED_LOCALES'] = ['es', 'en', 'de']
+app.config['BABEL_TRANSLATION_DIRECTORIES'] = 'translations'
+
+def get_locale():
+    """Determina el idioma del usuario."""
+    # 1. Cookie de preferencia del usuario
+    lang = request.cookies.get('lang')
+    if lang and lang in app.config['BABEL_SUPPORTED_LOCALES']:
+        return lang
+    # 2. Default: español
+    return 'es'
+
+babel.init_app(app, locale_selector=get_locale)
 
 # Flask-Mail
 from extensions import mail
@@ -582,6 +598,17 @@ def verificar_periodo_prueba():
 def offline_page():
     """Página para modo offline."""
     return render_template('offline.html')
+
+
+@app.route('/set-lang/<lang>')
+def set_language(lang):
+    """Cambia el idioma del usuario guardando preferencia en cookie."""
+    supported = app.config.get('BABEL_SUPPORTED_LOCALES', ['es', 'en', 'de'])
+    if lang not in supported:
+        lang = 'es'
+    response = redirect(request.referrer or url_for('index'))
+    response.set_cookie('lang', lang, max_age=365*24*60*60, samesite='Lax')
+    return response
 
 
 @app.route('/robots.txt')

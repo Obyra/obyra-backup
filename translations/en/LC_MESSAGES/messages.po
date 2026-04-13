@@ -1,0 +1,140 @@
+# English translations for OBYRA
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+# Navbar
+msgid "Dashboard"
+msgstr "Dashboard"
+
+msgid "Presupuestos"
+msgstr "Budgets"
+
+msgid "Obras"
+msgstr "Projects"
+
+msgid "Inventario"
+msgstr "Inventory"
+
+msgid "Equipos"
+msgstr "Teams"
+
+msgid "Reportes"
+msgstr "Reports"
+
+msgid "Seguridad"
+msgstr "Safety"
+
+msgid "Manual"
+msgstr "Manual"
+
+# Dashboard
+msgid "Dashboard Principal"
+msgstr "Main Dashboard"
+
+msgid "Resumen de tus obras activas y métricas clave"
+msgstr "Summary of your active projects and key metrics"
+
+msgid "Obras Activas"
+msgstr "Active Projects"
+
+msgid "Presupuesto Total"
+msgstr "Total Budget"
+
+msgid "Avance Promedio"
+msgstr "Average Progress"
+
+msgid "Personal Activo"
+msgstr "Active Staff"
+
+# Onboarding
+msgid "Bienvenido a OBYRA - Primeros pasos"
+msgstr "Welcome to OBYRA - First steps"
+
+msgid "Subir logo de tu empresa"
+msgstr "Upload your company logo"
+
+msgid "Crear tu primer cliente"
+msgstr "Create your first client"
+
+msgid "Crear tu primera obra (o cargar demo)"
+msgstr "Create your first project (or load demo)"
+
+msgid "Invitar a tu equipo"
+msgstr "Invite your team"
+
+msgid "Agregar un subcontratista"
+msgstr "Add a subcontractor"
+
+msgid "Cargar obra demo de ejemplo"
+msgstr "Load demo project"
+
+# Login/Register
+msgid "Iniciar sesión"
+msgstr "Sign in"
+
+msgid "Crear cuenta"
+msgstr "Create account"
+
+msgid "Correo electrónico"
+msgstr "Email"
+
+msgid "Contraseña"
+msgstr "Password"
+
+msgid "Olvidaste tu contraseña?"
+msgstr "Forgot your password?"
+
+msgid "Comenzar prueba gratis"
+msgstr "Start free trial"
+
+# Planes
+msgid "Planes y Precios"
+msgstr "Plans & Pricing"
+
+msgid "Suscripción Mensual"
+msgstr "Monthly Subscription"
+
+msgid "Licencia 5 Años"
+msgstr "5-Year License"
+
+msgid "Sin restricciones de usuarios ni obras"
+msgstr "No user or project restrictions"
+
+msgid "SUSCRIBIRME CON MERCADO PAGO"
+msgstr "SUBSCRIBE WITH MERCADO PAGO"
+
+# Common
+msgid "Guardar"
+msgstr "Save"
+
+msgid "Cancelar"
+msgstr "Cancel"
+
+msgid "Editar"
+msgstr "Edit"
+
+msgid "Eliminar"
+msgstr "Delete"
+
+msgid "Crear"
+msgstr "Create"
+
+msgid "Buscar"
+msgstr "Search"
+
+msgid "Filtrar"
+msgstr "Filter"
+
+msgid "Volver"
+msgstr "Back"
+
+msgid "Ver detalles"
+msgstr "View details"
+
+msgid "Cerrar"
+msgstr "Close"
+
+msgid "Aceptar"
+msgstr "Accept"
