@@ -300,3 +300,16 @@ msgstr "All rights reserved"
 
 msgid "Cookies"
 msgstr "Cookies"
+
+# ============ Planes extra ============
+msgid "Una sola plataforma con todo lo que tu constructora necesita"
+msgstr "One platform with everything your construction company needs"
+
+msgid "Acceso completo a todas las funcionalidades."
+msgstr "Full access to all features."
+
+msgid "Licencia 5 Años"
+msgstr "5-Year License"
+
+msgid "Ya tienes cuenta?"
+msgstr "Already have an account?"

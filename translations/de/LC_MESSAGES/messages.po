@@ -300,3 +300,16 @@ msgstr "Alle Rechte vorbehalten"
 
 msgid "Cookies"
 msgstr "Cookies"
+
+# ============ Planes extra ============
+msgid "Una sola plataforma con todo lo que tu constructora necesita"
+msgstr "Eine Plattform mit allem, was Ihr Bauunternehmen braucht"
+
+msgid "Acceso completo a todas las funcionalidades."
+msgstr "Voller Zugriff auf alle Funktionen."
+
+msgid "Licencia 5 Años"
+msgstr "5-Jahres-Lizenz"
+
+msgid "Ya tienes cuenta?"
+msgstr "Bereits ein Konto?"
