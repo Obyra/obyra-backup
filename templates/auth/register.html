@@ -1,28 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}Registrarse - OBYRA IA{% endblock %}
+{% block title %}{{ _('Crear cuenta') }} - OBYRA{% endblock %}
 
 {% block content %}
 <div class="auth-container">
     <div class="auth-card">
         <div class="auth-header">
             <div class="trial-badge">
-                <i class="fas fa-gift me-1"></i> 30 dias gratis
+                <i class="fas fa-gift me-1"></i> {{ _('30 días de prueba gratis') }}
             </div>
-            <h2><i class="fas fa-user-plus me-2"></i>Crear Cuenta</h2>
-            <p class="text-muted">Probá OBYRA IA gratis durante 30 días. Sin tarjeta de crédito.</p>
+            <h2><i class="fas fa-user-plus me-2"></i>{{ _('Crear cuenta') }}</h2>
+            <p class="text-muted">{{ _('30 días de prueba gratis. Sin tarjeta requerida.') }}</p>
         </div>
 
         <form method="POST" class="auth-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="row">
                 <div class="col-md-6 mb-3">
-                    <label for="nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                    <label for="nombre" class="form-label">{{ _('Nombre') }} <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="nombre" name="nombre" 
                            value="{{ request.form.nombre or '' }}" required>
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label for="apellido" class="form-label">Apellido <span class="text-danger">*</span></label>
+                    <label for="apellido" class="form-label">{{ _('Apellido') }} <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="apellido" name="apellido" 
                            value="{{ request.form.apellido or '' }}" required>
                 </div>
@@ -56,13 +56,13 @@
 
             <div class="row">
                 <div class="col-md-6 mb-3">
-                    <label for="password" class="form-label">Contraseña <span class="text-danger">*</span></label>
+                    <label for="password" class="form-label">{{ _('Contraseña') }} <span class="text-danger">*</span></label>
                     <input type="password" class="form-control" id="password" name="password" 
                            minlength="6" required>
                     <small class="form-text text-muted">Mínimo 6 caracteres</small>
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label for="confirm_password" class="form-label">Confirmar Contraseña <span class="text-danger">*</span></label>
+                    <label for="confirm_password" class="form-label">{{ _('Confirmar contraseña') }} <span class="text-danger">*</span></label>
                     <input type="password" class="form-control" id="confirm_password" name="confirm_password" 
                            minlength="6" required>
                 </div>
@@ -71,32 +71,32 @@
             <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" id="acepto_terminos" name="acepto_terminos" required>
                 <label class="form-check-label small" for="acepto_terminos">
-                    Acepto los <a href="{{ url_for('legal.terminos') }}" target="_blank">Terminos y Condiciones</a>
-                    y la <a href="{{ url_for('legal.privacidad') }}" target="_blank">Politica de Privacidad</a>
+                    {{ _('Acepto los') }} <a href="{{ url_for('legal.terminos') }}" target="_blank">{{ _('Términos y Condiciones') }}</a>
+                    {{ _('y la') }} <a href="{{ url_for('legal.privacidad') }}" target="_blank">{{ _('Política de Privacidad') }}</a>
                 </label>
             </div>
 
             <div class="d-grid gap-2 mb-3">
                 <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="fas fa-rocket me-2"></i>Comenzar prueba gratis
+                    <i class="fas fa-rocket me-2"></i>{{ _('Comenzar prueba gratis') }}
                 </button>
             </div>
 
             {% if google_available %}
             <div class="auth-divider">
-                <span>o</span>
+                <span>{{ _('o') }}</span>
             </div>
 
             <div class="d-grid gap-2 mb-3">
                 <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-danger btn-lg">
-                    <i class="fab fa-google me-2"></i>Registrarse con Google
+                    <i class="fab fa-google me-2"></i>{{ _('Registrarse con Google') }}
                 </a>
             </div>
             {% endif %}
 
             <div class="text-center">
-                <p class="mb-0">¿Ya tienes una cuenta?
-                    <a href="{{ login_url }}" class="auth-link">Iniciar Sesión</a>
+                <p class="mb-0">{{ _('Ya tienes cuenta?') }}
+                    <a href="{{ login_url }}" class="auth-link">{{ _('Iniciar sesión') }}</a>
                 </p>
             </div>
         </form>

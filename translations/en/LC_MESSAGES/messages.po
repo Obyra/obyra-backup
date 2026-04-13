@@ -4,7 +4,7 @@ msgstr ""
 "Language: en\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
-# Navbar
+# ============ Navbar ============
 msgid "Dashboard"
 msgstr "Dashboard"
 
@@ -29,7 +29,90 @@ msgstr "Safety"
 msgid "Manual"
 msgstr "Manual"
 
-# Dashboard
+# ============ Auth / Login ============
+msgid "Iniciar sesión"
+msgstr "Sign in"
+
+msgid "Accede a tu cuenta"
+msgstr "Access your account"
+
+msgid "Correo electrónico"
+msgstr "Email address"
+
+msgid "tu@email.com"
+msgstr "you@email.com"
+
+msgid "Contraseña"
+msgstr "Password"
+
+msgid "Tu contraseña"
+msgstr "Your password"
+
+msgid "Recordar mi sesión"
+msgstr "Remember me"
+
+msgid "Olvidaste tu contraseña?"
+msgstr "Forgot your password?"
+
+msgid "o"
+msgstr "or"
+
+msgid "Iniciar sesión con Google"
+msgstr "Sign in with Google"
+
+msgid "No tienes una cuenta?"
+msgstr "Don't have an account?"
+
+msgid "Crear cuenta"
+msgstr "Create account"
+
+msgid "Quieres vender tus servicios?"
+msgstr "Want to sell your services?"
+
+msgid "Registra tu empresa"
+msgstr "Register your company"
+
+# ============ Auth / Register ============
+msgid "Crear cuenta gratis"
+msgstr "Create free account"
+
+msgid "30 días de prueba gratis"
+msgstr "30-day free trial"
+
+msgid "Nombre"
+msgstr "First name"
+
+msgid "Apellido"
+msgstr "Last name"
+
+msgid "Nombre de tu empresa"
+msgstr "Company name"
+
+msgid "Confirmar contraseña"
+msgstr "Confirm password"
+
+msgid "Acepto los"
+msgstr "I accept the"
+
+msgid "Términos y Condiciones"
+msgstr "Terms & Conditions"
+
+msgid "y la"
+msgstr "and the"
+
+msgid "Política de Privacidad"
+msgstr "Privacy Policy"
+
+msgid "Comenzar prueba gratis"
+msgstr "Start free trial"
+
+msgid "Registrarse con Google"
+msgstr "Sign up with Google"
+
+msgid "Ya tienes cuenta?"
+msgstr "Already have an account?"
+
+# ============ Dashboard ============
 msgid "Dashboard Principal"
 msgstr "Main Dashboard"
 
@@ -48,9 +131,24 @@ msgstr "Average Progress"
 msgid "Personal Activo"
 msgstr "Active Staff"
 
-# Onboarding
+msgid "obras retrasadas"
+msgstr "delayed projects"
+
+msgid "En"
+msgstr "In"
+
+msgid "este mes"
+msgstr "this month"
+
+# ============ Onboarding ============
 msgid "Bienvenido a OBYRA - Primeros pasos"
-msgstr "Welcome to OBYRA - First steps"
+msgstr "Welcome to OBYRA - Getting started"
+
+msgid "Completa estos pasos para sacar el maximo provecho de la plataforma"
+msgstr "Complete these steps to get the most out of the platform"
+
+msgid "completado"
+msgstr "completed"
 
 msgid "Subir logo de tu empresa"
 msgstr "Upload your company logo"
@@ -68,28 +166,12 @@ msgid "Agregar un subcontratista"
 msgstr "Add a subcontractor"
 
 msgid "Cargar obra demo de ejemplo"
-msgstr "Load demo project"
+msgstr "Load sample demo project"
 
-# Login/Register
-msgid "Iniciar sesión"
-msgstr "Sign in"
+msgid "Esto crea una obra completa con etapas y tareas para que explores la plataforma sin partir de cero."
+msgstr "This creates a complete project with stages and tasks so you can explore the platform without starting from scratch."
 
-msgid "Crear cuenta"
-msgstr "Create account"
-
-msgid "Correo electrónico"
-msgstr "Email"
-
-msgid "Contraseña"
-msgstr "Password"
-
-msgid "Olvidaste tu contraseña?"
-msgstr "Forgot your password?"
-
-msgid "Comenzar prueba gratis"
-msgstr "Start free trial"
-
-# Planes
+# ============ Planes ============
 msgid "Planes y Precios"
 msgstr "Plans & Pricing"
 
@@ -102,10 +184,25 @@ msgstr "5-Year License"
 msgid "Sin restricciones de usuarios ni obras"
 msgstr "No user or project restrictions"
 
+msgid "Todo incluido"
+msgstr "All included"
+
 msgid "SUSCRIBIRME CON MERCADO PAGO"
 msgstr "SUBSCRIBE WITH MERCADO PAGO"
 
-# Common
+msgid "Pago seguro procesado por Mercado Pago"
+msgstr "Secure payment processed by Mercado Pago"
+
+msgid "Email de tu cuenta de Mercado Pago"
+msgstr "Your Mercado Pago account email"
+
+msgid "30 días de prueba gratis. Sin tarjeta requerida."
+msgstr "30-day free trial. No credit card required."
+
+msgid "Dudas? Escribinos por WhatsApp"
+msgstr "Questions? Contact us on WhatsApp"
+
+# ============ Common / Buttons ============
 msgid "Guardar"
 msgstr "Save"
 
@@ -138,3 +235,68 @@ msgstr "Close"
 
 msgid "Aceptar"
 msgstr "Accept"
+
+msgid "Confirmar"
+msgstr "Confirm"
+
+msgid "Descargar"
+msgstr "Download"
+
+msgid "Enviar"
+msgstr "Send"
+
+msgid "Siguiente"
+msgstr "Next"
+
+msgid "Anterior"
+msgstr "Previous"
+
+msgid "Nuevo"
+msgstr "New"
+
+msgid "Todos"
+msgstr "All"
+
+msgid "Activo"
+msgstr "Active"
+
+msgid "Inactivo"
+msgstr "Inactive"
+
+msgid "Pendiente"
+msgstr "Pending"
+
+msgid "Completado"
+msgstr "Completed"
+
+msgid "En curso"
+msgstr "In progress"
+
+# ============ Alerts / Messages ============
+msgid "Operación exitosa"
+msgstr "Operation successful"
+
+msgid "Error"
+msgstr "Error"
+
+msgid "Atención"
+msgstr "Warning"
+
+msgid "Sin resultados"
+msgstr "No results"
+
+msgid "Cargando..."
+msgstr "Loading..."
+
+msgid "No hay datos disponibles"
+msgstr "No data available"
+
+# ============ Footer ============
+msgid "Plataforma inteligente de planificación y compras para obras en LATAM"
+msgstr "Smart planning and procurement platform for construction in LATAM"
+
+msgid "Todos los derechos reservados"
+msgstr "All rights reserved"
+
+msgid "Cookies"
+msgstr "Cookies"

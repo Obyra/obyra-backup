@@ -4,7 +4,7 @@ msgstr ""
 "Language: de\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
-# Navbar
+# ============ Navbar ============
 msgid "Dashboard"
 msgstr "Übersicht"
 
@@ -29,7 +29,90 @@ msgstr "Sicherheit"
 msgid "Manual"
 msgstr "Handbuch"
 
-# Dashboard
+# ============ Auth / Login ============
+msgid "Iniciar sesión"
+msgstr "Anmelden"
+
+msgid "Accede a tu cuenta"
+msgstr "Zugang zu Ihrem Konto"
+
+msgid "Correo electrónico"
+msgstr "E-Mail-Adresse"
+
+msgid "tu@email.com"
+msgstr "ihre@email.com"
+
+msgid "Contraseña"
+msgstr "Passwort"
+
+msgid "Tu contraseña"
+msgstr "Ihr Passwort"
+
+msgid "Recordar mi sesión"
+msgstr "Angemeldet bleiben"
+
+msgid "Olvidaste tu contraseña?"
+msgstr "Passwort vergessen?"
+
+msgid "o"
+msgstr "oder"
+
+msgid "Iniciar sesión con Google"
+msgstr "Mit Google anmelden"
+
+msgid "No tienes una cuenta?"
+msgstr "Noch kein Konto?"
+
+msgid "Crear cuenta"
+msgstr "Konto erstellen"
+
+msgid "Quieres vender tus servicios?"
+msgstr "Möchten Sie Ihre Dienste anbieten?"
+
+msgid "Registra tu empresa"
+msgstr "Unternehmen registrieren"
+
+# ============ Auth / Register ============
+msgid "Crear cuenta gratis"
+msgstr "Kostenloses Konto erstellen"
+
+msgid "30 días de prueba gratis"
+msgstr "30 Tage kostenlose Testversion"
+
+msgid "Nombre"
+msgstr "Vorname"
+
+msgid "Apellido"
+msgstr "Nachname"
+
+msgid "Nombre de tu empresa"
+msgstr "Firmenname"
+
+msgid "Confirmar contraseña"
+msgstr "Passwort bestätigen"
+
+msgid "Acepto los"
+msgstr "Ich akzeptiere die"
+
+msgid "Términos y Condiciones"
+msgstr "Allgemeine Geschäftsbedingungen"
+
+msgid "y la"
+msgstr "und die"
+
+msgid "Política de Privacidad"
+msgstr "Datenschutzrichtlinie"
+
+msgid "Comenzar prueba gratis"
+msgstr "Kostenlose Testversion starten"
+
+msgid "Registrarse con Google"
+msgstr "Mit Google registrieren"
+
+msgid "Ya tienes cuenta?"
+msgstr "Bereits ein Konto?"
+
+# ============ Dashboard ============
 msgid "Dashboard Principal"
 msgstr "Hauptübersicht"
 
@@ -48,9 +131,24 @@ msgstr "Durchschnittlicher Fortschritt"
 msgid "Personal Activo"
 msgstr "Aktive Mitarbeiter"
 
-# Onboarding
+msgid "obras retrasadas"
+msgstr "verzögerte Projekte"
+
+msgid "En"
+msgstr "In"
+
+msgid "este mes"
+msgstr "diesen Monat"
+
+# ============ Onboarding ============
 msgid "Bienvenido a OBYRA - Primeros pasos"
 msgstr "Willkommen bei OBYRA - Erste Schritte"
+
+msgid "Completa estos pasos para sacar el maximo provecho de la plataforma"
+msgstr "Führen Sie diese Schritte aus, um die Plattform optimal zu nutzen"
+
+msgid "completado"
+msgstr "abgeschlossen"
 
 msgid "Subir logo de tu empresa"
 msgstr "Firmenlogo hochladen"
@@ -70,26 +168,10 @@ msgstr "Subunternehmer hinzufügen"
 msgid "Cargar obra demo de ejemplo"
 msgstr "Demo-Projekt laden"
 
-# Login/Register
-msgid "Iniciar sesión"
-msgstr "Anmelden"
+msgid "Esto crea una obra completa con etapas y tareas para que explores la plataforma sin partir de cero."
+msgstr "Dies erstellt ein vollständiges Projekt mit Phasen und Aufgaben, damit Sie die Plattform erkunden können."
 
-msgid "Crear cuenta"
-msgstr "Konto erstellen"
-
-msgid "Correo electrónico"
-msgstr "E-Mail"
-
-msgid "Contraseña"
-msgstr "Passwort"
-
-msgid "Olvidaste tu contraseña?"
-msgstr "Passwort vergessen?"
-
-msgid "Comenzar prueba gratis"
-msgstr "Kostenlose Testversion starten"
-
-# Planes
+# ============ Planes ============
 msgid "Planes y Precios"
 msgstr "Pläne & Preise"
 
@@ -102,10 +184,25 @@ msgstr "5-Jahres-Lizenz"
 msgid "Sin restricciones de usuarios ni obras"
 msgstr "Keine Benutzer- oder Projektbeschränkungen"
 
+msgid "Todo incluido"
+msgstr "Alles inklusive"
+
 msgid "SUSCRIBIRME CON MERCADO PAGO"
 msgstr "MIT MERCADO PAGO ABONNIEREN"
 
-# Common
+msgid "Pago seguro procesado por Mercado Pago"
+msgstr "Sichere Zahlung über Mercado Pago"
+
+msgid "Email de tu cuenta de Mercado Pago"
+msgstr "E-Mail Ihres Mercado Pago-Kontos"
+
+msgid "30 días de prueba gratis. Sin tarjeta requerida."
+msgstr "30 Tage kostenlose Testversion. Keine Kreditkarte erforderlich."
+
+msgid "Dudas? Escribinos por WhatsApp"
+msgstr "Fragen? Kontaktieren Sie uns über WhatsApp"
+
+# ============ Common / Buttons ============
 msgid "Guardar"
 msgstr "Speichern"
 
@@ -138,3 +235,68 @@ msgstr "Schließen"
 
 msgid "Aceptar"
 msgstr "Akzeptieren"
+
+msgid "Confirmar"
+msgstr "Bestätigen"
+
+msgid "Descargar"
+msgstr "Herunterladen"
+
+msgid "Enviar"
+msgstr "Senden"
+
+msgid "Siguiente"
+msgstr "Weiter"
+
+msgid "Anterior"
+msgstr "Zurück"
+
+msgid "Nuevo"
+msgstr "Neu"
+
+msgid "Todos"
+msgstr "Alle"
+
+msgid "Activo"
+msgstr "Aktiv"
+
+msgid "Inactivo"
+msgstr "Inaktiv"
+
+msgid "Pendiente"
+msgstr "Ausstehend"
+
+msgid "Completado"
+msgstr "Abgeschlossen"
+
+msgid "En curso"
+msgstr "In Bearbeitung"
+
+# ============ Alerts / Messages ============
+msgid "Operación exitosa"
+msgstr "Vorgang erfolgreich"
+
+msgid "Error"
+msgstr "Fehler"
+
+msgid "Atención"
+msgstr "Achtung"
+
+msgid "Sin resultados"
+msgstr "Keine Ergebnisse"
+
+msgid "Cargando..."
+msgstr "Wird geladen..."
+
+msgid "No hay datos disponibles"
+msgstr "Keine Daten verfügbar"
+
+# ============ Footer ============
+msgid "Plataforma inteligente de planificación y compras para obras en LATAM"
+msgstr "Intelligente Planungs- und Beschaffungsplattform für Bauprojekte in Lateinamerika"
+
+msgid "Todos los derechos reservados"
+msgstr "Alle Rechte vorbehalten"
+
+msgid "Cookies"
+msgstr "Cookies"
