@@ -332,3 +332,163 @@ msgstr "KOSTENLOSE DEMO ANFORDERN"
 
 msgid "Sin compromiso - Respuesta en menos de 24hs"
 msgstr "Unverbindlich - Antwort innerhalb von 24 Stunden"
+
+msgid "Más de 50 constructoras ya optimizan sus obras con OBYRA."
+msgstr "Über 50 Bauunternehmen optimieren bereits ihre Projekte mit OBYRA."
+
+msgid "Gestión inteligente de obras"
+msgstr "Intelligente Bauprojektverwaltung"
+
+msgid "INICIAR SESION"
+msgstr "ANMELDEN"
+
+msgid "EMAIL"
+msgstr "E-MAIL"
+
+msgid "CONTRASENA"
+msgstr "PASSWORT"
+
+msgid "Tu contrasena"
+msgstr "Ihr Passwort"
+
+msgid "Recordar mi sesion"
+msgstr "Angemeldet bleiben"
+
+msgid "INGRESAR"
+msgstr "EINLOGGEN"
+
+msgid "Olvidaste tu contrasena?"
+msgstr "Passwort vergessen?"
+
+msgid "Portal Proveedores"
+msgstr "Lieferantenportal"
+
+msgid "Accede a todas tus obras y reportes en segundos."
+msgstr "Greifen Sie in Sekunden auf alle Projekte und Berichte zu."
+
+msgid "o continua con"
+msgstr "oder weiter mit"
+
+msgid "No tienes cuenta?"
+msgstr "Noch kein Konto?"
+
+msgid "Registrate"
+msgstr "Registrieren"
+
+msgid "Quieres vender?"
+msgstr "Möchten Sie verkaufen?"
+
+msgid "Crear Cuenta"
+msgstr "Konto erstellen"
+
+msgid "Acceder al portal de proveedores"
+msgstr "Zum Lieferantenportal"
+
+msgid "INSTALAR APP EN TU CELULAR"
+msgstr "APP AUF DEM HANDY INSTALLIEREN"
+
+msgid "Acceso rápido desde tu pantalla de inicio"
+msgstr "Schnellzugriff vom Startbildschirm"
+
+# ============ Warum OBYRA wählen ============
+msgid "Por qué elegir"
+msgstr "Warum"
+
+msgid "Herramientas profesionales diseñadas para la industria de la construcción"
+msgstr "Professionelle Werkzeuge für die Bauindustrie"
+
+msgid "Visibilidad Total"
+msgstr "Vollständige Transparenz"
+
+msgid "Monitorea el avance de cada obra, controla presupuestos y detecta desvíos en tiempo real desde cualquier dispositivo."
+msgstr "Überwachen Sie den Fortschritt jedes Projekts, kontrollieren Sie Budgets und erkennen Sie Abweichungen in Echtzeit von jedem Gerät aus."
+
+msgid "Colaboración Ágil"
+msgstr "Agile Zusammenarbeit"
+
+msgid "Coordina equipos en obra y oficina, asigna tareas y comparte documentación con un flujo de trabajo integrado."
+msgstr "Koordinieren Sie Bau- und Büroteams, weisen Sie Aufgaben zu und teilen Sie Dokumentation mit einem integrierten Workflow."
+
+msgid "Automatización IA"
+msgstr "KI-Automatisierung"
+
+msgid "Aprovecha asistentes inteligentes para presupuestos, análisis de costos y reportes que te ayudan a tomar mejores decisiones."
+msgstr "Nutzen Sie intelligente Assistenten für Budgets, Kostenanalysen und Berichte, die Ihnen helfen, bessere Entscheidungen zu treffen."
+
+# ============ So funktioniert es ============
+msgid "Cómo funciona"
+msgstr "So funktioniert"
+
+msgid "Empezá a optimizar tus obras en 3 simples pasos"
+msgstr "Optimieren Sie Ihre Projekte in 3 einfachen Schritten"
+
+msgid "Creá tu cuenta"
+msgstr "Konto erstellen"
+
+msgid "Registrate gratis y configurá tu organización en menos de 5 minutos. Sin tarjeta de crédito."
+msgstr "Registrieren Sie sich kostenlos und richten Sie Ihre Organisation in weniger als 5 Minuten ein. Keine Kreditkarte erforderlich."
+
+msgid "Cargá tus obras"
+msgstr "Projekte hinzufügen"
+
+msgid "Agregá tus proyectos activos, invitá a tu equipo y empezá a centralizar toda la información."
+msgstr "Fügen Sie Ihre aktiven Projekte hinzu, laden Sie Ihr Team ein und beginnen Sie, alle Informationen zu zentralisieren."
+
+msgid "Optimizá tu gestión"
+msgstr "Verwaltung optimieren"
+
+msgid "Controlá presupuestos, gestioná compras y tomá decisiones con datos en tiempo real."
+msgstr "Kontrollieren Sie Budgets, verwalten Sie Einkäufe und treffen Sie Entscheidungen mit Echtzeitdaten."
+
+msgid "Agendá tu Demo Personalizada"
+msgstr "Persönliche Demo vereinbaren"
+
+# ============ FAQ ============
+msgid "Preguntas"
+msgstr "Häufig gestellte"
+
+msgid "Frecuentes"
+msgstr "Fragen"
+
+msgid "Respondemos las dudas más comunes sobre OBYRA"
+msgstr "Wir beantworten die häufigsten Fragen zu OBYRA"
+
+msgid "¿Qué tipo de empresas pueden usar OBYRA?"
+msgstr "Welche Unternehmen können OBYRA nutzen?"
+
+msgid "OBYRA está diseñado para constructoras, empresas de arquitectura, contratistas y cualquier organización que gestione obras de construcción. Funciona tanto para empresas pequeñas con 2-3 obras como para constructoras con múltiples proyectos simultáneos."
+msgstr "OBYRA ist für Bauunternehmen, Architekturbüros, Auftragnehmer und jede Organisation konzipiert, die Bauprojekte verwaltet. Es funktioniert sowohl für kleine Unternehmen mit 2-3 Projekten als auch für große Bauunternehmen mit mehreren gleichzeitigen Projekten."
+
+msgid "¿Cuánto cuesta OBYRA?"
+msgstr "Was kostet OBYRA?"
+
+msgid "Ofrecemos una prueba gratuita de 14 días sin necesidad de tarjeta de crédito. Después, tenemos planes flexibles que se adaptan al tamaño de tu empresa y cantidad de obras. Pedí una demo para conocer el plan ideal para vos."
+msgstr "Wir bieten eine 14-tägige kostenlose Testversion ohne Kreditkarte an. Danach haben wir flexible Pläne, die sich an die Größe Ihres Unternehmens und die Anzahl der Projekte anpassen. Fordern Sie eine Demo an, um den idealen Plan zu finden."
+
+msgid "¿Puedo usarlo desde el celular en la obra?"
+msgstr "Kann ich es vom Handy auf der Baustelle nutzen?"
+
+msgid "Sí, OBYRA es una aplicación web progresiva (PWA) que podés instalar en tu celular y usar como una app nativa. Funciona en Android y iOS, y tiene modo offline para cuando no tenés conexión en la obra."
+msgstr "Ja, OBYRA ist eine Progressive Web App (PWA), die Sie auf Ihrem Handy installieren und wie eine native App nutzen können. Sie funktioniert auf Android und iOS und hat einen Offline-Modus für Zeiten ohne Internet auf der Baustelle."
+
+msgid "¿Cómo funciona la inteligencia artificial?"
+msgstr "Wie funktioniert die künstliche Intelligenz?"
+
+msgid "Nuestra IA te ayuda a generar presupuestos más rápido, analizar costos históricos, detectar desvíos y generar reportes automáticos. No reemplaza tu criterio profesional, sino que te da herramientas para tomar mejores decisiones más rápido."
+msgstr "Unsere KI hilft Ihnen, Budgets schneller zu erstellen, historische Kosten zu analysieren, Abweichungen zu erkennen und automatische Berichte zu generieren. Sie ersetzt nicht Ihr professionelles Urteil, sondern gibt Ihnen Werkzeuge für schnellere und bessere Entscheidungen."
+
+msgid "¿Mis datos están seguros?"
+msgstr "Sind meine Daten sicher?"
+
+msgid "Absolutamente. Usamos encriptación de nivel bancario, servidores seguros y backups automáticos diarios. Tus datos son 100% privados y nunca los compartimos con terceros. Cumplimos con las normativas de protección de datos de Argentina."
+msgstr "Absolut. Wir verwenden Verschlüsselung auf Bankniveau, sichere Server und tägliche automatische Backups. Ihre Daten sind 100% privat und werden niemals an Dritte weitergegeben. Wir erfüllen die argentinischen Datenschutzbestimmungen."
+
+# ============ iOS Banner ============
+msgid "Instala OBYRA en tu iPhone"
+msgstr "OBYRA auf Ihrem iPhone installieren"
+
+msgid "Toca"
+msgstr "Tippen Sie auf"
+
+msgid "y luego \"Agregar a pantalla de inicio\""
+msgstr "dann \"Zum Home-Bildschirm\""

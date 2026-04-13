@@ -92,11 +92,11 @@
             <div class="col-12 col-md-8 col-lg-5">
                 <div class="text-center mb-4">
                     <img src="{{ url_for('static', filename='img/logo.png') }}" alt="OBYRA IA" height="55" class="mb-3" style="max-width: 220px; object-fit: contain;">
-                    <p class="text-white-75">Gestión inteligente de obras</p>
+                    <p class="text-white-75">{{ _('Gestión inteligente de obras') }}</p>
                 </div>
                 <div class="card login-card border-0 shadow-lg">
                     <div class="card-header-custom">
-                        <h2 class="h5 fw-bold text-center mb-0">INICIAR SESION</h2>
+                        <h2 class="h5 fw-bold text-center mb-0">{{ _('INICIAR SESION') }}</h2>
                     </div>
                     <div class="card-body p-4">
                         <form method="POST" action="{{ url_for('index') }}" class="needs-validation" novalidate>
@@ -105,21 +105,21 @@
                             <input type="hidden" name="next" value="{{ next_value }}">
                             {% endif %}
                             <div class="mb-3">
-                                <label for="pwa-email" class="form-label">EMAIL</label>
+                                <label for="pwa-email" class="form-label">{{ _('EMAIL') }}</label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="fas fa-envelope"></i></span>
                                     <input type="email" class="form-control" id="pwa-email" name="email"
-                                           placeholder="tu@email.com"
+                                           placeholder="{{ _('tu@email.com') }}"
                                            value="{{ form_data.email }}"
                                            required>
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label for="pwa-password" class="form-label">CONTRASENA</label>
+                                <label for="pwa-password" class="form-label">{{ _('CONTRASENA') }}</label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="fas fa-lock"></i></span>
                                     <input type="password" class="form-control" id="pwa-password" name="password"
-                                           placeholder="Tu contrasena" required>
+                                           placeholder="{{ _('Tu contrasena') }}" required>
                                     <button class="btn btn-outline-secondary" type="button" onclick="togglePWAPassword()">
                                         <i class="fas fa-eye" id="pwa-eye-icon"></i>
                                     </button>
@@ -128,25 +128,25 @@
                             <div class="mb-3 form-check">
                                 <input class="form-check-input" type="checkbox" value="1" id="pwa-remember" name="remember" checked>
                                 <label class="form-check-label" for="pwa-remember">
-                                    Recordar mi sesion
+                                    {{ _('Recordar mi sesion') }}
                                 </label>
                             </div>
                             <div class="d-grid gap-2 mb-3">
                                 <button type="submit" class="btn btn-yellow btn-lg">
-                                    <i class="fas fa-sign-in-alt me-2"></i>INGRESAR
+                                    <i class="fas fa-sign-in-alt me-2"></i>{{ _('INGRESAR') }}
                                 </button>
                             </div>
                             <div class="text-center">
                                 <a href="{{ url_for('auth.forgot_password') }}" class="auth-link small">
-                                    Olvidaste tu contrasena?
+                                    {{ _('Olvidaste tu contrasena?') }}
                                 </a>
                             </div>
                         </form>
                         <hr class="my-3">
                         <div class="text-center small">
-                            <a href="{{ url_for('auth.register') }}" class="text-muted">Crear cuenta</a>
+                            <a href="{{ url_for('auth.register') }}" class="text-muted">{{ _('Crear cuenta') }}</a>
                             <span class="text-muted mx-2">|</span>
-                            <a href="{{ url_for('supplier_auth.login') }}" class="text-muted">Portal Proveedores</a>
+                            <a href="{{ url_for('supplier_auth.login') }}" class="text-muted">{{ _('Portal Proveedores') }}</a>
                         </div>
                     </div>
                 </div>
@@ -168,7 +168,7 @@
                 </h1>
                 <p class="hero-subtitle mb-4">
                     {{ _('Centraliza presupuestos, coordina equipos, controla inventario y automatiza compras desde una sola plataforma.') }}
-                    Más de 50 constructoras ya optimizan sus obras con OBYRA.
+                    {{ _('Más de 50 constructoras ya optimizan sus obras con OBYRA.') }}
                 </p>
 
                 <!-- CTA Principal destacado -->
@@ -185,51 +185,51 @@
 
                 <!-- CTAs Secundarios -->
                 <div class="hero-cta-secondary">
-                    <a href="{{ url_for('auth.register') }}" class="btn btn-secondary-cta" aria-label="Crear cuenta gratis">
-                        <i class="fas fa-user-plus me-2" aria-hidden="true"></i>Crear Cuenta
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-secondary-cta" aria-label="{{ _('Crear cuenta gratis') }}">
+                        <i class="fas fa-user-plus me-2" aria-hidden="true"></i>{{ _('Crear Cuenta') }}
                     </a>
-                    <a href="{{ url_for('supplier_auth.login') }}" class="btn btn-tertiary-cta" aria-label="Acceder al portal de proveedores">
-                        <i class="fas fa-store me-2" aria-hidden="true"></i>Portal Proveedores
+                    <a href="{{ url_for('supplier_auth.login') }}" class="btn btn-tertiary-cta" aria-label="{{ _('Acceder al portal de proveedores') }}">
+                        <i class="fas fa-store me-2" aria-hidden="true"></i>{{ _('Portal Proveedores') }}
                     </a>
                 </div>
                 <!-- Botón Instalar App PWA -->
                 <div id="pwa-install-container" class="mt-3 d-none">
                     <button id="pwa-install-btn" class="btn btn-install-app btn-lg w-100">
-                        <i class="fas fa-mobile-alt me-2"></i>INSTALAR APP EN TU CELULAR
+                        <i class="fas fa-mobile-alt me-2"></i>{{ _('INSTALAR APP EN TU CELULAR') }}
                     </button>
                     <p class="text-white-50 small mt-2 mb-0">
-                        <i class="fas fa-info-circle me-1"></i>Acceso rápido desde tu pantalla de inicio
+                        <i class="fas fa-info-circle me-1"></i>{{ _('Acceso rápido desde tu pantalla de inicio') }}
                     </p>
                 </div>
             </div>
             <div class="col-lg-5">
                 <div class="card login-card border-0 shadow-lg">
                     <div class="card-header-custom">
-                        <h2 class="h5 fw-bold text-center mb-0">INICIAR SESION</h2>
+                        <h2 class="h5 fw-bold text-center mb-0">{{ _('INICIAR SESION') }}</h2>
                     </div>
                     <div class="card-body p-4">
-                        <p class="text-muted text-center mb-4">Accede a todas tus obras y reportes en segundos.</p>
+                        <p class="text-muted text-center mb-4">{{ _('Accede a todas tus obras y reportes en segundos.') }}</p>
                         <form method="POST" action="{{ url_for('index') }}" class="needs-validation" novalidate>
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             {% if next_value %}
                             <input type="hidden" name="next" value="{{ next_value }}">
                             {% endif %}
                             <div class="mb-3">
-                                <label for="landing-email" class="form-label">EMAIL</label>
+                                <label for="landing-email" class="form-label">{{ _('EMAIL') }}</label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="fas fa-envelope"></i></span>
                                     <input type="email" class="form-control" id="landing-email" name="email"
-                                           placeholder="tu@email.com"
+                                           placeholder="{{ _('tu@email.com') }}"
                                            value="{{ form_data.email }}"
                                            required>
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label for="landing-password" class="form-label">CONTRASENA</label>
+                                <label for="landing-password" class="form-label">{{ _('CONTRASENA') }}</label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="fas fa-lock"></i></span>
                                     <input type="password" class="form-control" id="landing-password" name="password"
-                                           placeholder="Tu contrasena" required>
+                                           placeholder="{{ _('Tu contrasena') }}" required>
                                     <button class="btn btn-outline-secondary" type="button" onclick="toggleLandingPassword()">
                                         <i class="fas fa-eye" id="landing-eye-icon"></i>
                                     </button>
@@ -239,22 +239,22 @@
                                 <input class="form-check-input" type="checkbox" value="1" id="landing-remember" name="remember"
                                        {% if form_data.remember %}checked{% endif %}>
                                 <label class="form-check-label" for="landing-remember">
-                                    Recordar mi sesion
+                                    {{ _('Recordar mi sesion') }}
                                 </label>
                             </div>
                             <div class="d-grid gap-2 mb-3">
                                 <button type="submit" class="btn btn-yellow btn-lg">
-                                    <i class="fas fa-sign-in-alt me-2"></i>INGRESAR
+                                    <i class="fas fa-sign-in-alt me-2"></i>{{ _('INGRESAR') }}
                                 </button>
                             </div>
                             <div class="text-center mb-3">
                                 <a href="{{ url_for('auth.forgot_password') }}" class="auth-link small">
-                                    Olvidaste tu contrasena?
+                                    {{ _('Olvidaste tu contrasena?') }}
                                 </a>
                             </div>
                             {% if google_available %}
                             <div class="divider-text mb-3">
-                                <span>o continua con</span>
+                                <span>{{ _('o continua con') }}</span>
                             </div>
                             <div class="d-grid gap-2">
                                 <a href="{{ url_for('auth.google_login') }}" class="btn btn-google btn-lg">
@@ -264,10 +264,10 @@
                             {% endif %}
                         </form>
                         <div class="mt-4 text-center small">
-                            No tienes cuenta? <a href="{{ url_for('auth.register') }}" class="fw-bold text-yellow">Registrate</a>
+                            {{ _('No tienes cuenta?') }} <a href="{{ url_for('auth.register') }}" class="fw-bold text-yellow">{{ _('Registrate') }}</a>
                         </div>
                         <div class="mt-2 text-center small">
-                            Quieres vender? <a href="{{ url_for('supplier_auth.registro') }}" class="fw-bold text-yellow">Registra tu empresa</a>
+                            {{ _('Quieres vender?') }} <a href="{{ url_for('supplier_auth.registro') }}" class="fw-bold text-yellow">{{ _('Registra tu empresa') }}</a>
                         </div>
                     </div>
                 </div>
@@ -280,8 +280,8 @@
 <section id="features-section" class="landing-features" aria-labelledby="features-title">
     <div class="container">
         <header class="section-header text-center">
-            <h2 id="features-title" class="section-title">Por qué elegir <span class="text-yellow">OBYRA</span></h2>
-            <p class="section-subtitle">Herramientas profesionales diseñadas para la industria de la construcción</p>
+            <h2 id="features-title" class="section-title">{{ _('Por qué elegir') }} <span class="text-yellow">OBYRA</span></h2>
+            <p class="section-subtitle">{{ _('Herramientas profesionales diseñadas para la industria de la construcción') }}</p>
         </header>
         <div class="row g-4">
             <div class="col-md-4">
@@ -289,8 +289,8 @@
                     <div class="feature-icon" aria-hidden="true">
                         <i class="fas fa-chart-line"></i>
                     </div>
-                    <h3 class="feature-title">Visibilidad Total</h3>
-                    <p class="feature-description">Monitorea el avance de cada obra, controla presupuestos y detecta desvíos en tiempo real desde cualquier dispositivo.</p>
+                    <h3 class="feature-title">{{ _('Visibilidad Total') }}</h3>
+                    <p class="feature-description">{{ _('Monitorea el avance de cada obra, controla presupuestos y detecta desvíos en tiempo real desde cualquier dispositivo.') }}</p>
                 </article>
             </div>
             <div class="col-md-4">
@@ -298,8 +298,8 @@
                     <div class="feature-icon" aria-hidden="true">
                         <i class="fas fa-users-cog"></i>
                     </div>
-                    <h3 class="feature-title">Colaboración Ágil</h3>
-                    <p class="feature-description">Coordina equipos en obra y oficina, asigna tareas y comparte documentación con un flujo de trabajo integrado.</p>
+                    <h3 class="feature-title">{{ _('Colaboración Ágil') }}</h3>
+                    <p class="feature-description">{{ _('Coordina equipos en obra y oficina, asigna tareas y comparte documentación con un flujo de trabajo integrado.') }}</p>
                 </article>
             </div>
             <div class="col-md-4">
@@ -307,8 +307,8 @@
                     <div class="feature-icon" aria-hidden="true">
                         <i class="fas fa-robot"></i>
                     </div>
-                    <h3 class="feature-title">Automatización IA</h3>
-                    <p class="feature-description">Aprovecha asistentes inteligentes para presupuestos, análisis de costos y reportes que te ayudan a tomar mejores decisiones.</p>
+                    <h3 class="feature-title">{{ _('Automatización IA') }}</h3>
+                    <p class="feature-description">{{ _('Aprovecha asistentes inteligentes para presupuestos, análisis de costos y reportes que te ayudan a tomar mejores decisiones.') }}</p>
                 </article>
             </div>
         </div>
@@ -319,8 +319,8 @@
 <section id="como-funciona" class="landing-how-it-works" aria-labelledby="como-funciona-title">
     <div class="container">
         <header class="section-header text-center">
-            <h2 id="como-funciona-title" class="section-title">Cómo funciona <span class="text-yellow">OBYRA</span></h2>
-            <p class="section-subtitle">Empezá a optimizar tus obras en 3 simples pasos</p>
+            <h2 id="como-funciona-title" class="section-title">{{ _('Cómo funciona') }} <span class="text-yellow">OBYRA</span></h2>
+            <p class="section-subtitle">{{ _('Empezá a optimizar tus obras en 3 simples pasos') }}</p>
         </header>
         <div class="row g-4 justify-content-center">
             <div class="col-md-4">
@@ -329,8 +329,8 @@
                     <div class="step-icon" aria-hidden="true">
                         <i class="fas fa-user-plus"></i>
                     </div>
-                    <h3 class="step-title">Creá tu cuenta</h3>
-                    <p class="step-description">Registrate gratis y configurá tu organización en menos de 5 minutos. Sin tarjeta de crédito.</p>
+                    <h3 class="step-title">{{ _('Creá tu cuenta') }}</h3>
+                    <p class="step-description">{{ _('Registrate gratis y configurá tu organización en menos de 5 minutos. Sin tarjeta de crédito.') }}</p>
                 </article>
             </div>
             <div class="col-md-4">
@@ -339,8 +339,8 @@
                     <div class="step-icon" aria-hidden="true">
                         <i class="fas fa-building"></i>
                     </div>
-                    <h3 class="step-title">Cargá tus obras</h3>
-                    <p class="step-description">Agregá tus proyectos activos, invitá a tu equipo y empezá a centralizar toda la información.</p>
+                    <h3 class="step-title">{{ _('Cargá tus obras') }}</h3>
+                    <p class="step-description">{{ _('Agregá tus proyectos activos, invitá a tu equipo y empezá a centralizar toda la información.') }}</p>
                 </article>
             </div>
             <div class="col-md-4">
@@ -349,8 +349,8 @@
                     <div class="step-icon" aria-hidden="true">
                         <i class="fas fa-rocket"></i>
                     </div>
-                    <h3 class="step-title">Optimizá tu gestión</h3>
-                    <p class="step-description">Controlá presupuestos, gestioná compras y tomá decisiones con datos en tiempo real.</p>
+                    <h3 class="step-title">{{ _('Optimizá tu gestión') }}</h3>
+                    <p class="step-description">{{ _('Controlá presupuestos, gestioná compras y tomá decisiones con datos en tiempo real.') }}</p>
                 </article>
             </div>
         </div>
@@ -360,7 +360,7 @@
                rel="noopener noreferrer"
                class="btn btn-cta-main btn-lg"
                aria-label="Agendar demo personalizada por WhatsApp">
-                <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>Agendá tu Demo Personalizada
+                <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>{{ _('Agendá tu Demo Personalizada') }}
             </a>
         </div>
     </div>
@@ -370,8 +370,8 @@
 <section id="faq-section" class="landing-faq" aria-labelledby="faq-title">
     <div class="container">
         <header class="section-header text-center">
-            <h2 id="faq-title" class="section-title">Preguntas <span class="text-yellow">Frecuentes</span></h2>
-            <p class="section-subtitle">Respondemos las dudas más comunes sobre OBYRA</p>
+            <h2 id="faq-title" class="section-title">{{ _('Preguntas') }} <span class="text-yellow">{{ _('Frecuentes') }}</span></h2>
+            <p class="section-subtitle">{{ _('Respondemos las dudas más comunes sobre OBYRA') }}</p>
         </header>
         <div class="row justify-content-center">
             <div class="col-lg-8">
@@ -379,60 +379,60 @@
                     <div class="accordion-item">
                         <h3 class="accordion-header">
                             <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1" aria-expanded="true" aria-controls="faq1">
-                                ¿Qué tipo de empresas pueden usar OBYRA?
+                                {{ _('¿Qué tipo de empresas pueden usar OBYRA?') }}
                             </button>
                         </h3>
                         <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
                             <div class="accordion-body">
-                                OBYRA está diseñado para constructoras, empresas de arquitectura, contratistas y cualquier organización que gestione obras de construcción. Funciona tanto para empresas pequeñas con 2-3 obras como para constructoras con múltiples proyectos simultáneos.
+                                {{ _('OBYRA está diseñado para constructoras, empresas de arquitectura, contratistas y cualquier organización que gestione obras de construcción. Funciona tanto para empresas pequeñas con 2-3 obras como para constructoras con múltiples proyectos simultáneos.') }}
                             </div>
                         </div>
                     </div>
                     <div class="accordion-item">
                         <h3 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2" aria-expanded="false" aria-controls="faq2">
-                                ¿Cuánto cuesta OBYRA?
+                                {{ _('¿Cuánto cuesta OBYRA?') }}
                             </button>
                         </h3>
                         <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
                             <div class="accordion-body">
-                                Ofrecemos una prueba gratuita de 14 días sin necesidad de tarjeta de crédito. Después, tenemos planes flexibles que se adaptan al tamaño de tu empresa y cantidad de obras. Pedí una demo para conocer el plan ideal para vos.
+                                {{ _('Ofrecemos una prueba gratuita de 14 días sin necesidad de tarjeta de crédito. Después, tenemos planes flexibles que se adaptan al tamaño de tu empresa y cantidad de obras. Pedí una demo para conocer el plan ideal para vos.') }}
                             </div>
                         </div>
                     </div>
                     <div class="accordion-item">
                         <h3 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3" aria-expanded="false" aria-controls="faq3">
-                                ¿Puedo usarlo desde el celular en la obra?
+                                {{ _('¿Puedo usarlo desde el celular en la obra?') }}
                             </button>
                         </h3>
                         <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
                             <div class="accordion-body">
-                                Sí, OBYRA es una aplicación web progresiva (PWA) que podés instalar en tu celular y usar como una app nativa. Funciona en Android y iOS, y tiene modo offline para cuando no tenés conexión en la obra.
+                                {{ _('Sí, OBYRA es una aplicación web progresiva (PWA) que podés instalar en tu celular y usar como una app nativa. Funciona en Android y iOS, y tiene modo offline para cuando no tenés conexión en la obra.') }}
                             </div>
                         </div>
                     </div>
                     <div class="accordion-item">
                         <h3 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4" aria-expanded="false" aria-controls="faq4">
-                                ¿Cómo funciona la inteligencia artificial?
+                                {{ _('¿Cómo funciona la inteligencia artificial?') }}
                             </button>
                         </h3>
                         <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
                             <div class="accordion-body">
-                                Nuestra IA te ayuda a generar presupuestos más rápido, analizar costos históricos, detectar desvíos y generar reportes automáticos. No reemplaza tu criterio profesional, sino que te da herramientas para tomar mejores decisiones más rápido.
+                                {{ _('Nuestra IA te ayuda a generar presupuestos más rápido, analizar costos históricos, detectar desvíos y generar reportes automáticos. No reemplaza tu criterio profesional, sino que te da herramientas para tomar mejores decisiones más rápido.') }}
                             </div>
                         </div>
                     </div>
                     <div class="accordion-item">
                         <h3 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5" aria-expanded="false" aria-controls="faq5">
-                                ¿Mis datos están seguros?
+                                {{ _('¿Mis datos están seguros?') }}
                             </button>
                         </h3>
                         <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
                             <div class="accordion-body">
-                                Absolutamente. Usamos encriptación de nivel bancario, servidores seguros y backups automáticos diarios. Tus datos son 100% privados y nunca los compartimos con terceros. Cumplimos con las normativas de protección de datos de Argentina.
+                                {{ _('Absolutamente. Usamos encriptación de nivel bancario, servidores seguros y backups automáticos diarios. Tus datos son 100% privados y nunca los compartimos con terceros. Cumplimos con las normativas de protección de datos de Argentina.') }}
                             </div>
                         </div>
                     </div>
@@ -454,9 +454,9 @@
                 <i class="fas fa-mobile-alt fa-2x text-warning"></i>
             </div>
             <div class="flex-grow-1">
-                <strong>Instala OBYRA en tu iPhone</strong>
+                <strong>{{ _('Instala OBYRA en tu iPhone') }}</strong>
                 <p class="mb-0 small opacity-75">
-                    Toca <i class="fas fa-share-square"></i> y luego "Agregar a pantalla de inicio"
+                    {{ _('Toca') }} <i class="fas fa-share-square"></i> {{ _('y luego "Agregar a pantalla de inicio"') }}
                 </p>
             </div>
         </div>

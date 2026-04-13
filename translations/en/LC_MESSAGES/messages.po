@@ -332,3 +332,163 @@ msgstr "REQUEST FREE DEMO"
 
 msgid "Sin compromiso - Respuesta en menos de 24hs"
 msgstr "No commitment - Response within 24 hours"
+
+msgid "Más de 50 constructoras ya optimizan sus obras con OBYRA."
+msgstr "Over 50 construction companies already optimize their projects with OBYRA."
+
+msgid "Gestión inteligente de obras"
+msgstr "Smart construction management"
+
+msgid "INICIAR SESION"
+msgstr "SIGN IN"
+
+msgid "EMAIL"
+msgstr "EMAIL"
+
+msgid "CONTRASENA"
+msgstr "PASSWORD"
+
+msgid "Tu contrasena"
+msgstr "Your password"
+
+msgid "Recordar mi sesion"
+msgstr "Remember me"
+
+msgid "INGRESAR"
+msgstr "SIGN IN"
+
+msgid "Olvidaste tu contrasena?"
+msgstr "Forgot your password?"
+
+msgid "Portal Proveedores"
+msgstr "Supplier Portal"
+
+msgid "Accede a todas tus obras y reportes en segundos."
+msgstr "Access all your projects and reports in seconds."
+
+msgid "o continua con"
+msgstr "or continue with"
+
+msgid "No tienes cuenta?"
+msgstr "Don't have an account?"
+
+msgid "Registrate"
+msgstr "Sign up"
+
+msgid "Quieres vender?"
+msgstr "Want to sell?"
+
+msgid "Crear Cuenta"
+msgstr "Create Account"
+
+msgid "Acceder al portal de proveedores"
+msgstr "Access the supplier portal"
+
+msgid "INSTALAR APP EN TU CELULAR"
+msgstr "INSTALL APP ON YOUR PHONE"
+
+msgid "Acceso rápido desde tu pantalla de inicio"
+msgstr "Quick access from your home screen"
+
+# ============ Why Choose OBYRA ============
+msgid "Por qué elegir"
+msgstr "Why choose"
+
+msgid "Herramientas profesionales diseñadas para la industria de la construcción"
+msgstr "Professional tools designed for the construction industry"
+
+msgid "Visibilidad Total"
+msgstr "Total Visibility"
+
+msgid "Monitorea el avance de cada obra, controla presupuestos y detecta desvíos en tiempo real desde cualquier dispositivo."
+msgstr "Monitor progress on each project, control budgets and detect deviations in real time from any device."
+
+msgid "Colaboración Ágil"
+msgstr "Agile Collaboration"
+
+msgid "Coordina equipos en obra y oficina, asigna tareas y comparte documentación con un flujo de trabajo integrado."
+msgstr "Coordinate field and office teams, assign tasks and share documentation with an integrated workflow."
+
+msgid "Automatización IA"
+msgstr "AI Automation"
+
+msgid "Aprovecha asistentes inteligentes para presupuestos, análisis de costos y reportes que te ayudan a tomar mejores decisiones."
+msgstr "Leverage intelligent assistants for budgets, cost analysis and reports that help you make better decisions."
+
+# ============ How It Works ============
+msgid "Cómo funciona"
+msgstr "How it works"
+
+msgid "Empezá a optimizar tus obras en 3 simples pasos"
+msgstr "Start optimizing your projects in 3 simple steps"
+
+msgid "Creá tu cuenta"
+msgstr "Create your account"
+
+msgid "Registrate gratis y configurá tu organización en menos de 5 minutos. Sin tarjeta de crédito."
+msgstr "Sign up for free and set up your organization in less than 5 minutes. No credit card needed."
+
+msgid "Cargá tus obras"
+msgstr "Add your projects"
+
+msgid "Agregá tus proyectos activos, invitá a tu equipo y empezá a centralizar toda la información."
+msgstr "Add your active projects, invite your team and start centralizing all information."
+
+msgid "Optimizá tu gestión"
+msgstr "Optimize your management"
+
+msgid "Controlá presupuestos, gestioná compras y tomá decisiones con datos en tiempo real."
+msgstr "Control budgets, manage procurement and make decisions with real-time data."
+
+msgid "Agendá tu Demo Personalizada"
+msgstr "Book Your Personalized Demo"
+
+# ============ FAQ ============
+msgid "Preguntas"
+msgstr "Frequently"
+
+msgid "Frecuentes"
+msgstr "Asked Questions"
+
+msgid "Respondemos las dudas más comunes sobre OBYRA"
+msgstr "We answer the most common questions about OBYRA"
+
+msgid "¿Qué tipo de empresas pueden usar OBYRA?"
+msgstr "What type of companies can use OBYRA?"
+
+msgid "OBYRA está diseñado para constructoras, empresas de arquitectura, contratistas y cualquier organización que gestione obras de construcción. Funciona tanto para empresas pequeñas con 2-3 obras como para constructoras con múltiples proyectos simultáneos."
+msgstr "OBYRA is designed for construction companies, architecture firms, contractors and any organization managing construction projects. It works for small companies with 2-3 projects as well as large constructors with multiple simultaneous projects."
+
+msgid "¿Cuánto cuesta OBYRA?"
+msgstr "How much does OBYRA cost?"
+
+msgid "Ofrecemos una prueba gratuita de 14 días sin necesidad de tarjeta de crédito. Después, tenemos planes flexibles que se adaptan al tamaño de tu empresa y cantidad de obras. Pedí una demo para conocer el plan ideal para vos."
+msgstr "We offer a 14-day free trial with no credit card required. After that, we have flexible plans that adapt to your company size and number of projects. Request a demo to find the ideal plan for you."
+
+msgid "¿Puedo usarlo desde el celular en la obra?"
+msgstr "Can I use it from my phone on the job site?"
+
+msgid "Sí, OBYRA es una aplicación web progresiva (PWA) que podés instalar en tu celular y usar como una app nativa. Funciona en Android y iOS, y tiene modo offline para cuando no tenés conexión en la obra."
+msgstr "Yes, OBYRA is a Progressive Web App (PWA) that you can install on your phone and use like a native app. It works on Android and iOS, and has offline mode for when you don't have internet on the job site."
+
+msgid "¿Cómo funciona la inteligencia artificial?"
+msgstr "How does the artificial intelligence work?"
+
+msgid "Nuestra IA te ayuda a generar presupuestos más rápido, analizar costos históricos, detectar desvíos y generar reportes automáticos. No reemplaza tu criterio profesional, sino que te da herramientas para tomar mejores decisiones más rápido."
+msgstr "Our AI helps you generate budgets faster, analyze historical costs, detect deviations and generate automatic reports. It doesn't replace your professional judgment, but gives you tools to make better decisions faster."
+
+msgid "¿Mis datos están seguros?"
+msgstr "Is my data secure?"
+
+msgid "Absolutamente. Usamos encriptación de nivel bancario, servidores seguros y backups automáticos diarios. Tus datos son 100% privados y nunca los compartimos con terceros. Cumplimos con las normativas de protección de datos de Argentina."
+msgstr "Absolutely. We use bank-level encryption, secure servers and daily automatic backups. Your data is 100% private and we never share it with third parties. We comply with Argentina's data protection regulations."
+
+# ============ iOS Banner ============
+msgid "Instala OBYRA en tu iPhone"
+msgstr "Install OBYRA on your iPhone"
+
+msgid "Toca"
+msgstr "Tap"
+
+msgid "y luego \"Agregar a pantalla de inicio\""
+msgstr "then \"Add to Home Screen\""
