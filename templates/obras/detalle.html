@@ -431,9 +431,15 @@
                                 <i class="fas fa-users me-1"></i>Mano de Obra
                             </button>
                         </li>
-                        <li class="nav-item ms-auto d-flex align-items-center gap-2">
+                        <li class="nav-item ms-auto d-flex align-items-center gap-2 flex-wrap">
                             <button class="btn btn-sm btn-warning text-dark" onclick="abrirConsumoMateriales()" title="Registrar consumo de materiales">
                                 <i class="fas fa-minus-circle me-1"></i>Registrar Consumo
+                            </button>
+                            <button class="btn btn-sm btn-info text-white" onclick="abrirTransferencia({{ obra.id }})" title="Transferir materiales a depósito u otra obra">
+                                <i class="fas fa-exchange-alt me-1"></i>Transferir
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" onclick="abrirRecibirDeposito({{ obra.id }})" title="Recibir materiales desde depósito central">
+                                <i class="fas fa-truck-loading me-1"></i>Recibir de Depósito
                             </button>
                             <button class="btn btn-sm btn-primary" onclick="abrirGestionMateriales({{ obra.id }})" title="Analizar stock, reservar y solicitar compra">
                                 <i class="fas fa-boxes me-1"></i>Gestionar Materiales
@@ -489,6 +495,7 @@
                                                 <th class="text-center">Transferido</th>
                                                 <th class="text-center">Consumido</th>
                                                 <th class="text-center">Restante</th>
+                                                <th class="text-center">Sobra / Falta</th>
                                                 <th class="text-end">Costo</th>
                                                 <th class="text-center">Stock Inv.</th>
                                             </tr>
@@ -560,6 +567,23 @@
                                                             <span class="badge bg-warning text-dark">{{ restante|numero }} {{ transferido_encontrado.data.unidad }}</span>
                                                         {% else %}
                                                             <span class="badge bg-warning text-dark">0 {{ item.unidad }}</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    {# Columna Sobra / Falta: transferido+disponible vs planificado #}
+                                                    <td class="text-center">
+                                                        {% set planif = materiales_cantidad[item.id] if (materiales_cantidad is defined and item.id in materiales_cantidad) else item.cantidad|float %}
+                                                        {% if transferido_encontrado.data %}
+                                                            {% set total_recibido = transferido_encontrado.data.cantidad_disponible + transferido_encontrado.data.cantidad_consumida %}
+                                                        {% else %}
+                                                            {% set total_recibido = 0 %}
+                                                        {% endif %}
+                                                        {% set diferencia = total_recibido - planif %}
+                                                        {% if diferencia > 0.01 %}
+                                                            <span class="badge bg-info" title="Material excedente"><i class="fas fa-arrow-up me-1"></i>Sobra {{ diferencia|numero }}</span>
+                                                        {% elif diferencia < -0.01 %}
+                                                            <span class="badge bg-danger" title="Material faltante"><i class="fas fa-arrow-down me-1"></i>Falta {{ (diferencia * -1)|numero }}</span>
+                                                        {% else %}
+                                                            <span class="badge bg-success" title="Cantidad correcta"><i class="fas fa-check me-1"></i>En línea</span>
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-end">
@@ -4972,6 +4996,223 @@ async function confirmarConsumoBatch() {
         </div>
     </div>
 </div>
+
+<!-- Modal Transferir Material -->
+<div class="modal fade" id="modalTransferir" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white py-2">
+                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Transferir Materiales</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="p-3 border-bottom bg-light">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1 fw-bold">Destino</label>
+                            <select class="form-select form-select-sm" id="transferDestinoTipo" onchange="toggleTransferDestino()">
+                                <option value="deposito">Depósito central</option>
+                                <option value="obra">Otra obra</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="transferObraDestinoWrap" style="display:none;">
+                            <label class="form-label small mb-1 fw-bold">Obra destino</label>
+                            <select class="form-select form-select-sm" id="transferObraDestino">
+                                <option value="">Seleccionar obra...</option>
+                                {% for o in obras_misma_org if o.id != obra.id and o.estado == 'en_curso' %}
+                                <option value="{{ o.id }}">{{ o.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <label class="form-label small mb-1">Observaciones (opcional)</label>
+                        <input type="text" class="form-control form-control-sm" id="transferObs" placeholder="Motivo de la transferencia...">
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:40px"></th>
+                                <th>Material</th>
+                                <th class="text-center">Disponible</th>
+                                <th style="width:120px">Cantidad</th>
+                                <th>Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transferBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info btn-sm text-white" id="btnConfirmarTransfer" onclick="confirmarTransferencia()">
+                    <i class="fas fa-check me-1"></i>Confirmar Transferencia
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Recibir de Depósito -->
+<div class="modal fade" id="modalRecibirDeposito" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white py-2">
+                <h5 class="modal-title"><i class="fas fa-truck-loading me-2"></i>Recibir de Depósito Central</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="p-3 border-bottom bg-light">
+                    <label class="form-label small mb-1">Observaciones (opcional)</label>
+                    <input type="text" class="form-control form-control-sm" id="recibirDepositoObs" placeholder="Motivo...">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:40px"></th>
+                                <th>Material</th>
+                                <th class="text-center">Stock Depósito</th>
+                                <th style="width:120px">Cantidad</th>
+                                <th>Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recibirDepositoBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info btn-sm text-white" onclick="confirmarRecibirDeposito()">
+                    <i class="fas fa-check me-1"></i>Confirmar Recepción
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ======== Transferir materiales ========
+function toggleTransferDestino() {
+    const tipo = document.getElementById('transferDestinoTipo').value;
+    document.getElementById('transferObraDestinoWrap').style.display = tipo === 'obra' ? '' : 'none';
+}
+
+async function abrirTransferencia(obraId) {
+    const tbody = document.getElementById('transferBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><i class="fas fa-spinner fa-spin me-2"></i>Cargando...</td></tr>';
+    new bootstrap.Modal(document.getElementById('modalTransferir')).show();
+
+    const res = await fetch(`/obras/api/obras/${obraId}/stock-obra`);
+    const data = await res.json();
+    if (!data.ok || !data.stock.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No hay materiales con stock en esta obra</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    data.stock.filter(s => s.cantidad_disponible > 0).forEach(s => {
+        tbody.innerHTML += `<tr>
+            <td><input type="checkbox" class="form-check-input transfer-check" data-inv-id="${s.item_inventario_id}" data-max="${s.cantidad_disponible}" onchange="this.closest('tr').querySelector('.transfer-qty').disabled = !this.checked"></td>
+            <td><strong>${s.item_nombre}</strong> <small class="text-muted">${s.item_codigo}</small></td>
+            <td class="text-center"><span class="badge bg-info">${s.cantidad_disponible} ${s.unidad}</span></td>
+            <td><input type="number" class="form-control form-control-sm transfer-qty" min="0.001" max="${s.cantidad_disponible}" step="0.001" disabled></td>
+            <td>${s.unidad}</td>
+        </tr>`;
+    });
+    if (!tbody.innerHTML) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No hay materiales con stock disponible</td></tr>';
+    }
+}
+
+async function confirmarTransferencia() {
+    const obraId = {{ obra.id }};
+    const destinoTipo = document.getElementById('transferDestinoTipo').value;
+    const destinoObraId = document.getElementById('transferObraDestino').value;
+    const observaciones = document.getElementById('transferObs').value;
+
+    if (destinoTipo === 'obra' && !destinoObraId) {
+        alert('Seleccioná la obra destino');
+        return;
+    }
+
+    const items = [];
+    document.querySelectorAll('.transfer-check:checked').forEach(chk => {
+        const qty = parseFloat(chk.closest('tr').querySelector('.transfer-qty').value || 0);
+        if (qty > 0) items.push({ item_inventario_id: parseInt(chk.dataset.invId), cantidad: qty });
+    });
+    if (!items.length) { alert('Seleccioná al menos un material'); return; }
+
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+    const res = await fetch(`/obras/api/obras/${obraId}/transferir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ items, destino_tipo: destinoTipo, destino_obra_id: destinoObraId ? parseInt(destinoObraId) : null, observaciones })
+    });
+    const data = await res.json();
+    if (data.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('modalTransferir')).hide();
+        alert(`${data.items.length} items transferidos correctamente`);
+        location.reload();
+    } else {
+        alert('Error: ' + (data.error || 'Error desconocido'));
+    }
+}
+
+// ======== Recibir de depósito ========
+async function abrirRecibirDeposito(obraId) {
+    const tbody = document.getElementById('recibirDepositoBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><i class="fas fa-spinner fa-spin me-2"></i>Cargando...</td></tr>';
+    new bootstrap.Modal(document.getElementById('modalRecibirDeposito')).show();
+
+    const res = await fetch('/obras/api/inventario-con-stock');
+    const data = await res.json();
+    const items = data.items || [];
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No hay materiales con stock en depósito</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    items.filter(i => parseFloat(i.stock_actual || 0) > 0).forEach(i => {
+        const stock = parseFloat(i.stock_actual || 0);
+        tbody.innerHTML += `<tr>
+            <td><input type="checkbox" class="form-check-input recibir-check" data-inv-id="${i.id}" data-max="${stock}" onchange="this.closest('tr').querySelector('.recibir-qty').disabled = !this.checked"></td>
+            <td><strong>${i.nombre}</strong> <small class="text-muted">${i.codigo || ''}</small></td>
+            <td class="text-center"><span class="badge bg-success">${stock} ${i.unidad}</span></td>
+            <td><input type="number" class="form-control form-control-sm recibir-qty" min="0.001" max="${stock}" step="0.001" disabled></td>
+            <td>${i.unidad}</td>
+        </tr>`;
+    });
+}
+
+async function confirmarRecibirDeposito() {
+    const obraId = {{ obra.id }};
+    const observaciones = document.getElementById('recibirDepositoObs').value;
+
+    const items = [];
+    document.querySelectorAll('.recibir-check:checked').forEach(chk => {
+        const qty = parseFloat(chk.closest('tr').querySelector('.recibir-qty').value || 0);
+        if (qty > 0) items.push({ item_inventario_id: parseInt(chk.dataset.invId), cantidad: qty });
+    });
+    if (!items.length) { alert('Seleccioná al menos un material'); return; }
+
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+    const res = await fetch(`/obras/api/obras/${obraId}/recibir-de-deposito`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ items, observaciones })
+    });
+    const data = await res.json();
+    if (data.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('modalRecibirDeposito')).hide();
+        alert(`${data.items.length} items recibidos en obra`);
+        location.reload();
+    } else {
+        alert('Error: ' + (data.error || 'Error desconocido'));
+    }
+}
+</script>
 
 <!-- Modal Asignar Tareas Batch -->
 <div class="modal fade" id="asignarTareasBatchModal" tabindex="-1">

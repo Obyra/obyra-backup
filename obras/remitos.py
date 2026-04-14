@@ -2,12 +2,80 @@
 from flask import (render_template, request, flash, redirect,
                    url_for, jsonify, current_app, abort)
 from flask_login import login_required, current_user
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 from extensions import db
 from services.permissions import validate_obra_ownership
 from services.memberships import get_current_org_id
 
 from obras import obras_bp, _get_roles_usuario
+
+
+def _sync_remito_to_stock(remito):
+    """Sincroniza los items de un remito recibido al StockObra.
+
+    Para cada RemitoItem vinculado a un ItemInventario:
+    - Crea o incrementa StockObra.cantidad_disponible
+    - Registra MovimientoStockObra tipo 'entrada'
+    """
+    from models.inventory import StockObra, MovimientoStockObra
+
+    for ri in remito.items:
+        if not ri.item_inventario_id or not ri.cantidad:
+            continue
+        cantidad = float(ri.cantidad)
+        if cantidad <= 0:
+            continue
+
+        stock = StockObra.query.filter_by(
+            obra_id=remito.obra_id,
+            item_inventario_id=ri.item_inventario_id,
+        ).first()
+
+        if not stock:
+            stock = StockObra(
+                obra_id=remito.obra_id,
+                item_inventario_id=ri.item_inventario_id,
+                cantidad_disponible=0,
+                cantidad_consumida=0,
+            )
+            db.session.add(stock)
+            db.session.flush()
+
+        stock.cantidad_disponible = float(
+            Decimal(str(stock.cantidad_disponible or 0)) + Decimal(str(cantidad))
+        )
+        stock.fecha_ultimo_traslado = datetime.utcnow()
+
+        mov = MovimientoStockObra(
+            stock_obra_id=stock.id,
+            tipo='entrada',
+            cantidad=cantidad,
+            fecha=datetime.utcnow(),
+            usuario_id=remito.created_by_id or remito.recibido_por_id,
+            observaciones=f'Remito #{remito.numero_remito} - {ri.descripcion}',
+            precio_unitario=float(ri.precio_unitario) if ri.precio_unitario else None,
+            moneda='ARS',
+        )
+        db.session.add(mov)
+
+
+def _reverse_remito_stock(remito):
+    """Revierte el stock que ingresó por un remito (antes de eliminarlo)."""
+    from models.inventory import StockObra
+
+    for ri in remito.items:
+        if not ri.item_inventario_id or not ri.cantidad:
+            continue
+        cantidad = float(ri.cantidad)
+        stock = StockObra.query.filter_by(
+            obra_id=remito.obra_id,
+            item_inventario_id=ri.item_inventario_id,
+        ).first()
+        if stock:
+            stock.cantidad_disponible = max(
+                0, float(Decimal(str(stock.cantidad_disponible or 0)) - Decimal(str(cantidad)))
+            )
 
 
 @obras_bp.route('/<int:obra_id>/remitos', methods=['POST'])
@@ -53,6 +121,12 @@ def crear_remito(obra_id):
                 precio_unitario=float(item_data['precio_unitario']) if item_data.get('precio_unitario') else None,
             )
             db.session.add(item)
+
+        db.session.flush()
+
+        # Sincronizar items del remito al stock de la obra
+        if remito.estado == 'recibido':
+            _sync_remito_to_stock(remito)
 
         db.session.commit()
         return jsonify(ok=True, id=remito.id)
@@ -105,6 +179,9 @@ def eliminar_remito(obra_id, remito_id):
     if remito.obra.organizacion_id != get_current_org_id():
         abort(403)
     try:
+        # Revertir stock si el remito estaba recibido
+        if remito.estado == 'recibido':
+            _reverse_remito_stock(remito)
         db.session.delete(remito)
         db.session.commit()
         return jsonify(ok=True)

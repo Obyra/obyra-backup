@@ -887,8 +887,14 @@ def detalle(id):
     # Diccionario etapa_id -> etapa para mostrar nombres en equipo asignado
     etapas_by_id = {e.id: e for e in etapas}
 
+    # Obras de la misma organización (para transferencias)
+    obras_misma_org = Obra.query.filter_by(
+        organizacion_id=org_id
+    ).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
+
     return render_template('obras/detalle.html',
                          obra=obra,
+                         obras_misma_org=obras_misma_org,
                          etapas=etapas,
                          etapas_by_id=etapas_by_id,
                          remitos_count=remitos_count,

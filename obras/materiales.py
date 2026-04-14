@@ -869,3 +869,280 @@ def api_consumo_batch(obra_id):
         current_app.logger.exception(f"Error en consumo batch: {e}")
         db.session.rollback()
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ============================================================
+# TRANSFERENCIAS: obra↔depósito, obra↔obra
+# ============================================================
+
+@obras_bp.route('/api/obras/<int:obra_id>/transferir', methods=['POST'])
+@login_required
+def api_transferir_material(obra_id):
+    """Transfiere materiales o maquinaria entre obra↔depósito u obra↔obra.
+
+    JSON body:
+        items: [{item_inventario_id, cantidad}]
+        destino_tipo: 'deposito' | 'obra'
+        destino_obra_id: int (solo si destino_tipo == 'obra')
+        observaciones: str (opcional)
+    """
+    try:
+        from models.inventory import (
+            StockObra, MovimientoStockObra, ItemInventario,
+            MovimientoInventario,
+        )
+
+        obra_origen = Obra.query.get_or_404(obra_id)
+        if obra_origen.organizacion_id != current_user.organizacion_id:
+            return jsonify(ok=False, error='Sin permisos'), 403
+
+        data = request.get_json() or {}
+        items = data.get('items', [])
+        destino_tipo = data.get('destino_tipo', '')  # 'deposito' | 'obra'
+        destino_obra_id = data.get('destino_obra_id')
+        observaciones = data.get('observaciones', '')
+
+        if not items:
+            return jsonify(ok=False, error='No se enviaron items'), 400
+        if destino_tipo not in ('deposito', 'obra'):
+            return jsonify(ok=False, error='destino_tipo debe ser "deposito" o "obra"'), 400
+
+        obra_destino = None
+        if destino_tipo == 'obra':
+            if not destino_obra_id:
+                return jsonify(ok=False, error='Falta destino_obra_id'), 400
+            obra_destino = Obra.query.get_or_404(int(destino_obra_id))
+            if obra_destino.organizacion_id != current_user.organizacion_id:
+                return jsonify(ok=False, error='La obra destino no pertenece a tu organización'), 403
+            if obra_destino.id == obra_id:
+                return jsonify(ok=False, error='Origen y destino no pueden ser la misma obra'), 400
+
+        resultados = []
+
+        for item_data in items:
+            inv_id = item_data.get('item_inventario_id')
+            cantidad = float(item_data.get('cantidad', 0))
+            if not inv_id or cantidad <= 0:
+                continue
+
+            # Bajar del stock de la obra origen
+            stock_origen = StockObra.query.filter_by(
+                obra_id=obra_id, item_inventario_id=inv_id
+            ).first()
+            if not stock_origen:
+                continue
+            disponible = float(stock_origen.cantidad_disponible or 0)
+            if cantidad > disponible:
+                cantidad = disponible
+            if cantidad <= 0:
+                continue
+
+            stock_origen.cantidad_disponible = float(
+                Decimal(str(disponible)) - Decimal(str(cantidad))
+            )
+
+            # Movimiento de salida en origen
+            mov_salida = MovimientoStockObra(
+                stock_obra_id=stock_origen.id,
+                tipo='devolucion',
+                cantidad=cantidad,
+                fecha=datetime.utcnow(),
+                usuario_id=current_user.id,
+                observaciones=f'Transferencia a {"depósito" if destino_tipo == "deposito" else obra_destino.nombre}. {observaciones}'.strip(),
+            )
+            db.session.add(mov_salida)
+
+            item_inv = ItemInventario.query.get(inv_id)
+            nombre_item = item_inv.nombre if item_inv else f'Item #{inv_id}'
+
+            if destino_tipo == 'deposito':
+                # Devolver al stock central del inventario
+                if item_inv:
+                    item_inv.stock_actual = float(
+                        Decimal(str(item_inv.stock_actual or 0)) + Decimal(str(cantidad))
+                    )
+                    mov_inv = MovimientoInventario(
+                        item_id=inv_id,
+                        tipo='entrada',
+                        cantidad=cantidad,
+                        fecha=datetime.utcnow(),
+                        usuario_id=current_user.id,
+                        observaciones=f'Devuelto desde obra {obra_origen.nombre}. {observaciones}'.strip(),
+                    )
+                    db.session.add(mov_inv)
+            else:
+                # Crear/incrementar stock en obra destino
+                stock_destino = StockObra.query.filter_by(
+                    obra_id=obra_destino.id, item_inventario_id=inv_id
+                ).first()
+                if not stock_destino:
+                    stock_destino = StockObra(
+                        obra_id=obra_destino.id,
+                        item_inventario_id=inv_id,
+                        cantidad_disponible=0,
+                        cantidad_consumida=0,
+                    )
+                    db.session.add(stock_destino)
+                    db.session.flush()
+
+                stock_destino.cantidad_disponible = float(
+                    Decimal(str(stock_destino.cantidad_disponible or 0)) + Decimal(str(cantidad))
+                )
+                stock_destino.fecha_ultimo_traslado = datetime.utcnow()
+
+                mov_entrada = MovimientoStockObra(
+                    stock_obra_id=stock_destino.id,
+                    tipo='entrada',
+                    cantidad=cantidad,
+                    fecha=datetime.utcnow(),
+                    usuario_id=current_user.id,
+                    observaciones=f'Transferencia desde obra {obra_origen.nombre}. {observaciones}'.strip(),
+                )
+                db.session.add(mov_entrada)
+
+            resultados.append({
+                'nombre': nombre_item,
+                'cantidad': cantidad,
+                'destino': 'Depósito central' if destino_tipo == 'deposito' else obra_destino.nombre,
+            })
+
+        if not resultados:
+            return jsonify(ok=False, error='No se pudo transferir ningún material'), 400
+
+        db.session.commit()
+        return jsonify(ok=True, mensaje=f'{len(resultados)} items transferidos', items=resultados)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Error en transferencia: {e}")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/recibir-de-deposito', methods=['POST'])
+@login_required
+def api_recibir_de_deposito(obra_id):
+    """Transfiere materiales desde depósito central a la obra.
+
+    JSON body:
+        items: [{item_inventario_id, cantidad}]
+        observaciones: str (opcional)
+    """
+    try:
+        from models.inventory import (
+            StockObra, MovimientoStockObra, ItemInventario,
+            MovimientoInventario,
+        )
+
+        obra = Obra.query.get_or_404(obra_id)
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify(ok=False, error='Sin permisos'), 403
+
+        data = request.get_json() or {}
+        items = data.get('items', [])
+        observaciones = data.get('observaciones', '')
+
+        if not items:
+            return jsonify(ok=False, error='No se enviaron items'), 400
+
+        resultados = []
+
+        for item_data in items:
+            inv_id = item_data.get('item_inventario_id')
+            cantidad = float(item_data.get('cantidad', 0))
+            if not inv_id or cantidad <= 0:
+                continue
+
+            item_inv = ItemInventario.query.get(inv_id)
+            if not item_inv or item_inv.organizacion_id != current_user.organizacion_id:
+                continue
+
+            stock_central = float(item_inv.stock_actual or 0)
+            if cantidad > stock_central:
+                cantidad = stock_central
+            if cantidad <= 0:
+                continue
+
+            # Bajar del depósito central
+            item_inv.stock_actual = float(
+                Decimal(str(stock_central)) - Decimal(str(cantidad))
+            )
+            mov_inv = MovimientoInventario(
+                item_id=inv_id,
+                tipo='salida',
+                cantidad=cantidad,
+                fecha=datetime.utcnow(),
+                usuario_id=current_user.id,
+                observaciones=f'Enviado a obra {obra.nombre}. {observaciones}'.strip(),
+            )
+            db.session.add(mov_inv)
+
+            # Subir al stock de la obra
+            stock_obra = StockObra.query.filter_by(
+                obra_id=obra_id, item_inventario_id=inv_id
+            ).first()
+            if not stock_obra:
+                stock_obra = StockObra(
+                    obra_id=obra_id,
+                    item_inventario_id=inv_id,
+                    cantidad_disponible=0,
+                    cantidad_consumida=0,
+                )
+                db.session.add(stock_obra)
+                db.session.flush()
+
+            stock_obra.cantidad_disponible = float(
+                Decimal(str(stock_obra.cantidad_disponible or 0)) + Decimal(str(cantidad))
+            )
+            stock_obra.fecha_ultimo_traslado = datetime.utcnow()
+
+            mov_entrada = MovimientoStockObra(
+                stock_obra_id=stock_obra.id,
+                tipo='entrada',
+                cantidad=cantidad,
+                fecha=datetime.utcnow(),
+                usuario_id=current_user.id,
+                observaciones=f'Desde depósito central. {observaciones}'.strip(),
+                precio_unitario=float(item_inv.precio_promedio or 0),
+                moneda='ARS',
+            )
+            db.session.add(mov_entrada)
+
+            resultados.append({
+                'nombre': item_inv.nombre,
+                'cantidad': cantidad,
+            })
+
+        if not resultados:
+            return jsonify(ok=False, error='No se pudo transferir ningún material'), 400
+
+        db.session.commit()
+        return jsonify(ok=True, mensaje=f'{len(resultados)} items recibidos en obra', items=resultados)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Error recibiendo de depósito: {e}")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/api/inventario-con-stock', methods=['GET'])
+@login_required
+def api_inventario_con_stock():
+    """Devuelve items de inventario con stock > 0 para transferir a obras."""
+    try:
+        from models.inventory import ItemInventario
+        org_id = get_current_org_id() or current_user.organizacion_id
+        items = ItemInventario.query.filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo.is_(True),
+            ItemInventario.stock_actual > 0,
+        ).order_by(ItemInventario.nombre).all()
+
+        return jsonify(ok=True, items=[{
+            'id': i.id,
+            'nombre': i.nombre,
+            'codigo': i.codigo,
+            'unidad': i.unidad,
+            'stock_actual': float(i.stock_actual or 0),
+        } for i in items])
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 500
