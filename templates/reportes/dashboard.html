@@ -310,65 +310,6 @@
     </div>
     {% endif %}
 
-    <!-- Detalle Financiero por Obra -->
-    {% if datos_financieros and datos_financieros.presupuesto_vs_real %}
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white border-0">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-table text-secondary me-2"></i>Detalle Financiero por Obra</h6>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0" style="font-size: 0.85rem;">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>Obra</th>
-                                    <th class="text-end">Presupuesto</th>
-                                    <th class="text-end">Gastado</th>
-                                    <th class="text-end">Saldo</th>
-                                    <th class="text-center">Ejecutado</th>
-                                    <th style="min-width:120px;">Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            {% for d in datos_financieros.presupuesto_vs_real %}
-                            <tr>
-                                <td class="fw-bold">{{ d.nombre }}</td>
-                                <td class="text-end">{{ d.presupuesto|moneda }}</td>
-                                <td class="text-end">{{ d.real|moneda }}</td>
-                                <td class="text-end {% if d.presupuesto > d.real %}text-success{% else %}text-danger{% endif %}">
-                                    {{ (d.presupuesto - d.real)|moneda }}
-                                </td>
-                                <td class="text-center">
-                                    <div class="progress mx-auto" style="height:8px; max-width:80px; border-radius:4px;">
-                                        <div class="progress-bar {% if d.porcentaje > 100 %}bg-danger{% elif d.porcentaje > 80 %}bg-warning{% else %}bg-success{% endif %}"
-                                             style="width: {{ [d.porcentaje, 100]|min }}%; border-radius:4px;"></div>
-                                    </div>
-                                    <small class="{% if d.porcentaje > 100 %}text-danger fw-bold{% else %}text-muted{% endif %}">{{ d.porcentaje }}%</small>
-                                </td>
-                                <td>
-                                    {% if d.porcentaje > 100 %}
-                                        <span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>Sobrecosto</span>
-                                    {% elif d.porcentaje > 80 %}
-                                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation me-1"></i>Atención</span>
-                                    {% elif d.porcentaje > 0 %}
-                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>En rango</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">Sin gastos</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
     <!-- Contenido Principal - 2 Columnas -->
     <div class="row">
         <!-- Columna Izquierda -->
