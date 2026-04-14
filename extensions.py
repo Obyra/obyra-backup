@@ -3,7 +3,6 @@ from flask_login import LoginManager
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
 from flask_mail import Mail
-from flask_babel import Babel
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -16,7 +15,6 @@ login_manager = LoginManager()
 migrate = Migrate()
 csrf = CSRFProtect()
 mail = Mail()
-babel = Babel()
 
 # Rate limiter se inicializa en app.py con setup_rate_limiter()
 # Proxy object que evita AttributeError si se usa antes de inicializar

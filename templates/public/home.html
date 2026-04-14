@@ -70,17 +70,10 @@
                 <li><a href="#como-funciona" aria-label="Cómo funciona OBYRA">Cómo Funciona</a></li>
                 <li><a href="#faq-section" aria-label="Preguntas frecuentes">FAQ</a></li>
             </ul>
-            <div class="d-flex align-items-center gap-2">
-                {% set flag_base = 'https://flagcdn.com/20x15' %}
-                {% set current_lang = request.cookies.get('lang', 'es') %}
-                <a href="{{ url_for('set_language', lang='es') }}" title="Español" class="{% if current_lang == 'es' %}opacity-100{% else %}opacity-50{% endif %}"><img src="{{ flag_base }}/es.png" alt="ES" style="width:20px;"></a>
-                <a href="{{ url_for('set_language', lang='en') }}" title="English" class="{% if current_lang == 'en' %}opacity-100{% else %}opacity-50{% endif %}"><img src="{{ flag_base }}/gb.png" alt="EN" style="width:20px;"></a>
-                <a href="{{ url_for('set_language', lang='de') }}" title="Deutsch" class="{% if current_lang == 'de' %}opacity-100{% else %}opacity-50{% endif %}"><img src="{{ flag_base }}/de.png" alt="DE" style="width:20px;"></a>
-                <a href="https://wa.me/5491173685175?text=Hola! Me interesa reservar una demo de OBYRA"
-                   target="_blank" rel="noopener noreferrer" class="btn btn-cta-nav ms-2">
-                    <i class="fab fa-whatsapp me-1"></i>{{ _('Pedir Demo') }}
-                </a>
-            </div>
+            <a href="https://wa.me/5491173685175?text=Hola! Me interesa reservar una demo de OBYRA"
+               target="_blank" rel="noopener noreferrer" class="btn btn-cta-nav">
+                <i class="fab fa-whatsapp me-1"></i>Pedir Demo
+            </a>
         </div>
     </div>
 </nav>
@@ -161,13 +154,13 @@
         <div class="row align-items-center g-4 g-lg-5">
             <div class="col-lg-7">
                 <div class="hero-badge mb-3">
-                    <i class="fas fa-hard-hat me-2" aria-hidden="true"></i>{{ _('PLATAFORMA DE GESTIÓN PARA CONSTRUCTORAS') }}
+                    <i class="fas fa-hard-hat me-2" aria-hidden="true"></i>PLATAFORMA DE GESTIÓN PARA CONSTRUCTORAS
                 </div>
                 <h1 class="hero-title text-white mb-4">
-                    {{ _('Gestiona tus obras con inteligencia artificial') }}
+                    Gestiona tus obras con inteligencia artificial
                 </h1>
                 <p class="hero-subtitle mb-4">
-                    {{ _('Centraliza presupuestos, coordina equipos, controla inventario y automatiza compras desde una sola plataforma.') }}
+                    Centraliza presupuestos, coordina equipos, controla inventario y automatiza compras desde una sola plataforma.
                     Más de 50 constructoras ya optimizan sus obras con OBYRA.
                 </p>
 
@@ -178,9 +171,9 @@
                        rel="noopener noreferrer"
                        class="btn btn-cta-main btn-lg"
                        aria-label="Reservar demo gratuita por WhatsApp">
-                        <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>{{ _('PEDIR DEMO GRATIS') }}
+                        <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>PEDIR DEMO GRATIS
                     </a>
-                    <span class="cta-helper">{{ _('Sin compromiso - Respuesta en menos de 24hs') }}</span>
+                    <span class="cta-helper">Sin compromiso - Respuesta en menos de 24hs</span>
                 </div>
 
                 <!-- CTAs Secundarios -->

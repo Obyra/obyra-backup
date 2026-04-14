@@ -113,7 +113,7 @@
                     {# Manual #}
                     <li class="nav-item">
                         <a class="nav-link text-info" href="{{ url_for('manual') }}">
-                            <i class="fas fa-book me-1"></i>{{ _('Manual') }}
+                            <i class="fas fa-book me-1"></i>Manual
                         </a>
                     </li>
 
@@ -124,7 +124,7 @@
                     {% if current_user.is_authenticated and current_user.role in ['admin','administrador','pm','project_manager'] %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('reportes.dashboard') }}">
-                            <i class="fas fa-tachometer-alt me-1"></i>{{ _('Dashboard') }}
+                            <i class="fas fa-tachometer-alt me-1"></i>Dashboard
                         </a>
                     </li>
                     {% endif %}
@@ -133,7 +133,7 @@
                     {% if current_user.puede_acceder_modulo('presupuestos') and has_endpoint('presupuestos.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarPresupuestos" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-calculator me-1"></i>{{ _('Presupuestos') }}
+                            <i class="fas fa-calculator me-1"></i>Presupuestos
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('presupuestos.lista') }}">
@@ -158,7 +158,7 @@
                     {% if current_user.puede_acceder_modulo('obras') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarObras" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-building me-1"></i>{{ _('Obras') }}
+                            <i class="fas fa-building me-1"></i>Obras
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('obras.lista') }}">
@@ -193,7 +193,7 @@
                         {% if current_user.puede_acceder_modulo('inventario') and has_endpoint('inventario.lista') %}
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="navbarInventario" role="button" data-bs-toggle="dropdown">
-                                <i class="fas fa-boxes me-1"></i>{{ _('Inventario') }}
+                                <i class="fas fa-boxes me-1"></i>Inventario
                             </a>
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">
@@ -241,7 +241,7 @@
                     {% if current_user.puede_acceder_modulo('equipos') and has_endpoint('equipos.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarEquipos" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-users me-1"></i>{{ _('Equipos') }}
+                            <i class="fas fa-users me-1"></i>Equipos
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('equipos.lista') }}">Ver Equipo</a></li>
@@ -287,7 +287,7 @@
                     {% if current_user.puede_acceder_modulo('reportes') and has_endpoint('reportes.reporte_obras') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarReportes" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-chart-bar me-1"></i>{{ _('Reportes') }}
+                            <i class="fas fa-chart-bar me-1"></i>Reportes
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_obras') }}">Reporte de Obras</a></li>
@@ -307,7 +307,7 @@
                     {% if current_user.puede_acceder_modulo('seguridad') and has_endpoint('seguridad.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-danger" href="#" id="navbarSeguridad" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-shield-alt me-1"></i>{{ _('Seguridad') }}
+                            <i class="fas fa-shield-alt me-1"></i>Seguridad
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('seguridad.dashboard') }}">
@@ -333,7 +333,7 @@
                     <!-- Manual de Usuario - Visible para todos -->
                     <li class="nav-item">
                         <a class="nav-link text-info" href="{{ url_for('manual') }}">
-                            <i class="fas fa-book me-1"></i>{{ _('Manual') }}
+                            <i class="fas fa-book me-1"></i>Manual
                         </a>
                     </li>
 
@@ -341,28 +341,6 @@
                 </ul>
 
                 <ul class="navbar-nav align-items-center">
-                    {# Selector de idioma - banderitas #}
-                    {% set current_lang = request.cookies.get('lang', 'es') %}
-                    {% set flag_base = 'https://flagcdn.com/24x18' %}
-                    <li class="nav-item dropdown me-2">
-                        <a class="nav-link py-1 px-2" href="#" id="navbarLang" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Idioma">
-                            {% if current_lang == 'en' %}<img src="{{ flag_base }}/gb.png" alt="EN" style="width:24px;height:18px;">
-                            {% elif current_lang == 'de' %}<img src="{{ flag_base }}/de.png" alt="DE" style="width:24px;height:18px;">
-                            {% else %}<img src="{{ flag_base }}/es.png" alt="ES" style="width:24px;height:18px;">{% endif %}
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" style="min-width: 160px;" aria-labelledby="navbarLang">
-                            <li><a class="dropdown-item d-flex align-items-center {% if current_lang == 'es' %}active{% endif %}" href="{{ url_for('set_language', lang='es') }}">
-                                <img src="{{ flag_base }}/es.png" alt="AR" class="me-2" style="width:24px;height:18px;"> Español
-                            </a></li>
-                            <li><a class="dropdown-item d-flex align-items-center {% if current_lang == 'en' %}active{% endif %}" href="{{ url_for('set_language', lang='en') }}">
-                                <img src="{{ flag_base }}/gb.png" alt="GB" class="me-2" style="width:24px;height:18px;"> English
-                            </a></li>
-                            <li><a class="dropdown-item d-flex align-items-center {% if current_lang == 'de' %}active{% endif %}" href="{{ url_for('set_language', lang='de') }}">
-                                <img src="{{ flag_base }}/de.png" alt="DE" class="me-2" style="width:24px;height:18px;"> Deutsch
-                            </a></li>
-                        </ul>
-                    </li>
-
                     {# Icono de notificaciones - ocultar para operarios #}
                     {% if current_user.role != 'operario' %}
                     <li class="nav-item dropdown me-2">
