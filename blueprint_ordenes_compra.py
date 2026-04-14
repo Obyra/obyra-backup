@@ -18,6 +18,71 @@ from sqlalchemy import or_, func
 ordenes_compra_bp = Blueprint('ordenes_compra', __name__, url_prefix='/ordenes-compra')
 
 
+def _find_or_create_item_inventario(descripcion, unidad, precio_unitario, org_id):
+    """Busca un ItemInventario existente por nombre normalizado.
+    Si no existe, lo crea automáticamente con datos mínimos.
+
+    Criterio de búsqueda: nombre normalizado (lowercase, stripped) + misma org.
+    Esto evita duplicados como "Cemento Portland" vs "cemento portland".
+
+    Returns: ItemInventario.id
+    """
+    from models.inventory import ItemInventario
+    import re
+
+    nombre_norm = descripcion.strip()
+    if not nombre_norm:
+        return None
+
+    # 1. Buscar existente por nombre exacto (case-insensitive)
+    existente = ItemInventario.query.filter(
+        ItemInventario.organizacion_id == org_id,
+        func.lower(ItemInventario.nombre) == nombre_norm.lower(),
+        ItemInventario.activo.is_(True),
+    ).first()
+
+    if existente:
+        # Actualizar precio si viene uno mejor
+        if precio_unitario and precio_unitario > 0:
+            if not existente.precio_promedio or float(existente.precio_promedio) == 0:
+                existente.precio_promedio = float(precio_unitario)
+        return existente.id
+
+    # 2. Crear nuevo ItemInventario
+    # Generar código automático: OC + correlativo
+    prefijo = 'OC-'
+    ultimo = ItemInventario.query.filter(
+        ItemInventario.organizacion_id == org_id,
+        ItemInventario.codigo.like(f'{prefijo}%'),
+    ).order_by(ItemInventario.codigo.desc()).first()
+
+    siguiente = 1
+    if ultimo and ultimo.codigo:
+        match = re.search(r'(\d+)$', ultimo.codigo)
+        if match:
+            siguiente = int(match.group(1)) + 1
+    codigo = f"{prefijo}{siguiente:04d}"
+
+    while ItemInventario.query.filter_by(codigo=codigo, organizacion_id=org_id).first():
+        siguiente += 1
+        codigo = f"{prefijo}{siguiente:04d}"
+
+    nuevo = ItemInventario(
+        codigo=codigo,
+        nombre=nombre_norm,
+        descripcion=f'Creado automáticamente desde Orden de Compra',
+        unidad=unidad or 'u',
+        stock_actual=0,
+        stock_minimo=0,
+        precio_promedio=float(precio_unitario) if precio_unitario else 0,
+        activo=True,
+        organizacion_id=org_id,
+    )
+    db.session.add(nuevo)
+    db.session.flush()  # Para obtener el ID
+    return nuevo.id
+
+
 def _tiene_permiso_oc():
     """Verifica si el usuario puede gestionar OC (admin o PM)."""
     rol = getattr(current_user, 'rol', '') or ''
@@ -162,6 +227,12 @@ def crear():
                 except Exception:
                     cant_val = Decimal('0')
                     precio_val = Decimal('0')
+
+                # Auto-crear o vincular ItemInventario si no viene seleccionado
+                if not item_inv_id and desc:
+                    item_inv_id = _find_or_create_item_inventario(
+                        desc, unidad, float(precio_val), org_id
+                    )
 
                 item = OrdenCompraItem(
                     orden_compra_id=oc.id,
