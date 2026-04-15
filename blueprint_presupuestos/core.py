@@ -333,6 +333,11 @@ def crear():
                                 item_inventario_id = item_inv.id
                                 items_vinculados += 1
 
+                        # Modalidad de costo: la IA siempre cotiza alquiler para
+                        # equipos (precios diarios derivados de precio_alquiler_usd/28).
+                        # Para otros tipos el campo se deja en NULL.
+                        modalidad = 'alquiler' if item['tipo'] == 'equipo' else None
+
                         item_presupuesto = ItemPresupuesto(
                             presupuesto_id=presupuesto.id,
                             tipo=item['tipo'],
@@ -350,7 +355,8 @@ def crear():
                             etapa_id=None,
                             etapa_nombre=item['nombre_etapa'],
                             nivel_nombre=item['nivel_nombre'],
-                            item_inventario_id=item_inventario_id
+                            item_inventario_id=item_inventario_id,
+                            modalidad_costo=modalidad
                         )
                         db.session.add(item_presupuesto)
 
@@ -563,9 +569,19 @@ def crear_manual():
                     if item_inventario_id:
                         item_inventario_id = int(item_inventario_id)
 
+                    # Modalidad de costo: si es equipo, acepta la que venga del
+                    # payload, default 'compra'. Para otros tipos queda NULL.
+                    tipo_item = item_data.get('tipo', 'material')
+                    if tipo_item == 'equipo':
+                        modalidad_item = item_data.get('modalidad_costo', 'compra')
+                        if modalidad_item not in ('compra', 'alquiler'):
+                            modalidad_item = 'compra'
+                    else:
+                        modalidad_item = None
+
                     item_presupuesto = ItemPresupuesto(
                         presupuesto_id=presupuesto.id,
-                        tipo=item_data.get('tipo', 'material'),
+                        tipo=tipo_item,
                         descripcion=item_data.get('descripcion', ''),
                         unidad=item_data.get('unidad', 'unidad'),
                         cantidad=cantidad,
@@ -575,7 +591,8 @@ def crear_manual():
                         currency=moneda,
                         price_unit_ars=precio_unit_ars,
                         total_ars=total_ars,
-                        item_inventario_id=item_inventario_id
+                        item_inventario_id=item_inventario_id,
+                        modalidad_costo=modalidad_item
                     )
                     db.session.add(item_presupuesto)
 
