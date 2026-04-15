@@ -352,7 +352,7 @@ def eliminar(id):
     ).first_or_404()
 
     # Solo el solicitante o admin puede eliminar
-    es_admin = current_user.role in ['admin']
+    es_admin = current_user.role in ['admin', 'administrador']
     es_solicitante = requerimiento.solicitante_id == current_user.id
     if not (es_admin or es_solicitante):
         flash('No tiene permisos para eliminar este requerimiento', 'danger')

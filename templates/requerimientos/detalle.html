@@ -489,7 +489,7 @@
                     </form>
                     {% endif %}
 
-                    {% if current_user.role == 'admin' and requerimiento.estado == 'completado' %}
+                    {% if current_user.role in ['admin', 'administrador'] and requerimiento.estado == 'completado' %}
                     <hr>
                     <form method="POST" action="{{ url_for('requerimientos.eliminar', id=requerimiento.id) }}?forzar=1">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
