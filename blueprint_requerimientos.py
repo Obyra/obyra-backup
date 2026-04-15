@@ -335,7 +335,15 @@ def completar(id):
 @requerimientos_bp.route('/<int:id>/eliminar', methods=['POST'])
 @login_required
 def eliminar(id):
-    """Eliminar un requerimiento (solo admin o solicitante)."""
+    """Eliminar un requerimiento.
+
+    Modo normal: solicitante o admin puede eliminar si no está completado.
+      Desvincula OCs y Remitos (deja los registros), elimina cotizaciones e items.
+
+    Modo forzado (admin + ?forzar=1): cascada total.
+      Elimina OCs vinculadas, sus Remitos (revierte StockObra), cotizaciones,
+      items, y el requerimiento. Usar para limpiar data de prueba.
+    """
     from models.inventory import RequerimientoCompra, RequerimientoCompraItem
 
     requerimiento = RequerimientoCompra.query.filter_by(
@@ -350,15 +358,39 @@ def eliminar(id):
         flash('No tiene permisos para eliminar este requerimiento', 'danger')
         return redirect(url_for('requerimientos.detalle', id=id))
 
-    # No eliminar si tiene OC vinculada
-    if requerimiento.estado == 'completado':
-        flash('No se puede eliminar un requerimiento completado', 'warning')
+    forzar = request.args.get('forzar') == '1' or request.form.get('forzar') == '1'
+
+    # Solo admin puede forzar
+    if forzar and not es_admin:
+        flash('Solo un admin puede forzar eliminación', 'danger')
+        return redirect(url_for('requerimientos.detalle', id=id))
+
+    # Sin forzar: no eliminar requerimientos completados
+    if requerimiento.estado == 'completado' and not forzar:
+        flash('No se puede eliminar un requerimiento completado. Si es admin, use el botón "Eliminar forzado".', 'warning')
         return redirect(url_for('requerimientos.detalle', id=id))
 
     numero = requerimiento.numero
 
     try:
-        # Eliminar cotizaciones y sus items (FK es NOT NULL, no se puede desvincular)
+        if forzar:
+            _cascada_eliminar_ocs_y_remitos(id)
+        else:
+            # Modo normal: solo desvincular
+            try:
+                from models.inventory import OrdenCompra
+                OrdenCompra.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+                db.session.flush()
+            except Exception:
+                db.session.rollback()
+            try:
+                from models.inventory import Remito
+                Remito.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
+                db.session.flush()
+            except Exception:
+                db.session.rollback()
+
+        # Eliminar cotizaciones y sus items (FK es NOT NULL)
         try:
             from models.proveedores_oc import CotizacionProveedor, CotizacionProveedorItem
             cotizaciones = CotizacionProveedor.query.filter_by(requerimiento_id=id).all()
@@ -369,40 +401,87 @@ def eliminar(id):
         except Exception:
             db.session.rollback()
 
-        # Desvincular OC (FK es nullable)
-        try:
-            from models.inventory import OrdenCompra
-            OrdenCompra.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
-            db.session.flush()
-        except Exception:
-            db.session.rollback()
-
-        # Desvincular Remitos (FK es nullable)
-        try:
-            from models.inventory import Remito
-            Remito.query.filter_by(requerimiento_id=id).update({'requerimiento_id': None})
-            db.session.flush()
-        except Exception:
-            db.session.rollback()
-
-        # Eliminar items del requerimiento (cascade debería hacerlo, pero por si acaso)
+        # Eliminar items del requerimiento
         RequerimientoCompraItem.query.filter_by(requerimiento_id=id).delete()
 
         # Eliminar el requerimiento
         db.session.delete(requerimiento)
         try:
             from models.audit import registrar_audit
-            registrar_audit('eliminar', 'requerimiento', id, f'Requerimiento {numero} eliminado')
+            accion = 'eliminar_forzado' if forzar else 'eliminar'
+            registrar_audit(accion, 'requerimiento', id, f'Requerimiento {numero} eliminado')
         except Exception:
             pass
         db.session.commit()
 
-        flash(f'Requerimiento {numero} eliminado', 'info')
+        msg = f'Requerimiento {numero} eliminado con cascada (OCs, Remitos, Stock revertido)' if forzar \
+              else f'Requerimiento {numero} eliminado'
+        flash(msg, 'info')
     except Exception as e:
         db.session.rollback()
-        flash('Error al eliminar. Intente nuevamente.', 'danger')
+        current_app.logger.exception(f"Error eliminando requerimiento {id}")
+        flash(f'Error al eliminar: {str(e)}', 'danger')
 
     return redirect(url_for('requerimientos.lista'))
+
+
+def _cascada_eliminar_ocs_y_remitos(requerimiento_id):
+    """Elimina en cascada todas las OCs vinculadas al requerimiento, sus
+    remitos, y revierte el StockObra generado.
+
+    Orden de eliminación (respeta FKs):
+      1. Para cada Remito de la OC:
+         - Revertir StockObra por cada RemitoItem (decrementa cantidad_disponible)
+         - Eliminar StockObra si quedó en 0 y sin consumos previos (con sus movimientos)
+         - Eliminar Remito (cascade elimina RemitoItems)
+      2. Eliminar OrdenCompra (cascade elimina OrdenCompraItems y Recepciones)
+    """
+    from models.inventory import (
+        OrdenCompra, Remito, RemitoItem,
+        StockObra, MovimientoStockObra,
+    )
+    from decimal import Decimal
+
+    ocs = OrdenCompra.query.filter_by(requerimiento_id=requerimiento_id).all()
+
+    for oc in ocs:
+        remitos = list(oc.remitos_vinculados)  # materializar antes de eliminar
+
+        for remito in remitos:
+            for ri in remito.items:
+                if not ri.item_inventario_id or not ri.cantidad:
+                    continue
+
+                stock = StockObra.query.filter_by(
+                    obra_id=remito.obra_id,
+                    item_inventario_id=ri.item_inventario_id,
+                ).first()
+                if not stock:
+                    continue
+
+                # Revertir cantidad_disponible
+                cant = Decimal(str(ri.cantidad))
+                disp = Decimal(str(stock.cantidad_disponible or 0))
+                stock.cantidad_disponible = float(max(Decimal('0'), disp - cant))
+
+                # Si quedó sin stock y sin consumos previos, eliminar StockObra
+                cons = Decimal(str(stock.cantidad_consumida or 0))
+                if stock.cantidad_disponible == 0 and cons == 0:
+                    MovimientoStockObra.query.filter_by(stock_obra_id=stock.id).delete()
+                    db.session.delete(stock)
+                else:
+                    # Solo eliminar movimientos del tipo 'entrada' de este remito
+                    MovimientoStockObra.query.filter(
+                        MovimientoStockObra.stock_obra_id == stock.id,
+                        MovimientoStockObra.tipo == 'entrada',
+                        MovimientoStockObra.observaciones.like(f'%Remito #{remito.numero_remito}%'),
+                    ).delete(synchronize_session=False)
+
+            db.session.delete(remito)
+        db.session.flush()
+
+        db.session.delete(oc)
+        db.session.flush()
 
 
 @requerimientos_bp.route('/<int:id>/cancelar', methods=['POST'])

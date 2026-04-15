@@ -488,6 +488,22 @@
                         </button>
                     </form>
                     {% endif %}
+
+                    {% if current_user.role == 'admin' and requerimiento.estado == 'completado' %}
+                    <hr>
+                    <form method="POST" action="{{ url_for('requerimientos.eliminar', id=requerimiento.id) }}?forzar=1">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="forzar" value="1">
+                        <button type="submit" class="btn btn-danger btn-sm w-100"
+                                onclick="return confirm('⚠️ ELIMINACIÓN FORZADA\n\nEsto eliminará en cascada:\n- El requerimiento {{ requerimiento.numero }}\n- Todas las OCs vinculadas\n- Todos los Remitos vinculados\n- Revertirá el stock recibido en obra\n\nEsta acción NO se puede deshacer.\n\n¿Confirmás?')">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Eliminar Forzado (Admin)
+                        </button>
+                        <small class="text-muted d-block mt-2">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Cascada completa: OCs, Remitos y Stock revertido
+                        </small>
+                    </form>
+                    {% endif %}
                 </div>
             </div>
 
