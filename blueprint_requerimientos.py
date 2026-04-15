@@ -434,7 +434,10 @@ def _cascada_eliminar_ocs_y_remitos(requerimiento_id):
          - Revertir StockObra por cada RemitoItem (decrementa cantidad_disponible)
          - Eliminar StockObra si quedó en 0 y sin consumos previos (con sus movimientos)
          - Eliminar Remito (cascade elimina RemitoItems)
-      2. Eliminar OrdenCompra (cascade elimina OrdenCompraItems y Recepciones)
+      2. Limpiar FKs externas que apuntan a la OC:
+         - HistorialPrecioProveedor: eliminar (regenerable desde OCs futuras)
+         - MovimientoCaja: desvincular (set NULL, preserva historial contable)
+      3. Eliminar OrdenCompra (cascade elimina OrdenCompraItems y Recepciones)
     """
     from models.inventory import (
         OrdenCompra, Remito, RemitoItem,
@@ -480,6 +483,22 @@ def _cascada_eliminar_ocs_y_remitos(requerimiento_id):
             db.session.delete(remito)
         db.session.flush()
 
+        # Limpiar FKs externas a esta OC antes de eliminarla
+        try:
+            from models.proveedores_oc import HistorialPrecioProveedor
+            HistorialPrecioProveedor.query.filter_by(orden_compra_id=oc.id).delete()
+        except Exception:
+            db.session.rollback()
+
+        try:
+            from models.templates import MovimientoCaja
+            MovimientoCaja.query.filter_by(orden_compra_id=oc.id).update(
+                {'orden_compra_id': None}
+            )
+        except Exception:
+            db.session.rollback()
+
+        db.session.flush()
         db.session.delete(oc)
         db.session.flush()
 
