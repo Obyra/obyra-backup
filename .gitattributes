@@ -1,0 +1,5 @@
+# Forzar LF en scripts ejecutados dentro de contenedores Linux.
+# Evita que git checkout en Windows introduzca CRLF y rompa el shebang
+# de docker-entrypoint.sh con "exec: no such file or directory".
+docker-entrypoint.sh text eol=lf
+*.sh text eol=lf

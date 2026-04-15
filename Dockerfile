@@ -75,8 +75,11 @@ RUN mkdir -p /app/instance /app/storage /app/reports /app/logs && \
     chown -R obyra:obyra /app/instance /app/storage /app/reports /app/logs
 
 # Copy and set permissions for entrypoint script
+# Normalize CRLF -> LF defensively (Windows hosts may reintroduce \r\n via git).
+# Without this, the shebang is read as "#!/bin/bash\r" and exec fails with
+# "no such file or directory".
 COPY --chown=obyra:obyra docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 # Switch to non-root user
 USER obyra

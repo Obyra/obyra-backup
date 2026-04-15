@@ -18,7 +18,10 @@ services:
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # Nota: NO se monta script de init SQL. En dev usamos el user/db
+      # creados automáticamente por la imagen (POSTGRES_USER/DB/PASSWORD).
+      # sql/roles.sql queda disponible en el repo pero no se ejecuta acá
+      # (sus passwords son placeholders para entornos reales).
     ports:
       - "5434:5432"  # Puerto 5434 (5432, 5433, 5435 ocupados)
     healthcheck:
@@ -64,9 +67,11 @@ services:
       FLASK_DEBUG: 1
       SECRET_KEY: dev-secret-key-for-local-only
 
-      # Database (using app role for simplicity in dev)
+      # Database (using app role for simplicity in dev — el rol obyra_migrator
+      # existe solo en entornos reales con roles.sql ejecutado; en dev
+      # reutilizamos el user 'obyra' creado automáticamente por la imagen).
       DATABASE_URL: postgresql+psycopg://obyra:obyra_dev_password@postgres:5432/obyra_dev
-      ALEMBIC_DATABASE_URL: postgresql+psycopg://obyra_migrator:migrator_dev_password@postgres:5432/obyra_dev
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://obyra:obyra_dev_password@postgres:5432/obyra_dev
 
       # Redis
       REDIS_URL: redis://redis:6379/0
