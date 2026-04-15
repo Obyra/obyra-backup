@@ -302,6 +302,13 @@ def agregar_item(id):
         currency = request.form.get('currency', presupuesto.currency or 'ARS')
         item_inventario_id = request.form.get('item_inventario_id', type=int)
 
+        # Modalidad de costo (solo aplica para tipo='equipo')
+        modalidad_costo = request.form.get('modalidad_costo', 'compra')
+        if modalidad_costo not in ('compra', 'alquiler'):
+            modalidad_costo = 'compra'
+        if tipo != 'equipo':
+            modalidad_costo = None  # Solo persiste para equipos
+
         if not descripcion or cantidad <= 0 or precio_unitario <= 0:
             flash('Datos inválidos para el item', 'danger')
             return redirect(url_for('presupuestos.detalle', id=id))
@@ -347,7 +354,8 @@ def agregar_item(id):
             price_unit_ars=price_unit_ars,
             total_ars=total_ars,
             origen='manual',
-            item_inventario_id=item_inventario_id if item_inventario_id else None
+            item_inventario_id=item_inventario_id if item_inventario_id else None,
+            modalidad_costo=modalidad_costo
         )
 
         db.session.add(item)
@@ -405,6 +413,12 @@ def editar_item(id):
         if 'currency' in data:
             item.currency = data['currency']
 
+        # Modalidad de costo (solo aplica para tipo='equipo')
+        if 'modalidad_costo' in data:
+            nueva_mod = data['modalidad_costo']
+            if item.tipo == 'equipo' and nueva_mod in ('compra', 'alquiler'):
+                item.modalidad_costo = nueva_mod
+
         # Recalcular total
         item.total = item.cantidad * item.precio_unitario
 
@@ -443,6 +457,7 @@ def editar_item(id):
             'price_unit_usd': _f(item.price_unit_currency) if item.price_unit_currency else None,
             'total_usd': _f(item.total_currency) if item.total_currency else None,
             'currency': item.currency,
+            'modalidad_costo': item.modalidad_costo,
             'subtotal_materiales': _f(presupuesto.subtotal_materiales),
             'subtotal_mano_obra': _f(presupuesto.subtotal_mano_obra),
             'subtotal_equipos': _f(presupuesto.subtotal_equipos),
