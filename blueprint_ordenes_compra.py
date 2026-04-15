@@ -370,6 +370,109 @@ def cancelar(id):
     return redirect(url_for('ordenes_compra.detalle', id=oc.id))
 
 
+@ordenes_compra_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar(id):
+    """Elimina una OC con cascada total (solo admin).
+
+    Cascada:
+      1. Para cada Remito vinculado:
+         - Revierte StockObra (decrementa cantidad_disponible)
+         - Elimina StockObra si quedó en 0 sin consumos previos
+         - Elimina Remito (cascade elimina RemitoItems)
+      2. Limpia FKs externas:
+         - HistorialPrecioProveedor: DELETE
+         - MovimientoCaja: UPDATE a NULL
+      3. Elimina OC (cascade elimina OrdenCompraItems y Recepciones)
+
+    Útil para eliminar OCs sin RC vinculado o OCs canceladas huérfanas.
+    """
+    from models.inventory import (
+        OrdenCompra, Remito, StockObra, MovimientoStockObra,
+    )
+    from decimal import Decimal
+
+    if not _tiene_permiso_oc():
+        flash('No tiene permisos.', 'danger')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    oc = OrdenCompra.query.get_or_404(id)
+    if oc.organizacion_id != current_user.organizacion_id:
+        flash('No tiene acceso.', 'danger')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    numero = oc.numero
+
+    try:
+        # 1. Eliminar remitos vinculados y revertir stock
+        remitos = list(oc.remitos_vinculados)
+        for remito in remitos:
+            for ri in remito.items:
+                if not ri.item_inventario_id or not ri.cantidad:
+                    continue
+
+                stock = StockObra.query.filter_by(
+                    obra_id=remito.obra_id,
+                    item_inventario_id=ri.item_inventario_id,
+                ).first()
+                if not stock:
+                    continue
+
+                cant = Decimal(str(ri.cantidad))
+                disp = Decimal(str(stock.cantidad_disponible or 0))
+                stock.cantidad_disponible = float(max(Decimal('0'), disp - cant))
+
+                cons = Decimal(str(stock.cantidad_consumida or 0))
+                if stock.cantidad_disponible == 0 and cons == 0:
+                    MovimientoStockObra.query.filter_by(stock_obra_id=stock.id).delete()
+                    db.session.delete(stock)
+                else:
+                    MovimientoStockObra.query.filter(
+                        MovimientoStockObra.stock_obra_id == stock.id,
+                        MovimientoStockObra.tipo == 'entrada',
+                        MovimientoStockObra.observaciones.like(f'%Remito #{remito.numero_remito}%'),
+                    ).delete(synchronize_session=False)
+
+            db.session.delete(remito)
+        db.session.flush()
+
+        # 2. Limpiar FKs externas
+        try:
+            from models.proveedores_oc import HistorialPrecioProveedor
+            HistorialPrecioProveedor.query.filter_by(orden_compra_id=oc.id).delete()
+        except Exception:
+            db.session.rollback()
+
+        try:
+            from models.templates import MovimientoCaja
+            MovimientoCaja.query.filter_by(orden_compra_id=oc.id).update(
+                {'orden_compra_id': None}
+            )
+        except Exception:
+            db.session.rollback()
+
+        db.session.flush()
+
+        # 3. Eliminar OC (cascade elimina items y recepciones)
+        db.session.delete(oc)
+        try:
+            from models.audit import registrar_audit
+            registrar_audit('eliminar', 'orden_compra', id,
+                            f'OC {numero} eliminada con cascada')
+        except Exception:
+            pass
+        db.session.commit()
+
+        flash(f'OC {numero} eliminada (remitos y stock revertidos).', 'success')
+        return redirect(url_for('ordenes_compra.lista'))
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Error eliminando OC {id}")
+        flash(f'Error al eliminar: {str(e)}', 'danger')
+        return redirect(url_for('ordenes_compra.detalle', id=id))
+
+
 # ============================================================
 # REGISTRAR RECEPCIÓN
 # ============================================================

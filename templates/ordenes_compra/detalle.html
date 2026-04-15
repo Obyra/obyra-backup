@@ -49,6 +49,15 @@
                         </button>
                     </form>
                     {% endif %}
+                    {% if current_user.role in ['admin', 'administrador'] %}
+                    <form method="POST" action="{{ url_for('ordenes_compra.eliminar', id=oc.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger"
+                                onclick="return confirm('⚠️ ELIMINAR OC {{ oc.numero }}\n\nEsto eliminará en cascada:\n- La OC y sus items\n- Todos los Remitos vinculados\n- Revertirá el stock recibido en obra\n- Eliminará el historial de precios\n\nEsta acción NO se puede deshacer.\n\n¿Confirmás?')">
+                            <i class="fas fa-trash me-1"></i>Eliminar OC
+                        </button>
+                    </form>
+                    {% endif %}
                 </div>
             </div>
         </div>
