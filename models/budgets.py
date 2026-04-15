@@ -295,6 +295,12 @@ class ItemPresupuesto(db.Model):
     # Nivel del edificio al que pertenece este item (para presupuestos por niveles)
     nivel_nombre = db.Column(db.String(100), nullable=True)
 
+    # Modalidad de costo (solo aplica para tipo='equipo'): compra | alquiler
+    # Para 'compra': cantidad=unidades físicas, precio=precio unitario de compra
+    # Para 'alquiler': cantidad=cantidad de períodos, unidad=período (día/semana/mes/hora/jornal),
+    #                  precio=precio por período. Total sigue siendo cantidad*precio_unitario.
+    modalidad_costo = db.Column(db.String(20), default='compra', nullable=True)
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')

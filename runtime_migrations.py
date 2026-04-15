@@ -184,6 +184,17 @@ def run_runtime_migrations(db, app):
                           WHERE table_name='niveles_presupuesto' AND column_name='albanileria_m2') THEN
                 ALTER TABLE niveles_presupuesto ADD COLUMN albanileria_m2 NUMERIC(10,2) DEFAULT 0;
             END IF;
+
+            -- Modalidad de costo (compra|alquiler) para líneas de equipos en presupuestos
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto' AND column_name='modalidad_costo') THEN
+                ALTER TABLE items_presupuesto ADD COLUMN modalidad_costo VARCHAR(20) DEFAULT 'compra';
+                -- Backfill: items de equipos generados por IA son en realidad alquileres
+                -- (la IA siempre cotizó precio diario de alquiler pero los guardaba sin etiquetar)
+                UPDATE items_presupuesto
+                SET modalidad_costo = 'alquiler'
+                WHERE tipo = 'equipo' AND origen = 'ia';
+            END IF;
         END $$;
         """
         db.session.execute(text(niveles_sql))
