@@ -727,6 +727,7 @@
                             <thead class="table-dark">
                                 <tr>
                                     <th>Descripcion</th>
+                                    <th class="text-center">Modalidad</th>
                                     <th>Unidad</th>
                                     <th class="text-end">Cantidad</th>
                                     <th class="text-end">P. Unit (ARS)</th>
@@ -739,6 +740,7 @@
                             </thead>
                             <tbody>
                                 {% for item in equipos %}
+                                {% set mod = item.modalidad_costo or 'compra' %}
                                 <tr data-item-id="{{ item.id }}"
                                     data-item-tipo="equipo"
                                     data-item-descripcion="{{ item.descripcion }}"
@@ -750,11 +752,23 @@
                                     data-item-precio-ars="{{ item.price_unit_ars or '' }}"
                                     data-item-total-currency="{{ item.total_currency or item.total or 0 }}"
                                     data-item-total-ars="{{ item.total_ars or '' }}"
+                                    data-item-modalidad="{{ mod }}"
                                     data-item-editable="{{ 'true' if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' else 'false' }}"
                                     data-item-can-delete="{{ 'true' if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' else 'false' }}"
                                     data-item-delete-url="{{ url_for('presupuestos.eliminar_item', id=item.id) if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' else '' }}"
                                     data-item-delete-confirm="¿Eliminar este item?">
                                     <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">
+                                        {% if mod == 'alquiler' %}
+                                        <span class="badge bg-info" title="Equipo alquilado">
+                                            <i class="fas fa-clock me-1"></i>Alquiler
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-success" title="Equipo comprado">
+                                            <i class="fas fa-shopping-cart me-1"></i>Compra
+                                        </span>
+                                        {% endif %}
+                                    </td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|entero }}</td>
                                     <td class="text-end">{{ (item.price_unit_ars or item.precio_unitario)|moneda('ARS') }}</td>
@@ -782,7 +796,7 @@
                             </tbody>
                             <tfoot>
                                 <tr class="table-secondary">
-                                    <th colspan="4" class="text-end">Subtotal Equipos:</th>
+                                    <th colspan="5" class="text-end">Subtotal Equipos:</th>
                                     <th class="text-end text-success">{{ subtotal_equipos_usd|moneda('USD') }}</th>
                                     <th class="text-end text-primary">{{ subtotal_equipos_ars|moneda('ARS') }}</th>
                                     {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' %}
@@ -847,11 +861,26 @@
                         <input type="text" class="form-control" name="descripcion" id="descripcionItem"
                                placeholder="Descripción del item" required>
                     </div>
-                    
+
+                    <!-- Modalidad de costo (solo para equipos) -->
+                    <div class="mb-3" id="modalidadCostoWrapper" style="display: none;">
+                        <label class="form-label">
+                            <i class="fas fa-tags me-1"></i>Modalidad
+                        </label>
+                        <select class="form-select" name="modalidad_costo" id="modalidadCostoSelect">
+                            <option value="compra">Compra</option>
+                            <option value="alquiler">Alquiler</option>
+                        </select>
+                        <small class="text-muted" id="modalidadCostoHint">
+                            <span id="hintCompra">Compra: cantidad = unidades físicas, precio = costo por unidad.</span>
+                            <span id="hintAlquiler" style="display:none">Alquiler: cantidad = cantidad de períodos (ej: 5 días), unidad = período, precio = precio por período.</span>
+                        </small>
+                    </div>
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Unidad</label>
+                                <label class="form-label" id="labelUnidadModal">Unidad</label>
                                 <select class="form-select" name="unidad" required>
                                     <option value="">Seleccionar...</option>
                                     <option value="unidad">Unidad</option>
@@ -863,6 +892,9 @@
                                     <option value="litro">Litro</option>
                                     <option value="hora">Hora</option>
                                     <option value="dia">Día</option>
+                                    <option value="semana">Semana</option>
+                                    <option value="mes">Mes</option>
+                                    <option value="jornal">Jornal</option>
                                     <option value="bolsa">Bolsa</option>
                                     <option value="caja">Caja</option>
                                 </select>
@@ -870,8 +902,8 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Cantidad</label>
-                                <input type="number" class="form-control" name="cantidad" 
+                                <label class="form-label" id="labelCantidadModal">Cantidad</label>
+                                <input type="number" class="form-control" name="cantidad"
                                        placeholder="0" step="0.001" min="0" required>
                             </div>
                         </div>
@@ -1153,12 +1185,44 @@ function abrirModalItem(tipo) {
         document.getElementById('itemInventarioSelect').value = '';
     }
 
+    // Mostrar selector de modalidad de costo solo para equipos
+    const modalidadWrapper = document.getElementById('modalidadCostoWrapper');
+    if (modalidadWrapper) {
+        if (tipo === 'equipo') {
+            modalidadWrapper.style.display = 'block';
+            document.getElementById('modalidadCostoSelect').value = 'compra';
+            actualizarHintsModalidad('compra');
+        } else {
+            modalidadWrapper.style.display = 'none';
+        }
+    }
+
     // Limpiar formulario
     document.getElementById('descripcionItem').value = '';
     document.getElementById('itemInventarioSelect').value = '';
 
     new bootstrap.Modal(document.getElementById('agregarItemModal')).show();
 }
+
+function actualizarHintsModalidad(modalidad) {
+    const hintCompra = document.getElementById('hintCompra');
+    const hintAlquiler = document.getElementById('hintAlquiler');
+    const labelCantidad = document.getElementById('labelCantidadModal');
+    if (!hintCompra || !hintAlquiler) return;
+    if (modalidad === 'alquiler') {
+        hintCompra.style.display = 'none';
+        hintAlquiler.style.display = '';
+        if (labelCantidad) labelCantidad.textContent = 'Períodos';
+    } else {
+        hintCompra.style.display = '';
+        hintAlquiler.style.display = 'none';
+        if (labelCantidad) labelCantidad.textContent = 'Cantidad';
+    }
+}
+
+document.getElementById('modalidadCostoSelect')?.addEventListener('change', function() {
+    actualizarHintsModalidad(this.value);
+});
 
 // Autocompletar campos cuando se selecciona un item de inventario
 document.getElementById('itemInventarioSelect')?.addEventListener('change', function() {
@@ -1496,8 +1560,19 @@ function renderItemDisplay(row) {
     const totalArsHtml = Number.isFinite(totalArs)
         ? `<td class="text-end fw-bold text-primary">${formatCurrencyValue(totalArs, 'ARS')}</td>`
         : `<td class="text-end fw-bold text-primary">${formatCurrencyValue(total, 'ARS')}</td>`;
+
+    // Badge de modalidad solo para equipos
+    const esEquipo = tipo === 'equipo';
+    const modalidad = row.dataset.itemModalidad || 'compra';
+    const modalidadCellHtml = esEquipo
+        ? (modalidad === 'alquiler'
+            ? `<td class="text-center"><span class="badge bg-info" title="Equipo alquilado"><i class="fas fa-clock me-1"></i>Alquiler</span></td>`
+            : `<td class="text-center"><span class="badge bg-success" title="Equipo comprado"><i class="fas fa-shopping-cart me-1"></i>Compra</span></td>`)
+        : '';
+
     const cells = [
         `<td>${descripcion}</td>`,
+        modalidadCellHtml,
         `<td>${unidad}</td>`,
         `<td class="text-end">${formatNumber(cantidad, 2)}</td>`,
         `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`,
@@ -1556,7 +1631,11 @@ function editarItem(itemId) {
         return;
     }
 
-    const baseUnidades = ['unidad', 'm²', 'm³', 'kg', 'metros', 'litros', 'día', 'jornal'];
+    const esEquipo = tipo === 'equipo';
+    const modalidadActual = row.dataset.itemModalidad || 'compra';
+    const baseUnidades = esEquipo
+        ? ['día', 'semana', 'mes', 'hora', 'jornal', 'unidad']
+        : ['unidad', 'm²', 'm³', 'kg', 'metros', 'litros', 'día', 'jornal'];
     const opciones = [];
     [unidad, ...baseUnidades].forEach((opt) => {
         if (opt && !opciones.includes(opt)) {
@@ -1565,8 +1644,20 @@ function editarItem(itemId) {
     });
     const opcionesHtml = opciones.map((opt) => `<option value="${escapeHtml(opt)}" ${opt === unidad ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
     const totalEstimado = cantidad * precioUnitario;
+
+    // Celda de modalidad (solo para equipos)
+    const modalidadCellHtml = esEquipo ? `
+        <td class="text-center">
+            <select class="form-select form-select-sm" id="edit-modalidad-${itemId}">
+                <option value="compra" ${modalidadActual === 'compra' ? 'selected' : ''}>Compra</option>
+                <option value="alquiler" ${modalidadActual === 'alquiler' ? 'selected' : ''}>Alquiler</option>
+            </select>
+        </td>
+    ` : '';
+
     row.innerHTML = `
         <td><input type="text" class="form-control form-control-sm" value="${escapeHtml(descripcion)}" id="edit-desc-${itemId}"></td>
+        ${modalidadCellHtml}
         <td>
             <select class="form-select form-select-sm" id="edit-unidad-${itemId}">
                 ${opcionesHtml}
@@ -1643,6 +1734,14 @@ async function guardarItem(itemId) {
             cantidadVal = 0;
         }
         data.cantidad = cantidadVal;
+
+        // Modalidad solo aplica para equipos
+        if (tipo === 'equipo') {
+            const modalidadSelect = document.getElementById(`edit-modalidad-${itemId}`);
+            if (modalidadSelect) {
+                data.modalidad_costo = modalidadSelect.value;
+            }
+        }
     }
 
     try {
@@ -1681,6 +1780,9 @@ async function guardarItem(itemId) {
                 row.dataset.itemUnidad = data.unidad;
                 row.dataset.itemCantidad = data.cantidad;
                 row.dataset.itemPrecio = data.precio_unitario;
+                if (tipo === 'equipo' && result.modalidad_costo) {
+                    row.dataset.itemModalidad = result.modalidad_costo;
+                }
             }
 
             // Actualizar totales USD (convertido por backend con tasa BNA)
