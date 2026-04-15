@@ -3048,3 +3048,36 @@ def deposito():
                          movimientos=movimientos,
                          total_items=total_items,
                          valor_total=valor_total)
+
+
+@inventario_bp.route('/api/buscar-items')
+@login_required
+def api_buscar_items():
+    """Autocomplete para prevenir duplicados en requerimientos/OC/remitos.
+
+    Devuelve items que contengan el término en nombre o código. El frontend
+    lo usa como dropdown mientras el usuario escribe la descripción, para
+    que elija uno existente antes de crear uno nuevo.
+
+    Query params:
+      q: término de búsqueda (>= 2 caracteres)
+      limit: máximo de resultados (default 20)
+    """
+    from services.inventory_helpers import buscar_items_inventario
+
+    q = request.args.get('q', '').strip()
+    limit = min(int(request.args.get('limit', 20)), 50)
+
+    items = buscar_items_inventario(q, current_user.organizacion_id, limit=limit)
+
+    return jsonify({
+        'ok': True,
+        'items': [{
+            'id': it.id,
+            'codigo': it.codigo,
+            'nombre': it.nombre,
+            'unidad': it.unidad,
+            'precio_promedio': float(it.precio_promedio or 0),
+            'stock_actual': float(it.stock_actual or 0),
+        } for it in items]
+    })

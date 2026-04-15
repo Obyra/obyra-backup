@@ -7,8 +7,59 @@ from decimal import Decimal
 from extensions import db
 from services.permissions import validate_obra_ownership
 from services.memberships import get_current_org_id
+from services.inventory_helpers import find_or_create_item_inventario
 
 from obras import obras_bp, _get_roles_usuario
+
+
+def _resolve_item_inventario_id(item_data, org_id):
+    """Resuelve el item_inventario_id de un item de remito con 3 fallbacks.
+
+    Prioridad:
+      1. item_inventario_id explícito del request
+      2. Heredar del OrdenCompraItem (si remito viene de una OC)
+         - Si el OC item no tiene vínculo tampoco (OCs previas al fix),
+           auto-crear y backfillear el OC.
+      3. Auto-crear desde la descripción del remito (remito manual sin OC)
+
+    Garantiza que todo RemitoItem tenga item_inventario_id antes de guardarse,
+    para que _sync_remito_to_stock pueda impactar en StockObra.
+    """
+    from models.inventory import OrdenCompraItem
+
+    item_inv_id = item_data.get('item_inventario_id')
+    if item_inv_id:
+        return int(item_inv_id)
+
+    # Fallback 1: heredar del OC item vinculado
+    oc_item_id = item_data.get('oc_item_id')
+    if oc_item_id:
+        oc_item = OrdenCompraItem.query.get(int(oc_item_id))
+        if oc_item:
+            if oc_item.item_inventario_id:
+                return oc_item.item_inventario_id
+            # OC viejo sin vínculo: auto-crear y backfillear
+            nuevo_id = find_or_create_item_inventario(
+                oc_item.descripcion,
+                oc_item.unidad,
+                float(oc_item.precio_unitario or 0),
+                org_id,
+            )
+            if nuevo_id:
+                oc_item.item_inventario_id = nuevo_id
+            return nuevo_id
+
+    # Fallback 2: auto-crear desde descripción del remito
+    descripcion = item_data.get('descripcion')
+    if descripcion:
+        return find_or_create_item_inventario(
+            descripcion,
+            item_data.get('unidad', 'u'),
+            float(item_data.get('precio_unitario') or 0),
+            org_id,
+        )
+
+    return None
 
 
 def _sync_remito_to_stock(remito):
@@ -109,7 +160,12 @@ def crear_remito(obra_id):
         db.session.add(remito)
         db.session.flush()
 
+        org_id = current_user.organizacion_id
         for item_data in data.get('items', []):
+            # Resolver item_inventario_id con 3 fallbacks (ver helper).
+            # Garantiza que _sync_remito_to_stock pueda crear StockObra.
+            item_inv_id = _resolve_item_inventario_id(item_data, org_id)
+
             item = RemitoItem(
                 remito_id=remito.id,
                 descripcion=item_data['descripcion'],
@@ -117,7 +173,7 @@ def crear_remito(obra_id):
                 unidad=item_data.get('unidad', 'u'),
                 observacion=item_data.get('observacion'),
                 oc_item_id=int(item_data['oc_item_id']) if item_data.get('oc_item_id') else None,
-                item_inventario_id=int(item_data['item_inventario_id']) if item_data.get('item_inventario_id') else None,
+                item_inventario_id=item_inv_id,
                 precio_unitario=float(item_data['precio_unitario']) if item_data.get('precio_unitario') else None,
             )
             db.session.add(item)
