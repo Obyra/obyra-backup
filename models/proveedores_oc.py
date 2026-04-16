@@ -77,6 +77,27 @@ class ProveedorOC(db.Model):
         }
         return colores.get(self.tipo, 'secondary')
 
+    @property
+    def scorecard(self):
+        """Retorna resumen de evaluaciones del proveedor."""
+        evals = self.evaluaciones.all() if hasattr(self, 'evaluaciones') else []
+        if not evals:
+            return None
+        n = len(evals)
+        avg_entrega = round(sum(e.puntaje_entrega for e in evals) / n, 1)
+        avg_precio = round(sum(e.puntaje_precio for e in evals) / n, 1)
+        avg_calidad = round(sum(e.puntaje_calidad for e in evals) / n, 1)
+        avg_servicio = round(sum(e.puntaje_servicio for e in evals) / n, 1)
+        avg_general = round((avg_entrega + avg_precio + avg_calidad + avg_servicio) / 4, 1)
+        return {
+            'evaluaciones': n,
+            'promedio': avg_general,
+            'entrega': avg_entrega,
+            'precio': avg_precio,
+            'calidad': avg_calidad,
+            'servicio': avg_servicio,
+        }
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -95,6 +116,35 @@ class ProveedorOC(db.Model):
             'condicion_pago': self.condicion_pago,
             'activo': self.activo,
         }
+
+
+class ProveedorEvaluacion(db.Model):
+    """Evaluacion/scorecard de un proveedor tras una OC."""
+    __tablename__ = 'proveedor_evaluaciones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id'), nullable=False)
+    orden_compra_id = db.Column(db.Integer, db.ForeignKey('ordenes_compra.id'), nullable=True)
+    evaluador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+
+    puntaje_entrega = db.Column(db.Integer, default=3)     # 1-5
+    puntaje_precio = db.Column(db.Integer, default=3)      # 1-5
+    puntaje_calidad = db.Column(db.Integer, default=3)     # 1-5
+    puntaje_servicio = db.Column(db.Integer, default=3)    # 1-5
+    comentario = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    proveedor = db.relationship('ProveedorOC', backref=db.backref('evaluaciones', lazy='dynamic'))
+    orden_compra = db.relationship('OrdenCompra')
+    evaluador = db.relationship('Usuario', foreign_keys=[evaluador_id])
+
+    @property
+    def puntaje_promedio(self):
+        return round((self.puntaje_entrega + self.puntaje_precio +
+                       self.puntaje_calidad + self.puntaje_servicio) / 4, 1)
 
 
 class HistorialPrecioProveedor(db.Model):

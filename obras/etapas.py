@@ -153,8 +153,13 @@ def editar_fechas_etapa(etapa_id):
 
         if fecha_inicio_usuario:
             etapa.fecha_inicio_estimada = fecha_inicio_usuario
+            # Si la etapa ya inició o finalizó, actualizar también la fecha real
+            if etapa.estado in ('en_curso', 'finalizada'):
+                etapa.fecha_inicio_real = fecha_inicio_usuario
         if fecha_fin_usuario:
             etapa.fecha_fin_estimada = fecha_fin_usuario
+            if etapa.estado == 'finalizada':
+                etapa.fecha_fin_real = fecha_fin_usuario
 
         bloquear = data.get('bloquear_fechas')
         if bloquear is not None:
@@ -176,6 +181,13 @@ def editar_fechas_etapa(etapa_id):
         propagadas = result['shifted_count']
         if propagadas > 0:
             db.session.commit()
+
+        # Si el usuario cambió fechas explícitamente, permitir que la
+        # redistribución recalcule horas y fechas de TODAS las tareas
+        # (incluso las marcadas como editado_manual).
+        if fecha_inicio_usuario or fecha_fin_usuario:
+            for t in etapa.tareas.all():
+                t.editado_manual = False
 
         distribuir_datos_etapa_a_tareas(etapa_id, forzar=True)
         db.session.commit()

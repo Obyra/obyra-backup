@@ -3511,6 +3511,26 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
                 bar.className = 'progress-bar ' + (pct >= 100 ? 'bg-success' : pct > 0 ? 'bg-primary' : 'bg-secondary');
             }
 
+            // Mostrar card de rendimiento si hay datos
+            var rendData = data.rendimiento_data;
+            var rendEl = document.getElementById('rendimiento-card');
+            if (rendEl && rendData && rendData.horas_reales > 0) {
+                var efColor = rendData.eficiencia_pct >= 100 ? 'success' : (rendData.eficiencia_pct >= 80 ? 'warning' : 'danger');
+                rendEl.style.display = 'block';
+                rendEl.innerHTML = '<div class="d-flex align-items-center gap-3 flex-wrap">'
+                    + '<div><small class="text-muted d-block">Eficiencia</small>'
+                    + '<span class="badge bg-' + efColor + ' fs-6">' + rendData.eficiencia_pct + '%</span></div>'
+                    + '<div><small class="text-muted d-block">Horas</small>'
+                    + '<strong>' + rendData.horas_reales + 'h</strong> <small class="text-muted">/ ' + rendData.horas_estimadas + 'h plan</small></div>'
+                    + (rendData.rendimiento_real > 0 ? '<div><small class="text-muted d-block">Rendimiento</small>'
+                    + '<strong>' + rendData.rendimiento_real + ' ' + (rendData.unidad || '') + '/h</strong>'
+                    + (rendData.rendimiento_plan > 0 ? ' <small class="text-muted">(plan: ' + rendData.rendimiento_plan + ')</small>' : '')
+                    + '</div>' : '')
+                    + '</div>';
+            } else if (rendEl) {
+                rendEl.style.display = 'none';
+            }
+
             // Auto-cálculo DESACTIVADO: causaba valores incorrectos (ej: 381 → 0.39).
             // En su lugar, PRECARGAMOS el campo horas con las horas_estimadas de
             // la tarea (valor conocido y correcto). El PM edita si hizo más/menos horas.
@@ -3575,18 +3595,37 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
             if (hEl && hCont) {
                 hEl.style.display = 'block';
                 var hHtml = '';
+                // Calcular eficiencia por avance si hay datos de rendimiento
+                var hEstTarea = data.tarea ? data.tarea.horas_estimadas : 0;
+                var totalHReales = data.historial.reduce(function(s, a) { return s + (a.horas || 0); }, 0);
+
                 data.historial.forEach(function(av) {
-                    hHtml += '<div class="card mb-2 border"><div class="card-body py-2 px-3">';
+                    // Eficiencia individual: proporción de horas estimadas vs reales
+                    var efBadge = '';
+                    if (av.horas > 0 && hEstTarea > 0 && totalHReales > 0) {
+                        var proporcionEst = (av.horas / totalHReales) * hEstTarea;
+                        var efPct = Math.round((proporcionEst / av.horas) * 100);
+                        var efColor = efPct >= 100 ? 'success' : (efPct >= 80 ? 'warning' : 'danger');
+                        efBadge = ' <span class="badge bg-' + efColor + ' bg-opacity-75" style="font-size:10px;" title="Eficiencia: horas estimadas vs reales">' + efPct + '% efic.</span>';
+                    }
+
+                    hHtml += '<div class="card mb-2 border" id="avance-card-' + av.id + '"><div class="card-body py-2 px-3">';
                     hHtml += '<div class="d-flex justify-content-between align-items-start">';
                     hHtml += '<div>';
-                    hHtml += '<div class="fw-bold" style="font-size:13px;"><i class="fas fa-check-circle text-success me-1"></i>' + av.cantidad + ' ' + (av.unidad || '') + '</div>';
-                    if (av.horas > 0) hHtml += '<small class="text-muted"><i class="far fa-clock me-1"></i>' + av.horas + ' hs</small> ';
+                    hHtml += '<div class="fw-bold" style="font-size:13px;">';
+                    hHtml += '<i class="fas fa-check-circle text-success me-1"></i>';
+                    hHtml += '<span id="av-cant-display-' + av.id + '">' + av.cantidad + '</span> ' + (av.unidad || '');
+                    hHtml += efBadge;
+                    hHtml += '</div>';
+                    if (av.horas > 0) hHtml += '<small class="text-muted"><i class="far fa-clock me-1"></i><span id="av-hrs-display-' + av.id + '">' + av.horas + '</span> hs</small> ';
                     hHtml += '<small class="text-muted"><i class="far fa-user me-1"></i>' + av.operario + '</small>';
                     if (av.notas) hHtml += '<div class="text-muted mt-1" style="font-size:12px;"><i class="far fa-comment me-1"></i>' + av.notas + '</div>';
                     hHtml += '</div>';
                     hHtml += '<div class="text-end">';
                     hHtml += '<small class="text-muted d-block">' + av.fecha + '</small>';
-                    hHtml += '<small class="text-success" style="font-size:10px;">Aprobado por ' + av.aprobado_por + '</small>';
+                    hHtml += '<small class="text-success d-block" style="font-size:10px;">Aprobado por ' + av.aprobado_por + '</small>';
+                    hHtml += '<button class="btn btn-outline-primary btn-sm mt-1 px-2 py-0" style="font-size:11px;" onclick="editarAvance(' + av.id + ', ' + av.cantidad + ', ' + (av.horas || 0) + ', \'' + (av.unidad || '') + '\')">';
+                    hHtml += '<i class="fas fa-pencil-alt me-1"></i>Editar</button>';
                     hHtml += '</div></div>';
                     if (av.fotos && av.fotos.length > 0) {
                         hHtml += '<div class="mt-2 d-flex gap-1 flex-wrap">';
@@ -3605,6 +3644,73 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
         document.querySelector('#no-avances p').textContent = 'No se pudieron cargar los avances pendientes. Inténtalo de nuevo.';
         console.error('Error cargando avances pendientes:', err);
     }
+}
+
+// ========== EDITAR AVANCE APROBADO ==========
+var _editAvanceId = null;
+function editarAvance(avanceId, cantidad, horas, unidad) {
+    _editAvanceId = avanceId;
+    var html = '<div class="mb-3">'
+        + '<label class="form-label fw-bold">Cantidad (' + (unidad || 'u') + ')</label>'
+        + '<input type="number" class="form-control" id="edit-av-cantidad" value="' + cantidad + '" step="0.1" min="0">'
+        + '</div>'
+        + '<div class="mb-3">'
+        + '<label class="form-label fw-bold">Horas</label>'
+        + '<input type="number" class="form-control" id="edit-av-horas" value="' + horas + '" step="0.5" min="0">'
+        + '</div>';
+    var modal = document.getElementById('modalEditarAvance');
+    if (!modal) {
+        // Crear modal dinámicamente la primera vez
+        var mdiv = document.createElement('div');
+        mdiv.innerHTML = `<div class="modal fade" id="modalEditarAvance" tabindex="-1"><div class="modal-dialog modal-sm">
+            <div class="modal-content"><div class="modal-header py-2">
+                <h6 class="modal-title"><i class="fas fa-pencil-alt me-2"></i>Editar Avance</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div><div class="modal-body" id="editAvanceBody"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="guardarEdicionAvance()"><i class="fas fa-save me-1"></i>Guardar</button>
+            </div></div></div></div>`;
+        document.body.appendChild(mdiv.firstElementChild);
+        modal = document.getElementById('modalEditarAvance');
+    }
+    document.getElementById('editAvanceBody').innerHTML = html;
+    new bootstrap.Modal(modal).show();
+}
+
+function guardarEdicionAvance() {
+    var cant = parseFloat(document.getElementById('edit-av-cantidad').value) || 0;
+    var hrs = parseFloat(document.getElementById('edit-av-horas').value) || 0;
+    var btn = document.querySelector('#modalEditarAvance .btn-primary');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+    fetch('/obras/api/avances/' + _editAvanceId + '/editar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({cantidad: cant, horas: hrs})
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar';
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarAvance')).hide();
+            // Actualizar displays sin recargar
+            var cantEl = document.getElementById('av-cant-display-' + _editAvanceId);
+            var hrsEl = document.getElementById('av-hrs-display-' + _editAvanceId);
+            if (cantEl) cantEl.textContent = data.cantidad;
+            if (hrsEl) hrsEl.textContent = data.horas;
+            // Recargar toda la página para actualizar avances y progreso
+            setTimeout(function() { location.reload(); }, 500);
+        } else {
+            alert(data.error || 'Error al guardar');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar';
+        alert('Error: ' + err.message);
+    });
 }
 
 function renderAvancesPendientes(avances) {

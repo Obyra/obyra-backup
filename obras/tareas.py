@@ -751,6 +751,14 @@ def obtener_avances_pendientes(tarea_id):
         plan = float(tarea.cantidad_planificada or 0)
         ejecutado = suma_ejecutado(tarea_id)
 
+        # Calcular rendimiento de la tarea
+        rendimiento_data = None
+        try:
+            from services.rendimiento_operario import calcular_rendimiento_tarea
+            rendimiento_data = calcular_rendimiento_tarea(tarea_id)
+        except Exception:
+            pass
+
         return jsonify({
             'ok': True,
             'tarea': {
@@ -761,9 +769,6 @@ def obtener_avances_pendientes(tarea_id):
                 'ejecutado': ejecutado,
                 'porcentaje': float(tarea.porcentaje_avance or 0),
                 'estado': tarea.estado,
-                # Horas y rendimiento para que el frontend pueda recalcular
-                # el auto-fill de cantidad↔horas sin depender del parámetro
-                # del onclick (que puede venir mal formateado con coma decimal).
                 'horas_estimadas': float(tarea.horas_estimadas or 0),
                 'rendimiento': float(tarea.rendimiento or 0),
             },
@@ -771,12 +776,70 @@ def obtener_avances_pendientes(tarea_id):
             'total': len(avances_data),
             'historial': historial,
             'miembros': miembros_data,
-            'responsable_id': tarea.responsable_id
+            'responsable_id': tarea.responsable_id,
+            'rendimiento_data': rendimiento_data,
         })
 
     except Exception as e:
         current_app.logger.exception("Error al obtener avances pendientes")
         return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/rendimiento-operarios')
+@login_required
+def api_rendimiento_operarios_obra(obra_id):
+    """Ranking de eficiencia de operarios en una obra."""
+    from services.rendimiento_operario import ranking_operarios_obra
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.filter_by(id=obra_id, organizacion_id=org_id).first()
+    if not obra:
+        return jsonify(ok=False, error="Obra no encontrada"), 404
+    ranking = ranking_operarios_obra(obra_id)
+    return jsonify(ok=True, ranking=ranking, obra_nombre=obra.nombre)
+
+
+@obras_bp.route('/api/avances/<int:avance_id>/editar', methods=['POST'])
+@login_required
+def api_editar_avance(avance_id):
+    """Editar cantidad y horas de un avance aprobado."""
+    from utils.permissions import is_admin_or_pm
+
+    if not is_admin_or_pm(current_user):
+        return jsonify(ok=False, error="Sin permisos"), 403
+
+    avance = TareaAvance.query.get_or_404(avance_id)
+    tarea = avance.tarea
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if tarea.etapa.obra.organizacion_id != org_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    data = request.get_json(silent=True) or {}
+    nueva_cantidad = data.get('cantidad')
+    nuevas_horas = data.get('horas')
+
+    if nueva_cantidad is not None:
+        try:
+            avance.cantidad = float(nueva_cantidad)
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="Cantidad inválida"), 400
+
+    if nuevas_horas is not None:
+        try:
+            avance.horas = float(nuevas_horas)
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="Horas inválidas"), 400
+
+    db.session.flush()
+    recalc_tarea_pct(tarea.id)
+    db.session.commit()
+
+    return jsonify(
+        ok=True,
+        avance_id=avance.id,
+        cantidad=float(avance.cantidad),
+        horas=float(avance.horas or 0),
+        porcentaje_tarea=float(tarea.porcentaje_avance or 0),
+    )
 
 
 @obras_bp.route('/api/tareas/<int:tarea_id>/galeria')

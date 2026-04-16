@@ -301,5 +301,168 @@
             </div>
         </div>
     </div>
+
+    <!-- Scorecard / Evaluaciones -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-star me-2 text-warning"></i>Scorecard del Proveedor</h5>
+                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalEvaluar">
+                        <i class="fas fa-plus me-1"></i>Evaluar
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if scorecard %}
+                    <div class="row g-3 mb-4">
+                        <div class="col-6 col-md-2 text-center">
+                            <h2 class="fw-bold mb-0 {% if scorecard.promedio >= 4 %}text-success{% elif scorecard.promedio >= 3 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ scorecard.promedio }}<small class="text-muted">/5</small>
+                            </h2>
+                            <small class="text-muted">Promedio ({{ scorecard.evaluaciones }} eval.)</small>
+                        </div>
+                        <div class="col-6 col-md-2 text-center">
+                            <div class="fw-bold">{{ scorecard.entrega }}/5</div>
+                            <small class="text-muted"><i class="fas fa-shipping-fast me-1"></i>Entrega</small>
+                        </div>
+                        <div class="col-6 col-md-2 text-center">
+                            <div class="fw-bold">{{ scorecard.precio }}/5</div>
+                            <small class="text-muted"><i class="fas fa-dollar-sign me-1"></i>Precio</small>
+                        </div>
+                        <div class="col-6 col-md-2 text-center">
+                            <div class="fw-bold">{{ scorecard.calidad }}/5</div>
+                            <small class="text-muted"><i class="fas fa-gem me-1"></i>Calidad</small>
+                        </div>
+                        <div class="col-6 col-md-2 text-center">
+                            <div class="fw-bold">{{ scorecard.servicio }}/5</div>
+                            <small class="text-muted"><i class="fas fa-headset me-1"></i>Servicio</small>
+                        </div>
+                    </div>
+
+                    {% if evaluaciones %}
+                    <h6 class="text-muted mb-2">Evaluaciones recientes</h6>
+                    {% for ev in evaluaciones %}
+                    <div class="border rounded p-2 mb-2">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                {% for i in range(5) %}
+                                <i class="fas fa-star {% if i < ev.puntaje_promedio|round|int %}text-warning{% else %}text-muted{% endif %}" style="font-size:0.8rem;"></i>
+                                {% endfor %}
+                                <strong class="ms-1">{{ ev.puntaje_promedio }}/5</strong>
+                            </div>
+                            <small class="text-muted">{{ ev.created_at.strftime('%d/%m/%Y') }} — {{ ev.evaluador.nombre_completo }}</small>
+                        </div>
+                        {% if ev.comentario %}<p class="mb-0 mt-1 text-muted small">{{ ev.comentario }}</p>{% endif %}
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-star fa-2x text-muted mb-2"></i>
+                        <p class="text-muted mb-0">Sin evaluaciones. Puntua al proveedor con el boton "Evaluar".</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Modal Evaluar Proveedor -->
+<div class="modal fade" id="modalEvaluar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-star me-2 text-warning"></i>Evaluar a {{ proveedor.razon_social }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold"><i class="fas fa-shipping-fast me-1"></i>Entrega a tiempo</label>
+                    <div class="star-rating" data-field="puntaje_entrega">
+                        {% for i in range(1, 6) %}<i class="fas fa-star text-muted star-btn" data-value="{{ i }}" style="cursor:pointer; font-size:1.5rem;" onclick="setStarRating(this)"></i>{% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold"><i class="fas fa-dollar-sign me-1"></i>Precio competitivo</label>
+                    <div class="star-rating" data-field="puntaje_precio">
+                        {% for i in range(1, 6) %}<i class="fas fa-star text-muted star-btn" data-value="{{ i }}" style="cursor:pointer; font-size:1.5rem;" onclick="setStarRating(this)"></i>{% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold"><i class="fas fa-gem me-1"></i>Calidad del material/servicio</label>
+                    <div class="star-rating" data-field="puntaje_calidad">
+                        {% for i in range(1, 6) %}<i class="fas fa-star text-muted star-btn" data-value="{{ i }}" style="cursor:pointer; font-size:1.5rem;" onclick="setStarRating(this)"></i>{% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold"><i class="fas fa-headset me-1"></i>Atencion y servicio</label>
+                    <div class="star-rating" data-field="puntaje_servicio">
+                        {% for i in range(1, 6) %}<i class="fas fa-star text-muted star-btn" data-value="{{ i }}" style="cursor:pointer; font-size:1.5rem;" onclick="setStarRating(this)"></i>{% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Comentario (opcional)</label>
+                    <textarea class="form-control" id="eval-comentario" rows="2" maxlength="500"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="btnGuardarEval" onclick="guardarEvaluacion()">
+                    <i class="fas fa-save me-1"></i>Guardar Evaluacion
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var starValues = {puntaje_entrega: 3, puntaje_precio: 3, puntaje_calidad: 3, puntaje_servicio: 3};
+
+function setStarRating(el) {
+    var val = parseInt(el.dataset.value);
+    var container = el.parentElement;
+    var field = container.dataset.field;
+    starValues[field] = val;
+    container.querySelectorAll('.star-btn').forEach(function(s, i) {
+        s.className = 'fas fa-star star-btn ' + ((i + 1) <= val ? 'text-warning' : 'text-muted');
+    });
+}
+
+function guardarEvaluacion() {
+    var btn = document.getElementById('btnGuardarEval');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+
+    fetch('{{ url_for("proveedores_oc.evaluar_proveedor", id=proveedor.id) }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            puntaje_entrega: starValues.puntaje_entrega,
+            puntaje_precio: starValues.puntaje_precio,
+            puntaje_calidad: starValues.puntaje_calidad,
+            puntaje_servicio: starValues.puntaje_servicio,
+            comentario: document.getElementById('eval-comentario').value,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert(data.error || 'Error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar Evaluacion';
+        }
+    })
+    .catch(err => {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar Evaluacion';
+    });
+}
+</script>
 {% endblock %}

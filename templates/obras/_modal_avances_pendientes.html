@@ -54,6 +54,9 @@
                     </div>
                 </div>
 
+                <!-- Card de rendimiento (calculado dinámicamente) -->
+                <div id="rendimiento-card" class="alert alert-light border py-2 px-3 mb-3" style="display:none; font-size:0.85rem;"></div>
+
                 <!-- Formulario de registro de nuevo avance (colapsable) -->
                 {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] or current_user.is_super_admin %}
                 <div class="mb-4">

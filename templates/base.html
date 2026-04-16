@@ -290,14 +290,18 @@
                             <i class="fas fa-chart-bar me-1"></i>Reportes
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_obras') }}">Reporte de Obras</a></li>
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
-                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_costos') }}">Reporte de Costos</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_financiero') }}"><i class="fas fa-chart-line me-2 text-primary"></i>Financiero (P&L)</a></li>
+                            <li><hr class="dropdown-divider"></li>
                             {% endif %}
-                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_inventario') }}">Reporte de Inventario</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_obras') }}"><i class="fas fa-hard-hat me-2"></i>Obras</a></li>
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_costos') }}"><i class="fas fa-coins me-2"></i>Costos</a></li>
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_inventario') }}"><i class="fas fa-boxes me-2"></i>Inventario</a></li>
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_financiero') }}"><i class="fas fa-chart-line me-1"></i>Reporte Financiero</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_productividad') }}"><i class="fas fa-tachometer-alt me-2 text-success"></i>Productividad Operarios</a></li>
                             {% endif %}
                         </ul>
                     </li>

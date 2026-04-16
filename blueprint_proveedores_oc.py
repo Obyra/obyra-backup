@@ -183,9 +183,60 @@ def detalle(id):
     except Exception:
         pass
 
+    # Evaluaciones / Scorecard
+    evaluaciones = []
+    scorecard = None
+    try:
+        evaluaciones = prov.evaluaciones.order_by(
+            db.text('created_at desc')
+        ).limit(10).all()
+        scorecard = prov.scorecard
+    except Exception:
+        pass
+
     return render_template('proveedores_oc/detalle.html',
                          proveedor=prov, ordenes=ordenes, precios=precios,
-                         cotizaciones=cotizaciones)
+                         cotizaciones=cotizaciones, evaluaciones=evaluaciones,
+                         scorecard=scorecard)
+
+
+@proveedores_oc_bp.route('/<int:id>/evaluar', methods=['POST'])
+@login_required
+def evaluar_proveedor(id):
+    """Crear evaluación/scorecard de un proveedor."""
+    from models.proveedores_oc import ProveedorOC, ProveedorEvaluacion
+
+    if not _tiene_permiso():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    prov = ProveedorOC.query.get_or_404(id)
+    org_id = _get_org_id()
+    if prov.organizacion_id != org_id:
+        return jsonify(ok=False, error='Sin acceso'), 403
+
+    data = request.get_json(silent=True) or {}
+
+    def _clamp(val, lo=1, hi=5):
+        try:
+            return max(lo, min(hi, int(val)))
+        except (TypeError, ValueError):
+            return 3
+
+    ev = ProveedorEvaluacion(
+        proveedor_id=prov.id,
+        orden_compra_id=data.get('orden_compra_id') or None,
+        evaluador_id=current_user.id,
+        organizacion_id=org_id,
+        puntaje_entrega=_clamp(data.get('puntaje_entrega', 3)),
+        puntaje_precio=_clamp(data.get('puntaje_precio', 3)),
+        puntaje_calidad=_clamp(data.get('puntaje_calidad', 3)),
+        puntaje_servicio=_clamp(data.get('puntaje_servicio', 3)),
+        comentario=(data.get('comentario') or '').strip()[:500],
+    )
+    db.session.add(ev)
+    db.session.commit()
+
+    return jsonify(ok=True, puntaje_promedio=ev.puntaje_promedio)
 
 
 # ============================================================

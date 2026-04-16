@@ -43,6 +43,7 @@ _STANDARD_FEATURES = {
     'inventory.categorias', 'inventory.consumo',
     'teams.basic', 'teams.invite',
     'manual.access',
+    'reports.costos', 'reports.inventario', 'reports.financiero',
 }
 
 _PREMIUM_FEATURES = _STANDARD_FEATURES | {
@@ -51,8 +52,7 @@ _PREMIUM_FEATURES = _STANDARD_FEATURES | {
     'requirements.basic', 'requirements.create',
     'orders.cotizaciones', 'orders.comparativa',
     'providers.basic', 'providers.manage', 'providers.history',
-    'reports.basic', 'reports.obras', 'reports.costos',
-    'reports.inventario', 'reports.financiero', 'reports.pdf_export',
+    'reports.pdf_export',
     'teams.rendimiento',
     'security.basic', 'security.checklists', 'security.incidents', 'security.protocols',
     'attendance.geo', 'attendance.alerts',

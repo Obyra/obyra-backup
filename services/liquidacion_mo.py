@@ -399,24 +399,9 @@ def generar_preview_unificado(obra_id, desde, hasta):
     operarios = buscar_operarios_obra(obra_id, desde, hasta)
     etapa_breakdown = compute_etapa_breakdown(obra)
 
-    # Filtrar operarios ya liquidados en este período
-    ya_liquidados = set()
-    liq_existentes = (
-        LiquidacionMOItem.query
-        .join(LiquidacionMO)
-        .filter(
-            LiquidacionMO.obra_id == obra_id,
-            LiquidacionMO.periodo_desde == desde,
-            LiquidacionMO.periodo_hasta == hasta,
-            LiquidacionMOItem.estado == 'pagado',
-        )
-        .all()
-    )
-    for item in liq_existentes:
-        ya_liquidados.add(item.operario_id)
-
-    # Quitar operarios ya liquidados
-    operarios = {uid: u for uid, u in operarios.items() if uid not in ya_liquidados}
+    # Nota: NO filtramos operarios ya liquidados. El admin puede querer
+    # liquidar diferencias o tareas nuevas completadas en el mismo período.
+    # El historial de liquidaciones muestra qué ya se pagó.
 
     # Calcular avance por conteo simple de tareas (igual que cronograma)
     def _pct_etapa_simple(etapa_id):
@@ -780,11 +765,9 @@ def registrar_pago_item(item_id, metodo_pago, fecha_pago=None, comprobante_url=N
 
 
 def obtener_liquidaciones_obra(obra_id):
-    """Obtiene todas las liquidaciones de una obra con items precargados (evita N+1)."""
-    from sqlalchemy.orm import selectinload
+    """Obtiene todas las liquidaciones de una obra."""
     return (
         LiquidacionMO.query
-        .options(selectinload(LiquidacionMO.items))
         .filter_by(obra_id=obra_id)
         .order_by(LiquidacionMO.created_at.desc())
         .all()

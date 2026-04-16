@@ -1097,8 +1097,8 @@ def reporte_obras():
                     if 0 < delta < 24:  # Validar que sea razonable
                         horas_hombre += delta
                     del ingresos_pendientes[uid]
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning(f"Error calculando horas-hombre obra {obra.id}: {e}")
 
         # ========== AVANCE POR ETAPAS ==========
         etapas_data = []
@@ -1112,8 +1112,8 @@ def reporte_obras():
                     'fecha_inicio': etapa.fecha_inicio_real or etapa.fecha_inicio_estimada,
                     'fecha_fin': etapa.fecha_fin_real or etapa.fecha_fin_estimada,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning(f"Error cargando etapas obra {obra.id}: {e}")
 
         total_etapas = len(etapas_data)
         etapas_finalizadas = len([e for e in etapas_data if e['estado'] == 'finalizada'])
@@ -1130,8 +1130,8 @@ def reporte_obras():
             ).all()
             certificaciones_count = len(certs)
             total_certificado = sum(float(c.monto_certificado_ars or 0) for c in certs)
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning(f"Error cargando certificaciones obra {obra.id}: {e}")
 
         # Diferencia entre certificado y gastado
         diferencia_cert_costo = total_certificado - costo_real if total_certificado > 0 else 0
@@ -1145,15 +1145,15 @@ def reporte_obras():
                 func.coalesce(func.sum(LiquidacionMO.monto_total), 0)
             ).filter(LiquidacionMO.obra_id == obra.id,
                      LiquidacionMO.organizacion_id == org_id).scalar() or 0)
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning(f"Error costo MO obra {obra.id}: {e}")
         try:
             from models.equipment import Equipment, EquipmentUsage
             costo_eq_obra = float(db.session.query(
                 func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0)
             ).join(Equipment).filter(EquipmentUsage.project_id == obra.id).scalar() or 0)
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning(f"Error costo equipos obra {obra.id}: {e}")
 
         obras_data.append({
             'obra': obra,
@@ -1325,8 +1325,9 @@ def reporte_costos():
         if fecha_hasta_obj:
             liq_query = liq_query.filter(LiquidacionMO.fecha_liquidacion <= fecha_hasta_obj)
         liquidaciones = liq_query.all()
-    except Exception:
-        pass
+    except Exception as e:
+        current_app.logger.warning(f"Error cargando liquidaciones MO en reporte costos: {e}")
+        db.session.rollback()
 
     # ========== COSTOS DE CAJA (MovimientoCaja) ==========
     gastos_caja = []
@@ -1346,8 +1347,9 @@ def reporte_costos():
             caja_query = caja_query.filter(MovimientoCaja.fecha_movimiento <= fecha_hasta_obj)
         gastos_caja = caja_query.order_by(desc(MovimientoCaja.fecha_movimiento)).all()
         costo_total_caja = sum(float(g.monto or 0) for g in gastos_caja)
-    except Exception:
-        pass
+    except Exception as e:
+        current_app.logger.warning(f"Error cargando gastos caja en reporte costos: {e}")
+        db.session.rollback()
 
     # ========== COSTOS DE EQUIPOS (EquipmentUsage) ==========
     usos_equipos = []
@@ -1363,8 +1365,9 @@ def reporte_costos():
         if fecha_hasta_obj:
             eq_query = eq_query.filter(EquipmentUsage.date <= fecha_hasta_obj)
         usos_equipos = eq_query.all()
-    except Exception:
-        pass
+    except Exception as e:
+        current_app.logger.warning(f"Error cargando equipos en reporte costos: {e}")
+        db.session.rollback()
 
     # Calcular costos detallados
     costo_total_ars = 0
@@ -2515,6 +2518,46 @@ def exportar_inventario_pdf():
 
 
 # ============================================================================
+# ============================================================================
+# REPORTE PRODUCTIVIDAD OPERARIOS
+# ============================================================================
+
+@reportes_bp.route('/productividad')
+@login_required
+def reporte_productividad():
+    """Reporte de eficiencia y rendimiento de operarios."""
+    from services.rendimiento_operario import ranking_operarios_obra
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        flash('Selecciona una organización.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion'))
+
+    obras = Obra.query.filter(
+        Obra.organizacion_id == org_id,
+        Obra.deleted_at.is_(None),
+    ).order_by(Obra.nombre).all()
+
+    obra_id_filtro = request.args.get('obra_id', type=int)
+
+    ranking = []
+    if obra_id_filtro:
+        ranking = ranking_operarios_obra(obra_id_filtro)
+    else:
+        # Todas las obras — agregar nombre de obra
+        for obra in obras:
+            obra_ranking = ranking_operarios_obra(obra.id)
+            for r in obra_ranking:
+                r['obra_nombre'] = obra.nombre
+            ranking.extend(obra_ranking)
+        ranking.sort(key=lambda x: x['eficiencia_pct'], reverse=True)
+
+    return render_template('reportes/productividad.html',
+                           ranking=ranking,
+                           obras=obras,
+                           obra_id_filtro=obra_id_filtro)
+
+
 # REPORTE FINANCIERO — Rentabilidad, márgenes y flujo de caja por obra
 # ============================================================================
 
@@ -2573,6 +2616,7 @@ def _reporte_financiero_impl():
     total_materiales = Decimal('0')
     total_mano_obra = Decimal('0')
     total_maquinaria = Decimal('0')
+    total_caja = Decimal('0')
 
     # Chart data
     chart_nombres = []
@@ -2618,10 +2662,27 @@ def _reporte_financiero_impl():
                 EquipmentUsage.estado == 'aprobado'
             ).scalar() or 0
             costo_maq = Decimal(str(maq_raw))
-        except Exception:
+        except Exception as e:
+            current_app.logger.warning(f"Error costo maquinaria financiero obra {obra.id}: {e}")
             db.session.rollback()
 
-        costo_total = costo_mat + costo_mo + costo_maq
+        # 4. Costos de caja (MovimientoCaja: gastos directos, pagos a proveedores)
+        costo_caja = Decimal('0')
+        try:
+            from models.templates import MovimientoCaja
+            caja_raw = db.session.query(
+                func.coalesce(func.sum(MovimientoCaja.monto), 0)
+            ).filter(
+                MovimientoCaja.obra_id == obra.id,
+                MovimientoCaja.estado == 'confirmado',
+                MovimientoCaja.tipo.in_(['gasto_obra', 'pago_proveedor'])
+            ).scalar() or 0
+            costo_caja = Decimal(str(caja_raw))
+        except Exception as e:
+            current_app.logger.warning(f"Error costo caja financiero obra {obra.id}: {e}")
+            db.session.rollback()
+
+        costo_total = costo_mat + costo_mo + costo_maq + costo_caja
         margen = presupuesto - costo_total
         pct_margen = (margen / presupuesto * Decimal('100')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP) if presupuesto > 0 else Decimal('0')
 
@@ -2639,6 +2700,7 @@ def _reporte_financiero_impl():
             'costo_materiales': costo_mat,
             'costo_mano_obra': costo_mo,
             'costo_maquinaria': costo_maq,
+            'costo_caja': costo_caja,
             'costo_total': costo_total,
             'margen': margen,
             'pct_margen': float(pct_margen),
@@ -2651,6 +2713,7 @@ def _reporte_financiero_impl():
         total_materiales += costo_mat
         total_mano_obra += costo_mo
         total_maquinaria += costo_maq
+        total_caja += costo_caja
 
         # Chart data
         chart_nombres.append(obra.nombre[:25])
@@ -2663,8 +2726,8 @@ def _reporte_financiero_impl():
         (margen_bruto / total_presupuestado * Decimal('100')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
     ) if total_presupuestado > 0 else 0.0
 
-    # Otros costos (total - materiales - MO - maquinaria), mínimo 0
-    otros = max(Decimal('0'), total_costo_real - total_materiales - total_mano_obra - total_maquinaria)
+    # Otros costos (residuo no categorizado), mínimo 0
+    otros = max(Decimal('0'), total_costo_real - total_materiales - total_mano_obra - total_maquinaria - total_caja)
 
     resumen = {
         'total_presupuestado': total_presupuestado,
@@ -2674,11 +2737,12 @@ def _reporte_financiero_impl():
     }
 
     # Pie chart data
-    pie_labels = ['Materiales', 'Mano de Obra', 'Maquinaria', 'Otros']
+    pie_labels = ['Materiales', 'Mano de Obra', 'Maquinaria', 'Caja', 'Otros']
     pie_values = [
         float(total_materiales),
         float(total_mano_obra),
         float(total_maquinaria),
+        float(total_caja),
         float(otros),
     ]
 

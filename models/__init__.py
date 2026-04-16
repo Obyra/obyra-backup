@@ -80,7 +80,7 @@ from models.subscription import Subscription
 
 # Proveedores OC models
 from models.proveedores_oc import (
-    ProveedorOC, HistorialPrecioProveedor,
+    ProveedorOC, HistorialPrecioProveedor, ProveedorEvaluacion,
     CotizacionProveedor, CotizacionProveedorItem,
 )
 

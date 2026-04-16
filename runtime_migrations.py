@@ -992,6 +992,28 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Performance indexes skipped: {e}")
 
+    # Sincronizar stock_actual de items_inventario con stock_obra
+    # (stock_obra se actualiza por OC/Remito pero items_inventario.stock_actual no se sincronizaba)
+    try:
+        sync_stock_sql = """
+        UPDATE items_inventario ii
+        SET stock_actual = sub.total_disponible
+        FROM (
+            SELECT item_inventario_id, SUM(cantidad_disponible) as total_disponible
+            FROM stock_obra
+            GROUP BY item_inventario_id
+        ) sub
+        WHERE ii.id = sub.item_inventario_id
+          AND (ii.stock_actual IS NULL OR ii.stock_actual != sub.total_disponible);
+        """
+        result = db.session.execute(text(sync_stock_sql))
+        db.session.commit()
+        if result.rowcount:
+            print(f"[OK] Sincronizado stock_actual en {result.rowcount} items de inventario")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Sync stock_actual skipped: {e}")
+
     print("[OK] Database tables created successfully")
 
     # Asegurar admin por defecto
