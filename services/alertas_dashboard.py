@@ -23,32 +23,79 @@ from extensions import db
 def obtener_alertas_stock_bajo(org_id, limite=5):
     """
     Obtiene items de inventario con stock bajo o sin stock.
+
+    Solo considera items con stock_minimo > 0 (configuración explícita
+    de nivel crítico). Items recién auto-creados desde OC tienen
+    stock_minimo=0 por default y no son stock crítico hasta que el
+    usuario configure un umbral.
+
+    Cruza con OCs pendientes: si el item tiene una OC emitida o de
+    recepción parcial sin completar, la severidad baja a 'media' con
+    texto "en tránsito", porque el material está en camino.
     """
     from models import ItemInventario
+    from models.inventory import OrdenCompra, OrdenCompraItem
 
     items = ItemInventario.query.filter(
         ItemInventario.organizacion_id == org_id,
         ItemInventario.activo == True,
+        ItemInventario.stock_minimo > 0,
         ItemInventario.stock_actual <= ItemInventario.stock_minimo
     ).order_by(ItemInventario.stock_actual).limit(limite).all()
 
+    # Items con OC pendiente de recepción (subquery para evitar N+1).
+    # Se considera "pendiente" si hay OrdenCompraItem en OC con estado
+    # 'emitida' o 'recibida_parcial', y cantidad_recibida < cantidad.
+    item_ids = [i.id for i in items]
+    items_con_oc_pendiente = {}
+    if item_ids:
+        pendientes = db.session.query(
+            OrdenCompraItem.item_inventario_id,
+            OrdenCompra.numero,
+            OrdenCompra.fecha_entrega_estimada,
+        ).join(
+            OrdenCompra, OrdenCompraItem.orden_compra_id == OrdenCompra.id
+        ).filter(
+            OrdenCompraItem.item_inventario_id.in_(item_ids),
+            OrdenCompra.estado.in_(['emitida', 'recibida_parcial']),
+            OrdenCompraItem.cantidad > OrdenCompraItem.cantidad_recibida,
+        ).all()
+        for item_id, oc_num, fecha in pendientes:
+            # Quedarse con la entrega más próxima por si hay varias OCs
+            existing = items_con_oc_pendiente.get(item_id)
+            if not existing or (fecha and existing[1] and fecha < existing[1]):
+                items_con_oc_pendiente[item_id] = (oc_num, fecha)
+
     alertas = []
     for item in items:
-        if item.stock_actual <= 0:
+        oc_pendiente = items_con_oc_pendiente.get(item.id)
+
+        if oc_pendiente:
+            # Hay OC llegando — baja severidad, etiqueta "en tránsito"
+            oc_num, fecha = oc_pendiente
+            severidad = 'media'
+            titulo = f'Stock bajo (en tránsito): {item.nombre}'
+            fecha_txt = f', llega {fecha.strftime("%d/%m")}' if fecha else ''
+            descripcion = (f'{item.stock_actual:.0f} {item.unidad} disponibles '
+                           f'(min: {item.stock_minimo:.0f}) — OC {oc_num} pendiente{fecha_txt}')
+        elif item.stock_actual <= 0:
             severidad = 'critica'
             titulo = f'Sin stock: {item.nombre}'
+            descripcion = f'{item.stock_actual:.0f} {item.unidad} disponibles (min: {item.stock_minimo:.0f})'
         elif item.stock_actual <= (item.stock_minimo * Decimal('0.25')):
             severidad = 'alta'
             titulo = f'Stock critico: {item.nombre}'
+            descripcion = f'{item.stock_actual:.0f} {item.unidad} disponibles (min: {item.stock_minimo:.0f})'
         else:
             severidad = 'media'
             titulo = f'Stock bajo: {item.nombre}'
+            descripcion = f'{item.stock_actual:.0f} {item.unidad} disponibles (min: {item.stock_minimo:.0f})'
 
         alertas.append({
             'tipo': 'stock_bajo',
             'severidad': severidad,
             'titulo': titulo,
-            'descripcion': f'{item.stock_actual:.0f} {item.unidad} disponibles (min: {item.stock_minimo:.0f})',
+            'descripcion': descripcion,
             'referencia': item.codigo or item.nombre,
             'url': f'/inventario/item/{item.id}',
             'item': item
@@ -580,7 +627,14 @@ def obtener_alertas_movimientos_caja(org_id, limite=5):
 
 
 def obtener_alertas_entregas_proximas(org_id, limite=5):
-    """Alertas de entregas de OC que llegan en los próximos 7 días."""
+    """Alertas de entregas de OC: vencidas (sin recibir) + próximas (≤7 días).
+
+    Cubre 2 casos que el PM/Admin necesita ver en el dashboard:
+      - OC vencida: fecha_entrega_estimada pasó y sigue sin completar
+        recepción. Severidad crítica — probablemente hay que llamar al
+        proveedor o recepcionar lo que llegó.
+      - OC próxima: entrega en los próximos 7 días. Severidad media/alta.
+    """
     try:
         from models.inventory import OrdenCompra
         from datetime import date, timedelta
@@ -593,21 +647,40 @@ def obtener_alertas_entregas_proximas(org_id, limite=5):
             OrdenCompra.estado.in_(['emitida', 'recibida_parcial']),
             OrdenCompra.fecha_entrega_estimada.isnot(None),
             OrdenCompra.fecha_entrega_estimada <= en_7_dias,
-            OrdenCompra.fecha_entrega_estimada >= hoy,
         ).order_by(OrdenCompra.fecha_entrega_estimada).limit(limite).all()
 
         alertas = []
         for oc in ocs:
             dias = (oc.fecha_entrega_estimada - hoy).days
             obra_nombre = oc.obra.nombre if oc.obra else 'Sin obra'
+
+            if dias < 0:
+                # Vencida (no recibida aún)
+                severidad = 'critica'
+                titulo = f'Entrega vencida: {oc.numero} (hace {abs(dias)} día{"s" if abs(dias) != 1 else ""})'
+                color = 'danger'
+            elif dias == 0:
+                severidad = 'alta'
+                titulo = f'Entrega HOY: {oc.numero}'
+                color = 'warning'
+            elif dias <= 2:
+                severidad = 'alta'
+                titulo = f'Entrega {oc.numero} en {dias} día(s)'
+                color = 'warning'
+            else:
+                severidad = 'media'
+                titulo = f'Entrega {oc.numero} en {dias} día(s)'
+                color = 'info'
+
             alertas.append({
                 'tipo': 'entrega_material',
-                'severidad': 'alta' if dias <= 2 else 'media',
-                'titulo': f'Entrega {oc.numero} en {dias} día(s)',
+                'severidad': severidad,
+                'titulo': titulo,
                 'detalle': f'{oc.proveedor} → {obra_nombre}',
                 'fecha': oc.fecha_entrega_estimada,
                 'icono': 'fa-truck',
-                'color': 'warning' if dias <= 2 else 'info',
+                'color': color,
+                'url': f'/ordenes-compra/{oc.id}/recepcion',
             })
         return alertas
     except Exception:

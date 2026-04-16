@@ -12,10 +12,91 @@ from sqlalchemy import func
 
 from extensions import db
 
-# Nombre de la categoría default para items auto-creados desde OC/Remito.
+# Nombre de la categoría default para items auto-creados desde OC/Remito
+# cuando no se puede detectar una categoría lógica por keywords.
 # Los ítems del árbol de inventario se agrupan por categoría; sin esto
 # quedaban con categoria_id=NULL e invisibles en la vista principal.
 CATEGORIA_AUTO_NOMBRE = 'Ingresos automáticos'
+
+# Mapeo de keywords → nombre de categoría/etapa del árbol de inventario.
+# Se busca cada keyword en la descripción normalizada del item auto-creado;
+# el primer match decide la categoría. Orden importa: lo más específico va
+# primero para evitar falsos positivos (ej: "revoque fino" antes que "revoque").
+KEYWORDS_CATEGORIA = [
+    # Yesería y Enlucidos
+    (['yeso', 'yeseria', 'enlucido', 'enduido', 'guardavivos', 'cantonera'], 'Yesería y Enlucidos'),
+    # Revoque (fino antes que grueso por especificidad)
+    (['revoque fino', 'enlucido de cal', 'fratas'], 'Revoque Fino'),
+    (['revoque', 'jaharro', 'hidrofugo', 'cal hidraulica'], 'Revoque Grueso'),
+    # Cielorrasos
+    (['cielorraso', 'placa roca', 'durlock', 'suspension'], 'Cielorrasos'),
+    # Pisos y Revestimientos
+    (['ceramico', 'porcellanato', 'zocalo', 'pastina', 'adhesivo cementicio',
+      'baldoson', 'cemento alisado', 'piso vinilico', 'deck'], 'Pisos y Revestimientos'),
+    # Pintura
+    (['pintura', 'latex', 'barniz', 'esmalte', 'rodillo', 'pincel', 'sellador'], 'Pintura'),
+    # Carpintería y Aberturas
+    (['puerta', 'ventana', 'marco', 'bisagra', 'cerradura', 'herraje',
+      'ventanal', 'mosquitero', 'cristal', 'vidrio'], 'Carpintería y Aberturas'),
+    # Herrería de Obra
+    (['perfil estructural', 'chapa hierro', 'baranda', 'escalera metalica',
+      'hierro redondo', 'caño estructural'], 'Herrería de Obra'),
+    # Instalaciones eléctricas
+    (['cable', 'conductor', 'tomacorriente', 'interruptor', 'llave termica',
+      'disyuntor', 'caño corrugado', 'bandeja portacables', 'tablero electrico',
+      'luminaria', 'lampara'], 'Instalaciones Eléctricas'),
+    # Instalaciones sanitarias / gas
+    (['caño gas', 'regulador gas', 'medidor gas'], 'Instalaciones de Gas'),
+    (['caño ppr', 'caño pvc sanitario', 'canilla', 'griferia', 'inodoro',
+      'bidet', 'lavatorio', 'bacha', 'flexible', 'sifon'], 'Instalaciones Sanitarias y Provisiones'),
+    # Construcción en seco
+    (['placa yeso', 'montante', 'solera', 'cinta papel', 'tornillo t1', 'tornillo t2'], 'Construcción en Seco'),
+    # Techos y Cubiertas
+    (['teja', 'membrana', 'chapa techo', 'aislacion termica', 'lana vidrio',
+      'canaleta', 'babeta'], 'Techos y Cubiertas'),
+    # Mampostería
+    (['ladrillo', 'bloque hormigon', 'bloque ceramico', 'mortero de asiento'], 'Mampostería'),
+    # Contrapisos y Carpetas
+    (['contrapiso', 'carpeta', 'polietileno', 'malla sima'], 'Contrapisos y Carpetas'),
+    # Impermeabilizaciones
+    (['asfaltico', 'pintura impermeable', 'emulsion asfaltica'], 'Impermeabilizaciones y Aislaciones'),
+    # Estructura / Fundaciones
+    (['cemento portland', 'hierro', 'hormigon elaborado', 'estribos'], 'Estructura'),
+    (['zapata', 'plateas', 'pilote'], 'Fundaciones'),
+    # Excavación / Movimiento de suelos
+    (['arena', 'piedra partida', 'tierra'], 'Movimiento de Suelos'),
+]
+
+
+def detectar_categoria_por_descripcion(descripcion, org_id):
+    """Intenta matchear la descripción de un item a una categoría existente
+    de la organización usando keywords conocidos.
+
+    Returns:
+        int|None: ID de la categoría si hay match; None si no.
+    """
+    from models.inventory import InventoryCategory
+
+    desc_norm = normalize_name(descripcion)
+    if not desc_norm:
+        return None
+
+    # Iterar en orden (más específico primero) y quedarse con el primer match.
+    for keywords, nombre_categoria in KEYWORDS_CATEGORIA:
+        for kw in keywords:
+            if kw in desc_norm:
+                cat = InventoryCategory.query.filter_by(
+                    company_id=org_id,
+                    nombre=nombre_categoria,
+                    is_active=True,
+                ).first()
+                if cat:
+                    return cat.id
+                # Si la keyword matcheó pero la categoría no existe en esta
+                # org, seguimos buscando otras keywords (puede haber sinónimo).
+                break
+
+    return None
 
 
 def normalize_name(s):
@@ -78,11 +159,17 @@ def find_or_create_item_inventario(descripcion, unidad, precio_unitario, org_id)
             return item.id
 
     # 2. No existe: crear nuevo con código autogenerado.
-    # Asignamos categoría "Ingresos automáticos" para que el item aparezca
-    # en el árbol del inventario (los items sin categoría quedan invisibles
-    # en la vista principal y solo se encuentran por búsqueda textual).
+    # Asignación de categoría en 2 niveles:
+    #   a) Detectar categoría lógica por keywords en la descripción
+    #      (ej: "Yeso París" → "Yesería y Enlucidos"). Así el item queda
+    #      directamente en la etapa correcta, sin necesidad de mover
+    #      manualmente desde "Otros".
+    #   b) Si no matchea ninguna keyword, caer en "Ingresos automáticos"
+    #      como último recurso (mejor que quedar sin categoría).
     codigo = _generate_codigo_auto(org_id)
-    categoria_id = _ensure_categoria_auto(org_id)
+    categoria_id = detectar_categoria_por_descripcion(nombre_original, org_id)
+    if not categoria_id:
+        categoria_id = _ensure_categoria_auto(org_id)
 
     nuevo = ItemInventario(
         codigo=codigo,
