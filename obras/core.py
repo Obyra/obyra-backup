@@ -194,7 +194,25 @@ def lista():
 
 @obras_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
-@require_active_subscription
+def crear_redirect():
+    """Creación manual de obra deshabilitada.
+
+    Regla de negocio: las obras nacen SIEMPRE a partir de un presupuesto
+    aprobado, via el botón 'Confirmar como Obra' del módulo Presupuestos.
+    Esto garantiza que toda obra quede vinculada a un presupuesto
+    (Presupuesto.obra_id) con sus etapas y tareas ya generadas.
+
+    Si en el futuro se necesita reactivar la creación manual, restaurar
+    el decorador sobre la función crear() más abajo.
+    """
+    flash(
+        'Las obras se crean confirmando un presupuesto aprobado. '
+        'Creá primero un presupuesto en el módulo Presupuestos.',
+        'info'
+    )
+    return redirect(url_for('presupuestos.lista'))
+
+
 def verificar_limite_obras(org_id, lock=False):
     """Verifica si la organizacion puede crear mas obras segun su plan.
     Si lock=True, usa SELECT FOR UPDATE para evitar race conditions."""
@@ -217,6 +235,12 @@ def verificar_limite_obras(org_id, lock=False):
 
 
 def crear():
+    """Implementación legacy de creación manual de obra (sin ruta activa).
+
+    La ruta /obras/crear ahora redirige a presupuestos. Esta función se
+    mantiene por si hay código legacy que la invoque directamente o para
+    reactivarla en el futuro. No la invoques desde UI.
+    """
     if not getattr(current_user, 'puede_acceder_modulo', lambda _ : False)('obras'):
         flash('No tienes permisos para crear obras.', 'danger')
         return redirect(url_for('obras.lista'))

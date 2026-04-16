@@ -65,9 +65,24 @@ def _resolve_item_inventario_id(item_data, org_id):
 def _sync_remito_to_stock(remito):
     """Sincroniza los items de un remito recibido al StockObra.
 
+    REGLA DE DESTINO (importante):
+    -----------------------------
+    Todo remito contra una OC (o remito manual desde obra) tiene obra_id.
+    El stock va SIEMPRE a StockObra (stock físico en la obra del remito).
+    NUNCA toca ItemInventario.stock_actual (depósito general).
+
+    Esto es consistente con el flow de compras:
+      Requerimiento (obra) -> OC (obra_id NOT NULL) -> Remito -> StockObra
+      -> /usar-stock (obra) -> UsoInventario -> costo_real de esa obra.
+
+    Si se quiere comprar para "depósito general" (sin obra), el flow es
+    distinto: usar /inventario/<id>/movimiento que sí actualiza
+    ItemInventario.stock_actual. No hay transferencia automática entre
+    ambos mundos.
+
     Para cada RemitoItem vinculado a un ItemInventario:
     - Crea o incrementa StockObra.cantidad_disponible
-    - Registra MovimientoStockObra tipo 'entrada'
+    - Registra MovimientoStockObra tipo 'entrada' con precio del remito
     """
     from models.inventory import StockObra, MovimientoStockObra
 

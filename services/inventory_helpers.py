@@ -12,6 +12,11 @@ from sqlalchemy import func
 
 from extensions import db
 
+# Nombre de la categoría default para items auto-creados desde OC/Remito.
+# Los ítems del árbol de inventario se agrupan por categoría; sin esto
+# quedaban con categoria_id=NULL e invisibles en la vista principal.
+CATEGORIA_AUTO_NOMBRE = 'Ingresos automáticos'
+
 
 def normalize_name(s):
     """Normaliza un nombre para comparación: lowercase, sin acentos, sin signos,
@@ -72,8 +77,12 @@ def find_or_create_item_inventario(descripcion, unidad, precio_unitario, org_id)
                     item.precio_promedio = float(precio_unitario)
             return item.id
 
-    # 2. No existe: crear nuevo con código autogenerado
+    # 2. No existe: crear nuevo con código autogenerado.
+    # Asignamos categoría "Ingresos automáticos" para que el item aparezca
+    # en el árbol del inventario (los items sin categoría quedan invisibles
+    # en la vista principal y solo se encuentran por búsqueda textual).
     codigo = _generate_codigo_auto(org_id)
+    categoria_id = _ensure_categoria_auto(org_id)
 
     nuevo = ItemInventario(
         codigo=codigo,
@@ -85,10 +94,44 @@ def find_or_create_item_inventario(descripcion, unidad, precio_unitario, org_id)
         precio_promedio=float(precio_unitario) if precio_unitario else 0,
         activo=True,
         organizacion_id=org_id,
+        categoria_id=categoria_id,
     )
     db.session.add(nuevo)
     db.session.flush()
     return nuevo.id
+
+
+def _ensure_categoria_auto(org_id):
+    """Obtiene (o crea lazy) la categoría default para items auto-creados.
+
+    La categoría se crea bajo demanda la primera vez que una organización
+    auto-crea un item desde OC/Remito. El usuario puede mover los items
+    a la categoría correcta después desde el detalle del item.
+
+    Returns:
+        int: ID de la categoría 'Ingresos automáticos' de esa org.
+    """
+    from models.inventory import InventoryCategory
+
+    cat = InventoryCategory.query.filter_by(
+        company_id=org_id,
+        nombre=CATEGORIA_AUTO_NOMBRE,
+        is_active=True,
+    ).first()
+
+    if cat:
+        return cat.id
+
+    cat = InventoryCategory(
+        company_id=org_id,
+        nombre=CATEGORIA_AUTO_NOMBRE,
+        sort_order=999,  # Al final del árbol
+        is_active=True,
+        is_global=False,
+    )
+    db.session.add(cat)
+    db.session.flush()
+    return cat.id
 
 
 def _generate_codigo_auto(org_id, prefijo='AUTO-'):
