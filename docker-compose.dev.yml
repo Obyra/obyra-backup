@@ -95,8 +95,16 @@ services:
       MAPS_PROVIDER: nominatim
       MAPS_USER_AGENT: OBYRA-Dev/1.0
 
-      # Migrations
-      RUN_MIGRATIONS: true
+      # Migrations: en dev usamos db.create_all() desde modelos SQLAlchemy
+      # en vez de Alembic (el grafo de migraciones tiene múltiples heads y
+      # dependencias entre tablas mal ordenadas al arrancar de cero).
+      # CREATE_ALL_ON_STARTUP=1 dispara la lógica equivalente a Railway.
+      RUN_MIGRATIONS: "false"
+      CREATE_ALL_ON_STARTUP: "1"
+
+      # Admin por defecto en dev (solo local, nunca pushear a prod).
+      # Usuario: admin@obyra.com / password: admin123
+      ADMIN_DEFAULT_PASSWORD: admin123
 
     volumes:
       # Mount source code for hot reload
@@ -142,6 +150,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
+      # Celery worker no corre migraciones, pero hereda misma política:
+      RUN_MIGRATIONS: "false"
     volumes:
       - .:/app:cached
       - app_dev_storage:/app/storage
