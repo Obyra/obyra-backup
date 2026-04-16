@@ -157,11 +157,21 @@ def run_runtime_migrations(db, app):
                           WHERE table_name='tareas_etapa' AND column_name='editado_manual') THEN
                 ALTER TABLE tareas_etapa ADD COLUMN editado_manual BOOLEAN NOT NULL DEFAULT false;
             END IF;
+            -- modalidad_costo en equipment: compra | alquiler_hora | alquiler_dia
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='modalidad_costo') THEN
+                ALTER TABLE equipment ADD COLUMN modalidad_costo VARCHAR(20) NOT NULL DEFAULT 'compra';
+            END IF;
+            -- costo_dia en equipment: tarifa diaria para modalidad='alquiler_dia'
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='costo_dia') THEN
+                ALTER TABLE equipment ADD COLUMN costo_dia NUMERIC(12,2) DEFAULT 0;
+            END IF;
         END $$;
         """
         db.session.execute(text(missing_cols_sql))
         db.session.commit()
-        print("[OK] Missing columns migration applied (logo_url, confirmado_como_obra, editado_manual)")
+        print("[OK] Missing columns migration applied (logo_url, confirmado_como_obra, editado_manual, equipment modalidad_costo/costo_dia)")
     except Exception as e:
         print(f"[WARN] Missing columns migration skipped: {e}")
 

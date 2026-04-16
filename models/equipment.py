@@ -19,10 +19,16 @@ class Equipment(db.Model):
     nro_serie = db.Column(db.String(100))
     costo_hora = db.Column(db.Numeric(12, 2), default=0)  # En la moneda indicada
     costo_hora_usd = db.Column(db.Numeric(12, 2))  # Costo hora en USD (si moneda=ARS, se calcula)
+    costo_dia = db.Column(db.Numeric(12, 2), default=0)  # Costo diario (solo usado si modalidad='alquiler_dia')
     costo_adquisicion = db.Column(db.Numeric(15, 2), default=0)  # Valor de compra
     costo_adquisicion_usd = db.Column(db.Numeric(15, 2))  # Adquisición en USD
     moneda = db.Column(db.String(3), default='ARS')  # ARS o USD
     vida_util_anios = db.Column(db.Integer)  # Para calcular amortización
+    # Modalidad de costo del equipo — define cómo impacta al costo real de la obra.
+    # 'compra'          = propio (sumará por hora solo si hay usos aprobados con costo_hora > 0)
+    # 'alquiler_hora'   = alquilado por hora (EquipmentUsage.horas × costo_hora)
+    # 'alquiler_dia'    = alquilado por día  (EquipmentUsage.horas interpretado como DÍAS × costo_dia)
+    modalidad_costo = db.Column(db.String(20), default='compra', nullable=False)
     estado = db.Column(db.Enum('activo', 'baja', 'mantenimiento', name='equipment_estado'), default='activo')
     # Ubicación actual: 'deposito' o ID de obra
     ubicacion_tipo = db.Column(db.String(20), default='deposito')  # deposito, obra

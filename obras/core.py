@@ -816,16 +816,63 @@ def detalle(id):
     horas_maquinaria = Decimal('0')
     try:
         from models.equipment import EquipmentUsage, Equipment
-        maq_data = db.session.query(
-            func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0),
+        # El costo de maquinaria se calcula SOLO a partir de usos aprobados
+        # (EquipmentUsage.estado='aprobado'). Trasladar un equipo NO suma por sí solo.
+        #
+        # Se separa por modalidad + moneda:
+        #  - 'compra' o 'alquiler_hora': horas × costo_hora
+        #  - 'alquiler_dia': EquipmentUsage.horas interpretado como DÍAS × costo_dia
+        # Si el equipo tiene moneda='USD', se convierte a ARS usando el tipo de cambio
+        # actual (costo_real_obra se expresa en ARS).
+
+        tipo_cambio_ars = Decimal('1')
+        try:
+            from models.budgets import ExchangeRate
+            rate = ExchangeRate.query.filter(
+                ExchangeRate.base_currency == 'USD',
+                ExchangeRate.quote_currency == 'ARS'
+            ).order_by(ExchangeRate.as_of_date.desc(), ExchangeRate.id.desc()).first()
+            if rate and rate.value:
+                tipo_cambio_ars = Decimal(str(rate.value))
+        except Exception:
+            pass
+
+        # Función auxiliar: suma por combinación de modalidad y moneda,
+        # aplicando el tipo de cambio si corresponde.
+        def _sum_usos(modalidad_filter, campo_costo, moneda):
+            q = db.session.query(
+                func.coalesce(func.sum(EquipmentUsage.horas * campo_costo), 0)
+            ).join(Equipment).filter(
+                EquipmentUsage.project_id == obra.id,
+                EquipmentUsage.estado == 'aprobado',
+                Equipment.moneda == moneda,
+            )
+            q = q.filter(modalidad_filter)
+            return Decimal(str(q.scalar() or 0))
+
+        mod_hora = Equipment.modalidad_costo.in_(['compra', 'alquiler_hora'])
+        mod_dia = Equipment.modalidad_costo == 'alquiler_dia'
+
+        # ARS: suma directa
+        costo_hora_ars = _sum_usos(mod_hora, Equipment.costo_hora, 'ARS')
+        costo_dia_ars = _sum_usos(mod_dia, Equipment.costo_dia, 'ARS')
+        # USD: convertir a ARS con tipo_cambio actual
+        costo_hora_usd = _sum_usos(mod_hora, Equipment.costo_hora, 'USD')
+        costo_dia_usd = _sum_usos(mod_dia, Equipment.costo_dia, 'USD')
+
+        costo_maquinaria = (
+            costo_hora_ars + costo_dia_ars +
+            (costo_hora_usd + costo_dia_usd) * tipo_cambio_ars
+        )
+
+        horas_maquinaria = db.session.query(
             func.coalesce(func.sum(EquipmentUsage.horas), 0)
         ).join(Equipment).filter(
             EquipmentUsage.project_id == obra.id,
-            EquipmentUsage.estado == 'aprobado'
-        ).first()
-        if maq_data:
-            costo_maquinaria = Decimal(str(maq_data[0] or 0))
-            horas_maquinaria = Decimal(str(maq_data[1] or 0))
+            EquipmentUsage.estado == 'aprobado',
+            mod_hora,
+        ).scalar() or 0
+        horas_maquinaria = Decimal(str(horas_maquinaria))
     except Exception:
         db.session.rollback()
 
@@ -893,8 +940,9 @@ def detalle(id):
     # Equipos en esta obra + movimientos pendientes de recepcion
     equipos_en_obra = []
     movimientos_pendientes = []
+    equipos_uso_map = {}  # {equipment_id: {'horas': X, 'costo': Y}}
     try:
-        from models.equipment import Equipment, EquipmentMovement
+        from models.equipment import Equipment, EquipmentMovement, EquipmentUsage
         from sqlalchemy.orm import joinedload
         equipos_en_obra = Equipment.query.filter_by(
             company_id=obra.organizacion_id,
@@ -908,6 +956,48 @@ def detalle(id):
             destino_obra_id=obra.id,
             estado='en_transito'
         ).order_by(EquipmentMovement.fecha_movimiento.desc()).all()
+
+        # Calcular uso acumulado por equipo en esta obra (solo aprobados).
+        # Para alquiler_dia, EquipmentUsage.horas se interpreta como días → costo = horas × costo_dia.
+        # Para compra/alquiler_hora, costo = horas × costo_hora.
+        usos_por_equipo = db.session.query(
+            EquipmentUsage.equipment_id,
+            func.coalesce(func.sum(EquipmentUsage.horas), 0)
+        ).filter(
+            EquipmentUsage.project_id == obra.id,
+            EquipmentUsage.estado == 'aprobado'
+        ).group_by(EquipmentUsage.equipment_id).all()
+
+        # Tipo de cambio para convertir USD→ARS (costo real está en ARS)
+        tc_ars_map = 1.0
+        try:
+            from models.budgets import ExchangeRate
+            rate_map = ExchangeRate.query.filter(
+                ExchangeRate.base_currency == 'USD',
+                ExchangeRate.quote_currency == 'ARS'
+            ).order_by(ExchangeRate.as_of_date.desc(), ExchangeRate.id.desc()).first()
+            if rate_map and rate_map.value:
+                tc_ars_map = float(rate_map.value)
+        except Exception:
+            pass
+
+        usos_dict = {eq_id: float(h or 0) for eq_id, h in usos_por_equipo}
+        for eq in equipos_en_obra:
+            horas_uso = usos_dict.get(eq.id, 0)
+            mod = getattr(eq, 'modalidad_costo', None) or 'compra'
+            tarifa = float(eq.costo_dia or 0) if mod == 'alquiler_dia' else float(eq.costo_hora or 0)
+            costo_nominal = horas_uso * tarifa
+            # Convertir a ARS si el equipo está en USD
+            if (eq.moneda or 'ARS').upper() == 'USD':
+                costo_ars = costo_nominal * tc_ars_map
+            else:
+                costo_ars = costo_nominal
+            equipos_uso_map[eq.id] = {
+                'horas': horas_uso,
+                'costo': costo_ars,
+                'costo_nominal': costo_nominal,
+                'moneda': eq.moneda or 'ARS',
+            }
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error cargando equipos en obra {obra.id}: {e}")
@@ -958,6 +1048,7 @@ def detalle(id):
                          stock_transferido_lista=stock_transferido_lista,
                          costos_desglosados=costos_desglosados,
                          equipos_en_obra=equipos_en_obra,
+                         equipos_uso_map=equipos_uso_map,
                          movimientos_pendientes=movimientos_pendientes,
                          wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
                          wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', False))
