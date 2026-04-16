@@ -30,7 +30,7 @@
                         <a class="nav-link" href="#cierre-obra"><i class="fas fa-flag-checkered me-2"></i>Cierre de Obra</a>
                         <a class="nav-link" href="#equipos"><i class="fas fa-users me-2"></i>Equipos</a>
                         <a class="nav-link" href="#fichadas"><i class="fas fa-clock me-2"></i>Fichadas</a>
-                        <a class="nav-link" href="#liquidaciones"><i class="fas fa-money-bill-wave me-2"></i>Liquidaciones</a>
+                        <a class="nav-link" href="#liquidaciones"><i class="fas fa-money-bill-wave me-2"></i>Certificaciones y Pagos</a>
                         <a class="nav-link" href="#reportes"><i class="fas fa-chart-bar me-2"></i>Reportes</a>
                         <a class="nav-link" href="#seguridad"><i class="fas fa-shield-alt me-2"></i>Seguridad</a>
                         <a class="nav-link" href="#configuracion"><i class="fas fa-cog me-2"></i>Configuracion</a>
@@ -300,6 +300,15 @@
                     <p>En la ficha del proveedor se ve el historial completo: cotizaciones ganadas, perdidas y pendientes, con descarga PDF.</p>
                     <h5 class="mt-4"><i class="fas fa-history me-2"></i>Historial de Precios</h5>
                     <p>Registro automatico de precios cada vez que se completa una OC.</p>
+                    <h5 class="mt-4"><i class="fas fa-star text-warning me-2"></i>Scorecard / Evaluacion</h5>
+                    <p>Desde la ficha del proveedor, puntua su desempeno con estrellas (1 a 5) en 4 categorias:</p>
+                    <ul>
+                        <li><strong>Entrega a tiempo:</strong> cumplimiento de plazos</li>
+                        <li><strong>Precio competitivo:</strong> relacion calidad-precio</li>
+                        <li><strong>Calidad:</strong> del material o servicio entregado</li>
+                        <li><strong>Atencion/Servicio:</strong> comunicacion y respuesta</li>
+                    </ul>
+                    <p>El sistema calcula un promedio general y muestra las evaluaciones recientes. Util para decidir entre proveedores al comparar cotizaciones.</p>
                 </div>
             </div>
 
@@ -433,12 +442,30 @@
 
             <!-- 15. Liquidaciones -->
             <div class="card mb-4" id="liquidaciones">
-                <div class="card-header"><h4 class="mb-0"><i class="fas fa-money-bill-wave text-primary me-2"></i>15. Liquidaciones de Mano de Obra</h4></div>
+                <div class="card-header"><h4 class="mb-0"><i class="fas fa-money-bill-wave text-primary me-2"></i>15. Certificaciones y Pago a Operarios</h4></div>
                 <div class="card-body">
-                    <h5><i class="fas fa-calculator me-2"></i>Liquidar Jornales</h5>
-                    <p>Desde la obra, generar liquidaciones basadas en las horas fichadas de cada operario.</p>
-                    <h5 class="mt-4"><i class="fas fa-file-pdf me-2"></i>Recibos</h5>
-                    <p>Descargar recibos de pago individuales o la liquidacion completa en PDF.</p>
+                    <h5><i class="fas fa-calculator me-2"></i>3 Modalidades de Pago</h5>
+                    <p>Cada operario puede configurarse con una modalidad de pago desde <strong>Gestion de Usuarios > boton "Pago"</strong>:</p>
+                    <ul>
+                        <li><strong>Por horas (avance):</strong> horas registradas en avances de tareas x tarifa/hora</li>
+                        <li><strong>Por medida (m2):</strong> cantidad ejecutada (m2, ml, etc.) x tarifa/m2 — pago a destajo</li>
+                        <li><strong>Por fichada (GPS):</strong> horas calculadas desde fichadas de ingreso/egreso x tarifa/hora</li>
+                    </ul>
+                    <h5 class="mt-4"><i class="fas fa-file-invoice-dollar me-2"></i>Certificar y Pagar</h5>
+                    <ol>
+                        <li>Ir a <strong>Obra > Certificaciones > Certificar</strong></li>
+                        <li>Seleccionar periodo (quincena, mes, etc.)</li>
+                        <li>El sistema muestra cada operario con sus tareas, cantidades, horas y monto calculado segun su modalidad</li>
+                        <li>Seleccionar/deseleccionar tareas individuales con los checks</li>
+                        <li>Cambiar modo de pago (Cantidad/Horas/Fichada/Manual) por operario</li>
+                        <li>Confirmar liquidacion — se registra el pago y actualiza el costo real de la obra</li>
+                    </ol>
+                    <h5 class="mt-4"><i class="fas fa-list me-2"></i>Desglose por Tarea</h5>
+                    <p>Cada liquidacion guarda que tareas se pagaron (etapa, cantidad, horas). El historial y el recibo PDF muestran este desglose. Las tareas ya pagadas aparecen marcadas como "PAGADA" al generar la siguiente liquidacion.</p>
+                    <h5 class="mt-4"><i class="fas fa-edit me-2"></i>Editar Avances</h5>
+                    <p>Desde <strong>Gestionar Avances > Historial</strong>, cada avance aprobado tiene un boton "Editar" para corregir cantidad u horas. Al guardar, el porcentaje de la tarea se recalcula automaticamente.</p>
+                    <h5 class="mt-4"><i class="fas fa-file-pdf me-2"></i>Recibos PDF</h5>
+                    <p>Descargar recibos individuales por operario o la liquidacion completa, con desglose de tareas.</p>
                 </div>
             </div>
 
@@ -447,19 +474,43 @@
                 <div class="card-header"><h4 class="mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>16. Reportes y Dashboard</h4></div>
                 <div class="card-body">
                     <h5><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h5>
-                    <p>Vista general con: obras activas, presupuesto total, progreso promedio, alertas (stock bajo, tareas vencidas, fichadas pendientes, sobrecosto, liquidaciones pendientes).</p>
-                    <h5 class="mt-4"><i class="fas fa-exclamation-triangle me-2"></i>Tipos de Alertas</h5>
+                    <p>Vista general con: obras activas, presupuesto total, progreso promedio, alertas.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-chart-line me-2"></i>Reporte Financiero (P&L)</h5>
+                    <p>El reporte mas importante. Muestra por cada obra:</p>
+                    <ul>
+                        <li>Presupuesto vs Costo Real (materiales + MO + maquinaria + caja)</li>
+                        <li>Margen bruto y porcentaje con semaforo (verde >15%, amarillo 5-15%, rojo <5%)</li>
+                        <li>Grafico de barras comparativo y torta de distribucion de costos</li>
+                    </ul>
+                    <p>Acceso: <strong>Reportes > Financiero (P&L)</strong></p>
+
+                    <h5 class="mt-4"><i class="fas fa-tachometer-alt me-2"></i>Productividad de Operarios</h5>
+                    <p>Ranking de eficiencia de operarios. Compara horas estimadas vs horas reales:</p>
+                    <ul>
+                        <li><strong>Eficiencia %:</strong> horas estimadas / horas reales x 100</li>
+                        <li><strong>Rendimiento:</strong> cantidad ejecutada por hora (ej: 11.9 m2/h)</li>
+                        <li><strong>Semaforo:</strong> verde (>=100%), amarillo (80-99%), rojo (<80%)</li>
+                    </ul>
+                    <p>Tambien se ve en cada avance del historial (badge de eficiencia) y en el modal de Gestionar Avances (card de rendimiento).</p>
+                    <p>Acceso: <strong>Reportes > Productividad Operarios</strong></p>
+
+                    <h5 class="mt-4"><i class="fas fa-hard-hat me-2"></i>Reporte de Obras</h5>
+                    <p>Listado de obras con presupuesto, costo real, desvio, progreso, horas-hombre y etapas.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-coins me-2"></i>Reporte de Costos</h5>
+                    <p>Desglose de costos por obra, categoria y mes. Incluye materiales, MO, equipos y caja.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-boxes me-2"></i>Reporte de Inventario</h5>
+                    <p>Estado del inventario: valor total, items activos, stock bajo, rotacion ultimos 90 dias.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-exclamation-triangle me-2"></i>Alertas</h5>
                     <ul>
                         <li><strong>Stock bajo:</strong> items debajo del minimo</li>
-                        <li><strong>Presupuestos por vencer:</strong> fecha de vigencia proxima</li>
                         <li><strong>Obras demoradas:</strong> pasaron la fecha estimada</li>
-                        <li><strong>Tareas vencidas/en riesgo:</strong> tareas retrasadas o con poco avance</li>
-                        <li><strong>Fichadas pendientes:</strong> operarios sin fichar ingreso/egreso</li>
-                        <li><strong>Sobrecosto:</strong> obras donde el costo real supera el presupuesto</li>
+                        <li><strong>Sobrecosto:</strong> costo real supera presupuesto</li>
                         <li><strong>Liquidaciones pendientes:</strong> pagos de MO sin confirmar</li>
-                        <li><strong>Movimientos de caja:</strong> gastos y transferencias de las ultimas 48 horas</li>
-                        <li><strong>Entregas proximas:</strong> ordenes de compra con entrega en los proximos 7 dias</li>
-                        <li><strong>Equipos en transito:</strong> maquinaria en traslado entre obras</li>
+                        <li><strong>Entregas proximas:</strong> OC con entrega en los proximos 7 dias</li>
                     </ul>
                 </div>
             </div>
