@@ -181,6 +181,100 @@ def calcular_horas_fichadas_operario(obra_id, operario_id, desde, hasta):
     }
 
 
+def calcular_cantidad_avance_operario(obra_id, operario_id, desde, hasta):
+    """Suma la cantidad (m², u, etc.) ejecutada por un operario desde sus avances aprobados."""
+    avances = (
+        TareaAvance.query
+        .join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id)
+        .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)
+        .filter(
+            EtapaObra.obra_id == obra_id,
+            TareaAvance.user_id == operario_id,
+            TareaAvance.status == 'aprobado',
+            TareaAvance.fecha >= desde,
+            TareaAvance.fecha <= hasta,
+        )
+        .all()
+    )
+    total_cantidad = Decimal('0')
+    unidades = set()
+    for av in avances:
+        total_cantidad += _decimal(av.cantidad)
+        if av.unidad:
+            unidades.add(av.unidad)
+    # Unidad dominante: si todas iguales usar esa, si hay mixtas retornar la más común o vacía
+    unidad = list(unidades)[0] if len(unidades) == 1 else ('m2' if 'm2' in unidades else (list(unidades)[0] if unidades else ''))
+    return {'cantidad': total_cantidad, 'unidad': unidad}
+
+
+def calcular_liquidacion_por_operario(operario, obra_id, desde, hasta, tarifa_fallback=None):
+    """Calcula liquidación de un operario según su modalidad de pago configurada.
+
+    Retorna un dict con:
+      - modalidad: 'medida' | 'hora' | 'fichada'
+      - base: cantidad numérica (m² ó h)
+      - unidad: 'm2' | 'h'
+      - tarifa: precio unitario
+      - monto: base × tarifa (Decimal cuantizado)
+      - warning: mensaje si falta tarifa o base
+    """
+    modalidad = (operario.modalidad_pago or 'hora').lower()
+    tarifa_hora_user = _decimal(operario.tarifa_hora)
+    tarifa_m2_user = _decimal(operario.tarifa_m2)
+    tarifa_fallback = _decimal(tarifa_fallback) if tarifa_fallback is not None else Decimal('0')
+
+    warning = None
+
+    if modalidad == 'medida':
+        avance = calcular_cantidad_avance_operario(obra_id, operario.id, desde, hasta)
+        cantidad = avance['cantidad']
+        unidad = avance['unidad'] or 'm2'
+        tarifa = tarifa_m2_user
+        if tarifa <= 0:
+            warning = 'Operario en modalidad medida sin tarifa $/m² configurada'
+        monto = _q2(cantidad * tarifa) if tarifa > 0 else Decimal('0')
+        return {
+            'modalidad': 'medida',
+            'base': float(cantidad),
+            'unidad': unidad,
+            'tarifa': float(tarifa),
+            'monto': float(monto),
+            'warning': warning,
+        }
+
+    if modalidad == 'fichada':
+        fich = calcular_horas_fichadas_operario(obra_id, operario.id, desde, hasta)
+        horas = _decimal(fich['total_horas'])
+        tarifa = tarifa_hora_user if tarifa_hora_user > 0 else tarifa_fallback
+        if tarifa <= 0:
+            warning = 'Operario en modalidad fichada sin tarifa $/h configurada'
+        monto = _q2(horas * tarifa) if tarifa > 0 else Decimal('0')
+        return {
+            'modalidad': 'fichada',
+            'base': float(horas),
+            'unidad': 'h',
+            'tarifa': float(tarifa),
+            'monto': float(monto),
+            'warning': warning,
+        }
+
+    # 'hora' (default): horas de avance aprobado × tarifa/h
+    av = calcular_horas_avance_operario(obra_id, operario.id, desde, hasta)
+    horas = _decimal(av['total_horas'])
+    tarifa = tarifa_hora_user if tarifa_hora_user > 0 else tarifa_fallback
+    if tarifa <= 0:
+        warning = 'Operario en modalidad hora sin tarifa $/h configurada'
+    monto = _q2(horas * tarifa) if tarifa > 0 else Decimal('0')
+    return {
+        'modalidad': 'hora',
+        'base': float(horas),
+        'unidad': 'h',
+        'tarifa': float(tarifa),
+        'monto': float(monto),
+        'warning': warning,
+    }
+
+
 def buscar_operarios_obra(obra_id, desde, hasta):
     """Busca todos los operarios que trabajaron en la obra en el período.
 
@@ -255,9 +349,10 @@ def generar_preview_liquidacion(obra_id, desde, hasta):
         horas_avance = avance_data['total_horas']
         horas_fichadas = fichada_data['total_horas']
 
-        # Default: usar fichadas si hay, sino avances
-        horas_liquidar = horas_fichadas if horas_fichadas > 0 else horas_avance
-        monto = _q2(_decimal(horas_liquidar) * tarifa_default)
+        # Cálculo por modalidad configurada en el usuario
+        modalidad_data = calcular_liquidacion_por_operario(
+            usuario, obra_id, desde, hasta, tarifa_fallback=tarifa_default
+        )
 
         # Obtener rol en obra
         asig = AsignacionObra.query.filter_by(
@@ -268,11 +363,15 @@ def generar_preview_liquidacion(obra_id, desde, hasta):
             'operario_id': uid,
             'operario_nombre': usuario.nombre_completo,
             'rol': asig.rol_en_obra if asig else 'sin asignar',
+            'modalidad': modalidad_data['modalidad'],
+            'base': modalidad_data['base'],
+            'unidad': modalidad_data['unidad'],
             'horas_avance': horas_avance,
             'horas_fichadas': horas_fichadas,
-            'horas_liquidar': float(horas_liquidar),
-            'tarifa_hora': float(tarifa_default),
-            'monto': float(monto),
+            'horas_liquidar': modalidad_data['base'] if modalidad_data['unidad'] == 'h' else 0,
+            'tarifa_hora': modalidad_data['tarifa'],
+            'monto': modalidad_data['monto'],
+            'warning': modalidad_data.get('warning'),
             'avance_desglose': avance_data['desglose'],
             'fichada_desglose': fichada_data['desglose'],
             'diferencia_horas': round(horas_fichadas - horas_avance, 2),
@@ -342,6 +441,11 @@ def generar_preview_unificado(obra_id, desde, hasta):
             obra_id=obra_id, usuario_id=uid, activo=True
         ).first()
 
+        # Cálculo según modalidad configurada del operario
+        modalidad_data = calcular_liquidacion_por_operario(
+            usuario, obra_id, desde, hasta, tarifa_fallback=tarifa_default
+        )
+
         operarios_data[uid] = {
             'operario_id': uid,
             'operario_nombre': usuario.nombre_completo,
@@ -350,6 +454,14 @@ def generar_preview_unificado(obra_id, desde, hasta):
             'fichada_desglose': fichada_data['desglose'],
             'avance_desglose': avance_data['desglose'],
             'horas_avance_total': avance_data['total_horas'],
+            'modalidad': modalidad_data['modalidad'],
+            'tarifa_hora_user': float(_decimal(usuario.tarifa_hora)),
+            'tarifa_m2_user': float(_decimal(usuario.tarifa_m2)),
+            'modalidad_base': modalidad_data['base'],
+            'modalidad_unidad': modalidad_data['unidad'],
+            'modalidad_tarifa': modalidad_data['tarifa'],
+            'modalidad_monto': modalidad_data['monto'],
+            'modalidad_warning': modalidad_data.get('warning'),
         }
 
     # Agrupar avances por etapa → operario
@@ -364,11 +476,37 @@ def generar_preview_unificado(obra_id, desde, hasta):
                 etapa_operarios[etapa_nombre][uid] = []
             etapa_operarios[etapa_nombre][uid].append(av)
 
+    # Etapas con avances pero sin costo presupuestado — agregar con costo=0 para
+    # que los operarios que trabajaron igual aparezcan en el preview.
+    etapas_en_breakdown = {ei['etapa_nombre'] for ei in (etapa_breakdown.get('etapas') or [])}
+    etapas_extras = []
+    for etapa_nombre_av in etapa_operarios.keys():
+        if etapa_nombre_av in etapas_en_breakdown:
+            continue
+        # Buscar la etapa por nombre para conseguir id y porcentaje
+        etapa_obj = EtapaObra.query.filter_by(obra_id=obra_id, nombre=etapa_nombre_av).first()
+        eid = etapa_obj.id if etapa_obj else None
+        tareas_total = 0
+        tareas_completadas = 0
+        if etapa_obj:
+            tareas_all = etapa_obj.tareas.all() if hasattr(etapa_obj.tareas, 'all') else (etapa_obj.tareas or [])
+            tareas_total = len(tareas_all)
+            tareas_completadas = sum(1 for t in tareas_all if t.estado in ('completada', 'finalizada'))
+        etapas_extras.append({
+            'etapa_id': eid,
+            'etapa_nombre': etapa_nombre_av,
+            'porcentaje_avance': _pct_etapa_simple(eid) if eid else 0,
+            'costo_presupuestado': Decimal('0'),
+            'monto_certificable': Decimal('0'),
+            'tareas_total': tareas_total,
+            'tareas_completadas': tareas_completadas,
+        })
+
     # Construir resultado por etapa
     etapas_result = []
     operarios_usados = set()
 
-    for etapa_info in (etapa_breakdown.get('etapas') or []):
+    for etapa_info in list(etapa_breakdown.get('etapas') or []) + etapas_extras:
         etapa_nombre = etapa_info['etapa_nombre']
         ops_en_etapa = etapa_operarios.get(etapa_nombre, {})
 
@@ -388,20 +526,32 @@ def generar_preview_unificado(obra_id, desde, hasta):
             unidades = set(t.get('unidad', '') for t in tareas if t.get('unidad'))
             unidad = list(unidades)[0] if len(unidades) == 1 else ', '.join(unidades) if unidades else ''
 
-            # Default: pagar por avance
-            horas_liquidar = horas_avance_etapa if horas_avance_etapa > 0 else op['horas_fichadas']
-            monto_default = float(_q2(_decimal(horas_liquidar) * tarifa_default))
+            # Default según modalidad del operario
+            modalidad = op.get('modalidad') or 'hora'
+            if modalidad == 'medida':
+                tarifa = op.get('tarifa_m2_user') or 0
+                monto_default = float(_q2(_decimal(cantidad_total) * _decimal(tarifa)))
+            elif modalidad == 'fichada':
+                tarifa = op.get('tarifa_hora_user') or float(tarifa_default)
+                monto_default = float(_q2(_decimal(op['horas_fichadas']) * _decimal(tarifa)))
+            else:  # 'hora' (default)
+                tarifa = op.get('tarifa_hora_user') or float(tarifa_default)
+                horas_liquidar = horas_avance_etapa if horas_avance_etapa > 0 else op['horas_fichadas']
+                monto_default = float(_q2(_decimal(horas_liquidar) * _decimal(tarifa)))
 
             operarios_list.append({
                 'operario_id': uid,
                 'operario_nombre': op['operario_nombre'],
                 'rol': op['rol'],
+                'modalidad': modalidad,
+                'tarifa_m2_user': op.get('tarifa_m2_user', 0),
+                'tarifa_hora_user': op.get('tarifa_hora_user', 0),
                 'tareas': tareas,
                 'cantidad_total': cantidad_total,
                 'unidad': unidad,
                 'horas_avance': horas_avance_etapa,
                 'horas_fichadas': op['horas_fichadas'],
-                'tarifa_hora': float(tarifa_default),
+                'tarifa_hora': float(tarifa),
                 'monto_default': monto_default,
             })
             subtotal_mo += _decimal(monto_default)
@@ -409,9 +559,9 @@ def generar_preview_unificado(obra_id, desde, hasta):
         etapas_result.append({
             'etapa_id': etapa_info['etapa_id'],
             'etapa_nombre': etapa_nombre,
-            'porcentaje_avance': pct_simple_map.get(etapa_info['etapa_id'], etapa_info['porcentaje_avance']),
-            'costo_presupuestado': float(etapa_info['costo_presupuestado']),
-            'monto_certificable': float(etapa_info['monto_certificable']),
+            'porcentaje_avance': pct_simple_map.get(etapa_info['etapa_id'], etapa_info.get('porcentaje_avance', 0)),
+            'costo_presupuestado': float(etapa_info['costo_presupuestado'] or 0),
+            'monto_certificable': float(etapa_info['monto_certificable'] or 0),
             'tareas_total': etapa_info['tareas_total'],
             'tareas_completadas': etapa_info['tareas_completadas'],
             'operarios': operarios_list,
@@ -422,18 +572,23 @@ def generar_preview_unificado(obra_id, desde, hasta):
     operarios_sin_etapa = []
     for uid, op in operarios_data.items():
         if uid not in operarios_usados and op['horas_fichadas'] > 0:
-            monto_default = float(_q2(_decimal(op['horas_fichadas']) * tarifa_default))
+            modalidad = op.get('modalidad') or 'hora'
+            tarifa = op.get('tarifa_hora_user') or float(tarifa_default)
+            monto_default = float(_q2(_decimal(op['horas_fichadas']) * _decimal(tarifa)))
             operarios_sin_etapa.append({
                 'operario_id': uid,
                 'operario_nombre': op['operario_nombre'],
                 'rol': op['rol'],
+                'modalidad': modalidad,
+                'tarifa_m2_user': op.get('tarifa_m2_user', 0),
+                'tarifa_hora_user': op.get('tarifa_hora_user', 0),
                 'tareas': [],
                 'cantidad_total': 0,
                 'unidad': '',
                 'horas_avance': 0,
                 'horas_fichadas': op['horas_fichadas'],
                 'fichada_desglose': op['fichada_desglose'],
-                'tarifa_hora': float(tarifa_default),
+                'tarifa_hora': float(tarifa),
                 'monto_default': monto_default,
             })
 
@@ -539,10 +694,21 @@ def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None, commit=True
         horas_liq = _decimal(item_data.get('horas_liquidadas', 0))
         tarifa = _decimal(item_data.get('tarifa_hora', 0))
         monto = _decimal(item_data.get('monto', 0))
+        modalidad = (item_data.get('modalidad_pago') or item_data.get('modalidad') or '').lower() or None
+        cantidad_liq = _decimal(item_data.get('cantidad_liquidada', 0))
+        unidad_liq = item_data.get('unidad_liquidada') or item_data.get('unidad') or None
+
+        # Si no viene modalidad explícita, inferir del usuario
+        if not modalidad:
+            op_user = Usuario.query.get(operario_id)
+            modalidad = (op_user.modalidad_pago or 'hora') if op_user else 'hora'
 
         # Si monto es 0 pero hay horas y tarifa, calcular
         if monto == 0 and horas_liq > 0 and tarifa > 0:
             monto = _q2(horas_liq * tarifa)
+        # Si modalidad='medida' y monto=0, calcular a partir de cantidad
+        if monto == 0 and modalidad == 'medida' and cantidad_liq > 0 and tarifa > 0:
+            monto = _q2(cantidad_liq * tarifa)
 
         # Recalcular horas informativas
         avance = calcular_horas_avance_operario(obra_id, operario_id, desde, hasta)
@@ -556,6 +722,9 @@ def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None, commit=True
             horas_liquidadas=float(horas_liq),
             tarifa_hora=float(tarifa),
             monto=float(monto),
+            modalidad_pago=modalidad,
+            cantidad_liquidada=float(cantidad_liq),
+            unidad_liquidada=unidad_liq,
             estado='pendiente',
         )
         db.session.add(item)

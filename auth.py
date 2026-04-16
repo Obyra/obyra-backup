@@ -1219,6 +1219,85 @@ def toggle_usuario():
         current_app.logger.error(f'Error al toggle estado de usuario {usuario_id}: {str(e)}', exc_info=True)
         return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
 
+
+@auth_bp.route('/usuarios/modalidad_pago', methods=['POST'])
+@login_required
+@require_membership('admin')
+@limiter.limit("30 per minute")
+def actualizar_modalidad_pago():
+    """Actualizar modalidad de pago y tarifas de un operario."""
+    from decimal import Decimal, InvalidOperation
+
+    usuario_id = request.form.get('usuario_id')
+    modalidad = (request.form.get('modalidad_pago') or '').strip().lower()
+    tarifa_hora_raw = request.form.get('tarifa_hora', '0')
+    tarifa_m2_raw = request.form.get('tarifa_m2', '0')
+    tarifa_jornal_raw = request.form.get('tarifa_jornal', '0')
+
+    if not usuario_id or modalidad not in {'medida', 'hora', 'fichada'}:
+        return jsonify({'success': False, 'message': 'Datos inválidos'}), 400
+
+    try:
+        usuario_id_int = int(usuario_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Identificador inválido'}), 400
+
+    membership = get_current_membership()
+    objetivo = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == usuario_id_int,
+            db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None)),
+        )
+        .first()
+    )
+    if not objetivo:
+        return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
+
+    def _parse_tarifa(val):
+        try:
+            d = Decimal(str(val or '0').replace(',', '.'))
+            return d if d >= 0 else Decimal('0')
+        except (InvalidOperation, ValueError):
+            return Decimal('0')
+
+    t_hora = _parse_tarifa(tarifa_hora_raw)
+    t_m2 = _parse_tarifa(tarifa_m2_raw)
+    t_jornal = _parse_tarifa(tarifa_jornal_raw)
+
+    if modalidad == 'medida' and t_m2 <= 0:
+        return jsonify({'success': False, 'message': 'Modalidad "medida" requiere tarifa $/m² > 0'}), 400
+    if modalidad in ('hora', 'fichada') and t_hora <= 0:
+        return jsonify({'success': False, 'message': f'Modalidad "{modalidad}" requiere tarifa $/h > 0'}), 400
+
+    try:
+        usuario = objetivo.usuario
+        usuario.modalidad_pago = modalidad
+        usuario.tarifa_hora = t_hora
+        usuario.tarifa_m2 = t_m2
+        usuario.tarifa_jornal = t_jornal
+        db.session.commit()
+        current_app.logger.info(
+            f'Modalidad pago actualizada: {usuario.email} -> {modalidad} '
+            f'(h=${t_hora}, m2=${t_m2}, j=${t_jornal}) por {current_user.email}'
+        )
+        return jsonify({
+            'success': True,
+            'message': 'Modalidad de pago actualizada',
+            'modalidad_pago': modalidad,
+            'tarifa_hora': float(t_hora),
+            'tarifa_m2': float(t_m2),
+            'tarifa_jornal': float(t_jornal),
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(
+            f'Error actualizando modalidad pago usuario {usuario_id}: {str(e)}', exc_info=True
+        )
+        return jsonify({'success': False, 'message': 'Error al guardar'}), 500
+
+
 # ================================
 # SISTEMA DE INVITACIONES
 # ================================

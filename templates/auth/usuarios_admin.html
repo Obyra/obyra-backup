@@ -291,6 +291,18 @@
                                             {{ 'disabled' if usuario.id == current_user.id else '' }}>
                                         <i class="fas fa-{{ boton_icono }} me-1"></i>{{ boton_texto }}
                                     </button>
+
+                                    <!-- Botón Modalidad de Pago -->
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-success ms-2 btn-modalidad-pago"
+                                            data-usuario-id="{{ usuario.id }}"
+                                            data-usuario-nombre="{{ usuario.nombre_completo }}"
+                                            data-modalidad-pago="{{ usuario.modalidad_pago or 'hora' }}"
+                                            data-tarifa-hora="{{ (usuario.tarifa_hora or 0)|float }}"
+                                            data-tarifa-m2="{{ (usuario.tarifa_m2 or 0)|float }}"
+                                            data-tarifa-jornal="{{ (usuario.tarifa_jornal or 0)|float }}">
+                                        <i class="fas fa-money-bill-wave me-1"></i>Pago
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -314,6 +326,62 @@
 
 <!-- Modal nuevo integrante -->
 {% include 'auth/_nuevo_integrante_modal.html' %}
+
+<!-- Modal Modalidad de Pago -->
+<div class="modal fade" id="modalModalidadPago" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-money-bill-wave me-2 text-success"></i>
+                    Modalidad de Pago — <span id="mp-usuario-nombre"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formModalidadPago">
+                <div class="modal-body">
+                    <input type="hidden" id="mp-usuario-id" name="usuario_id">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Modalidad de pago</label>
+                        <select class="form-select" id="mp-modalidad" name="modalidad_pago">
+                            <option value="hora">Por horas trabajadas (avance)</option>
+                            <option value="medida">Por medida ejecutada (m²)</option>
+                            <option value="fichada">Por fichada / presencia (GPS)</option>
+                        </select>
+                        <small class="text-muted">Determina cómo se calcula el pago del operario en cada liquidación.</small>
+                    </div>
+
+                    <div class="mb-3" id="mp-wrap-tarifa-hora">
+                        <label class="form-label">Tarifa por hora ($/h)</label>
+                        <input type="number" class="form-control" id="mp-tarifa-hora" name="tarifa_hora" step="100" min="0" value="0">
+                        <small class="text-muted">Usada en modalidades <strong>hora</strong> y <strong>fichada</strong>.</small>
+                    </div>
+
+                    <div class="mb-3" id="mp-wrap-tarifa-m2" style="display:none;">
+                        <label class="form-label">Tarifa por m² ($/m²)</label>
+                        <input type="number" class="form-control" id="mp-tarifa-m2" name="tarifa_m2" step="100" min="0" value="0">
+                        <small class="text-muted">Usada en modalidad <strong>medida</strong> (pago a destajo).</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Tarifa por jornal ($/jornal, opcional)</label>
+                        <input type="number" class="form-control" id="mp-tarifa-jornal" name="tarifa_jornal" step="100" min="0" value="0">
+                        <small class="text-muted">Referencia. 1 jornal = 8h.</small>
+                    </div>
+
+                    <div id="mp-alert" class="alert d-none" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -322,7 +390,81 @@
 <script>
 const cambiarRolEndpoint = {{ url_for('auth.cambiar_rol')|tojson }};
 const toggleUsuarioEndpoint = {{ url_for('auth.toggle_usuario')|tojson }};
+const modalidadPagoEndpoint = {{ url_for('auth.actualizar_modalidad_pago')|tojson }};
 const csrfTokenValue = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || {{ (csrf_token() if csrf_token is defined else '')|tojson }};
+
+// ========== Modal Modalidad de Pago ==========
+(function() {
+    const modalEl = document.getElementById('modalModalidadPago');
+    if (!modalEl) return;
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const form = document.getElementById('formModalidadPago');
+    const selectModalidad = document.getElementById('mp-modalidad');
+    const wrapHora = document.getElementById('mp-wrap-tarifa-hora');
+    const wrapM2 = document.getElementById('mp-wrap-tarifa-m2');
+    const alertBox = document.getElementById('mp-alert');
+
+    function actualizarCamposVisibles() {
+        const mod = selectModalidad.value;
+        wrapHora.style.display = (mod === 'medida') ? 'none' : '';
+        wrapM2.style.display = (mod === 'medida') ? '' : 'none';
+    }
+    selectModalidad.addEventListener('change', actualizarCamposVisibles);
+
+    function mostrarError(msg) {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = msg;
+        alertBox.classList.remove('d-none');
+    }
+    function limpiarError() {
+        alertBox.classList.add('d-none');
+    }
+
+    document.querySelectorAll('.btn-modalidad-pago').forEach(btn => {
+        btn.addEventListener('click', () => {
+            limpiarError();
+            document.getElementById('mp-usuario-id').value = btn.dataset.usuarioId;
+            document.getElementById('mp-usuario-nombre').textContent = btn.dataset.usuarioNombre;
+            selectModalidad.value = btn.dataset.modalidadPago || 'hora';
+            document.getElementById('mp-tarifa-hora').value = btn.dataset.tarifaHora || 0;
+            document.getElementById('mp-tarifa-m2').value = btn.dataset.tarifaM2 || 0;
+            document.getElementById('mp-tarifa-jornal').value = btn.dataset.tarifaJornal || 0;
+            actualizarCamposVisibles();
+            modal.show();
+        });
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        limpiarError();
+        const formData = new FormData(form);
+        try {
+            const resp = await fetch(modalidadPagoEndpoint, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfTokenValue },
+                body: formData,
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data.success) {
+                mostrarError(data.message || 'Error al guardar');
+                return;
+            }
+            // Actualizar data-attributes del botón en la fila
+            const uid = formData.get('usuario_id');
+            const btn = document.querySelector(`.btn-modalidad-pago[data-usuario-id="${uid}"]`);
+            if (btn) {
+                btn.dataset.modalidadPago = data.modalidad_pago;
+                btn.dataset.tarifaHora = data.tarifa_hora;
+                btn.dataset.tarifaM2 = data.tarifa_m2;
+                btn.dataset.tarifaJornal = data.tarifa_jornal;
+            }
+            modal.hide();
+            mostrarMensajeAccion('success', 'Modalidad de pago actualizada.');
+        } catch (err) {
+            mostrarError('Error de red: ' + err.message);
+        }
+    });
+})();
 
 let accionPendiente = null;
 let mensajeTimeoutId = null;

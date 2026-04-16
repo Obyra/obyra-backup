@@ -197,6 +197,12 @@ class Usuario(UserMixin, db.Model):
     plan_activo = db.Column(db.String(50), default='prueba')  # DEPRECATED: usar organizacion.plan_tipo
     fecha_expiracion_plan = db.Column(db.DateTime)  # DEPRECATED: usar organizacion.fecha_fin_plan
 
+    # Modalidad de pago del operario: 'medida' | 'hora' | 'fichada'
+    modalidad_pago = db.Column(db.String(20), default='hora')
+    tarifa_hora = db.Column(db.Numeric(12, 2), default=0)     # $/hora (usada en 'hora' o 'fichada')
+    tarifa_m2 = db.Column(db.Numeric(12, 2), default=0)       # $/m² (usada en 'medida')
+    tarifa_jornal = db.Column(db.Numeric(12, 2), default=0)   # $/jornal (opcional)
+
     @property
     def current_org_id(self):
         """Retorna el org_id activo: session membership > primary_org > organizacion_id.

@@ -847,6 +847,51 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Equipment movement migration skipped: {e}")
 
+    # Modalidad de pago de operarios (medida | hora | fichada) + tarifas individuales
+    # y trazabilidad de modalidad/cantidad/unidad en items de liquidación MO.
+    try:
+        pago_operarios_sql = """
+        DO $$ BEGIN
+            -- Usuario: modalidad de pago y tarifas individuales
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='usuarios' AND column_name='modalidad_pago') THEN
+                ALTER TABLE usuarios ADD COLUMN modalidad_pago VARCHAR(20) DEFAULT 'hora';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='usuarios' AND column_name='tarifa_hora') THEN
+                ALTER TABLE usuarios ADD COLUMN tarifa_hora NUMERIC(12,2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='usuarios' AND column_name='tarifa_m2') THEN
+                ALTER TABLE usuarios ADD COLUMN tarifa_m2 NUMERIC(12,2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='usuarios' AND column_name='tarifa_jornal') THEN
+                ALTER TABLE usuarios ADD COLUMN tarifa_jornal NUMERIC(12,2) DEFAULT 0;
+            END IF;
+
+            -- LiquidacionMOItem: trazabilidad de modalidad usada y base liquidada
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='liquidaciones_mo_items' AND column_name='modalidad_pago') THEN
+                ALTER TABLE liquidaciones_mo_items ADD COLUMN modalidad_pago VARCHAR(20);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='liquidaciones_mo_items' AND column_name='cantidad_liquidada') THEN
+                ALTER TABLE liquidaciones_mo_items ADD COLUMN cantidad_liquidada NUMERIC(12,3) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='liquidaciones_mo_items' AND column_name='unidad_liquidada') THEN
+                ALTER TABLE liquidaciones_mo_items ADD COLUMN unidad_liquidada VARCHAR(10);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(pago_operarios_sql))
+        db.session.commit()
+        print("[OK] Modalidad pago operarios + trazabilidad liquidacion migration applied")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Modalidad pago operarios migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions

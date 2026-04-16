@@ -544,10 +544,20 @@ function renderUnificado() {
             var tareas = op.tareas || [];
 
             // Fila header del operario
+            var modalidad = op.modalidad || 'hora';
+            var modalidadBadge = '';
+            if (modalidad === 'medida') {
+                modalidadBadge = '<span class="badge bg-success ms-2" title="Pago por medida ejecutada"><i class="fas fa-ruler-combined me-1"></i>Medida (m²)</span>';
+            } else if (modalidad === 'fichada') {
+                modalidadBadge = '<span class="badge bg-warning text-dark ms-2" title="Pago por fichada GPS"><i class="fas fa-map-marker-alt me-1"></i>Fichada</span>';
+            } else {
+                modalidadBadge = '<span class="badge bg-info ms-2" title="Pago por horas de avance"><i class="fas fa-clock me-1"></i>Horas</span>';
+            }
             html += `<tr class="table-secondary">
                 <td colspan="8">
                     <strong>${op.operario_nombre}</strong>
                     <span class="badge bg-secondary bg-opacity-50 ms-1">${op.rol}</span>
+                    ${modalidadBadge}
                 </td>
             </tr>`;
 
@@ -601,9 +611,9 @@ function renderUnificado() {
                 </td>
                 <td class="text-center">
                     <select class="form-select form-select-sm select-modo" data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" onchange="cambiarModo('${key}', ${eIdx}, ${oIdx})">
-                        <option value="cantidad" ${op.cantidad_total > 0 ? 'selected' : ''}>Cantidad</option>
-                        <option value="horas" ${op.cantidad_total <= 0 ? 'selected' : ''}>Horas</option>
-                        <option value="fichada">Fichada</option>
+                        <option value="cantidad" ${modalidad === 'medida' ? 'selected' : ''}>Cantidad (m²)</option>
+                        <option value="horas" ${modalidad === 'hora' ? 'selected' : ''}>Horas (avance)</option>
+                        <option value="fichada" ${modalidad === 'fichada' ? 'selected' : ''}>Fichada</option>
                         <option value="manual">Manual</option>
                     </select>
                 </td>
@@ -668,8 +678,17 @@ function renderUnificado() {
 
         sinEtapa.forEach((op, sIdx) => {
             var key = `se${sIdx}`;
+            var mod = op.modalidad || 'fichada';
+            var modBadge = '';
+            if (mod === 'medida') {
+                modBadge = '<span class="badge bg-success ms-1"><i class="fas fa-ruler-combined me-1"></i>Medida</span>';
+            } else if (mod === 'hora') {
+                modBadge = '<span class="badge bg-info ms-1"><i class="fas fa-clock me-1"></i>Horas</span>';
+            } else {
+                modBadge = '<span class="badge bg-warning text-dark ms-1"><i class="fas fa-map-marker-alt me-1"></i>Fichada</span>';
+            }
             html += `<tr>
-                <td><strong>${op.operario_nombre}</strong></td>
+                <td><strong>${op.operario_nombre}</strong>${modBadge}</td>
                 <td class="text-center"><span class="badge bg-secondary bg-opacity-50">${op.rol}</span></td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm text-center" id="hfi-input-${key}"
@@ -746,13 +765,31 @@ function actualizarTodosBtnPagar() {
 function cambiarModo(key, eIdx, oIdx) {
     var select = document.querySelector(`select[data-key="${key}"]`);
     var modo = select.value;
-    var tarifa = parseFloat(document.getElementById('tarifa-' + key).value) || 0;
+    var tarifaInput = document.getElementById('tarifa-' + key);
+    var tarifa = parseFloat(tarifaInput.value) || 0;
     var montoEl = document.getElementById('monto-' + key);
     var detalleEl = document.getElementById('detalle-modo-' + key);
     var hav = parseFloat(document.getElementById('hav-' + key).value) || 0;
     var hfi = parseFloat(document.getElementById('hfi-' + key).value) || 0;
     var cant = parseFloat(document.getElementById('cant-' + key).value) || 0;
-    var unid = document.getElementById('unid-' + key).value;
+    var unid = document.getElementById('unid-' + key).value || 'm2';
+
+    // Si el usuario tiene tarifas diferentes por modalidad, precargar la adecuada
+    // cuando cambia manualmente de modo (salvo que ya esté editando)
+    if (tarifaInput.dataset.editing !== '1' && previewData && previewData.etapas) {
+        try {
+            var op = previewData.etapas[eIdx] && previewData.etapas[eIdx].operarios[oIdx];
+            if (op) {
+                if (modo === 'cantidad' && op.tarifa_m2_user && op.tarifa_m2_user > 0) {
+                    tarifaInput.value = op.tarifa_m2_user;
+                    tarifa = op.tarifa_m2_user;
+                } else if ((modo === 'horas' || modo === 'fichada') && op.tarifa_hora_user && op.tarifa_hora_user > 0) {
+                    tarifaInput.value = op.tarifa_hora_user;
+                    tarifa = op.tarifa_hora_user;
+                }
+            }
+        } catch (_) {}
+    }
 
     if (modo === 'cantidad') {
         // Cantidad × tarifa (tarifa = precio por unidad)
@@ -885,6 +922,13 @@ function confirmarUnificado() {
 
     var items = [];
 
+    // Helper: mapea modo del select a modalidad persistida
+    function _modoToModalidad(modo) {
+        if (modo === 'cantidad') return 'medida';
+        if (modo === 'fichada') return 'fichada';
+        return 'hora'; // horas y manual caen a hora
+    }
+
     // Items de etapas
     if (previewData && previewData.etapas) {
         previewData.etapas.forEach((etapa, eIdx) => {
@@ -893,17 +937,23 @@ function confirmarUnificado() {
                 var monto = parseFloat(document.getElementById('monto-' + key).value) || 0;
                 var tarifa = parseFloat(document.getElementById('tarifa-' + key).value) || 0;
                 var select = document.querySelector(`select[data-key="${key}"]`);
-                var modo = select ? select.value : 'avance';
+                var modo = select ? select.value : 'horas';
                 var hav = parseFloat(document.getElementById('hav-' + key).value) || 0;
                 var hfi = parseFloat(document.getElementById('hfi-' + key).value) || 0;
+                var cant = parseFloat(document.getElementById('cant-' + key).value) || 0;
+                var unid = document.getElementById('unid-' + key).value || 'm2';
 
                 if (monto > 0) {
                     var horasLiq = modo === 'fichada' ? hfi : hav;
+                    var modalidad = _modoToModalidad(modo);
                     items.push({
                         operario_id: op.operario_id,
                         horas_liquidadas: horasLiq,
                         tarifa_hora: tarifa,
                         monto: monto,
+                        modalidad_pago: modalidad,
+                        cantidad_liquidada: modalidad === 'medida' ? cant : 0,
+                        unidad_liquidada: modalidad === 'medida' ? unid : 'h',
                     });
                 }
             });
@@ -924,6 +974,9 @@ function confirmarUnificado() {
                     horas_liquidadas: hfi,
                     tarifa_hora: tarifa,
                     monto: monto,
+                    modalidad_pago: 'fichada',
+                    cantidad_liquidada: 0,
+                    unidad_liquidada: 'h',
                 });
             }
         });
@@ -969,7 +1022,7 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
     var select = document.querySelector(`select[data-key="${key}"]`);
     var modo = select ? select.value : 'horas';
 
-    var operario, horas;
+    var operario, horas, cantidad = 0, unidad = 'h', modalidad = 'hora';
     if (tipo === 'etapa') {
         var etapa = previewData.etapas[eIdx];
         operario = etapa.operarios[oIdx];
@@ -977,15 +1030,25 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
         var hfiEl = document.getElementById('hfi-' + key) || document.getElementById('hfi-input-' + key);
         var hfi = parseFloat(hfiEl ? hfiEl.value : 0) || 0;
         horas = (modo === 'fichada') ? hfi : hav;
+        if (modo === 'cantidad') {
+            modalidad = 'medida';
+            cantidad = parseFloat(document.getElementById('cant-' + key).value) || 0;
+            unidad = document.getElementById('unid-' + key).value || 'm2';
+        } else if (modo === 'fichada') {
+            modalidad = 'fichada';
+        } else {
+            modalidad = 'hora';
+        }
     } else {
         operario = previewData.operarios_sin_etapa[oIdx];
         horas = parseFloat(document.getElementById('hfi-' + key).value) || 0;
+        modalidad = 'fichada';
     }
 
     if (monto <= 0) { alert('El monto debe ser mayor a 0'); return; }
 
     // Guardar datos y abrir modal
-    _pendingPago = { key, operario, horas, tarifa, monto, desde, hasta, notas };
+    _pendingPago = { key, operario, horas, tarifa, monto, desde, hasta, notas, modalidad, cantidad, unidad };
     document.getElementById('modal-pago-nombre').textContent = operario.operario_nombre;
     document.getElementById('modal-pago-monto').textContent = formatARS(monto);
     document.getElementById('modal-pago-periodo').textContent = formatFecha(desde) + ' al ' + formatFecha(hasta);
@@ -1011,6 +1074,9 @@ function ejecutarPagoIndividual() {
         horas_liquidadas: p.horas,
         tarifa_hora: p.tarifa,
         monto: p.monto,
+        modalidad_pago: p.modalidad || 'hora',
+        cantidad_liquidada: p.cantidad || 0,
+        unidad_liquidada: p.unidad || 'h',
     }];
 
     fetch(`/obras/${OBRA_ID}/liquidacion-mo/confirmar-y-pagar`, {

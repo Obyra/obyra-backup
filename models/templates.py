@@ -356,6 +356,11 @@ class LiquidacionMOItem(db.Model):
     tarifa_hora = db.Column(db.Numeric(12, 2), default=0)      # $/hora
     monto = db.Column(db.Numeric(15, 2), default=0)            # Monto final a pagar
 
+    # Trazabilidad de modalidad: medida | hora | fichada (se cachea al liquidar)
+    modalidad_pago = db.Column(db.String(20))
+    cantidad_liquidada = db.Column(db.Numeric(12, 3), default=0)  # Cantidad pagada (para 'medida')
+    unidad_liquidada = db.Column(db.String(10))                   # 'm2', 'h', etc.
+
     # Pago
     estado = db.Column(db.String(20), default='pendiente')  # pendiente / pagado
     metodo_pago = db.Column(db.String(30))                   # transferencia / efectivo
