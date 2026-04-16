@@ -465,6 +465,8 @@ def liquidacion_mo_historial(obra_id):
                     'metodo_pago': item.metodo_pago,
                     'fecha_pago': item.fecha_pago.isoformat() if item.fecha_pago else None,
                     'comprobante_url': item.comprobante_url,
+                    'modalidad_pago': item.modalidad_pago,
+                    'desglose_tareas': item.desglose_tareas or [],
                 })
             result.append({
                 'id': liq.id,

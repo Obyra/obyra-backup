@@ -399,6 +399,24 @@ def generar_preview_unificado(obra_id, desde, hasta):
     operarios = buscar_operarios_obra(obra_id, desde, hasta)
     etapa_breakdown = compute_etapa_breakdown(obra)
 
+    # Obtener tareas ya liquidadas (para marcar en preview)
+    tareas_ya_pagadas = set()
+    liq_existentes = (
+        LiquidacionMOItem.query
+        .join(LiquidacionMO)
+        .filter(
+            LiquidacionMO.obra_id == obra_id,
+            LiquidacionMOItem.estado == 'pagado',
+            LiquidacionMOItem.desglose_tareas.isnot(None),
+        )
+        .all()
+    )
+    for item in liq_existentes:
+        for dt in (item.desglose_tareas or []):
+            tarea_nombre = dt.get('tarea_nombre', '')
+            if tarea_nombre:
+                tareas_ya_pagadas.add(f"{item.operario_id}:{tarea_nombre}")
+
     # Nota: NO filtramos operarios ya liquidados. El admin puede querer
     # liquidar diferencias o tareas nuevas completadas en el mismo período.
     # El historial de liquidaciones muestra qué ya se pagó.
@@ -430,6 +448,11 @@ def generar_preview_unificado(obra_id, desde, hasta):
         modalidad_data = calcular_liquidacion_por_operario(
             usuario, obra_id, desde, hasta, tarifa_fallback=tarifa_default
         )
+
+        # Marcar tareas ya pagadas en el desglose de avances
+        for av in avance_data['desglose']:
+            tarea_key = f"{uid}:{av.get('tarea', '')}"
+            av['ya_pagada'] = tarea_key in tareas_ya_pagadas
 
         operarios_data[uid] = {
             'operario_id': uid,
@@ -699,6 +722,9 @@ def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None, commit=True
         avance = calcular_horas_avance_operario(obra_id, operario_id, desde, hasta)
         fichada = calcular_horas_fichadas_operario(obra_id, operario_id, desde, hasta)
 
+        # Desglose por tarea (si viene del frontend)
+        desglose = item_data.get('desglose_tareas')
+
         item = LiquidacionMOItem(
             liquidacion_id=liq.id,
             operario_id=operario_id,
@@ -710,6 +736,7 @@ def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None, commit=True
             modalidad_pago=modalidad,
             cantidad_liquidada=float(cantidad_liq),
             unidad_liquidada=unidad_liq,
+            desglose_tareas=desglose,
             estado='pendiente',
         )
         db.session.add(item)

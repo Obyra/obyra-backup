@@ -98,6 +98,31 @@
     <div class="amount">${{ "{:,.2f}".format(item.monto|float) }}</div>
 </div>
 
+{% if item.desglose_tareas and item.desglose_tareas|length > 0 %}
+<table style="margin-top: 15px;">
+    <thead>
+        <tr>
+            <th>Tarea</th>
+            <th>Etapa</th>
+            <th class="text-center">Cantidad</th>
+            <th class="text-center">Unidad</th>
+            <th class="text-center">Horas</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for dt in item.desglose_tareas %}
+        <tr>
+            <td class="fw-bold">{{ dt.tarea_nombre }}</td>
+            <td style="color:#666;">{{ dt.etapa_nombre or '-' }}</td>
+            <td class="text-center">{{ dt.cantidad or 0 }}</td>
+            <td class="text-center">{{ dt.unidad or '-' }}</td>
+            <td class="text-center">{{ dt.horas or 0 }}h</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
 {% if item.fecha_pago %}
 <div class="detalle">
     <strong>Fecha de pago:</strong> {{ item.fecha_pago.strftime('%d/%m/%Y') }}<br>

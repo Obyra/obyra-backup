@@ -1361,9 +1361,9 @@ def reporte_costos():
         if obra_id:
             eq_query = eq_query.filter(EquipmentUsage.project_id == obra_id)
         if fecha_desde_obj:
-            eq_query = eq_query.filter(EquipmentUsage.date >= fecha_desde_obj)
+            eq_query = eq_query.filter(EquipmentUsage.fecha >= fecha_desde_obj)
         if fecha_hasta_obj:
-            eq_query = eq_query.filter(EquipmentUsage.date <= fecha_hasta_obj)
+            eq_query = eq_query.filter(EquipmentUsage.fecha <= fecha_hasta_obj)
         usos_equipos = eq_query.all()
     except Exception as e:
         current_app.logger.warning(f"Error cargando equipos en reporte costos: {e}")
@@ -1482,9 +1482,9 @@ def reporte_costos():
         costos_por_categoria[cat_eq]['ars'] += costo_eq
         costos_por_categoria[cat_eq]['items'] += 1
 
-        if usage.date:
-            mes_key = usage.date.strftime('%Y-%m')
-            mes_display = usage.date.strftime('%B %Y')
+        if usage.fecha:
+            mes_key = usage.fecha.strftime('%Y-%m')
+            mes_display = usage.fecha.strftime('%B %Y')
             if mes_key not in costos_por_mes:
                 costos_por_mes[mes_key] = {'display': mes_display, 'ars': 0, 'usd': 0, 'items': 0}
             costos_por_mes[mes_key]['ars'] += costo_eq
@@ -2177,13 +2177,13 @@ def exportar_costos_pdf():
         if fecha_desde:
             try:
                 fd = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
-                eq_query = eq_query.filter(EquipmentUsage.date >= fd)
+                eq_query = eq_query.filter(EquipmentUsage.fecha >= fd)
             except ValueError:
                 pass
         if fecha_hasta:
             try:
                 fh = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
-                eq_query = eq_query.filter(EquipmentUsage.date <= fh)
+                eq_query = eq_query.filter(EquipmentUsage.fecha <= fh)
             except ValueError:
                 pass
         usos_equipos = eq_query.all()

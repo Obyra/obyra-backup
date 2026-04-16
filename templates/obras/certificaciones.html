@@ -565,13 +565,16 @@ function renderUnificado() {
             if (tareas.length > 0) {
                 tareas.forEach((t, tIdx) => {
                     var tKey = `${key}_t${tIdx}`;
-                    html += `<tr id="row-${tKey}">
+                    var yaPagada = t.ya_pagada || false;
+                    var rowStyle = yaPagada ? 'opacity:0.5; background:#e8f5e9;' : '';
+                    html += `<tr id="row-${tKey}" style="${rowStyle}">
                         <td class="ps-3">
                             <div class="d-flex align-items-center">
                                 <input type="checkbox" class="form-check-input me-2 tarea-check" id="chk-${tKey}"
                                        data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
-                                       checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
-                                <small>${t.tarea}</small>
+                                       ${yaPagada ? '' : 'checked'} ${yaPagada ? 'disabled' : ''}
+                                       onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
+                                <small>${t.tarea}${yaPagada ? ' <span class=&quot;badge bg-success bg-opacity-75 ms-1&quot; style=&quot;font-size:0.6rem;&quot;>PAGADA</span>' : ''}</small>
                             </div>
                         </td>
                         <td class="text-center">
@@ -946,6 +949,28 @@ function confirmarUnificado() {
                 if (monto > 0) {
                     var horasLiq = modo === 'fichada' ? hfi : hav;
                     var modalidad = _modoToModalidad(modo);
+
+                    // Armar desglose por tarea (solo tareas checkeadas)
+                    var desglose = [];
+                    var tareas = op.tareas || [];
+                    var checks = document.querySelectorAll(`.tarea-check[data-key="${key}"]`);
+                    tareas.forEach(function(t, tIdx) {
+                        var chk = checks[tIdx];
+                        if (!chk || chk.checked) {
+                            var tKey = `${key}_t${tIdx}`;
+                            var cantInput = document.querySelector(`.tarea-cant[data-tkey="${tKey}"]`);
+                            var horasInput = document.querySelector(`.tarea-horas[data-tkey="${tKey}"]`);
+                            desglose.push({
+                                tarea_nombre: t.tarea,
+                                etapa_nombre: etapa.etapa_nombre,
+                                cantidad: parseFloat(cantInput ? cantInput.value : t.cantidad) || 0,
+                                horas: parseFloat(horasInput ? horasInput.value : t.horas) || 0,
+                                unidad: t.unidad || unid,
+                                fecha: t.fecha,
+                            });
+                        }
+                    });
+
                     items.push({
                         operario_id: op.operario_id,
                         horas_liquidadas: horasLiq,
@@ -954,6 +979,7 @@ function confirmarUnificado() {
                         modalidad_pago: modalidad,
                         cantidad_liquidada: modalidad === 'medida' ? cant : 0,
                         unidad_liquidada: modalidad === 'medida' ? unid : 'h',
+                        desglose_tareas: desglose,
                     });
                 }
             });
@@ -1022,7 +1048,7 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
     var select = document.querySelector(`select[data-key="${key}"]`);
     var modo = select ? select.value : 'horas';
 
-    var operario, horas, cantidad = 0, unidad = 'h', modalidad = 'hora';
+    var operario, horas, cantidad = 0, unidad = 'h', modalidad = 'hora', desglose = [];
     if (tipo === 'etapa') {
         var etapa = previewData.etapas[eIdx];
         operario = etapa.operarios[oIdx];
@@ -1039,6 +1065,25 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
         } else {
             modalidad = 'hora';
         }
+        // Armar desglose por tarea
+        var tareas = operario.tareas || [];
+        var checks = document.querySelectorAll(`.tarea-check[data-key="${key}"]`);
+        tareas.forEach(function(t, tIdx) {
+            var chk = checks[tIdx];
+            if (!chk || chk.checked) {
+                var tKey = `${key}_t${tIdx}`;
+                var cantInput = document.querySelector(`.tarea-cant[data-tkey="${tKey}"]`);
+                var horasInput = document.querySelector(`.tarea-horas[data-tkey="${tKey}"]`);
+                desglose.push({
+                    tarea_nombre: t.tarea,
+                    etapa_nombre: etapa.etapa_nombre,
+                    cantidad: parseFloat(cantInput ? cantInput.value : t.cantidad) || 0,
+                    horas: parseFloat(horasInput ? horasInput.value : t.horas) || 0,
+                    unidad: t.unidad || unidad,
+                    fecha: t.fecha,
+                });
+            }
+        });
     } else {
         operario = previewData.operarios_sin_etapa[oIdx];
         horas = parseFloat(document.getElementById('hfi-' + key).value) || 0;
@@ -1048,7 +1093,7 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
     if (monto <= 0) { alert('El monto debe ser mayor a 0'); return; }
 
     // Guardar datos y abrir modal
-    _pendingPago = { key, operario, horas, tarifa, monto, desde, hasta, notas, modalidad, cantidad, unidad };
+    _pendingPago = { key, operario, horas, tarifa, monto, desde, hasta, notas, modalidad, cantidad, unidad, desglose };
     document.getElementById('modal-pago-nombre').textContent = operario.operario_nombre;
     document.getElementById('modal-pago-monto').textContent = formatARS(monto);
     document.getElementById('modal-pago-periodo').textContent = formatFecha(desde) + ' al ' + formatFecha(hasta);
@@ -1077,6 +1122,7 @@ function ejecutarPagoIndividual() {
         modalidad_pago: p.modalidad || 'hora',
         cantidad_liquidada: p.cantidad || 0,
         unidad_liquidada: p.unidad || 'h',
+        desglose_tareas: p.desglose || [],
     }];
 
     fetch(`/obras/${OBRA_ID}/liquidacion-mo/confirmar-y-pagar`, {
@@ -1207,6 +1253,22 @@ function cargarHistorialLiq() {
                     }
                 }
                 html += '</td></tr>';
+
+                // Desglose por tarea (si existe)
+                if (item.desglose_tareas && item.desglose_tareas.length > 0) {
+                    html += '<tr><td colspan="8" class="py-1 px-3" style="background:#f8f9fa;">';
+                    html += '<small class="text-muted fw-bold"><i class="fas fa-list me-1"></i>Tareas liquidadas:</small>';
+                    html += '<div class="ms-3">';
+                    item.desglose_tareas.forEach(function(dt) {
+                        html += '<div class="small text-muted">';
+                        html += '<i class="fas fa-check text-success me-1" style="font-size:0.6rem;"></i>';
+                        html += '<strong>' + dt.tarea_nombre + '</strong>';
+                        if (dt.etapa_nombre) html += ' <span class="text-muted">(' + dt.etapa_nombre + ')</span>';
+                        html += ' — ' + (dt.cantidad || 0) + ' ' + (dt.unidad || '') + ', ' + (dt.horas || 0) + 'h';
+                        html += '</div>';
+                    });
+                    html += '</div></td></tr>';
+                }
             });
             html += '</tbody></table></div></div>';
         });

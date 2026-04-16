@@ -361,6 +361,9 @@ class LiquidacionMOItem(db.Model):
     cantidad_liquidada = db.Column(db.Numeric(12, 3), default=0)  # Cantidad pagada (para 'medida')
     unidad_liquidada = db.Column(db.String(10))                   # 'm2', 'h', etc.
 
+    # Desglose por tarea: [{tarea_id, tarea_nombre, etapa_nombre, cantidad, horas, unidad, monto}]
+    desglose_tareas = db.Column(db.JSON)
+
     # Pago
     estado = db.Column(db.String(20), default='pendiente')  # pendiente / pagado
     metodo_pago = db.Column(db.String(30))                   # transferencia / efectivo

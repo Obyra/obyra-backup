@@ -876,6 +876,10 @@ def run_runtime_migrations(db, app):
                 ALTER TABLE liquidaciones_mo_items ADD COLUMN modalidad_pago VARCHAR(20);
             END IF;
             IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='liquidaciones_mo_items' AND column_name='desglose_tareas') THEN
+                ALTER TABLE liquidaciones_mo_items ADD COLUMN desglose_tareas JSONB;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                           WHERE table_name='liquidaciones_mo_items' AND column_name='cantidad_liquidada') THEN
                 ALTER TABLE liquidaciones_mo_items ADD COLUMN cantidad_liquidada NUMERIC(12,3) DEFAULT 0;
             END IF;
