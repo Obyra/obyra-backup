@@ -910,22 +910,68 @@
                                 <tr>
                                     <th>Código</th>
                                     <th>Equipo</th>
-                                    <th>Tipo</th>
-                                    <th>Costo/Hora</th>
-                                    <th>Estado</th>
+                                    <th>Modalidad</th>
+                                    <th>Tarifa</th>
+                                    <th class="text-end">Uso acumulado</th>
+                                    <th class="text-end">Costo imputado</th>
+                                    <th class="text-center">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for eq in equipos_en_obra %}
+                                {% set mod = eq.modalidad_costo or 'compra' %}
+                                {% set uso_info = equipos_uso_map.get(eq.id, {'horas': 0, 'costo': 0}) if equipos_uso_map is defined else {'horas': 0, 'costo': 0} %}
                                 <tr>
                                     <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
                                     <td>
                                         <strong>{{ eq.nombre }}</strong>
-                                        {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }}</small>{% endif %}
+                                        {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }} · {{ eq.tipo }}</small>{% endif %}
                                     </td>
-                                    <td>{{ eq.tipo }}</td>
-                                    <td>{{ "$ {:,.2f}".format(eq.costo_hora|float) if eq.costo_hora else '-' }}</td>
-                                    <td><span class="badge bg-success">En obra</span></td>
+                                    <td>
+                                        {% if mod == 'alquiler_hora' %}
+                                            <span class="badge bg-warning text-dark" title="Alquilado — cobra por hora usada">
+                                                <i class="fas fa-clock me-1"></i>Alquiler/h
+                                            </span>
+                                        {% elif mod == 'alquiler_dia' %}
+                                            <span class="badge" style="background-color:#fd7e14;color:#fff;" title="Alquilado — cobra por día">
+                                                <i class="fas fa-calendar-day me-1"></i>Alquiler/día
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-success" title="Equipo propio — no imputa por sola presencia">
+                                                <i class="fas fa-building me-1"></i>Propio
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% set eq_moneda = eq.moneda or 'ARS' %}
+                                        {% set simbolo = 'US$' if eq_moneda == 'USD' else '$' %}
+                                        {% if mod == 'alquiler_dia' %}
+                                            {{ "{} {:,.2f}/día".format(simbolo, eq.costo_dia|float) if eq.costo_dia else '—' }}
+                                        {% else %}
+                                            {{ "{} {:,.2f}/h".format(simbolo, eq.costo_hora|float) if eq.costo_hora else '—' }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% set unidad_uso = 'días' if mod == 'alquiler_dia' else 'h' %}
+                                        <span class="badge bg-light text-dark border">
+                                            {{ "{:,.2f}".format(uso_info.horas|float) }} {{ unidad_uso }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end fw-bold {% if uso_info.costo|float > 0 %}text-primary{% else %}text-muted{% endif %}">
+                                        {{ "$ {:,.2f}".format(uso_info.costo|float) }}
+                                        {% if eq_moneda == 'USD' and uso_info.costo_nominal is defined %}
+                                        <br><small class="text-muted fw-normal">(US$ {{ "{:,.2f}".format(uso_info.costo_nominal|float) }})</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if can_manage %}
+                                        <button class="btn btn-sm btn-outline-success"
+                                                title="Registrar uso (horas o días según modalidad)"
+                                                onclick="abrirRegistrarUsoEquipo({{ eq.id }}, '{{ eq.nombre|replace("'", "\\'") }}', '{{ mod }}')">
+                                            <i class="fas fa-clock"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -2421,6 +2467,57 @@
                 </button>
                 <button type="button" class="btn btn-primary" id="wizardBtnFin" data-action="finish" style="display:none;">
                     <i class="fas fa-times me-1"></i>Finalizar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Registrar uso de equipo en obra -->
+<div class="modal fade" id="modalRegistrarUsoEquipo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white py-2">
+                <h6 class="modal-title">
+                    <i class="fas fa-clock me-2"></i>Registrar uso de equipo: <span id="ueq-nombre"></span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ueq-equipment-id">
+                <input type="hidden" id="ueq-modalidad">
+
+                <div class="alert alert-info py-2 mb-3" style="font-size:.85rem;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <strong>Modalidad:</strong> <span id="ueq-modalidad-text"></span>.
+                    El uso queda en estado <strong>pendiente</strong> hasta que un admin lo apruebe.
+                    Recién ahí impacta en el costo real de la obra.
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label fw-bold">Fecha</label>
+                        <input type="date" class="form-control" id="ueq-fecha">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold">
+                            <span id="ueq-label-cantidad">Horas</span>
+                        </label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="ueq-horas" step="0.5" min="0.5" placeholder="0">
+                            <span class="input-group-text" id="ueq-unidad-text">h</span>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Notas (opcional)</label>
+                        <textarea class="form-control" id="ueq-notas" rows="2" placeholder="Trabajo realizado, condiciones, etc."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" onclick="guardarUsoEquipo()">
+                    <i class="fas fa-save me-1"></i>Registrar
                 </button>
             </div>
         </div>
@@ -4608,6 +4705,81 @@ document.addEventListener('DOMContentLoaded', initGantt);
     });
 });
 
+
+/* ===== Modal Registrar Uso de Equipo ===== */
+function abrirRegistrarUsoEquipo(equipmentId, nombre, modalidad) {
+    document.getElementById('ueq-equipment-id').value = equipmentId;
+    document.getElementById('ueq-modalidad').value = modalidad || 'compra';
+    document.getElementById('ueq-nombre').textContent = nombre;
+
+    // Fecha hoy por default
+    var hoy = new Date().toISOString().slice(0, 10);
+    document.getElementById('ueq-fecha').value = hoy;
+    document.getElementById('ueq-horas').value = '';
+    document.getElementById('ueq-notas').value = '';
+
+    // Ajustar labels según modalidad
+    var labelEl = document.getElementById('ueq-label-cantidad');
+    var unidadEl = document.getElementById('ueq-unidad-text');
+    var modalidadText = document.getElementById('ueq-modalidad-text');
+    if (modalidad === 'alquiler_dia') {
+        labelEl.textContent = 'Días';
+        unidadEl.textContent = 'días';
+        modalidadText.textContent = 'Alquiler por día (la cantidad ingresada son días a imputar × costo_dia del equipo)';
+    } else if (modalidad === 'alquiler_hora') {
+        labelEl.textContent = 'Horas';
+        unidadEl.textContent = 'h';
+        modalidadText.textContent = 'Alquiler por hora (horas × costo_hora del equipo)';
+    } else {
+        labelEl.textContent = 'Horas';
+        unidadEl.textContent = 'h';
+        modalidadText.textContent = 'Equipo propio (horas × costo_hora del equipo; si costo_hora=0 no impacta)';
+    }
+
+    new bootstrap.Modal(document.getElementById('modalRegistrarUsoEquipo')).show();
+}
+
+async function guardarUsoEquipo() {
+    var equipmentId = document.getElementById('ueq-equipment-id').value;
+    var fecha = document.getElementById('ueq-fecha').value;
+    var horas = parseFloat(document.getElementById('ueq-horas').value);
+    var notas = document.getElementById('ueq-notas').value;
+
+    if (!fecha || !Number.isFinite(horas) || horas <= 0) {
+        alert('Completá la fecha y una cantidad válida (> 0).');
+        return;
+    }
+
+    try {
+        var resp = await fetch('/obras/api/equipment/' + equipmentId + '/uso', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.content || ''
+            },
+            body: JSON.stringify({
+                project_id: {{ obra.id }},
+                fecha: fecha,
+                horas: horas,
+                notas: notas
+            })
+        });
+        var data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalRegistrarUsoEquipo')).hide();
+            if (data.estado === 'aprobado') {
+                alert('Uso registrado y aprobado. Ya impacta en el costo real de la obra.');
+            } else {
+                alert('Uso registrado en estado pendiente. Un admin/PM debe aprobarlo para que impacte en el costo.');
+            }
+            location.reload();
+        } else {
+            alert(data.error || 'Error al registrar uso');
+        }
+    } catch (e) {
+        alert('Error de conexión: ' + e.message);
+    }
+}
 
 /* ===== Modal Editar Datos de Tarea ===== */
 function editarDatosTarea(tareaId, nombre, horas, cantidad, unidad, rendimiento, fechaInicio, fechaFin, responsableId) {

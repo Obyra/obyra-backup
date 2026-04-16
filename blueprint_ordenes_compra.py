@@ -480,7 +480,7 @@ def eliminar(id):
 @ordenes_compra_bp.route('/<int:id>/recepcion', methods=['GET', 'POST'])
 @login_required
 def recepcion(id):
-    from models.inventory import OrdenCompra, RecepcionOC, RecepcionOCItem, StockObra, MovimientoStockObra
+    from models.inventory import OrdenCompra, RecepcionOC, RecepcionOCItem, StockObra, MovimientoStockObra, Remito, RemitoItem
 
     if not _tiene_permiso_oc():
         flash('No tiene permisos.', 'danger')
@@ -517,6 +517,7 @@ def recepcion(id):
             db.session.flush()
 
             alguno_recibido = False
+            items_para_remito = []  # (oc_item, cantidad) para crear RemitoItems al final
             for oc_item in oc.items:
                 cant_str = request.form.get(f'cantidad_{oc_item.id}', '0')
                 try:
@@ -541,6 +542,7 @@ def recepcion(id):
                     cantidad_recibida=cant,
                 )
                 db.session.add(rec_item)
+                items_para_remito.append((oc_item, cant))
 
                 # Actualizar cantidad recibida en el item de OC
                 oc_item.cantidad_recibida = Decimal(str(oc_item.cantidad_recibida or 0)) + cant
@@ -581,6 +583,43 @@ def recepcion(id):
                 db.session.rollback()
                 flash('Debe ingresar al menos una cantidad recibida.', 'warning')
                 return redirect(url_for('ordenes_compra.recepcion', id=oc.id))
+
+            # Crear automáticamente un Remito en la obra con los items recibidos.
+            # Así aparece en la solapa "Remitos" del detalle de obra sin que el
+            # usuario tenga que cargarlo a mano. No llamamos a _sync_remito_to_stock
+            # porque el stock ya se actualizó arriba en este mismo endpoint.
+            try:
+                numero_remito_final = remito or f"REC-{oc.numero}-{recepcion.id}"
+                remito_auto = Remito(
+                    organizacion_id=oc.organizacion_id,
+                    obra_id=oc.obra_id,
+                    requerimiento_id=oc.requerimiento_id,
+                    orden_compra_id=oc.id,
+                    numero_remito=numero_remito_final,
+                    proveedor=oc.proveedor or '',
+                    proveedor_oc_id=oc.proveedor_oc_id,
+                    fecha=fecha_recepcion,
+                    estado='recibido',
+                    recibido_por_id=current_user.id,
+                    notas=notas or f'Remito generado automáticamente desde recepción de {oc.numero}',
+                    created_by_id=current_user.id,
+                )
+                db.session.add(remito_auto)
+                db.session.flush()
+
+                for oc_item_rem, cant_rem in items_para_remito:
+                    db.session.add(RemitoItem(
+                        remito_id=remito_auto.id,
+                        oc_item_id=oc_item_rem.id,
+                        item_inventario_id=oc_item_rem.item_inventario_id,
+                        descripcion=oc_item_rem.descripcion,
+                        cantidad=float(cant_rem),
+                        unidad=oc_item_rem.unidad or 'u',
+                        precio_unitario=float(oc_item_rem.precio_unitario or 0),
+                    ))
+            except Exception as rem_err:
+                # No abortamos la recepción si falla la creación del remito.
+                current_app.logger.warning(f'Error creando remito automático: {rem_err}')
 
             # Actualizar estado de OC
             todos_completos = all(i.recepcion_completa for i in oc.items)
