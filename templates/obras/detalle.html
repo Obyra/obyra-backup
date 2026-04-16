@@ -635,18 +635,45 @@
                                     </table>
                                 </div>
 
-                                <!-- Stock de Obra (cargado dinámicamente) -->
+                                <!-- Stock de Obra (cargado dinámicamente, plegable, arranca colapsado) -->
                                 <div class="mt-4">
-                                    <h6 class="text-muted mb-3">
-                                        <i class="fas fa-warehouse me-1"></i> Stock en Obra
-                                        <small class="text-muted">(materiales recibidos / disponibles para consumir)</small>
-                                    </h6>
-                                    <div id="stockObraContainer">
-                                        <div class="text-center py-3 text-muted">
-                                            <i class="fas fa-spinner fa-spin me-2"></i>Cargando stock de obra...
+                                    <button class="btn btn-link p-0 text-decoration-none w-100 text-start"
+                                            type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#stockObraCollapse"
+                                            aria-expanded="false"
+                                            aria-controls="stockObraCollapse">
+                                        <h6 class="text-muted mb-3 d-flex align-items-center">
+                                            <i class="fas fa-chevron-right me-2 stock-obra-chevron transition-icon"
+                                               style="transition: transform 0.2s;"></i>
+                                            <i class="fas fa-warehouse me-1"></i> Stock en Obra
+                                            <small class="text-muted ms-2">(materiales recibidos / disponibles para consumir)</small>
+                                        </h6>
+                                    </button>
+                                    <div class="collapse" id="stockObraCollapse">
+                                        <div id="stockObraContainer">
+                                            <div class="text-center py-3 text-muted">
+                                                <i class="fas fa-spinner fa-spin me-2"></i>Cargando stock de obra...
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
+                                <script>
+                                    // Rotar el chevron al abrir/cerrar el collapse de Stock en Obra
+                                    document.addEventListener('DOMContentLoaded', function() {
+                                        const coll = document.getElementById('stockObraCollapse');
+                                        if (coll) {
+                                            coll.addEventListener('show.bs.collapse', function() {
+                                                const ch = document.querySelector('.stock-obra-chevron');
+                                                if (ch) ch.style.transform = 'rotate(90deg)';
+                                            });
+                                            coll.addEventListener('hide.bs.collapse', function() {
+                                                const ch = document.querySelector('.stock-obra-chevron');
+                                                if (ch) ch.style.transform = 'rotate(0deg)';
+                                            });
+                                        }
+                                    });
+                                </script>
                             </div>
                         </div>
 
