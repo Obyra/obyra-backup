@@ -888,9 +888,14 @@ with app.app_context():
     # Import models tardíamente
     from models import Usuario, Organizacion
 
-    # Runtime migrations (extracted for maintainability)
-    from runtime_migrations import run_runtime_migrations
-    run_runtime_migrations(db, app)
+    # Runtime migrations (extracted for maintainability).
+    # Skip durante `flask db upgrade`: Alembic importa app.py para descubrir
+    # modelos y los ALTER TABLE de runtime_migrations fallan si las tablas
+    # aún no fueron creadas. El entrypoint de Docker setea SKIP_RUNTIME_MIGRATIONS=1
+    # durante el upgrade y lo unsetea para el arranque normal de gunicorn.
+    if os.getenv('SKIP_RUNTIME_MIGRATIONS') != '1':
+        from runtime_migrations import run_runtime_migrations
+        run_runtime_migrations(db, app)
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""

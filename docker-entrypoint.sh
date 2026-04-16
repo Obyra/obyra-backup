@@ -58,6 +58,10 @@ PYEOF
     # Run Alembic migrations
     if [ -f "migrations/env.py" ]; then
         echo "Running: flask db upgrade"
+        # Skip runtime_migrations durante el upgrade: Alembic importa app.py
+        # para descubrir modelos y los ALTER TABLE fallan si las tablas aún
+        # no existen. Runtime migrations corren después, en el arranque de gunicorn.
+        export SKIP_RUNTIME_MIGRATIONS=1
         if ! flask db upgrade 2>&1; then
             echo "WARNING: Database migration failed! See error above."
             # En Railway, no salimos con error porque db.create_all() en app.py
@@ -80,6 +84,9 @@ PYEOF
     if [ -n "$ORIGINAL_DATABASE_URL" ]; then
         export DATABASE_URL="$ORIGINAL_DATABASE_URL"
     fi
+
+    # Permitir que runtime_migrations corran en el arranque normal de gunicorn
+    unset SKIP_RUNTIME_MIGRATIONS
 else
     echo "Skipping migrations (RUN_MIGRATIONS=false)"
 fi
