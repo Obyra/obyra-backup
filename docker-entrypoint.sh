@@ -39,6 +39,22 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
         export DATABASE_URL="$ALEMBIC_DATABASE_URL"
     fi
 
+    # Ensure schema "app" exists (requerido por migraciones Alembic que lo usan).
+    # En entornos reales este schema lo crea sql/roles.sql; en dev Docker
+    # no ejecutamos ese script, así que lo creamos acá.
+    # Idempotente: CREATE SCHEMA IF NOT EXISTS no falla en re-runs.
+    echo "Ensuring schema 'app' exists..."
+    python - <<'PYEOF' || echo "WARNING: could not ensure schema 'app' (DB unreachable?)"
+import os
+from sqlalchemy import create_engine, text
+url = os.environ.get('DATABASE_URL')
+if url:
+    engine = create_engine(url)
+    with engine.begin() as conn:
+        conn.execute(text('CREATE SCHEMA IF NOT EXISTS app'))
+    print("OK: schema 'app' ensured")
+PYEOF
+
     # Run Alembic migrations
     if [ -f "migrations/env.py" ]; then
         echo "Running: flask db upgrade"
