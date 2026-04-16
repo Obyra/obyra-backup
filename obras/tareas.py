@@ -1,10 +1,19 @@
 """Obras -- Task management routes."""
+import math
 from flask import (render_template, request, flash, redirect,
                    url_for, jsonify, current_app, abort)
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal
 from extensions import db
+
+# Jornada laboral estándar (horas por día) usada para convertir
+# horas_estimadas a días hábiles al calcular fecha_fin de una tarea.
+JORNADA_HORAS = 8
+
+# Unidades válidas para tareas (debe coincidir con las opciones del
+# <select> del modal de edición en templates/obras/detalle.html).
+VALID_UNITS = {'m2', 'ml', 'm3', 'un', 'kg', 'h', 'gl'}
 from extensions import limiter
 from models import (
     Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario,
@@ -1262,7 +1271,9 @@ def api_editar_datos_tarea(tarea_id):
             tarea.objetivo = tarea.cantidad_planificada
 
         if 'unidad' in data and data['unidad']:
-            tarea.unidad = data['unidad'].strip()
+            unidad_nueva = data['unidad'].strip().lower()
+            if unidad_nueva in VALID_UNITS:
+                tarea.unidad = unidad_nueva
 
         if 'rendimiento' in data and data['rendimiento'] is not None:
             tarea.rendimiento = float(str(data['rendimiento']).replace(',', '.'))
@@ -1298,7 +1309,10 @@ def api_editar_datos_tarea(tarea_id):
         if tarea.fecha_inicio_plan and tarea.horas_estimadas and float(tarea.horas_estimadas) > 0:
             from services.dependency_service import _sumar_dias_habiles
             horas = float(tarea.horas_estimadas)
-            dias_necesarios = max(1, int(horas / 8))
+            # Usar ceil para que 9h pase al día siguiente (no quede en el mismo
+            # día por truncado de int(9/8)=1). Resta 1 porque _sumar_dias_habiles
+            # cuenta el día de inicio como día 0.
+            dias_necesarios = max(1, math.ceil(horas / JORNADA_HORAS))
             nueva_fin = _sumar_dias_habiles(tarea.fecha_inicio_plan, dias_necesarios - 1)
             tarea.fecha_fin_plan = nueva_fin
             tarea.fecha_fin_estimada = nueva_fin
@@ -1318,7 +1332,7 @@ def api_editar_datos_tarea(tarea_id):
                     t.fecha_inicio_plan = fecha_cursor
                     t.fecha_inicio_estimada = fecha_cursor
                     if t.horas_estimadas and float(t.horas_estimadas) > 0:
-                        dias = max(1, int(float(t.horas_estimadas) / 8))
+                        dias = max(1, math.ceil(float(t.horas_estimadas) / JORNADA_HORAS))
                         t.fecha_fin_plan = _sumar_dias_habiles(fecha_cursor, dias - 1)
                         t.fecha_fin_estimada = t.fecha_fin_plan
                     cambios = True
@@ -1341,6 +1355,8 @@ def api_editar_datos_tarea(tarea_id):
                 'cantidad_planificada': float(tarea.cantidad_planificada or 0),
                 'unidad': tarea.unidad,
                 'rendimiento': float(tarea.rendimiento or 0),
+                'fecha_inicio_plan': tarea.fecha_inicio_plan.isoformat() if tarea.fecha_inicio_plan else None,
+                'fecha_fin_plan': tarea.fecha_fin_plan.isoformat() if tarea.fecha_fin_plan else None,
             }
         )
 
