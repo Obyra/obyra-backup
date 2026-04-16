@@ -515,6 +515,10 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         catalogo_map[t_cat['nombre'].lower().strip()] = t_cat
 
     for tarea in tareas:
+        # Respetar ediciones manuales del usuario: no sobrescribir horas
+        # ni descripcion desde el catálogo de tareas predefinidas.
+        if getattr(tarea, 'editado_manual', False):
+            continue
         key = tarea.nombre.lower().strip()
         info_cat = catalogo_map.get(key)
         if info_cat:
@@ -541,10 +545,17 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
             tarea.horas_estimadas = horas_nueva
 
     # --- PASO 2: Decidir que tareas necesitan distribucion ---
+    # Excluir SIEMPRE tareas editadas manualmente (incluso cuando forzar=True).
+    # El flag editado_manual es la fuente de verdad: si el usuario editó unidad,
+    # cantidad u horas, su input manda por encima de la heurística automática.
     if forzar:
-        tareas_a_procesar = tareas
+        tareas_a_procesar = [t for t in tareas if not getattr(t, 'editado_manual', False)]
     else:
-        tareas_a_procesar = [t for t in tareas if not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0]
+        tareas_a_procesar = [
+            t for t in tareas
+            if not getattr(t, 'editado_manual', False)
+            and (not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0)
+        ]
 
     if not tareas_a_procesar:
         db.session.flush()

@@ -22,17 +22,24 @@ def run_runtime_migrations(db, app):
     # Legacy file: migrations_runtime.py → _migrations_runtime_old.py
     # ============================================================================
 
-    # En Railway/producción: crear todas las tablas si no existen
-    # Esto es necesario porque las migraciones de Alembic usan schema "app"
-    # que no existe en Railway (usa "public" por defecto)
+    # Crear todas las tablas si no existen (bootstrap desde modelos SQLAlchemy).
+    # Se dispara en dos casos:
+    #  - Railway/producción: porque las migraciones Alembic usan schema "app"
+    #    que no existe en Railway (usa "public" por defecto).
+    #  - Dev Docker con CREATE_ALL_ON_STARTUP=1: evita problemas de orden entre
+    #    migraciones Alembic al arrancar de cero (algunas migraciones intentan
+    #    ALTER sobre tablas que otra migración posterior crea). create_all()
+    #    las crea todas desde los modelos Python antes de los ALTER.
     _is_railway = os.getenv("RAILWAY_ENVIRONMENT") is not None or \
                   os.getenv("RAILWAY_PROJECT_ID") is not None
-    if _is_railway:
+    _force_create_all = os.getenv("CREATE_ALL_ON_STARTUP") == "1"
+    if _is_railway or _force_create_all:
         try:
             db.create_all()
-            print("[OK] Railway: All database tables created/verified")
+            origen = "Railway" if _is_railway else "DEV"
+            print(f"[OK] {origen}: All database tables created/verified")
         except Exception as e:
-            print(f"[WARN] Railway db.create_all() error: {e}")
+            print(f"[WARN] db.create_all() error: {e}")
 
     # Backfill: sincronizar plan_activo de usuarios con plan_tipo de su org
     # Soluciona inconsistencia donde super admin activó planes manualmente
@@ -144,11 +151,17 @@ def run_runtime_migrations(db, app):
                           WHERE table_name='presupuestos' AND column_name='confirmado_como_obra') THEN
                 ALTER TABLE presupuestos ADD COLUMN confirmado_como_obra BOOLEAN DEFAULT false;
             END IF;
+            -- editado_manual en tareas_etapa: flag para respetar ediciones
+            -- del usuario y no sobrescribirlas con distribuir_datos_etapa_a_tareas.
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='tareas_etapa' AND column_name='editado_manual') THEN
+                ALTER TABLE tareas_etapa ADD COLUMN editado_manual BOOLEAN NOT NULL DEFAULT false;
+            END IF;
         END $$;
         """
         db.session.execute(text(missing_cols_sql))
         db.session.commit()
-        print("[OK] Missing columns migration applied (logo_url, confirmado_como_obra)")
+        print("[OK] Missing columns migration applied (logo_url, confirmado_como_obra, editado_manual)")
     except Exception as e:
         print(f"[WARN] Missing columns migration skipped: {e}")
 

@@ -252,6 +252,12 @@ class TareaEtapa(db.Model):
     # Vínculo con presupuesto para certificaciones
     item_presupuesto_id = db.Column(db.Integer, db.ForeignKey('items_presupuesto.id'), nullable=True)
 
+    # Flag: marca cuando el usuario editó manualmente horas/unidad/cantidad.
+    # Si está en True, distribuir_datos_etapa_a_tareas() NO pisa los valores
+    # con los defaults de la etapa o del catálogo de tareas predefinidas.
+    # Se setea en el endpoint api_editar_datos_tarea() al guardar.
+    editado_manual = db.Column(db.Boolean, default=False, nullable=False)
+
     # Relaciones
     etapa = db.relationship('EtapaObra', back_populates='tareas')
     miembros = db.relationship('TareaMiembro', back_populates='tarea', cascade='all, delete-orphan')

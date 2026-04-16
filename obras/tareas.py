@@ -1294,14 +1294,29 @@ def api_editar_datos_tarea(tarea_id):
         if 'responsable_id' in data:
             nuevo_resp = data['responsable_id']
             if nuevo_resp:
-                tarea.responsable_id = int(nuevo_resp)
+                nuevo_resp_id = int(nuevo_resp)
+                tarea.responsable_id = nuevo_resp_id
+                # Agregar como miembro de la tarea (para aparecer en el listado
+                # de asignados de la tarea).
                 existe = TareaMiembro.query.filter_by(
-                    tarea_id=tarea.id, user_id=int(nuevo_resp)
+                    tarea_id=tarea.id, user_id=nuevo_resp_id
                 ).first()
                 if not existe:
                     db.session.add(TareaMiembro(
                         tarea_id=tarea.id,
-                        user_id=int(nuevo_resp)
+                        user_id=nuevo_resp_id
+                    ))
+                # Agregar también como miembro de la obra (para aparecer en la
+                # pestaña "Equipo Asignado" del detalle de obra). Antes esto
+                # quedaba desincronizado: el usuario aparecía en la tarea pero
+                # no en el equipo de la obra.
+                existe_obra = ObraMiembro.query.filter_by(
+                    obra_id=obra.id, usuario_id=nuevo_resp_id
+                ).first()
+                if not existe_obra:
+                    db.session.add(ObraMiembro(
+                        obra_id=obra.id,
+                        usuario_id=nuevo_resp_id,
                     ))
             else:
                 tarea.responsable_id = None
@@ -1316,6 +1331,12 @@ def api_editar_datos_tarea(tarea_id):
             nueva_fin = _sumar_dias_habiles(tarea.fecha_inicio_plan, dias_necesarios - 1)
             tarea.fecha_fin_plan = nueva_fin
             tarea.fecha_fin_estimada = nueva_fin
+
+        # Marcar la tarea como editada manualmente. Esto bloquea que
+        # distribuir_datos_etapa_a_tareas() (disparada automáticamente al
+        # renderizar el detalle de obra) pise los valores del usuario con
+        # los derivados del catálogo de tareas predefinidas o de la etapa.
+        tarea.editado_manual = True
 
         db.session.commit()
 

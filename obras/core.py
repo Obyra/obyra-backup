@@ -430,22 +430,27 @@ def detalle(id):
         if not tareas_etapa:
             continue
 
-        # Verificar si alguna tarea tiene horas incorrectas comparando con catalogo
+        # Verificar si alguna tarea tiene horas incorrectas comparando con catalogo.
+        # IGNORAR tareas con editado_manual=True: son intencionales del usuario.
         catalogo = _obt_tareas_cat(etapa.nombre)
         cat_map = {t['nombre'].lower().strip(): t for t in catalogo}
         horas_mal = False
         for t in tareas_etapa:
+            if getattr(t, 'editado_manual', False):
+                continue
             key = t.nombre.lower().strip()
             info = cat_map.get(key)
             if info and float(t.horas_estimadas or 0) != float(info.get('horas', 0)):
                 horas_mal = True
                 break
 
-        sin_cantidad = any(not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0 for t in tareas_etapa)
+        # sin_cantidad / cant_mal solo cuentan para tareas NO editadas manualmente
+        tareas_no_editadas = [t for t in tareas_etapa if not getattr(t, 'editado_manual', False)]
+        sin_cantidad = any(not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0 for t in tareas_no_editadas)
 
         # Detectar cantidades mal distribuidas (todas iguales con >1 tarea)
-        cant_set = set(float(t.cantidad_planificada or 0) for t in tareas_etapa)
-        cant_mal = len(cant_set) <= 1 and len(tareas_etapa) > 1 and any(float(t.cantidad_planificada or 0) > 0 for t in tareas_etapa)
+        cant_set = set(float(t.cantidad_planificada or 0) for t in tareas_no_editadas)
+        cant_mal = len(cant_set) <= 1 and len(tareas_no_editadas) > 1 and any(float(t.cantidad_planificada or 0) > 0 for t in tareas_no_editadas)
 
         # Detectar fechas desincronizadas con la etapa
         if etapa.estado in ('en_curso', 'finalizada'):
