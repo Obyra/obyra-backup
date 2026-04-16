@@ -2535,31 +2535,36 @@ ETAPA_REGLAS_BASE = {
     'yeseria-enlucidos': {
         'nombre': 'Yesería y Enlucidos',
         'materiales': [
-            # --- Materiales base ---
-            {'codigo': 'MAT-YESO-PROY', 'material_key': 'yeso_proyectado', 'descripcion': 'Yeso proyectado / enlucido de yeso', 'unidad': 'kg', 'coef_por_m2': 4.5},
-            {'codigo': 'MAT-YESO', 'material_key': 'yeso', 'descripcion': 'Yeso París para reparaciones', 'unidad': 'kg', 'coef_por_m2': 1.0},
-            {'codigo': 'MAT-ENDUIDO', 'material_key': 'enduido', 'descripcion': 'Enduido plástico para terminación', 'unidad': 'kg', 'coef_por_m2': 0.8},
-            {'codigo': 'MAT-GUARDAVIVOS', 'material_key': 'guardavivos', 'descripcion': 'Guardavivos de PVC/aluminio', 'unidad': 'ml', 'coef_por_m2': 0.15},
-            # --- Del pliego ---
-            {'codigo': 'YES-ENLUCIDO-PROY', 'material_key': 'enlucido_proy', 'descripcion': 'Enlucido de yeso proyectado', 'unidad': 'm²', 'coef_por_m2': 0.80},
-            {'codigo': 'YES-CANTONERAS-METALICAS', 'material_key': 'cantoneras_met', 'descripcion': 'Cantoneras metálicas', 'unidad': 'ml', 'coef_por_m2': 0.15},
-            # --- Materiales adicionales ---
-            {'codigo': 'MAT-YESO-PROYECTABLE-BOLSA', 'material_key': 'yeso_proy_bolsa', 'descripcion': 'Yeso proyectable (bolsa 40kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.12},
-            {'codigo': 'MAT-YESO-MANUAL-BOLSA', 'material_key': 'yeso_manual', 'descripcion': 'Yeso para aplicación manual (bolsa 40kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.08},
-            {'codigo': 'MAT-CANTONERA-GALV', 'material_key': 'cantonera_galv', 'descripcion': 'Cantonera galvanizada para esquinas', 'unidad': 'ml', 'coef_por_m2': 0.10},
-            {'codigo': 'MAT-CANTONERA-PVC', 'material_key': 'cantonera_pvc', 'descripcion': 'Cantonera PVC para esquinas curvas', 'unidad': 'ml', 'coef_por_m2': 0.05},
-            {'codigo': 'MAT-ENDUIDO-INTERIOR', 'material_key': 'enduido_int', 'descripcion': 'Enduido plástico interior (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.025},
-            {'codigo': 'MAT-ENDUIDO-EXTERIOR', 'material_key': 'enduido_ext', 'descripcion': 'Enduido exterior para fachadas (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.008},
-            {'codigo': 'MAT-LIJA-YESO', 'material_key': 'lija_yeso', 'descripcion': 'Lija para yeso/enduido (grano 120-180)', 'unidad': 'pliego', 'coef_por_m2': 0.05},
+            # --- Materiales base (método manual — económica) ---
+            {'codigo': 'MAT-YESO', 'material_key': 'yeso', 'descripcion': 'Yeso París para reparaciones', 'unidad': 'kg', 'coef_por_m2': 1.0, 'tiers': ['economica', 'estandar', 'premium']},
+            {'codigo': 'MAT-ENDUIDO', 'material_key': 'enduido', 'descripcion': 'Enduido plástico para terminación', 'unidad': 'kg', 'coef_por_m2': 0.8, 'tiers': ['economica']},
+            {'codigo': 'MAT-GUARDAVIVOS', 'material_key': 'guardavivos', 'descripcion': 'Guardavivos de PVC/aluminio', 'unidad': 'ml', 'coef_por_m2': 0.15, 'tiers': ['economica']},
+            # --- Proyectado / premezclado (método mecánico — estándar/premium) ---
+            {'codigo': 'MAT-YESO-PROY', 'material_key': 'yeso_proyectado', 'descripcion': 'Yeso proyectado / enlucido de yeso', 'unidad': 'kg', 'coef_por_m2': 4.5, 'tiers': ['estandar', 'premium']},
+            {'codigo': 'MAT-YESO-PROYECTABLE-BOLSA', 'material_key': 'yeso_proy_bolsa', 'descripcion': 'Yeso proyectable (bolsa 40kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.12, 'tiers': ['estandar', 'premium']},
+            {'codigo': 'MAT-YESO-MANUAL-BOLSA', 'material_key': 'yeso_manual', 'descripcion': 'Yeso para aplicación manual (bolsa 40kg)', 'unidad': 'bolsa', 'coef_por_m2': 0.08, 'tiers': ['estandar', 'premium']},
+            {'codigo': 'MAT-ENDUIDO-INTERIOR', 'material_key': 'enduido_int', 'descripcion': 'Enduido plástico interior (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.025, 'tiers': ['estandar', 'premium']},
+            {'codigo': 'MAT-ENDUIDO-EXTERIOR', 'material_key': 'enduido_ext', 'descripcion': 'Enduido exterior para fachadas (balde 15kg)', 'unidad': 'balde', 'coef_por_m2': 0.008, 'tiers': ['estandar', 'premium']},
+            {'codigo': 'MAT-CANTONERA-GALV', 'material_key': 'cantonera_galv', 'descripcion': 'Cantonera galvanizada para esquinas', 'unidad': 'ml', 'coef_por_m2': 0.10, 'tiers': ['estandar', 'premium']},
+            # --- Del pliego (formal, estándar+premium) ---
+            {'codigo': 'YES-ENLUCIDO-PROY', 'material_key': 'enlucido_proy', 'descripcion': 'Enlucido de yeso proyectado', 'unidad': 'm²', 'coef_por_m2': 0.80, 'tiers': ['estandar', 'premium']},
+            {'codigo': 'YES-CANTONERAS-METALICAS', 'material_key': 'cantoneras_met', 'descripcion': 'Cantoneras metálicas', 'unidad': 'ml', 'coef_por_m2': 0.15, 'tiers': ['estandar', 'premium']},
+            # --- Avanzados (solo premium) ---
+            {'codigo': 'MAT-CANTONERA-PVC', 'material_key': 'cantonera_pvc', 'descripcion': 'Cantonera PVC para esquinas curvas', 'unidad': 'ml', 'coef_por_m2': 0.05, 'tiers': ['premium']},
+            {'codigo': 'MAT-LIJA-YESO', 'material_key': 'lija_yeso', 'descripcion': 'Lija para yeso/enduido (grano 120-180)', 'unidad': 'pliego', 'coef_por_m2': 0.05, 'tiers': ['estandar', 'premium']},
         ],
         'mano_obra': [
-            {'codigo': 'MO-YESERO', 'descripcion': 'Yesero proyectista', 'unidad': 'jornal', 'coef_por_m2': 0.14},
-            {'codigo': 'MO-YESERO-AYUDANTE', 'descripcion': 'Ayudante de yesero', 'unidad': 'jornal', 'coef_por_m2': 0.10},
+            # Yesero oficial: aplica a todos los tiers (el mismo oficial puede
+            # trabajar método manual o proyectado según la obra).
+            {'codigo': 'MO-YESERO', 'descripcion': 'Yesero proyectista', 'unidad': 'jornal', 'coef_por_m2': 0.14, 'tiers': ['economica', 'estandar', 'premium']},
+            {'codigo': 'MO-YESERO-AYUDANTE', 'descripcion': 'Ayudante de yesero', 'unidad': 'jornal', 'coef_por_m2': 0.10, 'tiers': ['economica', 'estandar', 'premium']},
         ],
         'equipos': [
-            {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Proyectora de yeso', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
-            {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios livianos y escaleras', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
-            {'codigo': 'EQ-LIJADORA-ORBITAL', 'descripcion': 'Lijadora orbital para yeso/enduido', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1},
+            # Proyectora: solo para método proyectado (estándar/premium).
+            {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Proyectora de yeso', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1, 'tiers': ['estandar', 'premium']},
+            # Andamios y lijadora: necesarios en cualquier obra.
+            {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios livianos y escaleras', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1, 'tiers': ['economica', 'estandar', 'premium']},
+            {'codigo': 'EQ-LIJADORA-ORBITAL', 'descripcion': 'Lijadora orbital para yeso/enduido', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1, 'tiers': ['economica', 'estandar', 'premium']},
         ],
         'notas': 'Enlucido de yeso proyectado, cantoneras metálicas y PVC, enduido interior/exterior, lijado y terminación.'
     },
@@ -3089,7 +3094,26 @@ def calcular_etapa_por_reglas(
     tasa = fx_rate if currency != 'ARS' else None
     cac_context = _get_cac_context_cached()
 
+    # Normalizar tipo_construccion para filtrar materiales por tier.
+    # Acepta "Económica", "Estándar", "Premium" (cualquier caso con/sin acentos).
+    _tipo_raw = (tipo_construccion or 'estandar').strip().lower()
+    _tipo_tier = (_tipo_raw
+                  .replace('á', 'a').replace('é', 'e').replace('í', 'i')
+                  .replace('ó', 'o').replace('ú', 'u'))
+    # Mapeo de valores legacy / variantes a los 3 tiers canónicos.
+    _TIER_ALIASES = {'economico': 'economica', 'standard': 'estandar'}
+    _tipo_tier = _TIER_ALIASES.get(_tipo_tier, _tipo_tier)
+    _TIERS_CANONICOS = {'economica', 'estandar', 'premium'}
+    if _tipo_tier not in _TIERS_CANONICOS:
+        _tipo_tier = 'estandar'  # fallback seguro
+
     for material in reglas.get('materiales', []):
+        # Filtrar por tier: si el material declara 'tiers', solo aparece si
+        # el tipo_construccion de la obra está en esa lista. Items sin 'tiers'
+        # se incluyen siempre (backward-compat con catálogos no migrados).
+        tiers_material = material.get('tiers')
+        if tiers_material and _tipo_tier not in tiers_material:
+            continue
         coef = _to_decimal(material['coef_por_m2'], '0')
         cantidad_base = superficie_dec * coef * multiplicador_dec
         # Si desperdicio está habilitado, sumar 10% a la cantidad base
@@ -3124,6 +3148,10 @@ def calcular_etapa_por_reglas(
         })
 
     for mano_obra in reglas.get('mano_obra', []):
+        # Filtrar mano de obra por tier (consistente con materiales).
+        tiers_mo = mano_obra.get('tiers')
+        if tiers_mo and _tipo_tier not in tiers_mo:
+            continue
         coef = _to_decimal(mano_obra['coef_por_m2'], '0')
         cantidad_base = superficie_dec * coef * multiplicador_dec
 
@@ -3155,6 +3183,10 @@ def calcular_etapa_por_reglas(
         })
 
     for equipo in reglas.get('equipos', []):
+        # Filtrar equipos por tier (consistente con materiales y mano_obra).
+        tiers_eq = equipo.get('tiers')
+        if tiers_eq and _tipo_tier not in tiers_eq:
+            continue
         dias_por_m2 = _to_decimal(equipo.get('dias_por_m2', 0), '0')
         base = superficie_dec * dias_por_m2 * multiplicador_dec
         dias_min = _to_decimal(equipo.get('min_dias', 0), '0')
