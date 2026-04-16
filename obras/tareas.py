@@ -761,6 +761,11 @@ def obtener_avances_pendientes(tarea_id):
                 'ejecutado': ejecutado,
                 'porcentaje': float(tarea.porcentaje_avance or 0),
                 'estado': tarea.estado,
+                # Horas y rendimiento para que el frontend pueda recalcular
+                # el auto-fill de cantidad↔horas sin depender del parámetro
+                # del onclick (que puede venir mal formateado con coma decimal).
+                'horas_estimadas': float(tarea.horas_estimadas or 0),
+                'rendimiento': float(tarea.rendimiento or 0),
             },
             'avances': avances_data,
             'total': len(avances_data),

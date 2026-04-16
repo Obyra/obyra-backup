@@ -11,6 +11,49 @@
             </div>
             <div class="modal-body">
 
+                <!-- Resumen de progreso al TOPE del modal: Planificado / Ejecutado / Pendiente + % -->
+                <div id="avance-resumen-top" class="mb-3" style="display:none;">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <div class="card border-primary bg-light h-100">
+                                <div class="card-body p-2 text-center">
+                                    <small class="text-muted d-block text-uppercase" style="font-size:.7rem;letter-spacing:.5px;">
+                                        <i class="fas fa-bullseye me-1"></i>Planificado
+                                    </small>
+                                    <div class="fw-bold fs-5" id="avance-plan-text">—</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-success bg-light h-100">
+                                <div class="card-body p-2 text-center">
+                                    <small class="text-muted d-block text-uppercase" style="font-size:.7rem;letter-spacing:.5px;">
+                                        <i class="fas fa-check-circle me-1"></i>Ejecutado
+                                    </small>
+                                    <div class="fw-bold fs-5 text-success" id="avance-ejec-text">—</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-warning bg-light h-100">
+                                <div class="card-body p-2 text-center">
+                                    <small class="text-muted d-block text-uppercase" style="font-size:.7rem;letter-spacing:.5px;">
+                                        <i class="fas fa-hourglass-half me-1"></i>Pendiente
+                                    </small>
+                                    <div class="fw-bold fs-5 text-warning" id="avance-pend-text">—</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="fw-bold text-muted">Progreso</small>
+                        <span id="avance-pct-text" class="fw-bold">0%</span>
+                    </div>
+                    <div class="progress" style="height:10px;">
+                        <div id="avance-pct-bar" class="progress-bar bg-secondary" role="progressbar" style="width:0%"></div>
+                    </div>
+                </div>
+
                 <!-- Formulario de registro de nuevo avance (colapsable) -->
                 {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] or current_user.is_super_admin %}
                 <div class="mb-4">
@@ -44,7 +87,7 @@
                                         <div class="input-group">
                                             <input type="number" class="form-control" id="modal_cantidad" name="cantidad"
                                                    step="0.01" min="0.01" required>
-                                            <select id="modal_unidad_ingresada" name="unidad_ingresada" class="form-select" style="max-width:120px" required>
+                                            <select id="modal_unidad_ingresada" name="unidad_ingresada" class="form-select" style="max-width:120px" required disabled>
                                                 <option value="">Unidad...</option>
                                                 <option value="m2">m2</option>
                                                 <option value="ml">ml</option>
@@ -58,8 +101,13 @@
                                                 <option value="jor">jor</option>
                                                 <option value="pza">pza</option>
                                                 <option value="bol">bol</option>
+                                                <option value="balde">balde</option>
+                                                <option value="bolsa">bolsa</option>
                                             </select>
                                         </div>
+                                        <!-- Hint dinámico que refleja el impacto del avance antes de guardarlo. -->
+                                        <small id="modal_cantidad_hint" class="form-text text-muted" style="display:none;"></small>
+                                        <small id="modal_unidad_hint" class="form-text text-muted d-block">Unidad fija según la tarea</small>
                                     </div>
                                     <div class="col-md-6 mb-3">
                                         <label for="modal_horas" class="form-label">Horas trabajadas *</label>
@@ -117,17 +165,9 @@
                     <p class="text-muted mb-0">No hay avances pendientes de aprobación.</p>
                 </div>
 
-                <!-- Resumen de progreso -->
-                <div id="avance-resumen" class="alert alert-light border py-2 px-3 mb-3" style="display:none;">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <small class="fw-bold">Progreso de la tarea</small>
-                        <span id="avance-pct-text" class="fw-bold"></span>
-                    </div>
-                    <div class="progress" style="height:8px;">
-                        <div id="avance-pct-bar" class="progress-bar" role="progressbar" style="width:0%"></div>
-                    </div>
-                    <small class="text-muted" id="avance-ejecutado-text"></small>
-                </div>
+                <!-- Resumen de progreso: ahora está al TOPE del modal (#avance-resumen-top).
+                     Este contenedor queda como compatibilidad para no romper JS que lo referencie. -->
+                <div id="avance-resumen" style="display:none;"></div>
 
                 <!-- Historial de avances aprobados -->
                 <div id="historial-avances" style="display:none;">

@@ -3312,9 +3312,14 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
     document.getElementById('avances-container').style.display = 'none';
     document.getElementById('no-avances').style.display = 'none';
     var resumenEl = document.getElementById('avance-resumen');
+    var resumenTopEl = document.getElementById('avance-resumen-top');
     var historialEl = document.getElementById('historial-avances');
     if (resumenEl) resumenEl.style.display = 'none';
+    if (resumenTopEl) resumenTopEl.style.display = 'none';
     if (historialEl) historialEl.style.display = 'none';
+    // Resetear hint de cantidad
+    var hintEl = document.getElementById('modal_cantidad_hint');
+    if (hintEl) { hintEl.style.display = 'none'; hintEl.textContent = ''; }
 
     // Configurar formulario de registro dentro del modal
     currentModalTareaId = tareaId;
@@ -3322,21 +3327,33 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
     const unidadBase = document.getElementById('modal_unidad_base');
     const rendInput = document.getElementById('modal_rendimiento');
     const unidadSel = document.getElementById('modal_unidad_ingresada');
+    const unidadHint = document.getElementById('modal_unidad_hint');
     if (tareaIdInput) tareaIdInput.value = tareaId;
     if (unidadBase) unidadBase.value = unidad || 'un';
     if (rendInput) rendInput.value = rendimiento || '';
-    if (unidadSel && [...unidadSel.options].some(o => o.value === unidad)) unidadSel.value = unidad;
 
-    // Autoconversión rendimiento en modal
+    // Unidad: preseleccionada y bloqueada si la tarea la tiene definida.
+    // Si la tarea no tiene unidad, permitir elegir manualmente (fallback).
+    if (unidadSel) {
+        if (unidad && [...unidadSel.options].some(o => o.value === unidad)) {
+            unidadSel.value = unidad;
+            unidadSel.disabled = true;
+            if (unidadHint) { unidadHint.textContent = 'Unidad fija según la tarea: ' + unidad; unidadHint.style.display = 'block'; }
+        } else {
+            unidadSel.value = '';
+            unidadSel.disabled = false;
+            if (unidadHint) { unidadHint.textContent = 'Elegí la unidad de medición del avance'; unidadHint.style.display = 'block'; }
+        }
+    }
+
+    // Nota: el auto-cálculo cantidad↔horas se configura más abajo usando los
+    // datos reales del endpoint (data.tarea.rendimiento/horas_estimadas) para
+    // no depender del parámetro `rendimiento` que puede llegar con formato
+    // localizado (ej: '7,78' que parseFloat convierte a 7).
     const mqty = document.getElementById('modal_cantidad');
     const mhrs = document.getElementById('modal_horas');
     if (mqty && mhrs) {
-        const rr = parseFloat(rendimiento);
         mqty.oninput = mhrs.oninput = null;
-        if (!isNaN(rr) && rr > 0) {
-            mhrs.oninput = () => { if (mhrs.value && !mqty.value) mqty.value = (parseFloat(mhrs.value)*rr).toFixed(2); };
-            mqty.oninput = () => { if (mqty.value && !mhrs.value) mhrs.value = (parseFloat(mqty.value)/rr).toFixed(2); };
-        }
     }
 
     // Colapsar el formulario al abrir
@@ -3377,19 +3394,80 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
         if ((data.avances || []).length === 0) { document.getElementById('no-avances').style.display = 'block'; }
         else { document.getElementById('avances-container').style.display = 'block'; renderAvancesPendientes(data.avances); }
 
-        // Mostrar resumen de progreso
+        // Mostrar resumen de progreso en las tarjetas del TOPE del modal
         if (data.tarea) {
-            var rEl = document.getElementById('avance-resumen');
-            if (rEl) {
-                rEl.style.display = 'block';
-                var pct = data.tarea.porcentaje || 0;
-                document.getElementById('avance-pct-text').textContent = pct + '%';
+            var rTopEl = document.getElementById('avance-resumen-top');
+            var plan = parseFloat(data.tarea.cantidad_planificada) || 0;
+            var ejec = parseFloat(data.tarea.ejecutado) || 0;
+            var pend = Math.max(0, plan - ejec);
+            var pct = parseFloat(data.tarea.porcentaje) || 0;
+            var unidadLabel = data.tarea.unidad || 'un';
+
+            if (rTopEl) {
+                rTopEl.style.display = 'block';
+                document.getElementById('avance-plan-text').textContent = plan.toFixed(plan % 1 === 0 ? 0 : 1) + ' ' + unidadLabel;
+                document.getElementById('avance-ejec-text').textContent = ejec.toFixed(ejec % 1 === 0 ? 0 : 1) + ' ' + unidadLabel;
+                document.getElementById('avance-pend-text').textContent = pend.toFixed(pend % 1 === 0 ? 0 : 1) + ' ' + unidadLabel;
+                document.getElementById('avance-pct-text').textContent = pct.toFixed(1) + '%';
                 var bar = document.getElementById('avance-pct-bar');
                 bar.style.width = pct + '%';
                 bar.className = 'progress-bar ' + (pct >= 100 ? 'bg-success' : pct > 0 ? 'bg-primary' : 'bg-secondary');
-                var plan = data.tarea.cantidad_planificada || 0;
-                var ejec = data.tarea.ejecutado || 0;
-                document.getElementById('avance-ejecutado-text').textContent = plan > 0 ? (ejec.toFixed(1) + ' / ' + plan.toFixed(1) + ' ' + (data.tarea.unidad || 'un') + ' ejecutado') : 'Sin cantidad planificada';
+            }
+
+            // Auto-cálculo DESACTIVADO: causaba valores incorrectos (ej: 381 → 0.39).
+            // En su lugar, PRECARGAMOS el campo horas con las horas_estimadas de
+            // la tarea (valor conocido y correcto). El PM edita si hizo más/menos horas.
+            var mqty2 = document.getElementById('modal_cantidad');
+            var mhrs2 = document.getElementById('modal_horas');
+            if (mqty2 && mhrs2) {
+                mqty2.oninput = null;
+                mhrs2.oninput = null;
+                // Precargar horas estimadas de la tarea (solo si el campo está vacío).
+                // El usuario puede modificar libremente el valor si el avance tomó
+                // más/menos horas que las estimadas.
+                if (!mhrs2.value && data.tarea.horas_estimadas > 0) {
+                    mhrs2.value = parseFloat(data.tarea.horas_estimadas).toFixed(2);
+                }
+            }
+            // Rendimiento como referencia para el hint de cantidad
+            var rendRef = parseFloat(data.tarea.rendimiento) || 0;
+            if (!rendRef && data.tarea.horas_estimadas > 0 && plan > 0) {
+                rendRef = plan / parseFloat(data.tarea.horas_estimadas);
+            }
+
+            // Listener para hint dinámico al tipear cantidad ejecutada.
+            // Muestra el impacto proyectado del avance y advierte si excede.
+            var cantInput = document.getElementById('modal_cantidad');
+            var hintEl2 = document.getElementById('modal_cantidad_hint');
+            if (cantInput && hintEl2) {
+                // Guardar referencia previa para poder removerla si la función se llama de nuevo
+                if (cantInput._avanceHintHandler) {
+                    cantInput.removeEventListener('input', cantInput._avanceHintHandler);
+                }
+                cantInput._avanceHintHandler = function() {
+                    var v = parseFloat(cantInput.value);
+                    if (!v || v <= 0) { hintEl2.style.display = 'none'; return; }
+                    hintEl2.style.display = 'block';
+                    if (plan <= 0) {
+                        hintEl2.className = 'form-text text-muted';
+                        hintEl2.textContent = 'Esta tarea no tiene cantidad planificada definida.';
+                    } else if (v > pend) {
+                        hintEl2.className = 'form-text text-danger fw-bold';
+                        hintEl2.innerHTML = '⚠️ Excede lo pendiente (máximo: ' + pend.toFixed(2) + ' ' + unidadLabel + '). El sistema rechazará el avance.';
+                    } else {
+                        var nuevoEjec = ejec + v;
+                        var nuevoPend = pend - v;
+                        var nuevoPct = (nuevoEjec / plan) * 100;
+                        hintEl2.className = 'form-text text-success';
+                        var extraRef = '';
+                        if (rendRef > 0) {
+                            var horasRef = (v / rendRef).toFixed(2);
+                            extraRef = ' — referencia: ~' + horasRef + ' h (al rendimiento ' + rendRef.toFixed(2) + ' ' + unidadLabel + '/h)';
+                        }
+                        hintEl2.textContent = 'Después del avance: ' + nuevoEjec.toFixed(1) + ' ' + unidadLabel + ' ejecutado, ' + nuevoPend.toFixed(1) + ' ' + unidadLabel + ' pendiente (' + nuevoPct.toFixed(1) + '%).' + extraRef;
+                    }
+                };
+                cantInput.addEventListener('input', cantInput._avanceHintHandler);
             }
         }
 
