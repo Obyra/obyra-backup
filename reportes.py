@@ -1286,7 +1286,9 @@ def reporte_costos():
         joinedload(UsoInventario.item).joinedload(ItemInventario.categoria),
         joinedload(UsoInventario.obra)
     ).join(ItemInventario).join(Obra).filter(
-        Obra.organizacion_id == org_id
+        Obra.organizacion_id == org_id,
+        Obra.deleted_at.is_(None),
+        Obra.estado.notin_(['cancelada']),
     )
 
     if obra_id:
