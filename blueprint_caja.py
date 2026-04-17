@@ -281,12 +281,8 @@ def gasto():
         )
         db.session.add(mov)
 
-        # Actualizar costo_real de la obra con el gasto
-        if tipo in ('gasto_obra', 'pago_proveedor'):
-            from models.projects import Obra
-            obra = Obra.query.get(obra_id)
-            if obra:
-                obra.costo_real = float(obra.costo_real or 0) + float(monto)
+        # costo_real se recalcula desde las 4 fuentes en obras/core.py::detalle().
+        # Incrementarlo acá causaba doble-conteo porque ese recálculo ya suma caja.
 
         db.session.commit()
 

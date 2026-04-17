@@ -1357,9 +1357,14 @@ def reporte_costos():
     usos_equipos = []
     try:
         from models.equipment import Equipment, EquipmentUsage
+        # Solo usos aprobados, igual que obras/core.py::detalle() (sino el reporte
+        # muestra costos mayores que el panel Progreso para la misma obra).
         eq_query = db.session.query(EquipmentUsage, Equipment).join(Equipment).join(
             Obra, Obra.id == EquipmentUsage.project_id
-        ).filter(Obra.organizacion_id == org_id)
+        ).filter(
+            Obra.organizacion_id == org_id,
+            EquipmentUsage.estado == 'aprobado',
+        )
         if obra_id:
             eq_query = eq_query.filter(EquipmentUsage.project_id == obra_id)
         if fecha_desde_obj:
