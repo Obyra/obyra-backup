@@ -1262,6 +1262,35 @@ def run_runtime_migrations(db, app):
             db.session.rollback()
             print(f"[WARN] Migración seguridad {tabla}: {e}")
 
+    # Presupuesto Ejecutivo (APU): composicion de items del pliego
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='items_presupuesto_composicion') THEN
+                CREATE TABLE items_presupuesto_composicion (
+                    id SERIAL PRIMARY KEY,
+                    item_presupuesto_id INTEGER NOT NULL REFERENCES items_presupuesto(id) ON DELETE CASCADE,
+                    tipo VARCHAR(20) NOT NULL,
+                    descripcion VARCHAR(300) NOT NULL,
+                    unidad VARCHAR(20) NOT NULL,
+                    cantidad NUMERIC(15, 3) NOT NULL DEFAULT 0,
+                    precio_unitario NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                    total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                    item_inventario_id INTEGER REFERENCES items_inventario(id),
+                    notas TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX ix_ipc_item_presupuesto ON items_presupuesto_composicion(item_presupuesto_id);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion items_presupuesto_composicion: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado

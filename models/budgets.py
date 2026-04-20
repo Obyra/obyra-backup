@@ -674,3 +674,52 @@ class MiembroCuadrilla(db.Model):
     # Relaciones
     cuadrilla = db.relationship('CuadrillaTipo', back_populates='miembros')
     escala = db.relationship('EscalaSalarialUOCRA', lazy='joined')
+
+
+class ItemPresupuestoComposicion(db.Model):
+    """Composicion (APU) de un item del pliego.
+
+    Cada item del presupuesto comercial (los 168 del pliego) se descompone
+    internamente en N recursos: materiales, mano de obra y equipos.
+    La suma de las composiciones es el costo estimado del item; comparado
+    contra el precio_unitario del item da el margen interno.
+
+    El cliente ve solo el item del pliego; la composicion queda interna.
+    """
+    __tablename__ = 'items_presupuesto_composicion'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_presupuesto_id = db.Column(
+        db.Integer,
+        db.ForeignKey('items_presupuesto.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    tipo = db.Column(db.String(20), nullable=False)  # material | mano_obra | equipo
+    descripcion = db.Column(db.String(300), nullable=False)
+    unidad = db.Column(db.String(20), nullable=False)
+    cantidad = db.Column(db.Numeric(15, 3), nullable=False, default=0)
+    precio_unitario = db.Column(db.Numeric(15, 2), nullable=False, default=0)
+    total = db.Column(db.Numeric(15, 2), nullable=False, default=0)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    item_presupuesto = db.relationship(
+        'ItemPresupuesto',
+        backref=db.backref('composiciones', cascade='all, delete-orphan', lazy='dynamic'),
+    )
+    item_inventario = db.relationship('ItemInventario', foreign_keys=[item_inventario_id])
+
+    __table_args__ = (
+        db.Index('ix_ipc_item_presupuesto', 'item_presupuesto_id'),
+    )
+
+    def __repr__(self):
+        return f'<ItemPresupuestoComposicion {self.tipo} {self.descripcion[:40]}>'
+
+    def recalcular_total(self):
+        try:
+            self.total = Decimal(str(self.cantidad or 0)) * Decimal(str(self.precio_unitario or 0))
+        except (InvalidOperation, TypeError):
+            self.total = Decimal('0')
