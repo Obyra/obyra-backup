@@ -57,7 +57,9 @@
                             <th>CUIT</th>
                             <th>Tipo</th>
                             <th>Contacto</th>
-                            <th>Telefono</th>
+                            <th>Teléfono</th>
+                            <th class="text-center">Puntaje</th>
+                            <th class="text-center">Respuesta WA</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
@@ -81,6 +83,41 @@
                                 <a href="tel:{{ prov.telefono }}">{{ prov.telefono }}</a>
                                 {% else %}
                                 -
+                                {% endif %}
+                            </td>
+                            {% set sc = prov.scorecard %}
+                            <td class="text-center">
+                                {% if sc and sc.evaluaciones > 0 %}
+                                <div class="d-flex flex-column align-items-center">
+                                    <div>
+                                        {% for i in range(5) %}
+                                        <i class="fas fa-star {% if i < sc.promedio|round|int %}text-warning{% else %}text-muted{% endif %}" style="font-size:0.7rem;"></i>
+                                        {% endfor %}
+                                    </div>
+                                    <small class="text-muted" style="font-size:0.7rem;">
+                                        {{ sc.promedio }}/5 · {{ sc.evaluaciones }} eval.
+                                    </small>
+                                </div>
+                                {% else %}
+                                <small class="text-muted">Sin evaluar</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if sc and sc.get('wa_enviadas') %}
+                                    {% set tasa = sc.wa_tasa_respuesta|int %}
+                                    <span class="badge bg-{{ 'success' if tasa >= 80 else ('warning text-dark' if tasa >= 50 else 'danger') }}">
+                                        {{ tasa }}%
+                                    </span>
+                                    {% if sc.wa_tiempo_respuesta_horas is not none %}
+                                    <div><small class="text-muted" style="font-size:0.7rem;">
+                                        <i class="far fa-clock me-1"></i>~{{ sc.wa_tiempo_respuesta_horas }}h
+                                    </small></div>
+                                    {% endif %}
+                                    <div><small class="text-muted" style="font-size:0.65rem;">
+                                        {{ sc.wa_respondidas }}/{{ sc.wa_enviadas }}
+                                    </small></div>
+                                {% else %}
+                                <small class="text-muted">-</small>
                                 {% endif %}
                             </td>
                             <td>

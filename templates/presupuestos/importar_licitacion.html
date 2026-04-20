@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Licitación - Presupuestos - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">
+                <i class="fas fa-file-excel text-info me-2"></i>Importar Excel de Licitación
+            </h2>
+            <p class="text-muted mb-0">Creá un presupuesto a partir de un pliego en Excel y pedí cotización a proveedores.</p>
+        </div>
+        <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nombre de la obra / Licitación <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="nombre_obra" required
+                                   placeholder="Ej: Licitación Edificio Rivadavia 1234">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Número de presupuesto</label>
+                                <input type="text" class="form-control" name="numero" value="{{ numero_sugerido }}">
+                                <small class="text-muted">Dejá el sugerido o cambialo</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Vigencia (días)</label>
+                                <input type="number" class="form-control" name="vigencia_dias" value="30" min="1">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Cliente (opcional)</label>
+                            <select class="form-select" name="cliente_id">
+                                <option value="">-- Sin cliente --</option>
+                                {% for c in clientes %}
+                                <option value="{{ c.id }}">{{ c.nombre }}{% if c.apellido %} {{ c.apellido }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
+                            <input type="file" class="form-control" name="archivo_excel" accept=".xlsx,.xls" required>
+                            <small class="text-muted">Formato aceptado: .xlsx o .xls</small>
+                        </div>
+
+                        <div class="alert alert-light border small">
+                            <strong><i class="fas fa-info-circle text-primary me-1"></i>Detección automática:</strong>
+                            <p class="mb-2 mt-2">El sistema intenta detectar automáticamente las columnas del Excel buscando encabezados como
+                                <strong>"Descripción"</strong>, <strong>"Cantidad"</strong>, <strong>"Unidad"</strong> y <strong>"Precio"</strong>
+                                (acepta variantes: "Cant", "Un", "PU", "$/un", etc.).</p>
+                            <p class="mb-0">Si el Excel tiene un formato distinto, abre la pantalla de <strong>mapeo manual</strong> donde podés indicar qué columna es cada cosa.</p>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="modo_licitacion" value="1" id="modoLicitacion" checked>
+                            <label class="form-check-label" for="modoLicitacion">
+                                <strong>Es un pliego para cotizar (ignorar precios del Excel)</strong>
+                                <br><small class="text-muted">Recomendado para licitaciones: importa los ítems con precio en $0 para que los carguen los proveedores. Destildá si el Excel ya trae precios definitivos.</small>
+                            </label>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="revisar_antes" value="1" id="revisarAntes">
+                            <label class="form-check-label" for="revisarAntes">
+                                <strong>Revisar y mapear columnas manualmente antes de importar</strong>
+                                <br><small class="text-muted">Útil si el Excel tiene un formato no estándar o querés validar la detección.</small>
+                            </label>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="forzar_duplicado" value="1" id="forzarDup">
+                            <label class="form-check-label" for="forzarDup">
+                                <strong>Crear aunque ya exista un presupuesto con el mismo nombre de obra</strong>
+                                <br><small class="text-muted">Por defecto el sistema te avisa si hay un duplicado reciente. Tildá esto para forzar la creación.</small>
+                            </label>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-file-import me-1"></i>Importar y crear presupuesto
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card border-info">
+                <div class="card-header bg-info bg-opacity-10">
+                    <h6 class="mb-0"><i class="fas fa-lightbulb me-1"></i>¿Qué pasa después?</h6>
+                </div>
+                <div class="card-body small">
+                    <ol class="mb-0 ps-3">
+                        <li>Se crea el presupuesto con todos los ítems del Excel.</li>
+                        <li>Te llevamos directo a la pantalla de <strong>"Cotizar por WhatsApp"</strong>.</li>
+                        <li>Vinculás cada ítem con uno o varios proveedores.</li>
+                        <li>El sistema arma mensajes automáticos por proveedor.</li>
+                        <li>Los editás y enviás por WhatsApp Web con un clic.</li>
+                        <li>Cuando recibís respuesta, la cargás y queda en el historial.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

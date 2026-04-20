@@ -1093,7 +1093,7 @@ def crear_integrante_desde_panel():
                 org_id=org_id,
                 user_id=usuario_objetivo.id,
                 role=role_front,
-                status='pending',
+                status='active',
                 invited_by=current_user.id,
             )
             db.session.add(membership_nuevo)

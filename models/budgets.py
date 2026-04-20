@@ -276,8 +276,8 @@ class ItemPresupuesto(db.Model):
     tipo = db.Column(db.String(20), nullable=False)  # material, mano_obra, equipo
     descripcion = db.Column(db.String(300), nullable=False)
     unidad = db.Column(db.String(20), nullable=False)
-    cantidad = db.Column(db.Numeric(10, 3), nullable=False)
-    precio_unitario = db.Column(db.Numeric(10, 2), nullable=False)
+    cantidad = db.Column(db.Numeric(15, 3), nullable=False)
+    precio_unitario = db.Column(db.Numeric(15, 2), nullable=False)
     total = db.Column(db.Numeric(15, 2), nullable=False)
     etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)
     etapa_nombre = db.Column(db.String(100), nullable=True)  # Nombre de etapa para presupuestos sin obra

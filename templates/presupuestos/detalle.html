@@ -55,6 +55,9 @@
                         <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}" class="btn btn-info">
                             <i class="fas fa-envelope me-1"></i>Enviar por Correo
                         </a>
+                        <a href="{{ url_for('presupuestos.cotizar_wa_vista', presupuesto_id=presupuesto.id) }}" class="btn btn-success">
+                            <i class="fab fa-whatsapp me-1"></i>Cotizar por WhatsApp
+                        </a>
                         {% endif %}
                         {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
                         <button type="button" class="btn btn-primary" onclick="confirmarComoObra({{ presupuesto.id }})">
@@ -537,8 +540,23 @@
                                 </tr>
                             </thead>
                             <tbody>
+                                {% set ns_mat = namespace(etapa=None, idx=0, count=0) %}
                                 {% for item in materiales %}
-                                <tr data-item-id="{{ item.id }}"
+                                {% set etapa_item = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin Etapa') %}
+                                {% if etapa_item != ns_mat.etapa %}
+                                {% set ns_mat.etapa = etapa_item %}
+                                {% set ns_mat.idx = ns_mat.idx + 1 %}
+                                {% set ns_mat.count = materiales|selectattr('etapa_nombre', 'equalto', etapa_item)|list|length %}
+                                <tr class="table-secondary etapa-header" role="button" onclick="toggleEtapa('mat', {{ ns_mat.idx }})" style="cursor:pointer;">
+                                    <td colspan="{{ 7 if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' else 6 }}" class="fw-bold">
+                                        <i class="fas fa-chevron-right me-2" id="chev-mat-{{ ns_mat.idx }}" style="transition:transform 0.15s;"></i>
+                                        <i class="fas fa-folder-open me-2 text-primary"></i>{{ etapa_item }}
+                                        <span class="badge bg-secondary ms-2">{{ ns_mat.count }} ítems</span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                <tr class="etapa-mat-{{ ns_mat.idx }} d-none"
+                                    data-item-id="{{ item.id }}"
                                     data-item-tipo="material"
                                     data-item-descripcion="{{ item.descripcion }}"
                                     data-item-unidad="{{ item.unidad }}"
@@ -985,6 +1003,16 @@
 
 {% block scripts %}
 <script>
+function toggleEtapa(prefix, idx) {
+    const rows = document.querySelectorAll('.etapa-' + prefix + '-' + idx);
+    rows.forEach(r => r.classList.toggle('d-none'));
+    const chev = document.getElementById('chev-' + prefix + '-' + idx);
+    if (chev) {
+        chev.classList.toggle('fa-chevron-right');
+        chev.classList.toggle('fa-chevron-down');
+    }
+}
+
 const modalPerdidoEl = document.getElementById('modalMarcarPerdido');
 const modalPerdido = modalPerdidoEl ? new bootstrap.Modal(modalPerdidoEl) : null;
 let presupuestoSeleccionado = null;

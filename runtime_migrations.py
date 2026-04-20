@@ -896,6 +896,84 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Modalidad pago operarios migration skipped: {e}")
 
+    # Ampliar precision de precio_unitario y total en items_presupuesto
+    # (algunas licitaciones manejan montos > $99M, que no entran en Numeric(10,2))
+    try:
+        db.session.execute(text("""
+        DO $$ BEGIN
+            -- precio_unitario: 10,2 -> 15,2
+            IF EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='items_presupuesto' AND column_name='precio_unitario'
+                      AND numeric_precision=10) THEN
+                ALTER TABLE items_presupuesto ALTER COLUMN precio_unitario TYPE NUMERIC(15,2);
+            END IF;
+            -- cantidad: 10,3 -> 15,3
+            IF EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='items_presupuesto' AND column_name='cantidad'
+                      AND numeric_precision=10) THEN
+                ALTER TABLE items_presupuesto ALTER COLUMN cantidad TYPE NUMERIC(15,3);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] items_presupuesto precision ampliada (precio_unitario 15,2; cantidad 15,3)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Ampliacion precision items_presupuesto skipped: {e}")
+
+    # Solicitud de cotizacion a proveedores via WhatsApp (desde Presupuesto)
+    try:
+        cotizacion_wa_sql = """
+        DO $$ BEGIN
+            -- Pivot item-presupuesto <-> proveedor
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='item_presupuesto_proveedores') THEN
+                CREATE TABLE item_presupuesto_proveedores (
+                    id SERIAL PRIMARY KEY,
+                    item_presupuesto_id INTEGER NOT NULL REFERENCES items_presupuesto(id) ON DELETE CASCADE,
+                    proveedor_oc_id INTEGER NOT NULL REFERENCES proveedores_oc(id) ON DELETE CASCADE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_item_prov UNIQUE (item_presupuesto_id, proveedor_oc_id)
+                );
+                CREATE INDEX idx_ipp_item ON item_presupuesto_proveedores(item_presupuesto_id);
+                CREATE INDEX idx_ipp_prov ON item_presupuesto_proveedores(proveedor_oc_id);
+            END IF;
+
+            -- Solicitud cotizacion WhatsApp
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='solicitudes_cotizacion_wa') THEN
+                CREATE TABLE solicitudes_cotizacion_wa (
+                    id SERIAL PRIMARY KEY,
+                    numero VARCHAR(20),
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    presupuesto_id INTEGER NOT NULL REFERENCES presupuestos(id),
+                    proveedor_oc_id INTEGER NOT NULL REFERENCES proveedores_oc(id),
+                    telefono_destino VARCHAR(20),
+                    mensaje_enviado TEXT,
+                    canal VARCHAR(20) DEFAULT 'wa_link',
+                    estado VARCHAR(20) DEFAULT 'borrador',
+                    items_snapshot JSONB,
+                    created_by_id INTEGER REFERENCES usuarios(id),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    fecha_envio TIMESTAMP,
+                    fecha_respuesta TIMESTAMP,
+                    respuesta_texto TEXT,
+                    notas TEXT
+                );
+                CREATE INDEX idx_scw_org ON solicitudes_cotizacion_wa(organizacion_id);
+                CREATE INDEX idx_scw_presu ON solicitudes_cotizacion_wa(presupuesto_id);
+                CREATE INDEX idx_scw_prov ON solicitudes_cotizacion_wa(proveedor_oc_id);
+                CREATE INDEX idx_scw_numero ON solicitudes_cotizacion_wa(numero);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(cotizacion_wa_sql))
+        db.session.commit()
+        print("[OK] Cotizacion WhatsApp tables migration applied")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Cotizacion WhatsApp migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions

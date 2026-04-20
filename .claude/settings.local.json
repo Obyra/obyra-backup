@@ -74,7 +74,10 @@
       "Bash(git rm:*)",
       "Bash(grep:*)",
       "Bash(ls:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(wc -l obras/*.py)",
+      "Bash(wc -l blueprint_presupuestos/*.py)",
+      "Bash(python)"
     ],
     "deny": [],
     "ask": []

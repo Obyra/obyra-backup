@@ -79,23 +79,78 @@ class ProveedorOC(db.Model):
 
     @property
     def scorecard(self):
-        """Retorna resumen de evaluaciones del proveedor."""
+        """Retorna resumen de evaluaciones del proveedor + tiempo respuesta WA."""
         evals = self.evaluaciones.all() if hasattr(self, 'evaluaciones') else []
-        if not evals:
+        wa_stats = self.wa_response_stats
+
+        if not evals and not wa_stats:
             return None
-        n = len(evals)
-        avg_entrega = round(sum(e.puntaje_entrega for e in evals) / n, 1)
-        avg_precio = round(sum(e.puntaje_precio for e in evals) / n, 1)
-        avg_calidad = round(sum(e.puntaje_calidad for e in evals) / n, 1)
-        avg_servicio = round(sum(e.puntaje_servicio for e in evals) / n, 1)
-        avg_general = round((avg_entrega + avg_precio + avg_calidad + avg_servicio) / 4, 1)
-        return {
+
+        if evals:
+            n = len(evals)
+            avg_entrega = round(sum(e.puntaje_entrega for e in evals) / n, 1)
+            avg_precio = round(sum(e.puntaje_precio for e in evals) / n, 1)
+            avg_calidad = round(sum(e.puntaje_calidad for e in evals) / n, 1)
+            avg_servicio = round(sum(e.puntaje_servicio for e in evals) / n, 1)
+            avg_general = round((avg_entrega + avg_precio + avg_calidad + avg_servicio) / 4, 1)
+        else:
+            n = 0
+            avg_entrega = avg_precio = avg_calidad = avg_servicio = avg_general = 0
+
+        result = {
             'evaluaciones': n,
             'promedio': avg_general,
             'entrega': avg_entrega,
             'precio': avg_precio,
             'calidad': avg_calidad,
             'servicio': avg_servicio,
+        }
+        if wa_stats:
+            result.update(wa_stats)
+        return result
+
+    @property
+    def wa_response_stats(self):
+        """Estadisticas de respuesta a solicitudes de cotizacion via WhatsApp.
+
+        Retorna dict con:
+          - wa_enviadas: total de solicitudes enviadas
+          - wa_respondidas: cuantas fueron respondidas
+          - wa_tasa_respuesta: % respondidas / enviadas
+          - wa_tiempo_respuesta_horas: promedio de horas entre envio y respuesta
+        """
+        try:
+            from models.presupuestos_wa import SolicitudCotizacionWA
+            solicitudes = SolicitudCotizacionWA.query.filter_by(
+                proveedor_oc_id=self.id
+            ).filter(SolicitudCotizacionWA.fecha_envio.isnot(None)).all()
+        except Exception:
+            return None
+
+        if not solicitudes:
+            return None
+
+        total = len(solicitudes)
+        respondidas = [s for s in solicitudes if s.fecha_respuesta]
+        n_resp = len(respondidas)
+        tasa = round((n_resp / total) * 100, 0) if total > 0 else 0
+
+        tiempo_promedio_h = None
+        if respondidas:
+            horas_total = 0
+            for s in respondidas:
+                if s.fecha_envio and s.fecha_respuesta:
+                    diff = (s.fecha_respuesta - s.fecha_envio).total_seconds() / 3600
+                    if diff >= 0:
+                        horas_total += diff
+            if n_resp > 0:
+                tiempo_promedio_h = round(horas_total / n_resp, 1)
+
+        return {
+            'wa_enviadas': total,
+            'wa_respondidas': n_resp,
+            'wa_tasa_respuesta': tasa,
+            'wa_tiempo_respuesta_horas': tiempo_promedio_h,
         }
 
     def to_dict(self):

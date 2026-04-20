@@ -177,11 +177,15 @@ def confirmar_como_obra(id):
                         current_app.logger.info(f"📌 Item '{item.descripcion}' asignado a etapa '{etapa_nombre}' (ID: {etapa_obj.id})")
 
         else:
-            # Fallback: agrupar por identificación automática
+            # Fallback: agrupar por identificación automática.
+            # Prioridad: etapa vinculada > etapa_nombre del pliego (importado Excel) > tipo de item.
             for item in items:
                 if item.etapa_id and item.etapa:
                     etapa_nombre = item.etapa.nombre
                     etapa_obj = item.etapa
+                elif item.etapa_nombre:
+                    etapa_nombre = item.etapa_nombre
+                    etapa_obj = None
                 else:
                     etapa_nombre = identificar_etapa_por_tipo(item)
                     etapa_obj = None

@@ -84,6 +84,9 @@ from models.proveedores_oc import (
     CotizacionProveedor, CotizacionProveedorItem,
 )
 
+# Solicitud de cotizacion via WhatsApp (desde Presupuesto)
+from models.presupuestos_wa import ItemPresupuestoProveedor, SolicitudCotizacionWA
+
 # Inventory models
 from models.inventory import (
     # Sistema de Ubicaciones (nuevo)
@@ -283,8 +286,12 @@ __all__ = [
     # Proveedores OC
     'ProveedorOC',
     'HistorialPrecioProveedor',
+    'ProveedorEvaluacion',
     'CotizacionProveedor',
     'CotizacionProveedorItem',
+    # Solicitud cotizacion WhatsApp
+    'ItemPresupuestoProveedor',
+    'SolicitudCotizacionWA',
     # Inventory
     'CategoriaInventario',
     'ItemInventario',

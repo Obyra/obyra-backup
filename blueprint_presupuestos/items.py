@@ -39,9 +39,12 @@ def detalle(id):
         presupuesto.calcular_totales()
         db.session.commit()
 
-        # Obtener items agrupados por tipo y origen
+        # Obtener items agrupados por tipo y origen.
+        # Ordenamos por etapa_nombre para permitir render con headers de etapa en el template
+        # (presupuestos importados del Excel traen etapa; los viejos quedan en "Sin Etapa").
         items = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(
             ItemPresupuesto.tipo,
+            ItemPresupuesto.etapa_nombre,
             ItemPresupuesto.id
         ).all()
 

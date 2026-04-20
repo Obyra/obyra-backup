@@ -339,6 +339,37 @@
                         </div>
                     </div>
 
+                    {% if scorecard.get('wa_enviadas') %}
+                    <div class="border-top pt-3 mt-2">
+                        <h6 class="text-muted mb-3"><i class="fab fa-whatsapp text-success me-1"></i>Respuesta por WhatsApp</h6>
+                        <div class="row g-3">
+                            <div class="col-6 col-md-3 text-center">
+                                <div class="fw-bold">{{ scorecard.wa_enviadas }}</div>
+                                <small class="text-muted">Solicitudes enviadas</small>
+                            </div>
+                            <div class="col-6 col-md-3 text-center">
+                                <div class="fw-bold">{{ scorecard.wa_respondidas }}</div>
+                                <small class="text-muted">Respondidas</small>
+                            </div>
+                            <div class="col-6 col-md-3 text-center">
+                                {% set tasa = scorecard.wa_tasa_respuesta|int %}
+                                <div class="fw-bold {% if tasa >= 80 %}text-success{% elif tasa >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ tasa }}%
+                                </div>
+                                <small class="text-muted">Tasa de respuesta</small>
+                            </div>
+                            <div class="col-6 col-md-3 text-center">
+                                <div class="fw-bold">
+                                    {% if scorecard.wa_tiempo_respuesta_horas is not none %}
+                                        {{ scorecard.wa_tiempo_respuesta_horas }}h
+                                    {% else %} - {% endif %}
+                                </div>
+                                <small class="text-muted">Tiempo promedio</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     {% if evaluaciones %}
                     <h6 class="text-muted mb-2">Evaluaciones recientes</h6>
                     {% for ev in evaluaciones %}
