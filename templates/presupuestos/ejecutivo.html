@@ -123,23 +123,24 @@
           </thead>
           <tbody>
             {% for item in etapa_data['items'] %}
-            {% set costo_item = item.composiciones|sum(attribute='total')|float if item.composiciones.count() > 0 else 0 %}
+            {% set comp_list = item.comp_list %}
+            {% set costo_item = item.costo_estimado|float %}
             {% set margen_item = (item.total|float) - costo_item %}
-            <tr>
+            <tr data-item-id="{{ item.id }}" data-item-row>
               <td>
                 <small>{{ item.descripcion }}</small>
               </td>
               <td class="text-center">{{ item.cantidad|float|round(2) }}</td>
               <td class="text-center"><small>{{ item.unidad }}</small></td>
               <td class="text-end text-success">${{ '{:,.0f}'.format(item.total|float) }}</td>
-              <td class="text-end">
+              <td class="text-end" data-costo-cell>
                 {% if costo_item > 0 %}
                   <span class="text-warning">${{ '{:,.0f}'.format(costo_item) }}</span>
                 {% else %}
                   <small class="text-muted">—</small>
                 {% endif %}
               </td>
-              <td class="text-end">
+              <td class="text-end" data-margen-cell>
                 {% if costo_item > 0 %}
                   <span class="{% if margen_item >= 0 %}text-primary{% else %}text-danger{% endif %}">
                     ${{ '{:,.0f}'.format(margen_item) }}
@@ -149,9 +150,87 @@
                 {% endif %}
               </td>
               <td class="text-end">
-                <button class="btn btn-sm btn-outline-primary" disabled title="Disponible en Fase 2">
+                <button class="btn btn-sm btn-outline-primary"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#comp-item-{{ item.id }}"
+                        aria-expanded="false">
                   <i class="fas fa-layer-group me-1"></i>Desglosar
+                  <span class="badge bg-secondary ms-1" data-comp-count>{{ comp_list|length }}</span>
                 </button>
+              </td>
+            </tr>
+            <tr class="collapse" id="comp-item-{{ item.id }}">
+              <td colspan="7" class="p-0 bg-light">
+                <div class="p-3">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong><i class="fas fa-tools text-primary me-1"></i>Composición interna (APU)</strong>
+                    <button class="btn btn-sm btn-success"
+                            type="button"
+                            onclick="abrirModalComposicion({{ item.id }}, '{{ item.descripcion|e }}')">
+                      <i class="fas fa-plus me-1"></i>Agregar recurso
+                    </button>
+                  </div>
+                  <div data-composiciones-item="{{ item.id }}">
+                    {% if comp_list %}
+                    <table class="table table-sm table-bordered mb-0 bg-white">
+                      <thead>
+                        <tr class="small text-muted">
+                          <th style="width:100px;">Tipo</th>
+                          <th>Descripción</th>
+                          <th class="text-center" style="width:80px;">Cant.</th>
+                          <th class="text-center" style="width:70px;">Un.</th>
+                          <th class="text-end" style="width:110px;">P. Unit.</th>
+                          <th class="text-end" style="width:110px;">Subtotal</th>
+                          <th style="width:50px;"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for comp in comp_list %}
+                        <tr data-comp-id="{{ comp.id }}">
+                          <td>
+                            {% if comp.tipo == 'material' %}<span class="badge bg-info">Material</span>
+                            {% elif comp.tipo == 'mano_obra' %}<span class="badge bg-warning text-dark">MO</span>
+                            {% elif comp.tipo == 'equipo' %}
+                              <span class="badge bg-secondary">Equipo</span>
+                              {% if comp.modalidad_costo == 'alquiler' %}<span class="badge bg-primary" title="Alquiler">Alq.</span>
+                              {% elif comp.modalidad_costo == 'compra' %}<span class="badge bg-success" title="Compra">Compra</span>
+                              {% endif %}
+                            {% endif %}
+                          </td>
+                          <td><small>{{ comp.descripcion }}</small></td>
+                          <td class="text-center"><small>{{ comp.cantidad|float|round(3) }}</small></td>
+                          <td class="text-center"><small>{{ comp.unidad }}</small></td>
+                          <td class="text-end"><small>${{ '{:,.2f}'.format(comp.precio_unitario|float) }}</small></td>
+                          <td class="text-end fw-bold"><small>${{ '{:,.2f}'.format(comp.total|float) }}</small></td>
+                          <td class="text-end">
+                            <div class="btn-group btn-group-sm" role="group">
+                              <button class="btn btn-outline-primary"
+                                      type="button"
+                                      onclick='editarComposicion({{ comp.id }}, {{ item.id }}, {{ {"tipo": comp.tipo, "descripcion": comp.descripcion, "unidad": comp.unidad, "cantidad": comp.cantidad|float, "precio_unitario": comp.precio_unitario|float, "modalidad_costo": comp.modalidad_costo, "notas": comp.notas}|tojson }}, "{{ item.descripcion|e }}")'
+                                      title="Editar">
+                                <i class="fas fa-pen"></i>
+                              </button>
+                              <button class="btn btn-outline-danger"
+                                      type="button"
+                                      onclick="eliminarComposicion({{ comp.id }}, {{ item.id }})"
+                                      title="Eliminar">
+                                <i class="fas fa-trash"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                    {% else %}
+                    <div class="text-center py-3 text-muted small bg-white rounded border">
+                      Este ítem aún no tiene recursos descompuestos. Tocá
+                      <strong>Agregar recurso</strong> para empezar.
+                    </div>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
             </tr>
             {% endfor %}
@@ -164,12 +243,424 @@
 
   {% endif %}
 
-  <div class="alert alert-secondary mt-4">
-    <i class="fas fa-flask me-2"></i>
-    <strong>Fase 1 (MVP).</strong> Acá ves la estructura del ejecutivo. El botón
-    <em>Desglosar</em> queda desactivado hasta la Fase 2, cuando vas a poder agregar
-    materiales, MO y equipos a cada ítem.
+  <div class="alert alert-secondary mt-4 small">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>Cómo usar:</strong> tocá <em>Desglosar</em> en un ítem para abrir su composición.
+    Agregá materiales, MO y equipos según necesites. El margen se recalcula al instante
+    y queda registrado para comparar contra la ejecución real de la obra.
   </div>
 
 </div>
+
+<!-- Modal: Agregar recurso (material / mano_obra / equipo) a un item del pliego -->
+<div class="modal fade" id="modalComposicion" tabindex="-1" aria-labelledby="modalComposicionLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="formComposicion" onsubmit="guardarComposicion(event)">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalComposicionLabel">
+            <i class="fas fa-plus-circle text-success me-2"></i>Agregar recurso
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-light small border mb-3">
+            <strong>Ítem del pliego:</strong>
+            <span id="compItemDescripcion" class="text-muted"></span>
+          </div>
+
+          <input type="hidden" id="compItemId">
+          <input type="hidden" id="compCompId">
+
+          <div class="mb-3">
+            <label class="form-label fw-bold">Tipo de recurso <span class="text-danger">*</span></label>
+            <div class="btn-group w-100" role="group">
+              <input type="radio" class="btn-check" name="tipo" id="tipoMaterial" value="material" checked onchange="onTipoChange()">
+              <label class="btn btn-outline-info" for="tipoMaterial">
+                <i class="fas fa-cubes me-1"></i>Material
+              </label>
+              <input type="radio" class="btn-check" name="tipo" id="tipoManoObra" value="mano_obra" onchange="onTipoChange()">
+              <label class="btn btn-outline-warning" for="tipoManoObra">
+                <i class="fas fa-hard-hat me-1"></i>Mano de obra
+              </label>
+              <input type="radio" class="btn-check" name="tipo" id="tipoEquipo" value="equipo" onchange="onTipoChange()">
+              <label class="btn btn-outline-secondary" for="tipoEquipo">
+                <i class="fas fa-truck me-1"></i>Equipo
+              </label>
+            </div>
+          </div>
+
+          <!-- Modalidad de costo: solo visible cuando tipo=equipo -->
+          <div class="mb-3 d-none" id="wrapperModalidad">
+            <label class="form-label fw-bold">Modalidad del equipo <span class="text-danger">*</span></label>
+            <div class="btn-group w-100" role="group">
+              <input type="radio" class="btn-check" name="modalidad_costo" id="modCompra" value="compra" checked onchange="onModalidadChange()">
+              <label class="btn btn-outline-success" for="modCompra">
+                <i class="fas fa-shopping-cart me-1"></i>Compra
+              </label>
+              <input type="radio" class="btn-check" name="modalidad_costo" id="modAlquiler" value="alquiler" onchange="onModalidadChange()">
+              <label class="btn btn-outline-primary" for="modAlquiler">
+                <i class="fas fa-calendar-alt me-1"></i>Alquiler
+              </label>
+            </div>
+            <small class="text-muted mt-1 d-block" id="hintModalidad">
+              <strong>Compra:</strong> cantidad = unidades físicas del equipo; precio = costo de compra por unidad.
+            </small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Descripción <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="compDescripcion" required
+                   placeholder="Ej: Cemento Portland x 50kg / Oficial albañil / Andamio">
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label" id="labelUnidad">Unidad</label>
+              <select class="form-select" id="compUnidad">
+                <option value="unidad">Unidad</option>
+                <option value="metro">Metro</option>
+                <option value="metro2">Metro²</option>
+                <option value="metro3">Metro³</option>
+                <option value="kilogramo">Kilogramo</option>
+                <option value="tonelada">Tonelada</option>
+                <option value="litro">Litro</option>
+                <option value="hora">Hora</option>
+                <option value="dia">Día</option>
+                <option value="semana">Semana</option>
+                <option value="mes">Mes</option>
+                <option value="jornal">Jornal</option>
+                <option value="bolsa">Bolsa</option>
+                <option value="caja">Caja</option>
+                <option value="gl">Global (gl)</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label" id="labelCantidad">Cantidad <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" id="compCantidad" step="any" min="0" required placeholder="0">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" id="labelPrecio">Precio unitario (ARS) <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" class="form-control" id="compPrecio" step="any" min="0" required placeholder="0.00">
+            </div>
+            <small class="text-muted" id="compSubtotalPreview"></small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Notas (opcional)</label>
+            <textarea class="form-control" id="compNotas" rows="2" placeholder="Ej: según cotización Corralón Central 2026-04"></textarea>
+          </div>
+
+          <div class="alert alert-danger d-none small" id="compError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success" id="btnGuardarComposicion">
+            <i class="fas fa-save me-1"></i>Agregar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MODAL_COMP = new bootstrap.Modal(document.getElementById('modalComposicion'));
+
+function _formatMoney(v) {
+  return '$' + Math.round(v || 0).toLocaleString('es-AR');
+}
+
+function abrirModalComposicion(itemId, descripcion) {
+  document.getElementById('compItemId').value = itemId;
+  document.getElementById('compCompId').value = '';
+  document.getElementById('compItemDescripcion').textContent = descripcion;
+  document.getElementById('formComposicion').reset();
+  document.getElementById('tipoMaterial').checked = true;
+  document.getElementById('modCompra').checked = true;
+  document.getElementById('compError').classList.add('d-none');
+  document.getElementById('compSubtotalPreview').textContent = '';
+  document.getElementById('modalComposicionLabel').innerHTML = '<i class="fas fa-plus-circle text-success me-2"></i>Agregar recurso';
+  document.getElementById('btnGuardarComposicion').innerHTML = '<i class="fas fa-save me-1"></i>Agregar';
+  onTipoChange();
+  MODAL_COMP.show();
+  setTimeout(() => document.getElementById('compDescripcion').focus(), 300);
+}
+
+function editarComposicion(compId, itemId, compData, itemDescripcion) {
+  // Pre-llenar el modal con los datos existentes
+  document.getElementById('compItemId').value = itemId;
+  document.getElementById('compCompId').value = compId;
+  document.getElementById('compItemDescripcion').textContent = itemDescripcion;
+  document.getElementById('compError').classList.add('d-none');
+
+  // Tipo
+  const tipo = compData.tipo || 'material';
+  document.getElementById('tipoMaterial').checked = tipo === 'material';
+  document.getElementById('tipoManoObra').checked = tipo === 'mano_obra';
+  document.getElementById('tipoEquipo').checked = tipo === 'equipo';
+
+  // Modalidad (solo equipos)
+  if (tipo === 'equipo') {
+    const mod = compData.modalidad_costo || 'compra';
+    document.getElementById('modCompra').checked = mod === 'compra';
+    document.getElementById('modAlquiler').checked = mod === 'alquiler';
+  }
+
+  onTipoChange();
+
+  document.getElementById('compDescripcion').value = compData.descripcion || '';
+  // Forzar opción de unidad (si no existe, la agrega temporalmente)
+  const unidadSel = document.getElementById('compUnidad');
+  const unidad = compData.unidad || 'unidad';
+  if (!Array.from(unidadSel.options).some(o => o.value === unidad)) {
+    const opt = document.createElement('option');
+    opt.value = unidad;
+    opt.textContent = unidad;
+    unidadSel.appendChild(opt);
+  }
+  unidadSel.value = unidad;
+  document.getElementById('compCantidad').value = compData.cantidad ?? '';
+  document.getElementById('compPrecio').value = compData.precio_unitario ?? '';
+  document.getElementById('compNotas').value = compData.notas || '';
+
+  // Preview subtotal
+  const subtotal = (parseFloat(compData.cantidad) || 0) * (parseFloat(compData.precio_unitario) || 0);
+  document.getElementById('compSubtotalPreview').textContent = subtotal > 0 ? 'Subtotal: ' + _formatMoney(subtotal) : '';
+
+  document.getElementById('modalComposicionLabel').innerHTML = '<i class="fas fa-pen text-primary me-2"></i>Editar recurso';
+  document.getElementById('btnGuardarComposicion').innerHTML = '<i class="fas fa-save me-1"></i>Guardar cambios';
+
+  MODAL_COMP.show();
+}
+
+// Mapa de descripciones de item cargado desde el DOM, para el modo edición dinámico
+function _getItemDesc(itemId) {
+  const row = document.querySelector(`tr[data-item-row][data-item-id="${itemId}"]`);
+  if (!row) return '';
+  const cell = row.querySelector('td:first-child small');
+  return cell ? cell.textContent : '';
+}
+
+function onTipoChange() {
+  const tipo = document.querySelector('input[name="tipo"]:checked').value;
+  const wrap = document.getElementById('wrapperModalidad');
+  if (tipo === 'equipo') {
+    wrap.classList.remove('d-none');
+    onModalidadChange();
+  } else {
+    wrap.classList.add('d-none');
+    // Reset labels a default
+    document.getElementById('labelUnidad').textContent = 'Unidad';
+    document.getElementById('labelCantidad').innerHTML = 'Cantidad <span class="text-danger">*</span>';
+    document.getElementById('labelPrecio').innerHTML = 'Precio unitario (ARS) <span class="text-danger">*</span>';
+  }
+}
+
+function onModalidadChange() {
+  const modalidad = document.querySelector('input[name="modalidad_costo"]:checked')?.value;
+  const hint = document.getElementById('hintModalidad');
+  const labelCant = document.getElementById('labelCantidad');
+  const labelUn = document.getElementById('labelUnidad');
+  const labelPrecio = document.getElementById('labelPrecio');
+  if (modalidad === 'alquiler') {
+    hint.innerHTML = '<strong>Alquiler:</strong> cantidad = cantidad de períodos (ej: 30 días); unidad = período (día / hora / semana); precio = costo por período.';
+    labelCant.innerHTML = 'Cantidad de períodos <span class="text-danger">*</span>';
+    labelUn.textContent = 'Período (día / hora / …)';
+    labelPrecio.innerHTML = 'Precio por período (ARS) <span class="text-danger">*</span>';
+  } else {
+    hint.innerHTML = '<strong>Compra:</strong> cantidad = unidades físicas del equipo; precio = costo de compra por unidad.';
+    labelCant.innerHTML = 'Cantidad <span class="text-danger">*</span>';
+    labelUn.textContent = 'Unidad';
+    labelPrecio.innerHTML = 'Precio de compra por unidad (ARS) <span class="text-danger">*</span>';
+  }
+}
+
+// Preview de subtotal en vivo
+['compCantidad', 'compPrecio'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const cant = parseFloat(document.getElementById('compCantidad').value) || 0;
+    const precio = parseFloat(document.getElementById('compPrecio').value) || 0;
+    const subtotal = cant * precio;
+    const el = document.getElementById('compSubtotalPreview');
+    el.textContent = subtotal > 0 ? 'Subtotal: ' + _formatMoney(subtotal) : '';
+  });
+});
+
+async function guardarComposicion(ev) {
+  ev.preventDefault();
+  const btn = document.getElementById('btnGuardarComposicion');
+  const errEl = document.getElementById('compError');
+  errEl.classList.add('d-none');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+
+  const itemId = document.getElementById('compItemId').value;
+  const compId = document.getElementById('compCompId').value;
+  const isEdit = !!compId;
+  const tipo = document.querySelector('input[name="tipo"]:checked').value;
+  const payload = {
+    tipo: tipo,
+    descripcion: document.getElementById('compDescripcion').value.trim(),
+    unidad: document.getElementById('compUnidad').value,
+    cantidad: document.getElementById('compCantidad').value,
+    precio_unitario: document.getElementById('compPrecio').value,
+    modalidad_costo: tipo === 'equipo' ? document.querySelector('input[name="modalidad_costo"]:checked').value : null,
+    notas: document.getElementById('compNotas').value.trim() || null,
+  };
+
+  const url = isEdit ? `/presupuestos/composicion/${compId}` : `/presupuestos/items/${itemId}/composicion`;
+  const method = isEdit ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method: method,
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify(payload),
+    });
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      // Respuesta no-JSON (ej: 500 con HTML): leer texto para diagnosticar
+      const txt = await res.text().catch(() => '');
+      errEl.textContent = `Error ${res.status}: ${txt.substring(0, 200) || 'respuesta no JSON'}`;
+      errEl.classList.remove('d-none');
+      console.error('Respuesta no-JSON:', txt);
+      return;
+    }
+    if (!res.ok || !data.ok) {
+      errEl.textContent = data.error || `Error ${res.status}`;
+      errEl.classList.remove('d-none');
+      console.error('Error backend:', data);
+      return;
+    }
+    MODAL_COMP.hide();
+    await refrescarComposicionesDeItem(itemId);
+  } catch (e) {
+    errEl.textContent = 'Error de red: ' + e.message;
+    errEl.classList.remove('d-none');
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = isEdit
+      ? '<i class="fas fa-save me-1"></i>Guardar cambios'
+      : '<i class="fas fa-save me-1"></i>Agregar';
+  }
+}
+
+async function eliminarComposicion(compId, itemId) {
+  if (!confirm('¿Eliminar este recurso del desglose?')) return;
+  const res = await fetch(`/presupuestos/composicion/${compId}`, {
+    method: 'DELETE',
+    headers: {'X-CSRFToken': _getCsrf()},
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    alert(data.error || 'No se pudo eliminar');
+    return;
+  }
+  await refrescarComposicionesDeItem(itemId);
+}
+
+async function refrescarComposicionesDeItem(itemId) {
+  const res = await fetch(`/presupuestos/items/${itemId}/composiciones`);
+  const data = await res.json();
+  if (!data.ok) return;
+
+  // Re-render de la tabla de composiciones del item
+  const container = document.querySelector(`[data-composiciones-item="${itemId}"]`);
+  if (container) container.innerHTML = _renderCompTable(data.composiciones);
+
+  // Actualizar celdas costo/margen en la fila del item
+  const row = document.querySelector(`tr[data-item-row][data-item-id="${itemId}"]`);
+  if (row) {
+    const precioTxt = row.children[3].textContent.trim().replace(/[^\d.-]/g, '');
+    const precioVendido = parseFloat(precioTxt) || 0;
+    const costoCell = row.querySelector('[data-costo-cell]');
+    const margenCell = row.querySelector('[data-margen-cell]');
+    const countBadge = row.querySelector('[data-comp-count]');
+    if (countBadge) countBadge.textContent = data.composiciones.length;
+    if (data.costo_estimado > 0) {
+      costoCell.innerHTML = `<span class="text-warning">${_formatMoney(data.costo_estimado)}</span>`;
+      const margen = precioVendido - data.costo_estimado;
+      const cls = margen >= 0 ? 'text-primary' : 'text-danger';
+      margenCell.innerHTML = `<span class="${cls}">${_formatMoney(margen)}</span>`;
+    } else {
+      costoCell.innerHTML = '<small class="text-muted">—</small>';
+      margenCell.innerHTML = '<small class="text-muted">—</small>';
+    }
+  }
+}
+
+function _renderCompTable(comps) {
+  if (!comps || comps.length === 0) {
+    return `<div class="text-center py-3 text-muted small bg-white rounded border">
+      Este ítem aún no tiene recursos descompuestos. Tocá <strong>Agregar recurso</strong> para empezar.
+    </div>`;
+  }
+  const rows = comps.map(c => {
+    let badge;
+    if (c.tipo === 'material') badge = '<span class="badge bg-info">Material</span>';
+    else if (c.tipo === 'mano_obra') badge = '<span class="badge bg-warning text-dark">MO</span>';
+    else {
+      badge = '<span class="badge bg-secondary">Equipo</span>';
+      if (c.modalidad_costo === 'alquiler') badge += ' <span class="badge bg-primary" title="Alquiler">Alq.</span>';
+      else if (c.modalidad_costo === 'compra') badge += ' <span class="badge bg-success" title="Compra">Compra</span>';
+    }
+    const itemId = document.getElementById('compItemId').value;
+    return `<tr data-comp-id="${c.id}">
+      <td>${badge}</td>
+      <td><small>${_escape(c.descripcion)}</small></td>
+      <td class="text-center"><small>${c.cantidad.toFixed(3)}</small></td>
+      <td class="text-center"><small>${_escape(c.unidad)}</small></td>
+      <td class="text-end"><small>$${c.precio_unitario.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small></td>
+      <td class="text-end fw-bold"><small>$${c.total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small></td>
+      <td class="text-end">
+        <div class="btn-group btn-group-sm" role="group">
+          <button class="btn btn-outline-primary" type="button"
+                  onclick='editarComposicion(${c.id}, ${itemId}, ${JSON.stringify(c).replace(/"/g, "&quot;")}, ${JSON.stringify(_getItemDesc(itemId)).replace(/"/g, "&quot;")})'
+                  title="Editar">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button class="btn btn-outline-danger" type="button" onclick="eliminarComposicion(${c.id}, ${itemId})" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  return `<table class="table table-sm table-bordered mb-0 bg-white">
+    <thead>
+      <tr class="small text-muted">
+        <th style="width:100px;">Tipo</th>
+        <th>Descripción</th>
+        <th class="text-center" style="width:80px;">Cant.</th>
+        <th class="text-center" style="width:70px;">Un.</th>
+        <th class="text-end" style="width:110px;">P. Unit.</th>
+        <th class="text-end" style="width:110px;">Subtotal</th>
+        <th style="width:50px;"></th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function _escape(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function _getCsrf() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute('content') : '';
+}
+</script>
 {% endblock %}

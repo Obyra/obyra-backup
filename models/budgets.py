@@ -701,6 +701,8 @@ class ItemPresupuestoComposicion(db.Model):
     precio_unitario = db.Column(db.Numeric(15, 2), nullable=False, default=0)
     total = db.Column(db.Numeric(15, 2), nullable=False, default=0)
     item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
+    # Solo aplica a tipo='equipo'. 'compra' = precio total del equipo; 'alquiler' = precio por período.
+    modalidad_costo = db.Column(db.String(20), nullable=True)
     notas = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

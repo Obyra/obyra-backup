@@ -1278,11 +1278,17 @@ def run_runtime_migrations(db, app):
                     precio_unitario NUMERIC(15, 2) NOT NULL DEFAULT 0,
                     total NUMERIC(15, 2) NOT NULL DEFAULT 0,
                     item_inventario_id INTEGER REFERENCES items_inventario(id),
+                    modalidad_costo VARCHAR(20),
                     notas TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX ix_ipc_item_presupuesto ON items_presupuesto_composicion(item_presupuesto_id);
+            END IF;
+            -- Agregar modalidad_costo si la tabla ya existia pre-fase
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto_composicion' AND column_name='modalidad_costo') THEN
+                ALTER TABLE items_presupuesto_composicion ADD COLUMN modalidad_costo VARCHAR(20);
             END IF;
         END $$;
         """))
