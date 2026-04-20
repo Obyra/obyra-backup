@@ -1262,6 +1262,22 @@ def run_runtime_migrations(db, app):
             db.session.rollback()
             print(f"[WARN] Migración seguridad {tabla}: {e}")
 
+    # Presupuesto Ejecutivo: flag ejecutivo_aprobado en presupuestos
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='presupuestos' AND column_name='ejecutivo_aprobado') THEN
+                ALTER TABLE presupuestos ADD COLUMN ejecutivo_aprobado BOOLEAN NOT NULL DEFAULT false;
+                ALTER TABLE presupuestos ADD COLUMN ejecutivo_aprobado_at TIMESTAMP;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion ejecutivo_aprobado: {e}")
+
     # Presupuesto Ejecutivo (APU): composicion de items del pliego
     try:
         db.session.execute(db.text("""

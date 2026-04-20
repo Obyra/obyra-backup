@@ -8,6 +8,7 @@ Rutas:
   GET  /presupuestos/<id>/ejecutivo           -> vista principal con items agrupados por etapa
 """
 from collections import OrderedDict
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from flask import render_template, redirect, url_for, flash, abort, request, jsonify
@@ -20,6 +21,16 @@ from services.memberships import get_current_org_id
 
 
 TIPOS_COMPOSICION = ('material', 'mano_obra', 'equipo')
+
+
+def _puede_editar_ejecutivo(presupuesto):
+    """True si el ejecutivo permite agregar/editar/eliminar composiciones.
+
+    Una vez aprobado queda congelado; para modificar hay que revertir primero.
+    """
+    if presupuesto.ejecutivo_aprobado:
+        return False
+    return presupuesto.estado in ESTADOS_EDITABLES_EJECUTIVO
 
 
 ESTADOS_EDITABLES_EJECUTIVO = ('borrador', 'enviado', 'aprobado')
@@ -90,6 +101,11 @@ def ejecutivo_vista(id):
         etapas[nombre_etapa]['total_vendido'] += Decimal(str(item.total or 0))
         etapas[nombre_etapa]['total_costo'] += costo_item
 
+    # Calcular margen y margen% por etapa
+    for nombre_etapa, d in etapas.items():
+        d['margen'] = d['total_vendido'] - d['total_costo']
+        d['margen_pct'] = (d['margen'] / d['total_vendido'] * 100) if d['total_vendido'] > 0 else Decimal('0')
+
     total_vendido = sum((d['total_vendido'] for d in etapas.values()), Decimal('0'))
     total_costo = sum((d['total_costo'] for d in etapas.values()), Decimal('0'))
     margen = total_vendido - total_costo
@@ -149,11 +165,11 @@ def composicion_crear(item_id):
     if not _item_pertenece_a_org(item, org_id):
         return jsonify(ok=False, error='Item no pertenece a tu organización'), 403
 
-    if item.presupuesto.estado not in ESTADOS_EDITABLES_EJECUTIVO:
-        return jsonify(
-            ok=False,
-            error=f'No se puede editar el ejecutivo en estado {item.presupuesto.estado}',
-        ), 400
+    if not _puede_editar_ejecutivo(item.presupuesto):
+        motivo = 'ejecutivo aprobado — revertí la aprobación para editarlo' \
+            if item.presupuesto.ejecutivo_aprobado \
+            else f'estado {item.presupuesto.estado} no editable'
+        return jsonify(ok=False, error=f'No se puede editar el ejecutivo: {motivo}'), 400
 
     data = request.get_json(silent=True) or request.form.to_dict()
 
@@ -219,11 +235,11 @@ def composicion_actualizar(comp_id):
     if not _item_pertenece_a_org(comp.item_presupuesto, org_id):
         return jsonify(ok=False, error='Composición no pertenece a tu organización'), 403
 
-    if comp.item_presupuesto.presupuesto.estado not in ESTADOS_EDITABLES_EJECUTIVO:
-        return jsonify(
-            ok=False,
-            error=f'No se puede editar el ejecutivo en estado {comp.item_presupuesto.presupuesto.estado}',
-        ), 400
+    if not _puede_editar_ejecutivo(comp.item_presupuesto.presupuesto):
+        motivo = 'ejecutivo aprobado — revertí la aprobación para editarlo' \
+            if comp.item_presupuesto.presupuesto.ejecutivo_aprobado \
+            else f'estado {comp.item_presupuesto.presupuesto.estado} no editable'
+        return jsonify(ok=False, error=f'No se puede editar el ejecutivo: {motivo}'), 400
 
     data = request.get_json(silent=True) or request.form.to_dict()
 
@@ -290,11 +306,11 @@ def composicion_eliminar(comp_id):
     if not _item_pertenece_a_org(comp.item_presupuesto, org_id):
         return jsonify(ok=False, error='Composición no pertenece a tu organización'), 403
 
-    if comp.item_presupuesto.presupuesto.estado not in ESTADOS_EDITABLES_EJECUTIVO:
-        return jsonify(
-            ok=False,
-            error=f'No se puede editar el ejecutivo en estado {comp.item_presupuesto.presupuesto.estado}',
-        ), 400
+    if not _puede_editar_ejecutivo(comp.item_presupuesto.presupuesto):
+        motivo = 'ejecutivo aprobado — revertí la aprobación para editarlo' \
+            if comp.item_presupuesto.presupuesto.ejecutivo_aprobado \
+            else f'estado {comp.item_presupuesto.presupuesto.estado} no editable'
+        return jsonify(ok=False, error=f'No se puede editar el ejecutivo: {motivo}'), 400
 
     db.session.delete(comp)
     db.session.commit()
@@ -322,3 +338,71 @@ def composiciones_listar(item_id):
         costo_estimado=costo_total,
         composiciones=[_serializar_composicion(c) for c in comps],
     )
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/aprobar', methods=['POST'])
+@login_required
+def ejecutivo_aprobar(id):
+    """Aprueba el ejecutivo y lo congela: no se pueden editar composiciones
+    hasta que se revierta la aprobación."""
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    rol = getattr(current_user, 'role', '') or ''
+    if rol not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    if presupuesto.ejecutivo_aprobado:
+        return jsonify(ok=False, error='El ejecutivo ya estaba aprobado'), 400
+
+    # Validar que haya al menos una composición cargada
+    total_comps = db.session.query(ItemPresupuestoComposicion).join(ItemPresupuesto).filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+    ).count()
+    if total_comps == 0:
+        return jsonify(
+            ok=False,
+            error='No hay recursos cargados en el ejecutivo. Agregá al menos una composición antes de aprobar.',
+        ), 400
+
+    presupuesto.ejecutivo_aprobado = True
+    presupuesto.ejecutivo_aprobado_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify(
+        ok=True,
+        aprobado_at=presupuesto.ejecutivo_aprobado_at.isoformat(),
+    )
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/revertir', methods=['POST'])
+@login_required
+def ejecutivo_revertir(id):
+    """Revierte la aprobación del ejecutivo para poder editarlo de nuevo."""
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    rol = getattr(current_user, 'role', '') or ''
+    if rol not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    if presupuesto.confirmado_como_obra:
+        return jsonify(
+            ok=False,
+            error='El presupuesto ya fue confirmado como obra — no se puede revertir el ejecutivo.',
+        ), 400
+
+    if not presupuesto.ejecutivo_aprobado:
+        return jsonify(ok=False, error='El ejecutivo no estaba aprobado'), 400
+
+    presupuesto.ejecutivo_aprobado = False
+    presupuesto.ejecutivo_aprobado_at = None
+    db.session.commit()
+
+    return jsonify(ok=True)

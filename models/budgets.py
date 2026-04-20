@@ -88,6 +88,10 @@ class Presupuesto(db.Model):
     fecha = db.Column(db.Date, default=date.today)
     estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado, perdido, eliminado
     confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtió en obra
+    # Presupuesto Ejecutivo (APU): cuando se aprueba, el desglose interno queda
+    # congelado y no se pueden agregar/editar composiciones sin revertir primero.
+    ejecutivo_aprobado = db.Column(db.Boolean, default=False, nullable=False, server_default='false')
+    ejecutivo_aprobado_at = db.Column(db.DateTime, nullable=True)
     datos_proyecto = db.Column(db.Text)  # NUEVO: Datos del proyecto en JSON
     ubicacion_texto = db.Column(db.String(300))
     ubicacion_normalizada = db.Column(db.String(300))

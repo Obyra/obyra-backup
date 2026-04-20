@@ -20,8 +20,33 @@
       <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-outline-secondary">
         <i class="fas fa-arrow-left me-1"></i>Volver al presupuesto
       </a>
+      {% if presupuesto.ejecutivo_aprobado %}
+      <button class="btn btn-outline-warning" onclick="revertirEjecutivo({{ presupuesto.id }})"
+              {% if presupuesto.confirmado_como_obra %}disabled title="El presupuesto ya es obra"{% endif %}>
+        <i class="fas fa-undo me-1"></i>Revertir aprobación
+      </button>
+      {% else %}
+      <button class="btn btn-primary" onclick="aprobarEjecutivo({{ presupuesto.id }})">
+        <i class="fas fa-check-double me-1"></i>Aprobar ejecutivo
+      </button>
+      {% endif %}
     </div>
   </div>
+
+  {% if presupuesto.ejecutivo_aprobado %}
+  <div class="alert alert-success d-flex align-items-start">
+    <i class="fas fa-lock fa-lg me-2 mt-1"></i>
+    <div class="flex-grow-1">
+      <strong>Ejecutivo aprobado.</strong>
+      {% if presupuesto.ejecutivo_aprobado_at %}
+      Aprobado el {{ presupuesto.ejecutivo_aprobado_at.strftime('%d/%m/%Y %H:%M') }}.
+      {% endif %}
+      El desglose quedó congelado. Para modificarlo, revertí la aprobación primero.
+      Cuando confirmes el presupuesto como obra, estas composiciones se van a usar
+      para pre-cargar materiales, mano de obra y equipos en las etapas.
+    </div>
+  </div>
+  {% endif %}
 
   <div class="alert alert-info d-flex align-items-start">
     <i class="fas fa-info-circle fa-lg me-2 mt-1"></i>
@@ -72,6 +97,13 @@
           <h4 class="mb-0 {% if margen_pct >= 30 %}text-success{% elif margen_pct >= 15 %}text-warning{% else %}text-danger{% endif %}">
             {{ '{:.1f}'.format(margen_pct|float) }}%
           </h4>
+          {% if total_costo|float > 0 %}
+          <small class="text-muted">
+            {% if margen_pct >= 30 %}✅ Margen saludable
+            {% elif margen_pct >= 15 %}⚠️ Margen ajustado
+            {% else %}🔴 Margen crítico{% endif %}
+          </small>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -87,6 +119,8 @@
   <!-- Etapas con items -->
   {% for nombre_etapa, etapa_data in etapas.items() %}
   <div class="card mb-3 shadow-sm">
+    {% set et_margen_pct = etapa_data['margen_pct']|float %}
+    {% set et_sem_class = 'bg-success' if et_margen_pct >= 30 else ('bg-warning text-dark' if et_margen_pct >= 15 else 'bg-danger') %}
     <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center"
          role="button"
          data-bs-toggle="collapse"
@@ -104,6 +138,11 @@
         <small class="text-light">
           Costo: <strong>${{ '{:,.0f}'.format(etapa_data['total_costo']|float) }}</strong>
         </small>
+        {% if etapa_data['total_costo']|float > 0 %}
+        <span class="badge {{ et_sem_class }}" title="Margen de la etapa">
+          {{ '{:+.1f}'.format(et_margen_pct) }}%
+        </span>
+        {% endif %}
         <i class="fas fa-chevron-down"></i>
       </div>
     </div>
@@ -150,12 +189,12 @@
                 {% endif %}
               </td>
               <td class="text-end">
-                <button class="btn btn-sm btn-outline-primary"
+                <button class="btn btn-sm {% if presupuesto.ejecutivo_aprobado %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
                         type="button"
                         data-bs-toggle="collapse"
                         data-bs-target="#comp-item-{{ item.id }}"
                         aria-expanded="false">
-                  <i class="fas fa-layer-group me-1"></i>Desglosar
+                  <i class="fas {% if presupuesto.ejecutivo_aprobado %}fa-eye{% else %}fa-layer-group{% endif %} me-1"></i>{% if presupuesto.ejecutivo_aprobado %}Ver{% else %}Desglosar{% endif %}
                   <span class="badge bg-secondary ms-1" data-comp-count>{{ comp_list|length }}</span>
                 </button>
               </td>
@@ -165,11 +204,13 @@
                 <div class="p-3">
                   <div class="d-flex justify-content-between align-items-center mb-2">
                     <strong><i class="fas fa-tools text-primary me-1"></i>Composición interna (APU)</strong>
+                    {% if not presupuesto.ejecutivo_aprobado %}
                     <button class="btn btn-sm btn-success"
                             type="button"
                             onclick="abrirModalComposicion({{ item.id }}, '{{ item.descripcion|e }}')">
                       <i class="fas fa-plus me-1"></i>Agregar recurso
                     </button>
+                    {% endif %}
                   </div>
                   <div data-composiciones-item="{{ item.id }}">
                     {% if comp_list %}
@@ -204,6 +245,7 @@
                           <td class="text-end"><small>${{ '{:,.2f}'.format(comp.precio_unitario|float) }}</small></td>
                           <td class="text-end fw-bold"><small>${{ '{:,.2f}'.format(comp.total|float) }}</small></td>
                           <td class="text-end">
+                            {% if not presupuesto.ejecutivo_aprobado %}
                             <div class="btn-group btn-group-sm" role="group">
                               <button class="btn btn-outline-primary"
                                       type="button"
@@ -218,6 +260,9 @@
                                 <i class="fas fa-trash"></i>
                               </button>
                             </div>
+                            {% else %}
+                            <small class="text-muted"><i class="fas fa-lock"></i></small>
+                            {% endif %}
                           </td>
                         </tr>
                         {% endfor %}
@@ -661,6 +706,46 @@ function _escape(s) {
 function _getCsrf() {
   const meta = document.querySelector('meta[name="csrf-token"]');
   return meta ? meta.getAttribute('content') : '';
+}
+
+async function aprobarEjecutivo(presupuestoId) {
+  if (!confirm('¿Aprobar el ejecutivo?\n\nUna vez aprobado no podrás editar las composiciones sin revertir primero. Las composiciones van a usarse para pre-cargar materiales, MO y equipos cuando confirmes el presupuesto como obra.')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/presupuestos/${presupuestoId}/ejecutivo/aprobar`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status} al aprobar`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+
+async function revertirEjecutivo(presupuestoId) {
+  if (!confirm('¿Revertir la aprobación del ejecutivo?\n\nVas a poder volver a editar las composiciones.')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/presupuestos/${presupuestoId}/ejecutivo/revertir`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status} al revertir`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
 }
 </script>
 {% endblock %}
