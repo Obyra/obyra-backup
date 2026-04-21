@@ -7,6 +7,10 @@ calcular costo estimado y margen por etapa antes de pasar a obra.
 Rutas:
   GET  /presupuestos/<id>/ejecutivo           -> vista principal con items agrupados por etapa
 """
+import hashlib
+import json
+import re
+import unicodedata
 from collections import OrderedDict
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -16,8 +20,170 @@ from flask_login import login_required, current_user
 
 from blueprint_presupuestos import presupuestos_bp
 from extensions import db
-from models import Presupuesto, ItemPresupuesto, ItemPresupuestoComposicion
+from models import (
+    Presupuesto, ItemPresupuesto, ItemPresupuestoComposicion, MaterialCotizable,
+    ProveedorAsignadoMaterial, SolicitudCotizacionMaterial, SolicitudCotizacionMaterialItem,
+)
+from models.proveedores_oc import ProveedorOC
 from services.memberships import get_current_org_id
+from etapas_predefinidas import ETAPAS_CONSTRUCCION, obtener_etapa_por_slug
+
+
+def _normalizar_texto(s):
+    """Pasa a lowercase, quita acentos, colapsa espacios. Útil para dedup."""
+    if not s:
+        return ''
+    s = str(s).strip().lower()
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode()
+    s = re.sub(r'\s+', ' ', s)
+    return s
+
+
+def _grupo_hash_material(descripcion, unidad, item_inventario_id=None, tipo='material'):
+    """Hash determinístico para identificar recursos iguales dentro del mismo tipo.
+
+    Regla: si hay item_inventario_id, manda ese ID (más confiable que texto).
+    Si no, normaliza descripción y unidad. Siempre se prefija con el tipo para
+    no mezclar 'Excavadora' material con 'Excavadora' equipo.
+    """
+    if item_inventario_id:
+        inner = f'inv:{item_inventario_id}'
+    else:
+        inner = f'txt:{_normalizar_texto(descripcion)}|{_normalizar_texto(unidad)}'
+    key = f'{tipo}|{inner}'
+    return hashlib.sha1(key.encode()).hexdigest()[:32]
+
+
+def sincronizar_materiales_cotizables(presupuesto):
+    """Consolida todas las composiciones COTIZABLES (material + equipo) del
+    presupuesto en registros MaterialCotizable agrupando por hash.
+
+    Qué hace:
+      - Lee composiciones tipo='material' Y tipo='equipo' del presupuesto.
+      - Agrupa por hash determinístico (desc + unidad + item_inventario_id).
+      - Crea/actualiza MaterialCotizable por grupo (upsert).
+      - Linkea cada composición a su MaterialCotizable via FK.
+      - Borra MaterialCotizable huérfanos (si una composición desapareció).
+
+    NO incluye mano_obra: esos son costos internos (sueldos/jornales) que
+    vos conocés y no se cotizan a proveedores externos.
+
+    Retorna lista ordenada de MaterialCotizable del presupuesto.
+    """
+    # 1. Traer composiciones cotizables (material + equipo) del presupuesto
+    comps = db.session.query(ItemPresupuestoComposicion).join(
+        ItemPresupuesto, ItemPresupuesto.id == ItemPresupuestoComposicion.item_presupuesto_id,
+    ).filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuestoComposicion.tipo.in_(['material', 'equipo']),
+    ).all()
+
+    # 2. Agrupar por hash (prefijando tipo para no mezclar material vs equipo)
+    grupos = {}  # hash -> dict(tipo, composiciones, descripciones, unidades, cantidad_total, item_inv_id)
+    for comp in comps:
+        h = _grupo_hash_material(comp.descripcion, comp.unidad, comp.item_inventario_id, tipo=comp.tipo)
+        if h not in grupos:
+            grupos[h] = {
+                'tipo': comp.tipo,
+                'composiciones': [],
+                'descripciones': [],
+                'unidades': set(),
+                'cantidad_total': Decimal('0'),
+                'item_inventario_id': comp.item_inventario_id,
+            }
+        grupos[h]['composiciones'].append(comp)
+        grupos[h]['descripciones'].append(comp.descripcion or '')
+        grupos[h]['unidades'].add(comp.unidad or '')
+        try:
+            grupos[h]['cantidad_total'] += Decimal(str(comp.cantidad or 0))
+        except (InvalidOperation, TypeError):
+            pass
+
+    # 3. Cargar MaterialCotizable existentes para este presupuesto
+    existentes = {
+        m.grupo_hash: m for m in MaterialCotizable.query.filter_by(
+            presupuesto_id=presupuesto.id
+        ).all()
+    }
+
+    # 4. Upsert: crear o actualizar por hash
+    for h, info in grupos.items():
+        # Descripción representativa = la más larga entre las composiciones agrupadas
+        desc_rep = max(info['descripciones'], key=len) if info['descripciones'] else ''
+        unidad_rep = next(iter(info['unidades']), 'un') if info['unidades'] else 'un'
+
+        mat = existentes.get(h)
+        if mat is None:
+            mat = MaterialCotizable(
+                presupuesto_id=presupuesto.id,
+                grupo_hash=h,
+                tipo=info['tipo'],
+                descripcion=desc_rep[:300],
+                unidad=unidad_rep[:20],
+                cantidad_total=info['cantidad_total'],
+                item_inventario_id=info['item_inventario_id'],
+                estado='nuevo',
+            )
+            db.session.add(mat)
+            db.session.flush()
+        else:
+            mat.tipo = info['tipo']
+            mat.descripcion = desc_rep[:300]
+            mat.unidad = unidad_rep[:20]
+            mat.cantidad_total = info['cantidad_total']
+            mat.item_inventario_id = info['item_inventario_id']
+
+        # Linkear composiciones
+        for comp in info['composiciones']:
+            if comp.material_cotizable_id != mat.id:
+                comp.material_cotizable_id = mat.id
+
+    # 5. Borrar MaterialCotizable huérfanos (ya no tienen composiciones)
+    for h, mat in existentes.items():
+        if h not in grupos:
+            db.session.delete(mat)
+
+    db.session.commit()
+
+    # 6. Devolver lista final ordenada
+    return MaterialCotizable.query.filter_by(
+        presupuesto_id=presupuesto.id
+    ).order_by(MaterialCotizable.descripcion).all()
+
+
+def _matchea_etapa_del_pliego(etapa_estandar_nombre, nombres_pliego_set):
+    """True si esta etapa estándar ya está cubierta por una etapa del pliego."""
+    if not etapa_estandar_nombre or not nombres_pliego_set:
+        return False
+    nombre_lower = etapa_estandar_nombre.strip().lower()
+    for n in nombres_pliego_set:
+        if not n:
+            continue
+        n_lower = n.strip().lower()
+        if nombre_lower == n_lower:
+            return True
+        # Matching flexible: "Depresión de Napa / Bombeo" matchea con "Depresion de Napa"
+        base_standard = nombre_lower.split('/')[0].strip()
+        base_pliego = n_lower.split('/')[0].strip()
+        if base_standard and base_standard == base_pliego:
+            return True
+    return False
+
+
+def _cargar_datos_proyecto(presupuesto):
+    """Devuelve el dict datos_proyecto del presupuesto (creando uno vacío si falta)."""
+    if not presupuesto.datos_proyecto:
+        return {}
+    if isinstance(presupuesto.datos_proyecto, dict):
+        return presupuesto.datos_proyecto
+    try:
+        return json.loads(presupuesto.datos_proyecto)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _guardar_datos_proyecto(presupuesto, datos):
+    presupuesto.datos_proyecto = json.dumps(datos, ensure_ascii=False)
 
 
 TIPOS_COMPOSICION = ('material', 'mano_obra', 'equipo')
@@ -68,7 +234,10 @@ def ejecutivo_vista(id):
         )
         return redirect(url_for('presupuestos.detalle', id=id))
 
-    # Traer items ordenados por etapa_nombre para agrupar en el template
+    # Traer items ordenados por etapa_nombre para agrupar en el template.
+    # Se traen TODOS (incluidos los solo_interno=True) pero se separan en dos
+    # grupos: "etapas del pliego" y "etapas internas" (las agregadas por el PM
+    # en el ejecutivo, que no se muestran al cliente).
     items = ItemPresupuesto.query.filter_by(
         presupuesto_id=presupuesto.id,
     ).order_by(
@@ -76,10 +245,10 @@ def ejecutivo_vista(id):
         ItemPresupuesto.id,
     ).all()
 
-    # Agrupar por etapa preservando orden natural.
-    # Pre-cargamos las composiciones ordenadas como atributo comp_list
-    # para evitar queries repetidas y order_by dentro del template.
-    etapas = OrderedDict()
+    # Agrupar por etapa, pre-cargando composiciones
+    etapas = OrderedDict()           # etapas del pliego (solo_interno=False)
+    etapas_internas = OrderedDict()  # etapas internas (solo_interno=True)
+
     for item in items:
         nombre_etapa = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin etapa')
 
@@ -91,34 +260,59 @@ def ejecutivo_vista(id):
         costo_item = sum((Decimal(str(c.total or 0)) for c in comp_list), Decimal('0'))
         item.costo_estimado = costo_item
 
-        if nombre_etapa not in etapas:
-            etapas[nombre_etapa] = {
+        target = etapas_internas if item.solo_interno else etapas
+        if nombre_etapa not in target:
+            target[nombre_etapa] = {
                 'items': [],
                 'total_vendido': Decimal('0'),
                 'total_costo': Decimal('0'),
             }
-        etapas[nombre_etapa]['items'].append(item)
-        etapas[nombre_etapa]['total_vendido'] += Decimal(str(item.total or 0))
-        etapas[nombre_etapa]['total_costo'] += costo_item
+        target[nombre_etapa]['items'].append(item)
+        # Solo suma al vendido si NO es interno (los internos no se facturan al cliente)
+        if not item.solo_interno:
+            target[nombre_etapa]['total_vendido'] += Decimal(str(item.total or 0))
+        target[nombre_etapa]['total_costo'] += costo_item
 
-    # Calcular margen y margen% por etapa
+    # Calcular margen y margen% por etapa (solo las del pliego tienen margen
+    # como tal, porque son las que se le vendieron al cliente)
     for nombre_etapa, d in etapas.items():
         d['margen'] = d['total_vendido'] - d['total_costo']
         d['margen_pct'] = (d['margen'] / d['total_vendido'] * 100) if d['total_vendido'] > 0 else Decimal('0')
 
+    # Las etapas internas solo tienen costo (no margen porque no se venden)
+    for d in etapas_internas.values():
+        d['margen'] = Decimal('0')
+        d['margen_pct'] = Decimal('0')
+
     total_vendido = sum((d['total_vendido'] for d in etapas.values()), Decimal('0'))
-    total_costo = sum((d['total_costo'] for d in etapas.values()), Decimal('0'))
+    # Costo total = costo de etapas del pliego + costo de etapas internas
+    total_costo_pliego = sum((d['total_costo'] for d in etapas.values()), Decimal('0'))
+    total_costo_interno = sum((d['total_costo'] for d in etapas_internas.values()), Decimal('0'))
+    total_costo = total_costo_pliego + total_costo_interno
     margen = total_vendido - total_costo
     margen_pct = (margen / total_vendido * 100) if total_vendido > 0 else Decimal('0')
+
+    # Materiales sin cotizar (precio=0 y tipo=material) para warning al aprobar
+    materiales_sin_precio = db.session.query(ItemPresupuestoComposicion).join(
+        ItemPresupuesto, ItemPresupuesto.id == ItemPresupuestoComposicion.item_presupuesto_id,
+    ).filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuestoComposicion.tipo == 'material',
+        ItemPresupuestoComposicion.precio_unitario == 0,
+    ).count()
 
     return render_template(
         'presupuestos/ejecutivo.html',
         presupuesto=presupuesto,
         etapas=etapas,
+        etapas_internas=etapas_internas,
         total_vendido=total_vendido,
         total_costo=total_costo,
+        total_costo_pliego=total_costo_pliego,
+        total_costo_interno=total_costo_interno,
         margen=margen,
         margen_pct=margen_pct,
+        materiales_sin_precio=materiales_sin_precio,
     )
 
 
@@ -340,11 +534,206 @@ def composiciones_listar(item_id):
     )
 
 
+@presupuestos_bp.route('/<int:id>/ejecutivo/etapas-internas', methods=['POST'])
+@login_required
+def ejecutivo_agregar_etapa_interna(id):
+    """Agrega una etapa interna al ejecutivo.
+
+    Crea N ítems sintéticos (`solo_interno=True`) en el presupuesto, uno por
+    cada tarea predefinida de la etapa elegida. Estos items:
+      - NO aparecen en el PDF del cliente.
+      - NO suman al precio vendido.
+      - SÍ pueden tener composiciones (materiales/MO/equipos) que sumen al costo.
+
+    Body JSON: {"slug": "mamposteria"}
+    """
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    rol = getattr(current_user, 'role', '') or ''
+    if rol not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    if presupuesto.ejecutivo_aprobado:
+        return jsonify(ok=False, error='Ejecutivo aprobado. Revertí la aprobación primero.'), 400
+    if presupuesto.estado not in ESTADOS_EDITABLES_EJECUTIVO:
+        return jsonify(ok=False, error=f'Estado {presupuesto.estado} no editable'), 400
+
+    data = request.get_json(silent=True) or {}
+    slug = (data.get('slug') or '').strip()
+    cat = obtener_etapa_por_slug(slug)
+    if not cat:
+        return jsonify(ok=False, error=f'Etapa "{slug}" no existe en el catálogo'), 400
+
+    etapa_nombre = cat['nombre']
+
+    # Si esta etapa ya existe como interna, no duplicamos (retornamos como ok).
+    ya_existe_interna = ItemPresupuesto.query.filter_by(
+        presupuesto_id=presupuesto.id,
+        solo_interno=True,
+        etapa_nombre=etapa_nombre,
+    ).first()
+    if ya_existe_interna:
+        return jsonify(ok=False, error=f'La etapa interna "{etapa_nombre}" ya está agregada.'), 400
+
+    # Si el etapa_nombre ya está como etapa del pliego, mejor avisar.
+    ya_en_pliego = ItemPresupuesto.query.filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuesto.solo_interno == False,  # noqa: E712
+        ItemPresupuesto.etapa_nombre == etapa_nombre,
+    ).first()
+    if ya_en_pliego:
+        return jsonify(ok=False, error=f'La etapa "{etapa_nombre}" ya forma parte del pliego.'), 400
+
+    # Crear 1 ítem sintético por cada tarea predefinida de la etapa.
+    # Si no hay tareas predefinidas, crear 1 placeholder "Ejecución {etapa}".
+    from tareas_predefinidas import obtener_tareas_por_etapa
+    predefs = obtener_tareas_por_etapa(etapa_nombre) or []
+    # Filtrar tareas opcionales (si_aplica=True)
+    predefs_core = [t for t in predefs if not t.get('si_aplica')]
+
+    items_creados = []
+    if predefs_core:
+        for tdef in predefs_core:
+            item = ItemPresupuesto(
+                presupuesto_id=presupuesto.id,
+                tipo='material',  # default; el PM puede cambiar la composición
+                descripcion=tdef['nombre'][:300],
+                unidad='un' if tdef.get('aplica_cantidad') is False else 'h',
+                cantidad=Decimal('1'),
+                precio_unitario=Decimal('0'),
+                total=Decimal('0'),
+                etapa_nombre=etapa_nombre,
+                origen='ejecutivo_interno',
+                currency=presupuesto.currency or 'ARS',
+                solo_interno=True,
+            )
+            db.session.add(item)
+            items_creados.append(item)
+    else:
+        item = ItemPresupuesto(
+            presupuesto_id=presupuesto.id,
+            tipo='material',
+            descripcion=f'Ejecución {etapa_nombre}',
+            unidad='un',
+            cantidad=Decimal('1'),
+            precio_unitario=Decimal('0'),
+            total=Decimal('0'),
+            etapa_nombre=etapa_nombre,
+            origen='ejecutivo_interno',
+            currency=presupuesto.currency or 'ARS',
+            solo_interno=True,
+        )
+        db.session.add(item)
+        items_creados.append(item)
+
+    db.session.commit()
+
+    return jsonify(
+        ok=True,
+        etapa_nombre=etapa_nombre,
+        items_creados=len(items_creados),
+    )
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/etapas-internas', methods=['DELETE'])
+@login_required
+def ejecutivo_eliminar_etapa_interna(id):
+    """Elimina una etapa interna completa (todos sus ítems internos y sus composiciones).
+
+    Body JSON: {"etapa_nombre": "Mampostería"}
+    """
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    rol = getattr(current_user, 'role', '') or ''
+    if rol not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    if presupuesto.ejecutivo_aprobado:
+        return jsonify(ok=False, error='Ejecutivo aprobado. Revertí la aprobación primero.'), 400
+
+    data = request.get_json(silent=True) or {}
+    etapa_nombre = (data.get('etapa_nombre') or '').strip()
+    if not etapa_nombre:
+        return jsonify(ok=False, error='etapa_nombre requerido'), 400
+
+    items = ItemPresupuesto.query.filter_by(
+        presupuesto_id=presupuesto.id,
+        solo_interno=True,
+        etapa_nombre=etapa_nombre,
+    ).all()
+
+    if not items:
+        return jsonify(ok=False, error=f'No hay etapa interna "{etapa_nombre}"'), 404
+
+    # Las composiciones tienen cascade DELETE desde item_presupuesto
+    for item in items:
+        db.session.delete(item)
+    db.session.commit()
+
+    return jsonify(ok=True, eliminados=len(items))
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/etapas-estandar')
+@login_required
+def ejecutivo_etapas_estandar(id):
+    """Catálogo de etapas estándar marcando cuáles están disponibles para
+    agregar como etapa interna al ejecutivo.
+
+    Para cada etapa:
+      - en_pliego: ya es parte del pliego (items con solo_interno=False)
+      - ya_interna: ya fue agregada como etapa interna (items con solo_interno=True)
+      - disponible: se puede agregar
+    """
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    nombres_pliego = set(
+        n for (n,) in db.session.query(ItemPresupuesto.etapa_nombre).filter(
+            ItemPresupuesto.presupuesto_id == presupuesto.id,
+            ItemPresupuesto.solo_interno == False,  # noqa: E712
+            ItemPresupuesto.etapa_nombre.isnot(None),
+        ).distinct().all()
+    )
+    nombres_internos = set(
+        n for (n,) in db.session.query(ItemPresupuesto.etapa_nombre).filter(
+            ItemPresupuesto.presupuesto_id == presupuesto.id,
+            ItemPresupuesto.solo_interno == True,  # noqa: E712
+            ItemPresupuesto.etapa_nombre.isnot(None),
+        ).distinct().all()
+    )
+
+    catalogo = []
+    for et in ETAPAS_CONSTRUCCION:
+        en_pliego = _matchea_etapa_del_pliego(et['nombre'], nombres_pliego)
+        ya_interna = et['nombre'] in nombres_internos
+        catalogo.append({
+            'slug': et['slug'],
+            'nombre': et['nombre'],
+            'descripcion': et['descripcion'],
+            'nivel': et.get('nivel'),
+            'en_pliego': en_pliego,
+            'ya_interna': ya_interna,
+            'disponible': not en_pliego and not ya_interna,
+        })
+
+    return jsonify(ok=True, etapas=catalogo)
+
+
 @presupuestos_bp.route('/<int:id>/ejecutivo/aprobar', methods=['POST'])
 @login_required
 def ejecutivo_aprobar(id):
     """Aprueba el ejecutivo y lo congela: no se pueden editar composiciones
-    hasta que se revierta la aprobación."""
+    ni agregar etapas internas hasta que se revierta la aprobación.
+    """
     org_id = get_current_org_id()
     if not org_id:
         return jsonify(ok=False, error='Sin organización activa'), 400
@@ -406,3 +795,387 @@ def ejecutivo_revertir(id):
     db.session.commit()
 
     return jsonify(ok=True)
+
+
+# ============================================================================
+# FASE A - Consolidación de materiales a cotizar
+# ============================================================================
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/materiales')
+@login_required
+def ejecutivo_materiales_vista(id):
+    """Vista con los materiales consolidados del ejecutivo, listos para cotizar.
+
+    Se llama también `/materiales` y sirve de entrada al circuito de cotización:
+    el PM ve la lista de materiales únicos (agrupados) con su cantidad total y
+    desde acá en siguientes fases va a poder asignar proveedores y pedir cotización.
+    """
+    org_id = get_current_org_id()
+    if not org_id:
+        flash('Seleccioná una organización.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion'))
+
+    presupuesto = Presupuesto.query.filter_by(
+        id=id, organizacion_id=org_id,
+    ).first_or_404()
+
+    rol = getattr(current_user, 'role', '') or ''
+    if rol not in ('admin', 'administrador', 'pm', 'project_manager'):
+        abort(403)
+
+    # Sincronizar: crea/actualiza MaterialCotizable a partir de las composiciones
+    materiales = sincronizar_materiales_cotizables(presupuesto)
+
+    # Proveedores disponibles en la org (para los chips / modal)
+    proveedores_disponibles = ProveedorOC.query.filter_by(
+        organizacion_id=org_id,
+    ).order_by(ProveedorOC.razon_social).all()
+
+    # Hay al menos una asignación pendiente de enviar?
+    hay_pendientes_enviar = db.session.query(ProveedorAsignadoMaterial).join(
+        MaterialCotizable, MaterialCotizable.id == ProveedorAsignadoMaterial.material_cotizable_id,
+    ).filter(
+        MaterialCotizable.presupuesto_id == presupuesto.id,
+        ProveedorAsignadoMaterial.solicitud_item_id.is_(None),
+    ).count() > 0
+
+    # Solicitudes ya generadas (para la sección "Solicitudes enviadas")
+    solicitudes = SolicitudCotizacionMaterial.query.filter_by(
+        presupuesto_id=presupuesto.id,
+    ).order_by(SolicitudCotizacionMaterial.fecha_creacion.desc()).all()
+
+    # Adjuntar info de "origen" + asignaciones
+    for mat in materiales:
+        origenes = []
+        for comp in mat.composiciones:
+            item = comp.item_presupuesto
+            if item is None:
+                continue
+            origenes.append({
+                'etapa': item.etapa_nombre or 'Sin etapa',
+                'tarea': item.descripcion[:80] if item.descripcion else '',
+                'cantidad': float(comp.cantidad or 0),
+                'interno': bool(item.solo_interno),
+            })
+        mat.origenes = origenes
+        # Asignaciones actuales (pendientes + enviadas, para mostrar chips completos)
+        mat.asignaciones_list = list(mat.asignaciones)
+
+    return render_template(
+        'presupuestos/ejecutivo_materiales.html',
+        presupuesto=presupuesto,
+        materiales=materiales,
+        proveedores_disponibles=proveedores_disponibles,
+        hay_pendientes_enviar=hay_pendientes_enviar,
+        solicitudes=solicitudes,
+    )
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/materiales/json')
+@login_required
+def ejecutivo_materiales_json(id):
+    """Misma info que la vista pero como JSON (para refrescar sin reload)."""
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    presupuesto = Presupuesto.query.filter_by(
+        id=id, organizacion_id=org_id,
+    ).first_or_404()
+
+    materiales = sincronizar_materiales_cotizables(presupuesto)
+    data = []
+    for mat in materiales:
+        data.append({
+            'id': mat.id,
+            'descripcion': mat.descripcion,
+            'unidad': mat.unidad,
+            'cantidad_total': float(mat.cantidad_total or 0),
+            'estado': mat.estado,
+            'grupo_hash': mat.grupo_hash,
+            'item_inventario_id': mat.item_inventario_id,
+            'proveedor_elegido_id': mat.proveedor_elegido_id,
+            'precio_elegido': float(mat.precio_elegido or 0) if mat.precio_elegido else None,
+            'num_composiciones': mat.composiciones.count(),
+        })
+    return jsonify(ok=True, materiales=data)
+
+
+# ============================================================================
+# FASE B - Asignar proveedores y generar solicitudes WhatsApp
+# ============================================================================
+
+def _verificar_permiso_ejecutivo():
+    rol = getattr(current_user, 'role', '') or ''
+    return rol in ('admin', 'administrador', 'pm', 'project_manager')
+
+
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/asignar-proveedor', methods=['POST'])
+@login_required
+def material_asignar_proveedor(material_id):
+    """Asigna un proveedor a un material cotizable (antes de enviar solicitud).
+
+    Body JSON: {"proveedor_id": 42}
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    mat = MaterialCotizable.query.get_or_404(material_id)
+    if mat.presupuesto.organizacion_id != org_id:
+        return jsonify(ok=False, error='Material no pertenece a tu organización'), 403
+
+    data = request.get_json(silent=True) or {}
+    prov_id = data.get('proveedor_id')
+    if not prov_id:
+        return jsonify(ok=False, error='proveedor_id requerido'), 400
+
+    prov = ProveedorOC.query.filter_by(id=prov_id, organizacion_id=org_id).first()
+    if not prov:
+        return jsonify(ok=False, error='Proveedor no encontrado'), 404
+
+    existente = ProveedorAsignadoMaterial.query.filter_by(
+        material_cotizable_id=mat.id, proveedor_id=prov.id,
+    ).first()
+    if existente:
+        return jsonify(ok=False, error='Proveedor ya asignado a este material'), 400
+
+    asignacion = ProveedorAsignadoMaterial(
+        material_cotizable_id=mat.id,
+        proveedor_id=prov.id,
+    )
+    db.session.add(asignacion)
+    db.session.commit()
+
+    return jsonify(ok=True, asignacion_id=asignacion.id, proveedor={
+        'id': prov.id, 'razon_social': prov.razon_social,
+    })
+
+
+@presupuestos_bp.route('/ejecutivo/asignacion/<int:asignacion_id>', methods=['DELETE'])
+@login_required
+def material_desasignar_proveedor(asignacion_id):
+    """Elimina la asignación proveedor-material (solo si aún no se generó solicitud)."""
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    asignacion = ProveedorAsignadoMaterial.query.get_or_404(asignacion_id)
+    if asignacion.material_cotizable.presupuesto.organizacion_id != org_id:
+        return jsonify(ok=False, error='No pertenece a tu organización'), 403
+
+    if asignacion.solicitud_item_id:
+        return jsonify(
+            ok=False,
+            error='Este proveedor ya fue incluido en una solicitud enviada. No se puede desasignar desde acá.',
+        ), 400
+
+    db.session.delete(asignacion)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+def _generar_mensaje_whatsapp(presupuesto, org_nombre, items_info):
+    """Arma el mensaje WhatsApp agrupado para un proveedor.
+
+    items_info: lista de dicts {descripcion, cantidad, unidad}
+    """
+    lineas = [f'Hola! {org_nombre or "OBYRA"} - Presupuesto {presupuesto.numero}']
+    if presupuesto.datos_proyecto:
+        try:
+            dp = json.loads(presupuesto.datos_proyecto) if isinstance(presupuesto.datos_proyecto, str) else presupuesto.datos_proyecto
+            nombre_obra = dp.get('nombre_obra') or dp.get('nombre')
+            if nombre_obra:
+                lineas.append(f'Obra: {nombre_obra}')
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    lineas.append('')
+    lineas.append('Necesito cotización para los siguientes recursos:')
+    lineas.append('')
+    for i, it in enumerate(items_info, start=1):
+        cant = it['cantidad']
+        # Formatear cantidad: si es entero, sin decimales; si no, con máx 3
+        if cant == int(cant):
+            cant_str = str(int(cant))
+        else:
+            cant_str = f'{cant:.3f}'.rstrip('0').rstrip('.')
+        lineas.append(f"{i}. {it['descripcion']} — {cant_str} {it['unidad']}")
+    lineas.append('')
+    lineas.append('Por favor respondeme con el precio unitario de cada uno.')
+    lineas.append('Gracias!')
+
+    return '\n'.join(lineas)
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/generar-solicitudes', methods=['POST'])
+@login_required
+def ejecutivo_generar_solicitudes(id):
+    """Agrupa asignaciones pendientes por proveedor y crea una SolicitudCotizacionMaterial
+    por cada uno con sus items. Genera mensaje WhatsApp + URL wa.me.
+
+    Devuelve lista de solicitudes creadas con sus URLs para abrir.
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    # Traer asignaciones pendientes (sin solicitud_item_id)
+    asignaciones = db.session.query(ProveedorAsignadoMaterial).join(
+        MaterialCotizable, MaterialCotizable.id == ProveedorAsignadoMaterial.material_cotizable_id,
+    ).filter(
+        MaterialCotizable.presupuesto_id == presupuesto.id,
+        ProveedorAsignadoMaterial.solicitud_item_id.is_(None),
+    ).all()
+
+    if not asignaciones:
+        return jsonify(
+            ok=False,
+            error='No hay asignaciones pendientes. Asigná proveedores a los recursos primero.',
+        ), 400
+
+    # Agrupar por proveedor_id
+    por_proveedor = {}  # prov_id -> [asignaciones]
+    for a in asignaciones:
+        por_proveedor.setdefault(a.proveedor_id, []).append(a)
+
+    from services.whatsapp_service import normalizar_telefono, generar_url_wa_me
+
+    org_nombre = None
+    try:
+        from models import Organizacion
+        org = Organizacion.query.get(org_id)
+        if org:
+            org_nombre = getattr(org, 'nombre_fantasia', None) or org.nombre
+    except Exception:
+        pass
+
+    solicitudes_creadas = []
+    for prov_id, asigns in por_proveedor.items():
+        prov = ProveedorOC.query.get(prov_id)
+        if not prov:
+            continue
+
+        # Calcular versión: cuántas solicitudes previas tenemos para este proveedor
+        version = 1 + db.session.query(SolicitudCotizacionMaterial).filter_by(
+            presupuesto_id=presupuesto.id, proveedor_id=prov.id,
+        ).count()
+
+        items_info = []
+        for a in asigns:
+            mat = a.material_cotizable
+            items_info.append({
+                'descripcion': mat.descripcion,
+                'cantidad': float(mat.cantidad_total or 0),
+                'unidad': mat.unidad,
+            })
+
+        mensaje = _generar_mensaje_whatsapp(presupuesto, org_nombre, items_info)
+        telefono = normalizar_telefono(prov.telefono) if prov.telefono else None
+        wa_url = generar_url_wa_me(telefono, mensaje) if telefono else None
+
+        solicitud = SolicitudCotizacionMaterial(
+            presupuesto_id=presupuesto.id,
+            proveedor_id=prov.id,
+            version=version,
+            estado='pendiente',
+            mensaje_texto=mensaje,
+            wa_url=wa_url,
+        )
+        db.session.add(solicitud)
+        db.session.flush()
+
+        for a in asigns:
+            mat = a.material_cotizable
+            item_solicitud = SolicitudCotizacionMaterialItem(
+                solicitud_id=solicitud.id,
+                material_cotizable_id=mat.id,
+                descripcion_snapshot=mat.descripcion,
+                unidad_snapshot=mat.unidad,
+                cantidad_snapshot=mat.cantidad_total,
+            )
+            db.session.add(item_solicitud)
+            db.session.flush()
+
+            # Linkear asignación a su item (para no re-procesar)
+            a.solicitud_item_id = item_solicitud.id
+
+            # Marcar material como 'cotizando'
+            if mat.estado == 'nuevo':
+                mat.estado = 'cotizando'
+
+        solicitudes_creadas.append({
+            'solicitud_id': solicitud.id,
+            'proveedor_id': prov.id,
+            'proveedor_razon_social': prov.razon_social,
+            'telefono': telefono,
+            'wa_url': wa_url,
+            'num_items': len(asigns),
+            'version': version,
+            'sin_telefono': not telefono,
+        })
+
+    db.session.commit()
+    return jsonify(ok=True, solicitudes=solicitudes_creadas)
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/solicitudes')
+@login_required
+def ejecutivo_solicitudes_listar(id):
+    """Lista todas las solicitudes de cotización generadas para el presupuesto."""
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    sols = SolicitudCotizacionMaterial.query.filter_by(
+        presupuesto_id=presupuesto.id,
+    ).order_by(SolicitudCotizacionMaterial.fecha_creacion.desc()).all()
+
+    data = []
+    for s in sols:
+        items = []
+        for it in s.items.order_by(SolicitudCotizacionMaterialItem.id):
+            items.append({
+                'id': it.id,
+                'descripcion': it.descripcion_snapshot,
+                'cantidad': float(it.cantidad_snapshot or 0),
+                'unidad': it.unidad_snapshot,
+                'precio_respuesta': float(it.precio_respuesta) if it.precio_respuesta else None,
+                'elegido': it.elegido,
+            })
+        data.append({
+            'id': s.id,
+            'proveedor_id': s.proveedor_id,
+            'proveedor_razon_social': s.proveedor.razon_social if s.proveedor else '—',
+            'version': s.version,
+            'estado': s.estado,
+            'fecha_creacion': s.fecha_creacion.isoformat() if s.fecha_creacion else None,
+            'fecha_enviado': s.fecha_enviado.isoformat() if s.fecha_enviado else None,
+            'wa_url': s.wa_url,
+            'mensaje': s.mensaje_texto,
+            'items': items,
+        })
+    return jsonify(ok=True, solicitudes=data)
+
+
+@presupuestos_bp.route('/ejecutivo/solicitud/<int:solicitud_id>/marcar-enviada', methods=['POST'])
+@login_required
+def ejecutivo_solicitud_marcar_enviada(solicitud_id):
+    """Marca la solicitud como enviada (cuando el PM tocó el link WA)."""
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    s = SolicitudCotizacionMaterial.query.get_or_404(solicitud_id)
+    if s.presupuesto.organizacion_id != org_id:
+        return jsonify(ok=False, error='No pertenece a tu organización'), 403
+
+    if s.estado == 'pendiente':
+        s.estado = 'enviado'
+    if not s.fecha_enviado:
+        s.fecha_enviado = datetime.utcnow()
+    db.session.commit()
+    return jsonify(ok=True, estado=s.estado)

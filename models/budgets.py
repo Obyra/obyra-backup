@@ -172,11 +172,16 @@ class Presupuesto(db.Model):
         - subtotal_equipos
         - total_sin_iva
         - total_con_iva
+
+        Los ítems con `solo_interno=True` pertenecen al ejecutivo (APU) y NO
+        suman al precio vendido al cliente. Se excluyen explícitamente acá.
         """
         # Import local para evitar circular import
         from services.calculation import BudgetCalculator, BudgetConstants
 
-        items = self.items.all() if hasattr(self.items, 'all') else list(self.items)
+        items_raw = self.items.all() if hasattr(self.items, 'all') else list(self.items)
+        # Filtrar ítems internos del ejecutivo antes de calcular el precio al cliente
+        items = [i for i in items_raw if not getattr(i, 'solo_interno', False)]
 
         # Usar calculadora centralizada
         iva_rate = Decimal(self.iva_porcentaje) if self.iva_porcentaje else BudgetConstants.DEFAULT_IVA_RATE
@@ -304,6 +309,13 @@ class ItemPresupuesto(db.Model):
     # Para 'alquiler': cantidad=cantidad de períodos, unidad=período (día/semana/mes/hora/jornal),
     #                  precio=precio por período. Total sigue siendo cantidad*precio_unitario.
     modalidad_costo = db.Column(db.String(20), default='compra', nullable=True)
+
+    # Solo-interno: el item pertenece al ejecutivo (APU) como parte de una etapa
+    # interna que NO está en el pliego. NO se muestra en el PDF del cliente ni
+    # suma al precio vendido, pero sí suma al costo estimado del ejecutivo.
+    # Típicamente usado para planificar Mampostería, Pisos, Pintura, etc. que el PM
+    # necesita ejecutar pero que no se facturan como renglón separado al cliente.
+    solo_interno = db.Column(db.Boolean, default=False, nullable=False, server_default='false')
 
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
@@ -707,6 +719,14 @@ class ItemPresupuestoComposicion(db.Model):
     item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
     # Solo aplica a tipo='equipo'. 'compra' = precio total del equipo; 'alquiler' = precio por período.
     modalidad_costo = db.Column(db.String(20), nullable=True)
+    # Agrupador de cotización: vincula esta composición con un MaterialCotizable
+    # que consolida todas las composiciones equivalentes (misma desc+unidad) del
+    # presupuesto para pedir cotización única a proveedores.
+    material_cotizable_id = db.Column(
+        db.Integer,
+        db.ForeignKey('materiales_cotizables.id', ondelete='SET NULL'),
+        nullable=True,
+    )
     notas = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -729,3 +749,180 @@ class ItemPresupuestoComposicion(db.Model):
             self.total = Decimal(str(self.cantidad or 0)) * Decimal(str(self.precio_unitario or 0))
         except (InvalidOperation, TypeError):
             self.total = Decimal('0')
+
+
+class MaterialCotizable(db.Model):
+    """Material consolidado del ejecutivo para pedir cotización a proveedores.
+
+    Si el mismo material (ej: 'Cemento 50kg') aparece en 3 tareas distintas,
+    acá se agrega UNA sola vez con cantidad_total = suma. Los proveedores
+    cotizan este material unificado; el precio ganador se propaga a todas
+    las composiciones que lo componen.
+
+    grupo_hash es la clave de consolidación: normaliza (descripcion + unidad
+    + item_inventario_id) para deduplicar exacto.
+    """
+    __tablename__ = 'materiales_cotizables'
+
+    id = db.Column(db.Integer, primary_key=True)
+    presupuesto_id = db.Column(
+        db.Integer,
+        db.ForeignKey('presupuestos.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    # Tipo de recurso: 'material' (se compra) o 'equipo' (alquiler/compra).
+    # MO no entra porque es costo interno, no se cotiza a proveedores.
+    tipo = db.Column(db.String(20), nullable=False, default='material', server_default='material')
+    # Descripción representativa (la más larga / clara entre las composiciones del grupo)
+    descripcion = db.Column(db.String(300), nullable=False)
+    unidad = db.Column(db.String(20), nullable=False)
+    cantidad_total = db.Column(db.Numeric(15, 3), nullable=False, default=0)
+    # Vínculo opcional a inventario (si las composiciones estaban linkeadas)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
+    # Hash determinístico usado para dedup al sincronizar composiciones → materiales.
+    grupo_hash = db.Column(db.String(64), nullable=False)
+    # Estado del ciclo de cotización
+    #   nuevo          -> recién consolidado, sin cotizar
+    #   cotizando      -> ya se enviaron solicitudes a proveedores
+    #   con_respuestas -> al menos un proveedor respondió
+    #   elegido        -> se eligió proveedor ganador
+    estado = db.Column(db.String(20), nullable=False, default='nuevo', server_default='nuevo')
+    # Proveedor ganador (si hay) y su precio elegido
+    proveedor_elegido_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id'), nullable=True)
+    precio_elegido = db.Column(db.Numeric(15, 2), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    presupuesto = db.relationship('Presupuesto')
+    item_inventario = db.relationship('ItemInventario', foreign_keys=[item_inventario_id])
+    proveedor_elegido = db.relationship('ProveedorOC', foreign_keys=[proveedor_elegido_id])
+    composiciones = db.relationship(
+        'ItemPresupuestoComposicion',
+        backref='material_cotizable',
+        foreign_keys=[ItemPresupuestoComposicion.material_cotizable_id],
+        lazy='dynamic',
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint('presupuesto_id', 'grupo_hash', name='uq_material_cotizable_pres_hash'),
+        db.Index('ix_materiales_cotizables_presupuesto', 'presupuesto_id'),
+    )
+
+    def __repr__(self):
+        return f'<MaterialCotizable {self.descripcion[:40]} ({self.cantidad_total} {self.unidad})>'
+
+
+class ProveedorAsignadoMaterial(db.Model):
+    """Asignación de un proveedor a un material cotizable (intención, antes de enviar).
+
+    El PM arma la lista de "a qué proveedor quiero pedirle cotización de qué".
+    Cuando termina, toca 'Generar solicitudes' y el sistema agrupa todas las
+    asignaciones por proveedor en 1 solo mensaje de WhatsApp por proveedor.
+    """
+    __tablename__ = 'proveedores_asignados_material'
+
+    id = db.Column(db.Integer, primary_key=True)
+    material_cotizable_id = db.Column(
+        db.Integer,
+        db.ForeignKey('materiales_cotizables.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    proveedor_id = db.Column(
+        db.Integer,
+        db.ForeignKey('proveedores_oc.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    # Una vez generada la solicitud, se asocia acá para no duplicar envíos.
+    # Si es NULL, la asignación está "pendiente de enviar".
+    solicitud_item_id = db.Column(
+        db.Integer,
+        db.ForeignKey('solicitud_cotizacion_material_items.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    material_cotizable = db.relationship('MaterialCotizable', backref=db.backref('asignaciones', cascade='all, delete-orphan', lazy='dynamic'))
+    proveedor = db.relationship('ProveedorOC')
+
+    __table_args__ = (
+        db.UniqueConstraint('material_cotizable_id', 'proveedor_id', name='uq_asignacion_material_proveedor'),
+        db.Index('ix_proveedores_asignados_material', 'material_cotizable_id'),
+    )
+
+
+class SolicitudCotizacionMaterial(db.Model):
+    """Solicitud de cotización enviada a UN proveedor (con N recursos).
+
+    Agrupa todos los materiales/equipos que se le piden a ese proveedor en un
+    solo mensaje de WhatsApp. Versionada: si hacés otra ronda de cotización
+    al mismo proveedor, version=2, 3, etc.
+    """
+    __tablename__ = 'solicitudes_cotizacion_material'
+
+    id = db.Column(db.Integer, primary_key=True)
+    presupuesto_id = db.Column(
+        db.Integer,
+        db.ForeignKey('presupuestos.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    proveedor_id = db.Column(
+        db.Integer,
+        db.ForeignKey('proveedores_oc.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    version = db.Column(db.Integer, nullable=False, default=1)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_enviado = db.Column(db.DateTime, nullable=True)
+    fecha_respondido = db.Column(db.DateTime, nullable=True)
+    # pendiente (creada) | enviado (el PM tocó el link WA) | respondido (el PM cargó precios) | descartado
+    estado = db.Column(db.String(20), nullable=False, default='pendiente', server_default='pendiente')
+    mensaje_texto = db.Column(db.Text, nullable=True)
+    wa_url = db.Column(db.Text, nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+
+    presupuesto = db.relationship('Presupuesto')
+    proveedor = db.relationship('ProveedorOC')
+
+    __table_args__ = (
+        db.Index('ix_solicitudes_cot_mat_presupuesto', 'presupuesto_id'),
+        db.Index('ix_solicitudes_cot_mat_proveedor', 'proveedor_id'),
+    )
+
+
+class SolicitudCotizacionMaterialItem(db.Model):
+    """Item dentro de una solicitud (un recurso cotizado a un proveedor).
+
+    Guarda snapshot de cantidad/descripción al momento de enviar (por si el
+    material cambia después). Cuando el proveedor responde, se carga
+    precio_respuesta. Si se elige como ganador, elegido=True.
+    """
+    __tablename__ = 'solicitud_cotizacion_material_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitud_id = db.Column(
+        db.Integer,
+        db.ForeignKey('solicitudes_cotizacion_material.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    material_cotizable_id = db.Column(
+        db.Integer,
+        db.ForeignKey('materiales_cotizables.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    # Snapshot al momento de envío
+    descripcion_snapshot = db.Column(db.String(300), nullable=False)
+    unidad_snapshot = db.Column(db.String(20), nullable=False)
+    cantidad_snapshot = db.Column(db.Numeric(15, 3), nullable=False, default=0)
+    # Respuesta del proveedor (se completa en Fase C)
+    precio_respuesta = db.Column(db.Numeric(15, 2), nullable=True)
+    notas_respuesta = db.Column(db.Text, nullable=True)
+    # True si este item fue el ganador para el MaterialCotizable
+    elegido = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+
+    solicitud = db.relationship('SolicitudCotizacionMaterial', backref=db.backref('items', cascade='all, delete-orphan', lazy='dynamic'))
+    material_cotizable = db.relationship('MaterialCotizable', backref=db.backref('respuestas', lazy='dynamic'))
+
+    __table_args__ = (
+        db.Index('ix_solicitud_cot_mat_items_solicitud', 'solicitud_id'),
+        db.Index('ix_solicitud_cot_mat_items_material', 'material_cotizable_id'),
+    )

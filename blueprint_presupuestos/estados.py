@@ -254,42 +254,129 @@ def confirmar_como_obra(id):
 
         db.session.flush()
 
-        # Crear tareas predefinidas por etapa (tareas de OBRA, no materiales)
+        # Nota: las etapas internas del ejecutivo ya quedan incluidas en
+        # `etapas_dict` porque los ítems internos (solo_interno=True) tienen
+        # `etapa_nombre` poblado igual que los del pliego — y ya fueron
+        # procesados arriba al agrupar items por etapa. Al crear EtapaObra
+        # para ese nombre, automáticamente queda en la obra con sus tareas.
+
+        # Crear tareas por etapa.
+        # Si el presupuesto tiene ejecutivo aprobado, se crea una tarea POR CADA
+        # ITEM del pliego dentro de su etapa, con horas estimadas y presupuesto
+        # de MO tomados de las composiciones del ejecutivo (APU).
+        # Si no hay ejecutivo, se usa el flujo original de tareas predefinidas.
         if crear_tareas:
-            from tareas_predefinidas import obtener_tareas_por_etapa
             tareas_creadas_count = 0
 
-            for etapa_nombre in etapas_dict.keys():
-                etapa_id = etapas_creadas[etapa_nombre]
-                tareas_predefinidas = obtener_tareas_por_etapa(etapa_nombre)
+            if presupuesto.ejecutivo_aprobado:
+                current_app.logger.info(
+                    f"Pre-cargando tareas desde ejecutivo aprobado del presupuesto {presupuesto.numero}"
+                )
+                # Unidades que cuentan como "horas" para horas_estimadas de la tarea
+                UNIDADES_HORA = {'hora', 'h', 'hs', 'horas'}
+                # Aproximación: 1 jornal = 8h, 1 día = 8h (si se usa como unidad de MO).
+                # Si el PM cargó otra convención, puede ajustar la tarea después.
+                FACTORES_HORA = {'jornal': 8, 'dia': 8, 'día': 8, 'dias': 8, 'días': 8}
 
-                if tareas_predefinidas:
-                    # Usar tareas predefinidas (son tareas de obra reales)
-                    for tarea_def in tareas_predefinidas:
-                        # Saltar tareas opcionales marcadas con si_aplica
-                        if tarea_def.get('si_aplica'):
-                            continue
+                from tareas_predefinidas import obtener_tareas_por_etapa as _obt_tareas
+
+                for etapa_nombre, items_etapa in etapas_dict.items():
+                    etapa_id = etapas_creadas[etapa_nombre]
+
+                    if items_etapa:
+                        # Etapa del pliego: 1 tarea por ítem con datos del ejecutivo
+                        for item in items_etapa:
+                            horas_estimadas = Decimal('0')
+                            presupuesto_mo = Decimal('0')
+                            for comp in item.composiciones.filter_by(tipo='mano_obra').all():
+                                cantidad = Decimal(str(comp.cantidad or 0))
+                                total = Decimal(str(comp.total or 0))
+                                unidad_norm = (comp.unidad or '').strip().lower()
+                                if unidad_norm in UNIDADES_HORA:
+                                    horas_estimadas += cantidad
+                                elif unidad_norm in FACTORES_HORA:
+                                    horas_estimadas += cantidad * FACTORES_HORA[unidad_norm]
+                                presupuesto_mo += total
+
+                            nombre_tarea = (item.descripcion or 'Tarea sin descripción')[:200]
+
+                            tarea = TareaEtapa(
+                                etapa_id=etapa_id,
+                                nombre=nombre_tarea,
+                                estado='pendiente',
+                                horas_estimadas=horas_estimadas,
+                                presupuesto_mo=presupuesto_mo,
+                                unidad=(item.unidad or 'un')[:20],
+                                cantidad_planificada=Decimal(str(item.cantidad or 0)),
+                                item_presupuesto_id=item.id,
+                            )
+                            db.session.add(tarea)
+                            tareas_creadas_count += 1
+                    else:
+                        # Etapa interna adicional (no está en el pliego): usar
+                        # tareas predefinidas del catálogo si existen.
+                        predefs = _obt_tareas(etapa_nombre) or []
+                        if predefs:
+                            for tdef in predefs:
+                                if tdef.get('si_aplica'):
+                                    continue
+                                tarea = TareaEtapa(
+                                    etapa_id=etapa_id,
+                                    nombre=tdef['nombre'],
+                                    estado='pendiente',
+                                    horas_estimadas=tdef.get('horas', 0),
+                                    unidad='un' if tdef.get('aplica_cantidad') is False else 'h',
+                                )
+                                db.session.add(tarea)
+                                tareas_creadas_count += 1
+                        else:
+                            tarea = TareaEtapa(
+                                etapa_id=etapa_id,
+                                nombre=f'Ejecución {etapa_nombre}',
+                                estado='pendiente',
+                                unidad='un',
+                            )
+                            db.session.add(tarea)
+                            tareas_creadas_count += 1
+
+                current_app.logger.info(
+                    f"Creadas {tareas_creadas_count} tareas desde ejecutivo para obra {obra.id}"
+                )
+            else:
+                from tareas_predefinidas import obtener_tareas_por_etapa
+                for etapa_nombre in etapas_dict.keys():
+                    etapa_id = etapas_creadas[etapa_nombre]
+                    tareas_predefinidas = obtener_tareas_por_etapa(etapa_nombre)
+
+                    if tareas_predefinidas:
+                        # Usar tareas predefinidas (son tareas de obra reales)
+                        for tarea_def in tareas_predefinidas:
+                            # Saltar tareas opcionales marcadas con si_aplica
+                            if tarea_def.get('si_aplica'):
+                                continue
+                            tarea = TareaEtapa(
+                                etapa_id=etapa_id,
+                                nombre=tarea_def['nombre'],
+                                estado='pendiente',
+                                horas_estimadas=tarea_def.get('horas', 0),
+                                unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+                            )
+                            db.session.add(tarea)
+                            tareas_creadas_count += 1
+                    else:
+                        # Fallback: si no hay tareas predefinidas, crear tarea genérica por etapa
                         tarea = TareaEtapa(
                             etapa_id=etapa_id,
-                            nombre=tarea_def['nombre'],
+                            nombre=f'Ejecución {etapa_nombre}',
                             estado='pendiente',
-                            horas_estimadas=tarea_def.get('horas', 0),
-                            unidad='un' if tarea_def.get('aplica_cantidad') is False else 'h',
+                            unidad='un',
                         )
                         db.session.add(tarea)
                         tareas_creadas_count += 1
-                else:
-                    # Fallback: si no hay tareas predefinidas, crear tarea genérica por etapa
-                    tarea = TareaEtapa(
-                        etapa_id=etapa_id,
-                        nombre=f'Ejecución {etapa_nombre}',
-                        estado='pendiente',
-                        unidad='un',
-                    )
-                    db.session.add(tarea)
-                    tareas_creadas_count += 1
 
-            current_app.logger.info(f"Creadas {tareas_creadas_count} tareas predefinidas para {len(etapas_dict)} etapas en obra {obra.id}")
+                current_app.logger.info(
+                    f"Creadas {tareas_creadas_count} tareas predefinidas para {len(etapas_dict)} etapas en obra {obra.id}"
+                )
 
         db.session.commit()
 

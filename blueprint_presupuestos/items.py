@@ -42,7 +42,10 @@ def detalle(id):
         # Obtener items agrupados por tipo y origen.
         # Ordenamos por etapa_nombre para permitir render con headers de etapa en el template
         # (presupuestos importados del Excel traen etapa; los viejos quedan en "Sin Etapa").
-        items = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(
+        # Excluimos items solo_interno (son del ejecutivo APU, no del pliego al cliente).
+        items = ItemPresupuesto.query.filter_by(
+            presupuesto_id=id, solo_interno=False,
+        ).order_by(
             ItemPresupuesto.tipo,
             ItemPresupuesto.etapa_nombre,
             ItemPresupuesto.id

@@ -1230,7 +1230,34 @@ def agregar_etapas(id):
 
         if etapas_creadas > 0:
             db.session.commit()
-            flash(f'Se agregaron {etapas_creadas} etapas con sus tareas correspondientes a la obra.', 'success')
+
+            # Re-encadenar cronograma: asignar niveles, generar dependencias FS y
+            # propagar fechas a las etapas nuevas. Sin force_cascade para no pisar
+            # fechas que el PM ya haya ajustado manualmente en otras etapas.
+            try:
+                from services.dependency_service import (
+                    asignar_niveles_por_defecto,
+                    generar_dependencias_desde_niveles,
+                    propagar_fechas_obra,
+                )
+                asignar_niveles_por_defecto(obra.id)
+                db.session.flush()
+                generar_dependencias_desde_niveles(obra.id)
+                db.session.flush()
+                propagar_fechas_obra(obra.id, force_cascade=False)
+                db.session.commit()
+            except Exception as enc_err:
+                db.session.rollback()
+                current_app.logger.warning(
+                    f"Error re-encadenando cronograma al agregar etapas en obra {obra.id}: {enc_err}"
+                )
+                db.session.commit()  # asegura que las etapas quedaron creadas
+
+            flash(
+                f'Se agregaron {etapas_creadas} etapas con sus tareas correspondientes, '
+                f'encadenadas al cronograma.',
+                'success',
+            )
         else:
             flash('No se agregaron etapas nuevas. Las etapas seleccionadas ya existen en esta obra.', 'info')
 

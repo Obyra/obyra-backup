@@ -46,7 +46,9 @@ def generar_pdf(id):
         from models.budgets import ItemPresupuesto
         from extensions import db
         items_ordenados = db.session.query(ItemPresupuesto).filter(
-            ItemPresupuesto.presupuesto_id == presupuesto.id
+            ItemPresupuesto.presupuesto_id == presupuesto.id,
+            # Excluir items del ejecutivo interno (APU) — el cliente no los ve.
+            ItemPresupuesto.solo_interno == False,  # noqa: E712
         ).order_by(ItemPresupuesto.tipo, ItemPresupuesto.id).all()
 
         # Obtener cotización del dólar (Banco Nación vendedor)
@@ -260,7 +262,9 @@ Saludos cordiales,
         # Obtener items ordenados (igual que en generar_pdf)
         from models.budgets import ItemPresupuesto
         items_ordenados = db.session.query(ItemPresupuesto).filter(
-            ItemPresupuesto.presupuesto_id == presupuesto.id
+            ItemPresupuesto.presupuesto_id == presupuesto.id,
+            # Excluir items del ejecutivo interno (APU) — el cliente no los ve.
+            ItemPresupuesto.solo_interno == False,  # noqa: E712
         ).order_by(ItemPresupuesto.tipo, ItemPresupuesto.id).all()
 
         # Obtener cotización del dólar para el PDF dual moneda

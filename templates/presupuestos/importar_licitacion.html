@@ -52,6 +52,13 @@
                         </div>
 
                         <div class="mb-3">
+                            <label class="form-label fw-bold">Ubicación de la obra</label>
+                            <input type="text" class="form-control" name="ubicacion"
+                                   placeholder="Ej: Av. Corrientes 1234, CABA">
+                            <small class="text-muted">Se pre-carga al confirmar como obra. Podés dejarla vacía y completarla después.</small>
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
                             <input type="file" class="form-control" name="archivo_excel" accept=".xlsx,.xls" required>
                             <small class="text-muted">Formato aceptado: .xlsx o .xls</small>
@@ -69,7 +76,10 @@
                             <input class="form-check-input" type="checkbox" name="modo_licitacion" value="1" id="modoLicitacion" checked>
                             <label class="form-check-label" for="modoLicitacion">
                                 <strong>Es un pliego para cotizar (ignorar precios del Excel)</strong>
-                                <br><small class="text-muted">Recomendado para licitaciones: importa los ítems con precio en $0 para que los carguen los proveedores. Destildá si el Excel ya trae precios definitivos.</small>
+                                <br><small class="text-muted">
+                                    <strong>Tildado (recomendado):</strong> importa los ítems con <strong>precio $0</strong> para que después los carguen los proveedores por WhatsApp cuando les pidas cotización.<br>
+                                    <strong>Destildado:</strong> mantiene los precios del Excel tal cual (útil si el pliego ya trae los valores definitivos).
+                                </small>
                             </label>
                         </div>
 
@@ -77,7 +87,10 @@
                             <input class="form-check-input" type="checkbox" name="revisar_antes" value="1" id="revisarAntes">
                             <label class="form-check-label" for="revisarAntes">
                                 <strong>Revisar y mapear columnas manualmente antes de importar</strong>
-                                <br><small class="text-muted">Útil si el Excel tiene un formato no estándar o querés validar la detección.</small>
+                                <br><small class="text-muted">
+                                    <strong>Tildado:</strong> después de subir el archivo, abre una pantalla donde <strong>vos elegís qué columna</strong> es Descripción, Cantidad, Unidad y Precio (sirve si el Excel tiene un formato raro que no se detecta solo).<br>
+                                    <strong>Destildado:</strong> el sistema detecta las columnas automáticamente por los nombres ("Descripción", "Cant.", "P. Unit.", etc.).
+                                </small>
                             </label>
                         </div>
 
@@ -85,7 +98,10 @@
                             <input class="form-check-input" type="checkbox" name="forzar_duplicado" value="1" id="forzarDup">
                             <label class="form-check-label" for="forzarDup">
                                 <strong>Crear aunque ya exista un presupuesto con el mismo nombre de obra</strong>
-                                <br><small class="text-muted">Por defecto el sistema te avisa si hay un duplicado reciente. Tildá esto para forzar la creación.</small>
+                                <br><small class="text-muted">
+                                    Si ya cargaste recientemente un presupuesto con este mismo nombre, el sistema te avisa y no te deja duplicar para evitar errores.<br>
+                                    <strong>Tildá esto</strong> si querés forzar la creación igual (útil para versiones v2, v3 del mismo pliego).
+                                </small>
                             </label>
                         </div>
 

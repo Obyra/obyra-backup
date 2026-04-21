@@ -1262,6 +1262,126 @@ def run_runtime_migrations(db, app):
             db.session.rollback()
             print(f"[WARN] Migración seguridad {tabla}: {e}")
 
+    # Presupuesto Ejecutivo: MaterialCotizable (consolidación de materiales para cotizar a proveedores)
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='materiales_cotizables') THEN
+                CREATE TABLE materiales_cotizables (
+                    id SERIAL PRIMARY KEY,
+                    presupuesto_id INTEGER NOT NULL REFERENCES presupuestos(id) ON DELETE CASCADE,
+                    descripcion VARCHAR(300) NOT NULL,
+                    unidad VARCHAR(20) NOT NULL,
+                    cantidad_total NUMERIC(15, 3) NOT NULL DEFAULT 0,
+                    item_inventario_id INTEGER REFERENCES items_inventario(id),
+                    grupo_hash VARCHAR(64) NOT NULL,
+                    estado VARCHAR(20) NOT NULL DEFAULT 'nuevo',
+                    proveedor_elegido_id INTEGER REFERENCES proveedores_oc(id),
+                    precio_elegido NUMERIC(15, 2),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_material_cotizable_pres_hash UNIQUE (presupuesto_id, grupo_hash)
+                );
+                CREATE INDEX ix_materiales_cotizables_presupuesto ON materiales_cotizables(presupuesto_id);
+            END IF;
+            -- FK desde items_presupuesto_composicion hacia materiales_cotizables
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto_composicion' AND column_name='material_cotizable_id') THEN
+                ALTER TABLE items_presupuesto_composicion
+                    ADD COLUMN material_cotizable_id INTEGER
+                    REFERENCES materiales_cotizables(id) ON DELETE SET NULL;
+                CREATE INDEX ix_ipc_material_cotizable ON items_presupuesto_composicion(material_cotizable_id);
+            END IF;
+            -- Columna tipo en materiales_cotizables (distinguir material vs equipo)
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='materiales_cotizables' AND column_name='tipo') THEN
+                ALTER TABLE materiales_cotizables
+                    ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'material';
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion materiales_cotizables: {e}")
+
+    # Presupuesto Ejecutivo - Fase B: cotización de materiales a proveedores
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            -- SolicitudCotizacionMaterial (1 por proveedor, con N items)
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='solicitudes_cotizacion_material') THEN
+                CREATE TABLE solicitudes_cotizacion_material (
+                    id SERIAL PRIMARY KEY,
+                    presupuesto_id INTEGER NOT NULL REFERENCES presupuestos(id) ON DELETE CASCADE,
+                    proveedor_id INTEGER NOT NULL REFERENCES proveedores_oc(id) ON DELETE CASCADE,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_enviado TIMESTAMP,
+                    fecha_respondido TIMESTAMP,
+                    estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+                    mensaje_texto TEXT,
+                    wa_url TEXT,
+                    notas TEXT
+                );
+                CREATE INDEX ix_solicitudes_cot_mat_presupuesto ON solicitudes_cotizacion_material(presupuesto_id);
+                CREATE INDEX ix_solicitudes_cot_mat_proveedor ON solicitudes_cotizacion_material(proveedor_id);
+            END IF;
+            -- Items de la solicitud (recurso cotizado)
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='solicitud_cotizacion_material_items') THEN
+                CREATE TABLE solicitud_cotizacion_material_items (
+                    id SERIAL PRIMARY KEY,
+                    solicitud_id INTEGER NOT NULL REFERENCES solicitudes_cotizacion_material(id) ON DELETE CASCADE,
+                    material_cotizable_id INTEGER NOT NULL REFERENCES materiales_cotizables(id) ON DELETE CASCADE,
+                    descripcion_snapshot VARCHAR(300) NOT NULL,
+                    unidad_snapshot VARCHAR(20) NOT NULL,
+                    cantidad_snapshot NUMERIC(15, 3) NOT NULL DEFAULT 0,
+                    precio_respuesta NUMERIC(15, 2),
+                    notas_respuesta TEXT,
+                    elegido BOOLEAN NOT NULL DEFAULT false
+                );
+                CREATE INDEX ix_solicitud_cot_mat_items_solicitud ON solicitud_cotizacion_material_items(solicitud_id);
+                CREATE INDEX ix_solicitud_cot_mat_items_material ON solicitud_cotizacion_material_items(material_cotizable_id);
+            END IF;
+            -- Asignaciones (intención antes de enviar)
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='proveedores_asignados_material') THEN
+                CREATE TABLE proveedores_asignados_material (
+                    id SERIAL PRIMARY KEY,
+                    material_cotizable_id INTEGER NOT NULL REFERENCES materiales_cotizables(id) ON DELETE CASCADE,
+                    proveedor_id INTEGER NOT NULL REFERENCES proveedores_oc(id) ON DELETE CASCADE,
+                    solicitud_item_id INTEGER REFERENCES solicitud_cotizacion_material_items(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_asignacion_material_proveedor UNIQUE (material_cotizable_id, proveedor_id)
+                );
+                CREATE INDEX ix_proveedores_asignados_material ON proveedores_asignados_material(material_cotizable_id);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion Fase B cotizacion materiales: {e}")
+
+    # Presupuesto Ejecutivo: flag solo_interno en items_presupuesto para etapas internas del APU
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto' AND column_name='solo_interno') THEN
+                ALTER TABLE items_presupuesto ADD COLUMN solo_interno BOOLEAN NOT NULL DEFAULT false;
+                CREATE INDEX ix_items_presupuesto_solo_interno ON items_presupuesto(presupuesto_id, solo_interno);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion solo_interno: {e}")
+
     # Presupuesto Ejecutivo: flag ejecutivo_aprobado en presupuestos
     try:
         db.session.execute(db.text("""

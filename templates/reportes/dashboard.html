@@ -723,7 +723,9 @@
                                        value="{{ obra.id }}" id="project{{ obra.id }}">
                                 <label class="form-check-label small" for="project{{ obra.id }}">
                                     {{ obra.nombre }}
+                                    {% if obra.direccion %}
                                     <span class="text-muted">- {{ obra.direccion[:30] }}...</span>
+                                    {% endif %}
                                 </label>
                             </div>
                             {% endfor %}

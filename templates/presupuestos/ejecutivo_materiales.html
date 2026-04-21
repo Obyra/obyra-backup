@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+
+{% block title %}Recursos a cotizar - {{ presupuesto.numero }} - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+
+  {% set pendientes = materiales|selectattr('estado', 'in', ['nuevo', 'cotizando'])|list %}
+  {% set con_ganador = materiales|selectattr('estado', 'equalto', 'elegido')|list %}
+  {% set solo_materiales = materiales|selectattr('tipo', 'equalto', 'material')|list %}
+  {% set solo_equipos = materiales|selectattr('tipo', 'equalto', 'equipo')|list %}
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+      <h2 class="mb-1">
+        <i class="fas fa-dolly-flatbed text-primary me-2"></i>Recursos a cotizar
+      </h2>
+      <p class="text-muted mb-0">
+        <strong>{{ presupuesto.numero }}</strong>
+        &middot; Materiales y equipos del ejecutivo (MO no se cotiza)
+        &middot; <span class="badge bg-info">{{ solo_materiales|length }} materiales</span>
+        <span class="badge bg-secondary">{{ solo_equipos|length }} equipos</span>
+        {% if pendientes %}
+        &middot; <span class="badge bg-warning text-dark">{{ pendientes|length }} sin cotizar</span>
+        {% endif %}
+        {% if con_ganador %}
+        &middot; <span class="badge bg-success">{{ con_ganador|length }} con ganador</span>
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Volver al ejecutivo
+      </a>
+    </div>
+  </div>
+
+  <div class="alert alert-info d-flex align-items-start">
+    <i class="fas fa-info-circle fa-lg me-2 mt-1"></i>
+    <div>
+      <strong>¿Qué es esto?</strong>
+      Acá ves los <strong>recursos únicos</strong> (materiales + equipos) de todo tu ejecutivo.
+      Si el mismo material/equipo aparece en varias tareas, se <strong>consolida</strong> con la cantidad
+      total para pedir <strong>un solo pedido</strong> por recurso a cada proveedor.
+      <div class="small mt-1">
+        <strong>Mano de obra no aparece</strong> — es costo interno (sueldos, jornales), no se cotiza a proveedores externos.
+      </div>
+      <div class="small mt-1">
+        📋 <strong>Fase B (próxima):</strong> vincular proveedores + enviar por WhatsApp + cargar respuestas + comparar precios.
+      </div>
+    </div>
+  </div>
+
+  {% if not materiales %}
+  <div class="alert alert-warning text-center py-5">
+    <i class="fas fa-exclamation-triangle fa-2x mb-3 d-block"></i>
+    <h5>Todavía no hay materiales para cotizar</h5>
+    <p class="mb-0">
+      Volvé al ejecutivo y agregá al menos una composición tipo <strong>Material</strong> a algún ítem.
+    </p>
+  </div>
+  {% else %}
+
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:80px;">Tipo</th>
+            <th style="width:30%;">Recurso</th>
+            <th class="text-center" style="width:90px;">Cantidad</th>
+            <th class="text-center" style="width:70px;">Unidad</th>
+            <th class="text-center" style="width:90px;">Usos</th>
+            <th class="text-center" style="width:110px;">Estado</th>
+            <th>Proveedores asignados</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mat in materiales %}
+          <tr data-material-id="{{ mat.id }}">
+            <td>
+              {% if mat.tipo == 'material' %}
+                <span class="badge bg-info">Material</span>
+              {% elif mat.tipo == 'equipo' %}
+                <span class="badge bg-secondary">Equipo</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ mat.descripcion }}</strong>
+              {% if mat.item_inventario_id %}
+              <small class="d-block text-muted">
+                <i class="fas fa-warehouse me-1"></i>Inventario
+              </small>
+              {% endif %}
+              {% if mat.proveedor_elegido %}
+              <small class="d-block text-success">
+                <i class="fas fa-trophy me-1"></i>Ganador: {{ mat.proveedor_elegido.razon_social }}
+                — ${{ '{:,.2f}'.format(mat.precio_elegido|float) }}
+              </small>
+              {% endif %}
+            </td>
+            <td class="text-center fw-bold">{{ mat.cantidad_total|float|round(3) }}</td>
+            <td class="text-center"><small>{{ mat.unidad }}</small></td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-secondary"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#origenes-{{ mat.id }}"
+                      title="Ver en qué tareas aparece">
+                <i class="fas fa-eye me-1"></i>{{ mat.origenes|length }}
+              </button>
+            </td>
+            <td class="text-center">
+              {% if mat.estado == 'nuevo' %}
+                <span class="badge bg-secondary">Sin cotizar</span>
+              {% elif mat.estado == 'cotizando' %}
+                <span class="badge bg-warning text-dark">Cotizando</span>
+              {% elif mat.estado == 'con_respuestas' %}
+                <span class="badge bg-info">Con respuestas</span>
+              {% elif mat.estado == 'elegido' %}
+                <span class="badge bg-success">Elegido</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="d-flex flex-wrap gap-1 align-items-center" data-chips-material="{{ mat.id }}">
+                {% for a in mat.asignaciones_list %}
+                <span class="badge bg-{{ 'success' if a.solicitud_item_id else 'primary' }} d-inline-flex align-items-center gap-1" data-asignacion-id="{{ a.id }}">
+                  <i class="fas fa-{{ 'paper-plane' if a.solicitud_item_id else 'user-tag' }}"></i>
+                  {{ a.proveedor.razon_social }}
+                  {% if not a.solicitud_item_id %}
+                  <button type="button" class="btn-close btn-close-white ms-1" style="font-size:0.6rem;"
+                          onclick="desasignarProveedor({{ a.id }}, {{ mat.id }})"
+                          title="Quitar asignación"></button>
+                  {% endif %}
+                </span>
+                {% endfor %}
+                <button class="btn btn-sm btn-outline-primary"
+                        type="button"
+                        onclick="abrirModalAsignarProveedor({{ mat.id }}, '{{ mat.descripcion|e }}')"
+                        title="Agregar proveedor para cotizar">
+                  <i class="fas fa-plus"></i> Proveedor
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="collapse" id="origenes-{{ mat.id }}">
+            <td colspan="7" class="bg-light p-3">
+              <strong class="d-block mb-2"><i class="fas fa-link me-1"></i>Aparece en:</strong>
+              <ul class="list-unstyled mb-0 small">
+                {% for o in mat.origenes %}
+                <li>
+                  <i class="fas fa-folder-open text-primary me-1"></i>
+                  <strong>{{ o.etapa }}</strong>
+                  {% if o.interno %}<span class="badge bg-info text-dark ms-1">Interna</span>{% endif %}
+                  &middot; {{ o.tarea }}
+                  &middot; <span class="text-muted">{{ o.cantidad|round(3) }} {{ mat.unidad }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if hay_pendientes_enviar %}
+  <div class="text-end mt-3">
+    <button class="btn btn-success btn-lg" onclick="generarSolicitudes()" id="btnGenerarSolicitudes">
+      <i class="fab fa-whatsapp me-2"></i>Generar solicitudes WhatsApp
+    </button>
+    <div class="text-muted small mt-1">
+      Agrupa las asignaciones por proveedor → 1 mensaje por proveedor.
+    </div>
+  </div>
+  {% endif %}
+
+  {% if solicitudes %}
+  <div class="card mt-4 shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <i class="fas fa-paper-plane me-2"></i>
+      <strong>Solicitudes enviadas</strong>
+      <span class="badge bg-light text-dark ms-2">{{ solicitudes|length }}</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Proveedor</th>
+            <th class="text-center">Versión</th>
+            <th class="text-center">Recursos</th>
+            <th class="text-center">Fecha</th>
+            <th class="text-center">Estado</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in solicitudes %}
+          <tr>
+            <td>
+              <strong>{{ s.proveedor.razon_social }}</strong>
+              {% if s.proveedor.telefono %}
+              <small class="d-block text-muted">{{ s.proveedor.telefono }}</small>
+              {% endif %}
+            </td>
+            <td class="text-center">v{{ s.version }}</td>
+            <td class="text-center">{{ s.items.count() }}</td>
+            <td class="text-center"><small>{{ s.fecha_creacion.strftime('%d/%m/%Y %H:%M') if s.fecha_creacion else '-' }}</small></td>
+            <td class="text-center">
+              {% if s.estado == 'pendiente' %}
+                <span class="badge bg-warning text-dark">Sin enviar</span>
+              {% elif s.estado == 'enviado' %}
+                <span class="badge bg-primary">Enviado</span>
+              {% elif s.estado == 'respondido' %}
+                <span class="badge bg-success">Respondido</span>
+              {% elif s.estado == 'descartado' %}
+                <span class="badge bg-secondary">Descartado</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                {% if s.wa_url %}
+                <a href="{{ s.wa_url }}" target="_blank"
+                   class="btn btn-success"
+                   onclick="marcarEnviada({{ s.id }})">
+                  <i class="fab fa-whatsapp me-1"></i>Abrir WA
+                </a>
+                {% else %}
+                <button class="btn btn-outline-secondary" disabled title="Proveedor sin teléfono">
+                  <i class="fas fa-phone-slash me-1"></i>Sin tel.
+                </button>
+                {% endif %}
+                <button class="btn btn-outline-info" onclick="verMensaje({{ s.id }})">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+
+</div>
+
+<!-- Modal: Asignar proveedor a un material -->
+<div class="modal fade" id="modalAsignarProveedor" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">
+          <i class="fas fa-user-tag me-2"></i>Asignar proveedor
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-light small border mb-3">
+          <strong>Recurso:</strong>
+          <span id="asignarRecursoNombre" class="text-muted"></span>
+        </div>
+
+        <label class="form-label">Proveedor</label>
+        <select class="form-select" id="asignarProveedorSelect">
+          <option value="">-- Elegí un proveedor --</option>
+          {% for p in proveedores_disponibles %}
+          <option value="{{ p.id }}" data-telefono="{{ p.telefono or '' }}">
+            {{ p.razon_social }}{% if not p.telefono %} (sin teléfono){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+
+        <div class="alert alert-warning d-none small mt-3" id="asignarError"></div>
+        <div class="mt-3 small text-muted">
+          <i class="fas fa-info-circle me-1"></i>
+          Podés asignar varios proveedores al mismo recurso (para comparar precios).
+          Solo los proveedores con <strong>teléfono</strong> cargado se pueden contactar por WhatsApp.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="confirmarAsignarProveedor()" id="btnAsignarProv">
+          <i class="fas fa-plus me-1"></i>Asignar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ver mensaje de WhatsApp -->
+<div class="modal fade" id="modalVerMensaje" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">
+          <i class="fab fa-whatsapp me-2"></i>Mensaje de WhatsApp
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <pre id="verMensajeTexto" class="bg-light p-3 rounded border" style="white-space:pre-wrap; font-family: inherit; font-size: 0.9rem;"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Resultado de generar solicitudes -->
+<div class="modal fade" id="modalGenerarResultado" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">
+          <i class="fab fa-whatsapp me-2"></i>Solicitudes generadas
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">Tocá <strong>Abrir WhatsApp</strong> en cada proveedor — se abre una pestaña con el mensaje pre-cargado listo para enviar.</p>
+        <div id="generarResultadoList"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="location.reload()">
+          Cerrar y refrescar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRESUPUESTO_ID = {{ presupuesto.id }};
+const MODAL_ASIGNAR = new bootstrap.Modal(document.getElementById('modalAsignarProveedor'));
+const MODAL_VER_MSG = new bootstrap.Modal(document.getElementById('modalVerMensaje'));
+const MODAL_RESULTADO = new bootstrap.Modal(document.getElementById('modalGenerarResultado'));
+let MATERIAL_EN_ASIGNACION = null;
+const SOLICITUDES_POR_ID = {
+  {% for s in solicitudes %}
+  {{ s.id }}: {{ {'mensaje': s.mensaje_texto}|tojson }},
+  {% endfor %}
+};
+
+function _getCsrf() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute('content') : '';
+}
+
+function _escape(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function abrirModalAsignarProveedor(materialId, descripcion) {
+  MATERIAL_EN_ASIGNACION = materialId;
+  document.getElementById('asignarRecursoNombre').textContent = descripcion;
+  document.getElementById('asignarProveedorSelect').value = '';
+  document.getElementById('asignarError').classList.add('d-none');
+  MODAL_ASIGNAR.show();
+}
+
+async function confirmarAsignarProveedor() {
+  const proveedorId = document.getElementById('asignarProveedorSelect').value;
+  const errEl = document.getElementById('asignarError');
+  if (!proveedorId) {
+    errEl.textContent = 'Elegí un proveedor';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  const btn = document.getElementById('btnAsignarProv');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Asignando...';
+
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/material/${MATERIAL_EN_ASIGNACION}/asignar-proveedor`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify({proveedor_id: parseInt(proveedorId)}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      errEl.textContent = data.error || `Error ${res.status}`;
+      errEl.classList.remove('d-none');
+      return;
+    }
+    MODAL_ASIGNAR.hide();
+    location.reload();
+  } catch (e) {
+    errEl.textContent = 'Error de red: ' + e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-plus me-1"></i>Asignar';
+  }
+}
+
+async function desasignarProveedor(asignacionId, materialId) {
+  if (!confirm('¿Quitar la asignación de este proveedor?')) return;
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/asignacion/${asignacionId}`, {
+      method: 'DELETE',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+
+async function generarSolicitudes() {
+  if (!confirm('Se van a generar solicitudes agrupadas por proveedor. ¿Continuar?')) return;
+  const btn = document.getElementById('btnGenerarSolicitudes');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generando...';
+
+  try {
+    const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/generar-solicitudes`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fab fa-whatsapp me-2"></i>Generar solicitudes WhatsApp';
+      return;
+    }
+    mostrarResultadoGeneracion(data.solicitudes);
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fab fa-whatsapp me-2"></i>Generar solicitudes WhatsApp';
+  }
+}
+
+function mostrarResultadoGeneracion(solicitudes) {
+  const list = document.getElementById('generarResultadoList');
+  list.innerHTML = solicitudes.map(s => {
+    const waBtn = s.wa_url
+      ? `<a href="${s.wa_url}" target="_blank" class="btn btn-success btn-sm" onclick="marcarEnviada(${s.solicitud_id})">
+          <i class="fab fa-whatsapp me-1"></i>Abrir WhatsApp
+        </a>`
+      : `<span class="badge bg-warning text-dark"><i class="fas fa-phone-slash me-1"></i>Sin teléfono</span>`;
+    return `<div class="border rounded p-3 mb-2 d-flex justify-content-between align-items-center">
+      <div>
+        <strong>${_escape(s.proveedor_razon_social)}</strong>
+        <small class="d-block text-muted">
+          ${s.num_items} recurso${s.num_items > 1 ? 's' : ''} &middot; v${s.version}
+          ${s.telefono ? '&middot; ' + _escape(s.telefono) : ''}
+        </small>
+      </div>
+      <div>${waBtn}</div>
+    </div>`;
+  }).join('');
+  MODAL_RESULTADO.show();
+}
+
+async function marcarEnviada(solicitudId) {
+  try {
+    await fetch(`/presupuestos/ejecutivo/solicitud/${solicitudId}/marcar-enviada`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+  } catch (e) {
+    // Silent fail - el usuario ya abrió WhatsApp
+  }
+}
+
+function verMensaje(solicitudId) {
+  const data = SOLICITUDES_POR_ID[solicitudId];
+  if (!data) return;
+  document.getElementById('verMensajeTexto').textContent = data.mensaje || '(sin mensaje)';
+  MODAL_VER_MSG.show();
+}
+</script>
+{% endblock %}

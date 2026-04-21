@@ -130,6 +130,13 @@
                                       </button>
                                     {% endif %}
 
+                                    {% if can_manage %}
+                                    <button id="btnAgregarEtapaEstandar" class="btn btn-outline-success btn-sm"
+                                            data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal"
+                                            title="Usar solo para adicionales a mitad de obra. Lo normal es planificar las etapas desde el Presupuesto Ejecutivo antes de confirmar.">
+                                      <i class="fas fa-plus me-1"></i>Agregar Etapa (adicional)
+                                    </button>
+                                    {% endif %}
                                     <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal" data-obra-id="{{ obra.id }}">
                                       <i class="fas fa-wand-magic-sparkles me-1"></i>Wizard Tareas
                                     </button>
@@ -2284,21 +2291,29 @@
             <form method="POST" action="{{ url_for('obras.agregar_etapas', id=obra.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
-                    <h5 class="modal-title">Seleccionar Etapas del Proyecto</h5>
+                    <h5 class="modal-title">Agregar etapas estándar del sistema</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted mb-3">Selecciona las etapas que aplicarán a esta obra de construcción:</p>
-                    
+                    <p class="text-muted mb-3">
+                        Marcá las etapas que querés sumar a la obra. Las que ya están en tu obra aparecen
+                        deshabilitadas.
+                    </p>
+
+                    {% set nombres_existentes = etapas|map(attribute='nombre')|map('lower')|list %}
                     <div class="row">
                         {% for etapa in etapas_disponibles %}
+                        {% set ya_esta = etapa.nombre|lower in nombres_existentes %}
                         <div class="col-md-6 mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" 
-                                       name="etapas[]" value='{"nombre": "{{ etapa.nombre }}", "descripcion": "{{ etapa.descripcion }}", "orden": {{ etapa.orden }}}' 
-                                       id="etapa_{{ loop.index }}">
+                            <div class="form-check {% if ya_esta %}opacity-50{% endif %}">
+                                <input class="form-check-input" type="checkbox"
+                                       name="etapas[]"
+                                       value='{"nombre": "{{ etapa.nombre }}", "descripcion": "{{ etapa.descripcion }}", "orden": {{ etapa.orden }}}'
+                                       id="etapa_{{ loop.index }}"
+                                       {% if ya_esta %}disabled{% endif %}>
                                 <label class="form-check-label" for="etapa_{{ loop.index }}">
                                     <strong>{{ etapa.nombre }}</strong>
+                                    {% if ya_esta %}<span class="badge bg-secondary ms-1">Ya agregada</span>{% endif %}
                                     <small class="d-block text-muted">{{ etapa.descripcion }}</small>
                                 </label>
                             </div>

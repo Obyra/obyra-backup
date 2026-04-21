@@ -20,13 +20,16 @@
       <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-outline-secondary">
         <i class="fas fa-arrow-left me-1"></i>Volver al presupuesto
       </a>
+      <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}" class="btn btn-outline-primary">
+        <i class="fas fa-dolly-flatbed me-1"></i>Recursos a cotizar
+      </a>
       {% if presupuesto.ejecutivo_aprobado %}
       <button class="btn btn-outline-warning" onclick="revertirEjecutivo({{ presupuesto.id }})"
               {% if presupuesto.confirmado_como_obra %}disabled title="El presupuesto ya es obra"{% endif %}>
         <i class="fas fa-undo me-1"></i>Revertir aprobación
       </button>
       {% else %}
-      <button class="btn btn-primary" onclick="aprobarEjecutivo({{ presupuesto.id }})">
+      <button class="btn btn-primary" onclick="abrirModalAprobar({{ presupuesto.id }})">
         <i class="fas fa-check-double me-1"></i>Aprobar ejecutivo
       </button>
       {% endif %}
@@ -242,8 +245,22 @@
                           <td><small>{{ comp.descripcion }}</small></td>
                           <td class="text-center"><small>{{ comp.cantidad|float|round(3) }}</small></td>
                           <td class="text-center"><small>{{ comp.unidad }}</small></td>
-                          <td class="text-end"><small>${{ '{:,.2f}'.format(comp.precio_unitario|float) }}</small></td>
-                          <td class="text-end fw-bold"><small>${{ '{:,.2f}'.format(comp.total|float) }}</small></td>
+                          <td class="text-end">
+                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                              <span class="badge bg-warning text-dark" title="Sin precio todavía — pendiente de cotizar a proveedor">
+                                <i class="fas fa-hourglass-half me-1"></i>Pendiente
+                              </span>
+                            {% else %}
+                              <small>${{ '{:,.2f}'.format(comp.precio_unitario|float) }}</small>
+                            {% endif %}
+                          </td>
+                          <td class="text-end fw-bold">
+                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                              <small class="text-muted">—</small>
+                            {% else %}
+                              <small>${{ '{:,.2f}'.format(comp.total|float) }}</small>
+                            {% endif %}
+                          </td>
                           <td class="text-end">
                             {% if not presupuesto.ejecutivo_aprobado %}
                             <div class="btn-group btn-group-sm" role="group">
@@ -288,6 +305,202 @@
 
   {% endif %}
 
+  {# Etapas internas del ejecutivo: las que agregó el PM que NO están en
+     el pliego (Mampostería, Pisos, Pintura...). Se muestran como cards al
+     estilo de las del pliego pero con borde/badge distinto. #}
+  {% if etapas_internas %}
+  <div class="d-flex justify-content-between align-items-center mb-2 mt-4">
+    <h5 class="mb-0">
+      <i class="fas fa-list-check text-primary me-2"></i>Etapas internas adicionales
+      <small class="text-muted">(no las ve el cliente)</small>
+    </h5>
+    {% if not presupuesto.ejecutivo_aprobado %}
+    <button class="btn btn-outline-primary btn-sm" onclick="abrirModalAgregarEtapaInterna()">
+      <i class="fas fa-plus me-1"></i>Agregar etapa interna
+    </button>
+    {% endif %}
+  </div>
+
+  {% for nombre_etapa, etapa_data in etapas_internas.items() %}
+  <div class="card mb-3 shadow-sm border-primary">
+    {% set et_margen_costo = etapa_data['total_costo']|float %}
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center"
+         role="button"
+         data-bs-toggle="collapse"
+         data-bs-target="#etapa-interna-{{ loop.index }}"
+         style="cursor:pointer;">
+      <div>
+        <i class="fas fa-folder-open me-2 text-warning"></i>
+        <strong>{{ nombre_etapa }}</strong>
+        <span class="badge bg-light text-dark ms-2">{{ etapa_data['items']|length }} tareas</span>
+        <span class="badge bg-info text-dark ms-1">Interna</span>
+      </div>
+      <div class="d-flex gap-3 align-items-center">
+        <small class="text-light">
+          Costo: <strong>${{ '{:,.0f}'.format(et_margen_costo) }}</strong>
+        </small>
+        {% if not presupuesto.ejecutivo_aprobado %}
+        <button class="btn btn-sm btn-outline-light"
+                onclick="event.stopPropagation(); eliminarEtapaInterna('{{ nombre_etapa|e }}')"
+                title="Quitar esta etapa interna">
+          <i class="fas fa-times"></i>
+        </button>
+        {% endif %}
+        <i class="fas fa-chevron-down"></i>
+      </div>
+    </div>
+    <div id="etapa-interna-{{ loop.index }}" class="collapse">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width:55%;">Tarea (interna)</th>
+              <th class="text-center" style="width:80px;">Cant.</th>
+              <th class="text-center" style="width:60px;">Un.</th>
+              <th class="text-end" style="width:140px;">Costo estimado</th>
+              <th style="width:120px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in etapa_data['items'] %}
+            {% set comp_list = item.comp_list %}
+            {% set costo_item = item.costo_estimado|float %}
+            <tr data-item-id="{{ item.id }}" data-item-row>
+              <td><small>{{ item.descripcion }}</small></td>
+              <td class="text-center">{{ item.cantidad|float|round(2) }}</td>
+              <td class="text-center"><small>{{ item.unidad }}</small></td>
+              <td class="text-end" data-costo-cell>
+                {% if costo_item > 0 %}
+                  <span class="text-warning">${{ '{:,.0f}'.format(costo_item) }}</span>
+                {% else %}
+                  <small class="text-muted">—</small>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <button class="btn btn-sm {% if presupuesto.ejecutivo_aprobado %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#comp-item-{{ item.id }}"
+                        aria-expanded="false">
+                  <i class="fas {% if presupuesto.ejecutivo_aprobado %}fa-eye{% else %}fa-layer-group{% endif %} me-1"></i>{% if presupuesto.ejecutivo_aprobado %}Ver{% else %}Desglosar{% endif %}
+                  <span class="badge bg-secondary ms-1" data-comp-count>{{ comp_list|length }}</span>
+                </button>
+              </td>
+            </tr>
+            <tr class="collapse" id="comp-item-{{ item.id }}">
+              <td colspan="5" class="p-0 bg-light">
+                <div class="p-3">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong><i class="fas fa-tools text-primary me-1"></i>Composición</strong>
+                    {% if not presupuesto.ejecutivo_aprobado %}
+                    <button class="btn btn-sm btn-success"
+                            type="button"
+                            onclick="abrirModalComposicion({{ item.id }}, '{{ item.descripcion|e }}')">
+                      <i class="fas fa-plus me-1"></i>Agregar recurso
+                    </button>
+                    {% endif %}
+                  </div>
+                  <div data-composiciones-item="{{ item.id }}">
+                    {% if comp_list %}
+                    <table class="table table-sm table-bordered mb-0 bg-white">
+                      <thead>
+                        <tr class="small text-muted">
+                          <th style="width:100px;">Tipo</th>
+                          <th>Descripción</th>
+                          <th class="text-center" style="width:80px;">Cant.</th>
+                          <th class="text-center" style="width:70px;">Un.</th>
+                          <th class="text-end" style="width:110px;">P. Unit.</th>
+                          <th class="text-end" style="width:110px;">Subtotal</th>
+                          <th style="width:80px;"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for comp in comp_list %}
+                        <tr data-comp-id="{{ comp.id }}">
+                          <td>
+                            {% if comp.tipo == 'material' %}<span class="badge bg-info">Material</span>
+                            {% elif comp.tipo == 'mano_obra' %}<span class="badge bg-warning text-dark">MO</span>
+                            {% elif comp.tipo == 'equipo' %}
+                              <span class="badge bg-secondary">Equipo</span>
+                              {% if comp.modalidad_costo == 'alquiler' %}<span class="badge bg-primary" title="Alquiler">Alq.</span>
+                              {% elif comp.modalidad_costo == 'compra' %}<span class="badge bg-success" title="Compra">Compra</span>
+                              {% endif %}
+                            {% endif %}
+                          </td>
+                          <td><small>{{ comp.descripcion }}</small></td>
+                          <td class="text-center"><small>{{ comp.cantidad|float|round(3) }}</small></td>
+                          <td class="text-center"><small>{{ comp.unidad }}</small></td>
+                          <td class="text-end">
+                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                              <span class="badge bg-warning text-dark" title="Sin precio todavía — pendiente de cotizar a proveedor">
+                                <i class="fas fa-hourglass-half me-1"></i>Pendiente
+                              </span>
+                            {% else %}
+                              <small>${{ '{:,.2f}'.format(comp.precio_unitario|float) }}</small>
+                            {% endif %}
+                          </td>
+                          <td class="text-end fw-bold">
+                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                              <small class="text-muted">—</small>
+                            {% else %}
+                              <small>${{ '{:,.2f}'.format(comp.total|float) }}</small>
+                            {% endif %}
+                          </td>
+                          <td class="text-end">
+                            {% if not presupuesto.ejecutivo_aprobado %}
+                            <div class="btn-group btn-group-sm" role="group">
+                              <button class="btn btn-outline-primary"
+                                      type="button"
+                                      onclick='editarComposicion({{ comp.id }}, {{ item.id }}, {{ {"tipo": comp.tipo, "descripcion": comp.descripcion, "unidad": comp.unidad, "cantidad": comp.cantidad|float, "precio_unitario": comp.precio_unitario|float, "modalidad_costo": comp.modalidad_costo, "notas": comp.notas}|tojson }}, "{{ item.descripcion|e }}")'
+                                      title="Editar">
+                                <i class="fas fa-pen"></i>
+                              </button>
+                              <button class="btn btn-outline-danger"
+                                      type="button"
+                                      onclick="eliminarComposicion({{ comp.id }}, {{ item.id }})"
+                                      title="Eliminar">
+                                <i class="fas fa-trash"></i>
+                              </button>
+                            </div>
+                            {% else %}
+                            <small class="text-muted"><i class="fas fa-lock"></i></small>
+                            {% endif %}
+                          </td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                    {% else %}
+                    <div class="text-center py-3 text-muted small bg-white rounded border">
+                      Esta tarea aún no tiene recursos. Tocá <strong>Agregar recurso</strong> para descomponerla.
+                    </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {# Botón "agregar etapa interna" cuando aún no hay ninguna cargada #}
+  {% if not etapas_internas and not presupuesto.ejecutivo_aprobado %}
+  <div class="text-center my-4">
+    <button class="btn btn-outline-primary" onclick="abrirModalAgregarEtapaInterna()">
+      <i class="fas fa-plus me-1"></i>Agregar etapa interna al ejecutivo
+    </button>
+    <div class="text-muted small mt-2">
+      Sumá etapas del catálogo estándar que <strong>no están en el pliego</strong> pero vas a ejecutar
+      (ej: Mampostería, Pisos, Pintura, Limpieza Final). El cliente no las ve, pero suman al costo y a la obra.
+    </div>
+  </div>
+  {% endif %}
+
   <div class="alert alert-secondary mt-4 small">
     <i class="fas fa-info-circle me-2"></i>
     <strong>Cómo usar:</strong> tocá <em>Desglosar</em> en un ítem para abrir su composición.
@@ -295,6 +508,101 @@
     y queda registrado para comparar contra la ejecución real de la obra.
   </div>
 
+</div>
+
+<!-- Modal: Aprobar ejecutivo (simplificado) -->
+<div class="modal fade" id="modalAprobarEjecutivo" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-check-double me-2"></i>Aprobar ejecutivo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3">Estás por aprobar el ejecutivo del presupuesto <strong>{{ presupuesto.numero }}</strong>. Revisá los totales:</p>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="p-2 bg-light rounded text-center">
+              <small class="text-muted d-block">Precio vendido</small>
+              <div class="fw-bold text-success">${{ '{:,.0f}'.format(total_vendido|float) }}</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 bg-light rounded text-center">
+              <small class="text-muted d-block">Costo estimado</small>
+              <div class="fw-bold text-warning">${{ '{:,.0f}'.format(total_costo|float) }}</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 bg-light rounded text-center">
+              <small class="text-muted d-block">Margen</small>
+              <div class="fw-bold {% if margen >= 0 %}text-primary{% else %}text-danger{% endif %}">
+                ${{ '{:,.0f}'.format(margen|float) }}
+              </div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 bg-light rounded text-center">
+              <small class="text-muted d-block">Margen %</small>
+              <div class="fw-bold {% if margen_pct >= 30 %}text-success{% elif margen_pct >= 15 %}text-warning{% else %}text-danger{% endif %}">
+                {{ '{:.1f}'.format(margen_pct|float) }}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% if materiales_sin_precio and materiales_sin_precio > 0 %}
+        <div class="alert alert-warning small mb-2">
+          <i class="fas fa-hourglass-half me-1"></i>
+          <strong>Hay {{ materiales_sin_precio }} material{{ 'es' if materiales_sin_precio > 1 else '' }} sin cotizar</strong>
+          (precio en $0). Podés aprobar igual — el costo se va a completar cuando elijas
+          un proveedor ganador en la pantalla <em>Materiales a cotizar</em>.
+        </div>
+        {% endif %}
+
+        <div class="alert alert-warning small mb-0">
+          <i class="fas fa-exclamation-triangle me-1"></i>
+          Una vez aprobado, el desglose queda congelado. Para editar composiciones
+          o etapas internas, revertí la aprobación primero.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmarAprobar" onclick="confirmarAprobar()">
+          <i class="fas fa-check me-1"></i>Aprobar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Agregar etapa interna al ejecutivo -->
+<div class="modal fade" id="modalAgregarEtapaInterna" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Agregar etapa interna al ejecutivo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          Elegí una etapa del catálogo estándar. Se van a crear sus tareas predefinidas como
+          <em>tareas internas</em> (no se ven en el PDF del cliente). Después podés
+          descomponer cada tarea en materiales, MO y equipos.
+        </p>
+
+        <div id="etapasInternasLoader" class="text-center py-3">
+          <span class="spinner-border spinner-border-sm"></span>
+          <small class="ms-2 text-muted">Cargando catálogo...</small>
+        </div>
+        <div id="etapasInternasList" class="row d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Agregar recurso (material / mano_obra / equipo) a un item del pliego -->
@@ -387,12 +695,13 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label" id="labelPrecio">Precio unitario (ARS) <span class="text-danger">*</span></label>
+            <label class="form-label" id="labelPrecio">Precio unitario (ARS) <span class="text-danger" id="precioRequired">*</span></label>
             <div class="input-group">
               <span class="input-group-text">$</span>
-              <input type="number" class="form-control" id="compPrecio" step="any" min="0" required placeholder="0.00">
+              <input type="number" class="form-control" id="compPrecio" step="any" min="0" placeholder="0.00">
             </div>
-            <small class="text-muted" id="compSubtotalPreview"></small>
+            <small class="text-muted d-block" id="compHintPrecio"></small>
+            <small class="text-muted d-block" id="compSubtotalPreview"></small>
           </div>
 
           <div class="mb-3">
@@ -496,15 +805,32 @@ function _getItemDesc(itemId) {
 function onTipoChange() {
   const tipo = document.querySelector('input[name="tipo"]:checked').value;
   const wrap = document.getElementById('wrapperModalidad');
+  const precioInput = document.getElementById('compPrecio');
+  const hintPrecio = document.getElementById('compHintPrecio');
+
   if (tipo === 'equipo') {
     wrap.classList.remove('d-none');
     onModalidadChange();
-  } else {
+    // Equipo: precio OPCIONAL también (se cotiza a empresa de alquiler o vendedor)
+    document.getElementById('labelPrecio').innerHTML = 'Precio unitario (ARS) <span class="text-muted" style="font-weight:normal;">(opcional)</span>';
+    precioInput.required = false;
+    hintPrecio.innerHTML = '<i class="fas fa-info-circle me-1"></i>Dejá en <strong>0</strong> si vas a pedir cotización a proveedor de alquiler / vendedor — el precio se completa cuando elegís el ganador.';
+  } else if (tipo === 'mano_obra') {
     wrap.classList.add('d-none');
-    // Reset labels a default
     document.getElementById('labelUnidad').textContent = 'Unidad';
     document.getElementById('labelCantidad').innerHTML = 'Cantidad <span class="text-danger">*</span>';
     document.getElementById('labelPrecio').innerHTML = 'Precio unitario (ARS) <span class="text-danger">*</span>';
+    // MO: precio obligatorio (vos conocés los sueldos/jornales)
+    precioInput.required = true;
+    hintPrecio.innerHTML = '<i class="fas fa-info-circle me-1"></i>Costo interno conocido (jornal UOCRA, sueldo operario). No se cotiza a proveedores.';
+  } else {
+    // Material: precio OPCIONAL. Por defecto se deja en 0 para cotizar después.
+    wrap.classList.add('d-none');
+    document.getElementById('labelUnidad').textContent = 'Unidad';
+    document.getElementById('labelCantidad').innerHTML = 'Cantidad <span class="text-danger">*</span>';
+    document.getElementById('labelPrecio').innerHTML = 'Precio unitario (ARS) <span class="text-muted" style="font-weight:normal;">(opcional)</span>';
+    precioInput.required = false;
+    hintPrecio.innerHTML = '<i class="fas fa-info-circle me-1"></i>Dejá en <strong>0</strong> si vas a pedir cotización a proveedores — el precio se completa cuando elegís el ganador.';
   }
 }
 
@@ -660,13 +986,20 @@ function _renderCompTable(comps) {
       else if (c.modalidad_costo === 'compra') badge += ' <span class="badge bg-success" title="Compra">Compra</span>';
     }
     const itemId = document.getElementById('compItemId').value;
+    const pendiente = (c.tipo === 'material' || c.tipo === 'equipo') && (c.precio_unitario || 0) === 0;
+    const precioCell = pendiente
+      ? '<span class="badge bg-warning text-dark" title="Pendiente de cotizar"><i class="fas fa-hourglass-half me-1"></i>Pendiente</span>'
+      : `<small>$${c.precio_unitario.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small>`;
+    const subtotalCell = pendiente
+      ? '<small class="text-muted">—</small>'
+      : `<small>$${c.total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small>`;
     return `<tr data-comp-id="${c.id}">
       <td>${badge}</td>
       <td><small>${_escape(c.descripcion)}</small></td>
       <td class="text-center"><small>${c.cantidad.toFixed(3)}</small></td>
       <td class="text-center"><small>${_escape(c.unidad)}</small></td>
-      <td class="text-end"><small>$${c.precio_unitario.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small></td>
-      <td class="text-end fw-bold"><small>$${c.total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small></td>
+      <td class="text-end">${precioCell}</td>
+      <td class="text-end fw-bold">${subtotalCell}</td>
       <td class="text-end">
         <div class="btn-group btn-group-sm" role="group">
           <button class="btn btn-outline-primary" type="button"
@@ -708,18 +1041,130 @@ function _getCsrf() {
   return meta ? meta.getAttribute('content') : '';
 }
 
-async function aprobarEjecutivo(presupuestoId) {
-  if (!confirm('¿Aprobar el ejecutivo?\n\nUna vez aprobado no podrás editar las composiciones sin revertir primero. Las composiciones van a usarse para pre-cargar materiales, MO y equipos cuando confirmes el presupuesto como obra.')) {
-    return;
-  }
+const MODAL_APROBAR = (() => {
+  const el = document.getElementById('modalAprobarEjecutivo');
+  return el ? new bootstrap.Modal(el) : null;
+})();
+const MODAL_ETAPA_INTERNA = (() => {
+  const el = document.getElementById('modalAgregarEtapaInterna');
+  return el ? new bootstrap.Modal(el) : null;
+})();
+let PRESUPUESTO_ID_APROBAR = null;
+const PRESUPUESTO_ID = {{ presupuesto.id }};
+
+function abrirModalAprobar(presupuestoId) {
+  PRESUPUESTO_ID_APROBAR = presupuestoId;
+  MODAL_APROBAR.show();
+}
+
+async function confirmarAprobar() {
+  if (!PRESUPUESTO_ID_APROBAR) return;
+  const btn = document.getElementById('btnConfirmarAprobar');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aprobando...';
+
   try {
-    const res = await fetch(`/presupuestos/${presupuestoId}/ejecutivo/aprobar`, {
+    const res = await fetch(`/presupuestos/${PRESUPUESTO_ID_APROBAR}/ejecutivo/aprobar`, {
       method: 'POST',
       headers: {'X-CSRFToken': _getCsrf()},
     });
     const data = await res.json();
     if (!res.ok || !data.ok) {
       alert(data.error || `Error ${res.status} al aprobar`);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check me-1"></i>Aprobar';
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check me-1"></i>Aprobar';
+  }
+}
+
+async function abrirModalAgregarEtapaInterna() {
+  const loader = document.getElementById('etapasInternasLoader');
+  const list = document.getElementById('etapasInternasList');
+  loader.classList.remove('d-none');
+  list.classList.add('d-none');
+  list.innerHTML = '';
+
+  MODAL_ETAPA_INTERNA.show();
+
+  try {
+    const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/etapas-estandar`);
+    const data = await res.json();
+    if (!data.ok) {
+      list.innerHTML = `<div class="col-12 text-danger small">Error: ${data.error || res.status}</div>`;
+    } else {
+      list.innerHTML = data.etapas.map(et => {
+        let badge = '';
+        let statusClass = '';
+        let btnHtml = '';
+        if (et.en_pliego) {
+          badge = '<span class="badge bg-success ms-1">Ya en pliego</span>';
+          statusClass = 'opacity-50';
+          btnHtml = '<button class="btn btn-sm btn-outline-secondary" disabled>No disponible</button>';
+        } else if (et.ya_interna) {
+          badge = '<span class="badge bg-info ms-1">Ya agregada</span>';
+          statusClass = 'opacity-50';
+          btnHtml = '<button class="btn btn-sm btn-outline-secondary" disabled>Ya agregada</button>';
+        } else {
+          if (et.nivel) badge = `<span class="badge bg-secondary ms-1">NV${et.nivel}</span>`;
+          btnHtml = `<button class="btn btn-sm btn-primary" onclick="agregarEtapaInterna('${et.slug}')">
+            <i class="fas fa-plus me-1"></i>Agregar
+          </button>`;
+        }
+        return `<div class="col-md-6 mb-2">
+          <div class="d-flex justify-content-between align-items-start p-2 border rounded ${statusClass}">
+            <div style="flex:1;">
+              <strong>${_escape(et.nombre)}</strong>${badge}
+              <small class="d-block text-muted">${_escape(et.descripcion || '')}</small>
+            </div>
+            <div class="ms-2">${btnHtml}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="col-12 text-danger small">Error de red: ${_escape(e.message)}</div>`;
+  }
+  loader.classList.add('d-none');
+  list.classList.remove('d-none');
+}
+
+async function agregarEtapaInterna(slug) {
+  try {
+    const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/etapas-internas`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify({slug: slug}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+
+async function eliminarEtapaInterna(etapaNombre) {
+  if (!confirm(`¿Eliminar la etapa interna "${etapaNombre}" con todas sus tareas y composiciones?`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/etapas-internas`, {
+      method: 'DELETE',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify({etapa_nombre: etapaNombre}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
       return;
     }
     location.reload();

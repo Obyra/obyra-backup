@@ -297,7 +297,7 @@ def _leer_preview(path, max_rows=30):
     return sheets
 
 
-def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, nombre_obra, items, modo_licitacion=True):
+def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, nombre_obra, items, modo_licitacion=True, ubicacion=None):
     """Helper compartido para crear el presupuesto + items.
 
     Si modo_licitacion=True (default), los precios del Excel se ignoran y
@@ -309,6 +309,8 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
         'modo_creacion': 'excel_licitacion',
         'modo_licitacion': modo_licitacion,
     }
+    if ubicacion:
+        datos_proyecto['ubicacion'] = ubicacion
     presu = Presupuesto(
         numero=numero,
         organizacion_id=org_id,
@@ -317,6 +319,7 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
         vigencia_dias=vigencia_dias,
         estado='borrador',
         datos_proyecto=json.dumps(datos_proyecto),
+        ubicacion_texto=(ubicacion or None),
         currency='ARS',
     )
     db.session.add(presu)
@@ -402,6 +405,7 @@ def importar_licitacion():
     numero = (request.form.get('numero') or '').strip()
     vigencia_dias = request.form.get('vigencia_dias', 30, type=int)
     modo_licitacion = request.form.get('modo_licitacion') == '1'
+    ubicacion = (request.form.get('ubicacion') or '').strip() or None
 
     if not archivo or not archivo.filename:
         flash('Subí un archivo Excel', 'danger')
@@ -496,7 +500,7 @@ def importar_licitacion():
             try:
                 presu = _crear_presupuesto_desde_items(
                     org_id, cliente_id, numero, vigencia_dias, nombre_obra, items,
-                    modo_licitacion=modo_licitacion,
+                    modo_licitacion=modo_licitacion, ubicacion=ubicacion,
                 )
                 import os
                 try: os.remove(path)
@@ -523,6 +527,7 @@ def importar_licitacion():
         numero=numero,
         vigencia_dias=vigencia_dias,
         modo_licitacion='1' if modo_licitacion else '0',
+        ubicacion=ubicacion or '',
     ))
 
 
@@ -547,6 +552,7 @@ def importar_licitacion_mapear(token):
     numero = request.values.get('numero', '').strip()
     vigencia_dias = int(request.values.get('vigencia_dias', 30) or 30)
     modo_licitacion = request.values.get('modo_licitacion', '1') == '1'
+    ubicacion = (request.values.get('ubicacion') or '').strip() or None
 
     if request.method == 'POST':
         # Procesar mapeo manual
@@ -609,7 +615,7 @@ def importar_licitacion_mapear(token):
 
             presu = _crear_presupuesto_desde_items(
                 org_id, cliente_id, numero, vigencia_dias, nombre_obra, items,
-                modo_licitacion=modo_licitacion,
+                modo_licitacion=modo_licitacion, ubicacion=ubicacion,
             )
             import os
             try: os.remove(path)
