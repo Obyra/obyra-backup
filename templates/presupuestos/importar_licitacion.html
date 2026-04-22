@@ -51,12 +51,7 @@
                             </select>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Ubicación de la obra</label>
-                            <input type="text" class="form-control" name="ubicacion"
-                                   placeholder="Ej: Av. Corrientes 1234, CABA">
-                            <small class="text-muted">Se pre-carga al confirmar como obra. Podés dejarla vacía y completarla después.</small>
-                        </div>
+                        {% include 'presupuestos/_ubicacion_widget.html' %}
 
                         <div class="mb-3">
                             <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
@@ -135,4 +130,11 @@
         </div>
     </div>
 </div>
+
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&loading=async" async defer></script>
+{% else %}
+<script>console.warn('[ubicacion] GOOGLE_MAPS_API_KEY no configurada. El mapa no va a renderizar.');</script>
+{% endif %}
+{% include 'presupuestos/_ubicacion_widget_js.html' %}
 {% endblock %}

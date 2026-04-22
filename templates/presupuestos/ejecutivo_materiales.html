@@ -119,6 +119,11 @@
               {% elif mat.estado == 'elegido' %}
                 <span class="badge bg-success">Elegido</span>
               {% endif %}
+              {% if mat.estado in ['con_respuestas', 'elegido'] %}
+              <button class="btn btn-sm btn-outline-primary mt-1 d-block mx-auto" onclick="abrirComparativa({{ mat.id }})" title="Ver comparativa y elegir ganador">
+                <i class="fas fa-balance-scale me-1"></i>Comparar
+              </button>
+              {% endif %}
             </td>
             <td>
               <div class="d-flex flex-wrap gap-1 align-items-center" data-chips-material="{{ mat.id }}">
@@ -230,8 +235,11 @@
                   <i class="fas fa-phone-slash me-1"></i>Sin tel.
                 </button>
                 {% endif %}
-                <button class="btn btn-outline-info" onclick="verMensaje({{ s.id }})">
+                <button class="btn btn-outline-info" onclick="verMensaje({{ s.id }})" title="Ver mensaje">
                   <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-outline-primary" onclick="abrirCargarRespuestas({{ s.id }})" title="Cargar respuesta del proveedor">
+                  <i class="fas fa-reply"></i>
                 </button>
               </div>
             </td>
@@ -302,6 +310,65 @@
       </div>
       <div class="modal-body">
         <pre id="verMensajeTexto" class="bg-light p-3 rounded border" style="white-space:pre-wrap; font-family: inherit; font-size: 0.9rem;"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cargar respuestas del proveedor -->
+<div class="modal fade" id="modalCargarRespuestas" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">
+          <i class="fas fa-reply me-2"></i>Cargar respuesta del proveedor
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-light border small mb-3">
+          <strong>Proveedor:</strong> <span id="respuestaProveedor"></span>
+          <br><small class="text-muted">
+            Cargá el <strong>precio unitario (ARS)</strong> que te pasó por cada recurso.
+            Si el proveedor no cotizó alguno, dejá el campo vacío.
+          </small>
+        </div>
+
+        <div id="respuestasLoader" class="text-center py-3">
+          <span class="spinner-border spinner-border-sm"></span>
+        </div>
+        <div id="respuestasContent" class="d-none"></div>
+
+        <div class="alert alert-danger d-none small mt-3" id="respuestasError"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="guardarRespuestas()" id="btnGuardarRespuestas">
+          <i class="fas fa-save me-1"></i>Guardar respuestas
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Comparativa de precios -->
+<div class="modal fade" id="modalComparativa" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title">
+          <i class="fas fa-balance-scale me-2"></i>Comparativa de precios
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="comparativaLoader" class="text-center py-3">
+          <span class="spinner-border spinner-border-sm"></span>
+        </div>
+        <div id="comparativaContent" class="d-none"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
@@ -484,6 +551,249 @@ function verMensaje(solicitudId) {
   if (!data) return;
   document.getElementById('verMensajeTexto').textContent = data.mensaje || '(sin mensaje)';
   MODAL_VER_MSG.show();
+}
+
+// ================ FASE C: Cargar respuestas + comparativa ================
+
+const MODAL_RESPUESTAS = new bootstrap.Modal(document.getElementById('modalCargarRespuestas'));
+const MODAL_COMPARATIVA = new bootstrap.Modal(document.getElementById('modalComparativa'));
+let SOLICITUD_RESPUESTAS_ID = null;
+let SOLICITUD_RESPUESTAS_ITEMS = [];
+
+async function abrirCargarRespuestas(solicitudId) {
+  SOLICITUD_RESPUESTAS_ID = solicitudId;
+  const loader = document.getElementById('respuestasLoader');
+  const content = document.getElementById('respuestasContent');
+  const errEl = document.getElementById('respuestasError');
+  loader.classList.remove('d-none');
+  content.classList.add('d-none');
+  errEl.classList.add('d-none');
+
+  MODAL_RESPUESTAS.show();
+
+  try {
+    const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/solicitudes`);
+    const data = await res.json();
+    const s = (data.solicitudes || []).find(x => x.id === solicitudId);
+    if (!s) {
+      errEl.textContent = 'Solicitud no encontrada';
+      errEl.classList.remove('d-none');
+      loader.classList.add('d-none');
+      return;
+    }
+    document.getElementById('respuestaProveedor').textContent = s.proveedor_razon_social + ' (v' + s.version + ')';
+    SOLICITUD_RESPUESTAS_ITEMS = s.items;
+
+    let html = `<table class="table table-sm table-hover">
+      <thead class="table-light">
+        <tr>
+          <th>Recurso</th>
+          <th class="text-center" style="width:100px;">Cantidad</th>
+          <th class="text-center" style="width:80px;">Unidad</th>
+          <th style="width:160px;">Precio unit. (ARS)</th>
+          <th style="width:180px;">Notas (opcional)</th>
+        </tr>
+      </thead>
+      <tbody>`;
+    for (const it of s.items) {
+      const precio = it.precio_respuesta !== null && it.precio_respuesta !== undefined ? it.precio_respuesta : '';
+      const notas = it.notas_respuesta || '';
+      html += `<tr data-item-id="${it.id}">
+        <td><small>${_escape(it.descripcion)}</small></td>
+        <td class="text-center">${it.cantidad.toFixed(3)}</td>
+        <td class="text-center"><small>${_escape(it.unidad)}</small></td>
+        <td>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control form-control-sm" step="any" min="0"
+                   data-precio-item="${it.id}" value="${precio}" placeholder="0">
+          </div>
+        </td>
+        <td>
+          <input type="text" class="form-control form-control-sm" data-notas-item="${it.id}" value="${_escape(notas)}" placeholder="Ej: entrega 48hs">
+        </td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    html += '<div class="small text-muted"><i class="fas fa-info-circle me-1"></i>Dejá un campo vacío si el proveedor no cotizó ese recurso.</div>';
+    document.getElementById('respuestasContent').innerHTML = html;
+    loader.classList.add('d-none');
+    content.classList.remove('d-none');
+  } catch (e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.classList.remove('d-none');
+    loader.classList.add('d-none');
+  }
+}
+
+async function guardarRespuestas() {
+  if (!SOLICITUD_RESPUESTAS_ID) return;
+  const btn = document.getElementById('btnGuardarRespuestas');
+  const errEl = document.getElementById('respuestasError');
+  errEl.classList.add('d-none');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+
+  const items = SOLICITUD_RESPUESTAS_ITEMS.map(it => {
+    const precioInput = document.querySelector(`[data-precio-item="${it.id}"]`);
+    const notasInput = document.querySelector(`[data-notas-item="${it.id}"]`);
+    return {
+      item_id: it.id,
+      precio: precioInput ? precioInput.value : '',
+      notas: notasInput ? notasInput.value : '',
+    };
+  });
+
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/solicitud/${SOLICITUD_RESPUESTAS_ID}/respuestas`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify({items}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      errEl.textContent = data.error || `Error ${res.status}`;
+      errEl.classList.remove('d-none');
+      return;
+    }
+    MODAL_RESPUESTAS.hide();
+    location.reload();
+  } catch (e) {
+    errEl.textContent = 'Error de red: ' + e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar respuestas';
+  }
+}
+
+async function abrirComparativa(materialId) {
+  const loader = document.getElementById('comparativaLoader');
+  const content = document.getElementById('comparativaContent');
+  loader.classList.remove('d-none');
+  content.classList.add('d-none');
+  content.innerHTML = '';
+
+  MODAL_COMPARATIVA.show();
+
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/material/${materialId}/comparativa`);
+    const data = await res.json();
+    if (!data.ok) {
+      content.innerHTML = `<div class="alert alert-danger">${data.error || 'Error'}</div>`;
+      loader.classList.add('d-none');
+      content.classList.remove('d-none');
+      return;
+    }
+
+    const m = data.material;
+    const mejor = data.mejor_precio;
+
+    let html = `<div class="mb-3">
+      <h5 class="mb-1">${_escape(m.descripcion)}</h5>
+      <small class="text-muted">Cantidad total: <strong>${m.cantidad_total} ${_escape(m.unidad)}</strong></small>
+      ${m.proveedor_elegido_id ? `<span class="badge bg-success ms-2"><i class="fas fa-trophy me-1"></i>Ganador elegido</span>` : ''}
+    </div>`;
+
+    if (data.respuestas.length === 0) {
+      html += '<div class="alert alert-warning">Aún no hay respuestas cargadas para este recurso.</div>';
+    } else {
+      html += `<table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Proveedor</th>
+            <th class="text-center" style="width:80px;">Versión</th>
+            <th class="text-end" style="width:150px;">Precio unitario</th>
+            <th class="text-end" style="width:180px;">Subtotal (${m.cantidad_total} ${_escape(m.unidad)})</th>
+            <th style="width:180px;">Notas</th>
+            <th class="text-center" style="width:140px;">Acción</th>
+          </tr>
+        </thead>
+        <tbody>`;
+      for (const r of data.respuestas) {
+        const esMejor = r.precio !== null && r.precio === mejor;
+        const esElegido = r.elegido;
+        const rowClass = esElegido ? 'table-success' : (esMejor ? 'table-warning' : '');
+        const precioCell = r.precio !== null
+          ? `$${r.precio.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2})}`
+          : '<small class="text-muted">Sin respuesta</small>';
+        const subtotalCell = r.subtotal !== null
+          ? `$${r.subtotal.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2})}`
+          : '—';
+        let accionCell;
+        if (r.precio === null) {
+          accionCell = '<span class="text-muted small">—</span>';
+        } else if (esElegido) {
+          accionCell = `<button class="btn btn-sm btn-outline-warning" onclick="desmarcarGanador(${m.id})">
+            <i class="fas fa-undo me-1"></i>Desmarcar
+          </button>`;
+        } else {
+          accionCell = `<button class="btn btn-sm btn-success" onclick="elegirGanador(${m.id}, ${r.item_id})">
+            <i class="fas fa-trophy me-1"></i>Elegir
+          </button>`;
+        }
+        html += `<tr class="${rowClass}">
+          <td>
+            <strong>${_escape(r.proveedor_razon_social)}</strong>
+            ${esElegido ? '<i class="fas fa-trophy text-success ms-1"></i>' : ''}
+            ${esMejor && !esElegido ? '<span class="badge bg-warning text-dark ms-1">Mejor precio</span>' : ''}
+          </td>
+          <td class="text-center"><small>v${r.version}</small></td>
+          <td class="text-end ${esMejor ? 'fw-bold text-success' : ''}">${precioCell}</td>
+          <td class="text-end fw-bold">${subtotalCell}</td>
+          <td><small>${_escape(r.notas || '—')}</small></td>
+          <td class="text-center">${accionCell}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      html += '<div class="small text-muted"><i class="fas fa-info-circle me-1"></i>Al <strong>elegir</strong> un proveedor, su precio se copia al ejecutivo y se recalcula el costo estimado / margen.</div>';
+    }
+
+    content.innerHTML = html;
+    loader.classList.add('d-none');
+    content.classList.remove('d-none');
+  } catch (e) {
+    content.innerHTML = `<div class="alert alert-danger">Error de red: ${_escape(e.message)}</div>`;
+    loader.classList.add('d-none');
+    content.classList.remove('d-none');
+  }
+}
+
+async function elegirGanador(materialId, itemId) {
+  if (!confirm('¿Elegir este proveedor como ganador?\n\nEl precio se va a copiar al ejecutivo y se recalcula costo/margen.')) return;
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/material/${materialId}/elegir-ganador`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify({item_id: itemId}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+
+async function desmarcarGanador(materialId) {
+  if (!confirm('¿Desmarcar el ganador? El precio del ejecutivo vuelve a $0 para este recurso.')) return;
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/material/${materialId}/desmarcar-ganador`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
 }
 </script>
 {% endblock %}

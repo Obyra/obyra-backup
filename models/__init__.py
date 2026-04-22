@@ -72,6 +72,7 @@ from models.budgets import (
     EscalaSalarialUOCRA,
     CuadrillaTipo,
     MiembroCuadrilla,
+    EtapaInternaVinculo,
 )
 
 # Client models
@@ -291,6 +292,7 @@ __all__ = [
     'EscalaSalarialUOCRA',
     'CuadrillaTipo',
     'MiembroCuadrilla',
+    'EtapaInternaVinculo',
     # Clients
     'Cliente',
     # Proveedores OC

@@ -278,6 +278,32 @@ def _path_archivo_temp(token):
     return path if os.path.exists(path) else None
 
 
+def _persistir_pliego(presu, temp_path, nombre_original=None):
+    """Copia el Excel del pliego desde /tmp a static/uploads/pliegos/ para que
+    quede como documento contractual del presupuesto (y luego de la obra).
+
+    Guarda la ruta relativa (partiendo de 'static/') en presu.archivo_pliego_path
+    y un nombre amigable en presu.archivo_pliego_nombre. No falla si no puede
+    copiar — solo loggea y sigue.
+    """
+    import os
+    import shutil
+    try:
+        base_dir = os.path.join('static', 'uploads', 'pliegos')
+        os.makedirs(base_dir, exist_ok=True)
+        dest_rel = os.path.join('uploads', 'pliegos', f'pres_{presu.id}.xlsx')
+        dest_abs = os.path.join('static', dest_rel)
+        shutil.copyfile(temp_path, dest_abs)
+        presu.archivo_pliego_path = dest_rel.replace('\\', '/')
+        presu.archivo_pliego_nombre = (
+            nombre_original or f'Pliego_{presu.numero}.xlsx'
+        )
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.warning(f'No se pudo persistir pliego: {e}')
+
+
 def _leer_preview(path, max_rows=30):
     """Retorna las primeras N filas + columnas detectadas."""
     import openpyxl
@@ -297,7 +323,7 @@ def _leer_preview(path, max_rows=30):
     return sheets
 
 
-def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, nombre_obra, items, modo_licitacion=True, ubicacion=None):
+def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, nombre_obra, items, modo_licitacion=True, ubicacion=None, ubicacion_lat=None, ubicacion_lng=None, ubicacion_normalizada=None):
     """Helper compartido para crear el presupuesto + items.
 
     Si modo_licitacion=True (default), los precios del Excel se ignoran y
@@ -320,6 +346,9 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
         estado='borrador',
         datos_proyecto=json.dumps(datos_proyecto),
         ubicacion_texto=(ubicacion or None),
+        ubicacion_normalizada=(ubicacion_normalizada or None),
+        geo_latitud=ubicacion_lat,
+        geo_longitud=ubicacion_lng,
         currency='ARS',
     )
     db.session.add(presu)
@@ -395,8 +424,11 @@ def importar_licitacion():
         else:
             numero_sug = f"PRES-{fecha_hoy}-001"
 
+        import os as _os
         return render_template('presupuestos/importar_licitacion.html',
-                               clientes=clientes, numero_sugerido=numero_sug)
+                               clientes=clientes,
+                               numero_sugerido=numero_sug,
+                               google_maps_key=_os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
     # POST
     archivo = request.files.get('archivo_excel')
@@ -406,6 +438,9 @@ def importar_licitacion():
     vigencia_dias = request.form.get('vigencia_dias', 30, type=int)
     modo_licitacion = request.form.get('modo_licitacion') == '1'
     ubicacion = (request.form.get('ubicacion') or '').strip() or None
+    ubicacion_lat = request.form.get('ubicacion_lat', type=float)
+    ubicacion_lng = request.form.get('ubicacion_lng', type=float)
+    ubicacion_normalizada = (request.form.get('ubicacion_normalizada') or '').strip() or None
 
     if not archivo or not archivo.filename:
         flash('Subí un archivo Excel', 'danger')
@@ -501,7 +536,10 @@ def importar_licitacion():
                 presu = _crear_presupuesto_desde_items(
                     org_id, cliente_id, numero, vigencia_dias, nombre_obra, items,
                     modo_licitacion=modo_licitacion, ubicacion=ubicacion,
+                    ubicacion_lat=ubicacion_lat, ubicacion_lng=ubicacion_lng,
+                    ubicacion_normalizada=ubicacion_normalizada,
                 )
+                _persistir_pliego(presu, path, nombre_original=archivo.filename)
                 import os
                 try: os.remove(path)
                 except Exception: pass
@@ -528,6 +566,9 @@ def importar_licitacion():
         vigencia_dias=vigencia_dias,
         modo_licitacion='1' if modo_licitacion else '0',
         ubicacion=ubicacion or '',
+        ubicacion_lat=ubicacion_lat or '',
+        ubicacion_lng=ubicacion_lng or '',
+        ubicacion_normalizada=ubicacion_normalizada or '',
     ))
 
 
@@ -553,6 +594,15 @@ def importar_licitacion_mapear(token):
     vigencia_dias = int(request.values.get('vigencia_dias', 30) or 30)
     modo_licitacion = request.values.get('modo_licitacion', '1') == '1'
     ubicacion = (request.values.get('ubicacion') or '').strip() or None
+    try:
+        ubicacion_lat = float(request.values.get('ubicacion_lat') or '') or None
+    except (ValueError, TypeError):
+        ubicacion_lat = None
+    try:
+        ubicacion_lng = float(request.values.get('ubicacion_lng') or '') or None
+    except (ValueError, TypeError):
+        ubicacion_lng = None
+    ubicacion_normalizada = (request.values.get('ubicacion_normalizada') or '').strip() or None
 
     if request.method == 'POST':
         # Procesar mapeo manual
@@ -616,7 +666,10 @@ def importar_licitacion_mapear(token):
             presu = _crear_presupuesto_desde_items(
                 org_id, cliente_id, numero, vigencia_dias, nombre_obra, items,
                 modo_licitacion=modo_licitacion, ubicacion=ubicacion,
+                ubicacion_lat=ubicacion_lat, ubicacion_lng=ubicacion_lng,
+                ubicacion_normalizada=ubicacion_normalizada,
             )
+            _persistir_pliego(presu, path)
             import os
             try: os.remove(path)
             except Exception: pass

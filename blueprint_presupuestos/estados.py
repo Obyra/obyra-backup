@@ -19,6 +19,62 @@ from services.plan_service import require_active_subscription
 from blueprint_presupuestos import presupuestos_bp, identificar_etapa_por_tipo
 
 
+def _copiar_pliego_a_legajo(presupuesto, obra):
+    """Copia el Excel del pliego importado al Legajo Digital de la obra.
+
+    Toma presupuesto.archivo_pliego_path (relativo a static/), lo copia a la
+    carpeta de documentos de la obra y crea un registro en documentos_obra
+    con tipo 'Pliego de Especificaciones'.
+    """
+    import os
+    import shutil
+    import uuid
+
+    if not getattr(presupuesto, 'archivo_pliego_path', None):
+        return
+
+    src_abs = os.path.join('static', presupuesto.archivo_pliego_path)
+    if not os.path.exists(src_abs):
+        return
+
+    # Destino en legajo de la obra
+    dest_dir = os.path.join('static', 'uploads', 'obras', str(obra.id), 'documentos')
+    os.makedirs(dest_dir, exist_ok=True)
+    nombre_archivo = presupuesto.archivo_pliego_nombre or f'Pliego_{presupuesto.numero}.xlsx'
+    safe_name = ''.join(c if c.isalnum() or c in '._- ' else '_' for c in nombre_archivo).strip()
+    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+    dest_abs = os.path.join(dest_dir, unique_name)
+    shutil.copyfile(src_abs, dest_abs)
+    relative_path = f"uploads/obras/{obra.id}/documentos/{unique_name}"
+
+    # Buscar (o crear) tipo "Pliego de Especificaciones"
+    tipo_id_row = db.session.execute(
+        db.text("SELECT id FROM tipos_documento WHERE nombre = 'Pliego de Especificaciones' LIMIT 1")
+    ).fetchone()
+    tipo_id = tipo_id_row.id if tipo_id_row else None
+
+    db.session.execute(
+        db.text("""
+            INSERT INTO documentos_obra
+                (obra_id, tipo_documento_id, organizacion_id, nombre, descripcion,
+                 archivo_path, creado_por_id, fecha_creacion, fecha_modificacion, estado)
+            VALUES
+                (:obra_id, :tipo_id, :org_id, :nombre, :desc,
+                 :path, :user_id, NOW(), NOW(), 'activo')
+        """),
+        {
+            'obra_id': obra.id,
+            'tipo_id': tipo_id,
+            'org_id': obra.organizacion_id,
+            'nombre': nombre_archivo,
+            'desc': f'Pliego original importado desde Excel al crear el presupuesto {presupuesto.numero}.',
+            'path': relative_path,
+            'user_id': current_user.id,
+        }
+    )
+    db.session.commit()
+
+
 @presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
 @login_required
 @require_active_subscription
@@ -425,6 +481,14 @@ def confirmar_como_obra(id):
                 db.session.commit()  # Commit lo que se pueda
             except Exception:
                 pass
+
+        # Gap 18: si el presupuesto tiene el Excel del pliego adjunto,
+        # copiarlo automáticamente al Legajo Digital de la obra como
+        # documento contractual ("Pliego de Especificaciones").
+        try:
+            _copiar_pliego_a_legajo(presupuesto, obra)
+        except Exception as e_leg:
+            current_app.logger.warning(f"No se pudo copiar pliego al legajo: {e_leg}")
 
         current_app.logger.info(f"Presupuesto {presupuesto.numero} confirmado como obra {obra.id}")
 

@@ -46,6 +46,19 @@
                         <i class="fas fa-flag-checkered me-1"></i>Cerrar Obra
                     </a>
                     {% endif %}
+                    {% set ns_pliego = namespace(presu=none) %}
+                    {% for p in obra.presupuestos %}
+                      {% if ns_pliego.presu is none %}
+                        {% set ns_pliego.presu = p %}
+                      {% endif %}
+                    {% endfor %}
+                    {% if ns_pliego.presu %}
+                    <a href="{{ url_for('presupuestos.detalle', id=ns_pliego.presu.id) }}"
+                       class="btn btn-outline-secondary me-1"
+                       title="Ver el pliego creado a partir del Excel importado (presupuesto {{ ns_pliego.presu.numero }})">
+                        <i class="fas fa-file-invoice me-1"></i>Pliego
+                    </a>
+                    {% endif %}
                     <a href="{{ url_for('obras.lista') }}" class="btn btn-secondary">
                         <i class="fas fa-arrow-left me-1"></i>Volver
                     </a>

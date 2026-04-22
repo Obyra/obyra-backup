@@ -124,6 +124,9 @@
   <div class="card mb-3 shadow-sm">
     {% set et_margen_pct = etapa_data['margen_pct']|float %}
     {% set et_sem_class = 'bg-success' if et_margen_pct >= 30 else ('bg-warning text-dark' if et_margen_pct >= 15 else 'bg-danger') %}
+    {% set et_costo_propio = etapa_data['total_costo']|float %}
+    {% set et_costo_vinc = etapa_data['costo_internas_vinculadas']|float %}
+    {% set et_costo_consol = etapa_data['total_costo_consolidado']|float %}
     <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center"
          role="button"
          data-bs-toggle="collapse"
@@ -133,15 +136,24 @@
         <i class="fas fa-folder-open me-2 text-warning"></i>
         <strong>{{ nombre_etapa }}</strong>
         <span class="badge bg-light text-dark ms-2">{{ etapa_data['items']|length }} ítems</span>
+        {% if etapa_data['internas_vinculadas'] %}
+        <span class="badge bg-info text-dark ms-1" title="Etapas internas vinculadas a este rubro">
+          <i class="fas fa-link me-1"></i>{{ etapa_data['internas_vinculadas']|length }} interna{{ 's' if etapa_data['internas_vinculadas']|length != 1 else '' }}
+        </span>
+        {% endif %}
       </div>
       <div class="d-flex gap-3 align-items-center">
         <small class="text-light">
           Vendido: <strong>${{ '{:,.0f}'.format(etapa_data['total_vendido']|float) }}</strong>
         </small>
-        <small class="text-light">
-          Costo: <strong>${{ '{:,.0f}'.format(etapa_data['total_costo']|float) }}</strong>
+        <small class="text-light"
+               {% if et_costo_vinc > 0 %}title="Propio: ${{ '{:,.0f}'.format(et_costo_propio) }} + Internas vinculadas: ${{ '{:,.0f}'.format(et_costo_vinc) }}"{% endif %}>
+          Costo: <strong>${{ '{:,.0f}'.format(et_costo_consol) }}</strong>
+          {% if et_costo_vinc > 0 %}
+          <span class="text-info ms-1">(+${{ '{:,.0f}'.format(et_costo_vinc) }} int.)</span>
+          {% endif %}
         </small>
-        {% if etapa_data['total_costo']|float > 0 %}
+        {% if et_costo_consol > 0 %}
         <span class="badge {{ et_sem_class }}" title="Margen de la etapa">
           {{ '{:+.1f}'.format(et_margen_pct) }}%
         </span>
@@ -150,6 +162,17 @@
       </div>
     </div>
     <div id="etapa-{{ loop.index }}" class="collapse">
+      {% if etapa_data['internas_vinculadas'] %}
+      <div class="px-3 pt-2 pb-1 bg-light border-bottom small">
+        <i class="fas fa-link text-info me-1"></i>
+        <strong>Etapas internas que aportan costo a este rubro:</strong>
+        {% for int_nombre, int_costo in etapa_data['internas_vinculadas'] %}
+          <span class="badge bg-info text-dark ms-1">
+            {{ int_nombre }} +${{ '{:,.0f}'.format(int_costo|float) }}
+          </span>
+        {% endfor %}
+      </div>
+      {% endif %}
       <div class="table-responsive">
         <table class="table table-hover mb-0 align-middle">
           <thead class="table-light">
@@ -324,6 +347,7 @@
   {% for nombre_etapa, etapa_data in etapas_internas.items() %}
   <div class="card mb-3 shadow-sm border-primary">
     {% set et_margen_costo = etapa_data['total_costo']|float %}
+    {% set vinc_actual = etapa_data.get('vinculada_a') %}
     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center"
          role="button"
          data-bs-toggle="collapse"
@@ -334,6 +358,15 @@
         <strong>{{ nombre_etapa }}</strong>
         <span class="badge bg-light text-dark ms-2">{{ etapa_data['items']|length }} tareas</span>
         <span class="badge bg-info text-dark ms-1">Interna</span>
+        {% if vinc_actual %}
+        <span class="badge bg-success ms-1" title="Costo volcado a este rubro del pliego">
+          <i class="fas fa-link me-1"></i>→ {{ vinc_actual }}
+        </span>
+        {% else %}
+        <span class="badge bg-warning text-dark ms-1" title="Sin vínculo: el costo no se suma a ningún rubro del pliego">
+          <i class="fas fa-unlink me-1"></i>Sin vincular
+        </span>
+        {% endif %}
       </div>
       <div class="d-flex gap-3 align-items-center">
         <small class="text-light">
@@ -349,6 +382,20 @@
         <i class="fas fa-chevron-down"></i>
       </div>
     </div>
+    {% if not presupuesto.ejecutivo_aprobado %}
+    <div class="px-3 py-2 bg-light border-bottom d-flex align-items-center gap-2 small">
+      <i class="fas fa-link text-primary"></i>
+      <label class="mb-0 text-muted">Volcar costo al rubro pliego:</label>
+      <select class="form-select form-select-sm" style="width:auto;min-width:220px;"
+              onchange="vincularEtapaInterna('{{ nombre_etapa|e }}', this.value)">
+        <option value="" {% if not vinc_actual %}selected{% endif %}>— Sin vincular —</option>
+        {% for npliego in nombres_etapas_pliego %}
+        <option value="{{ npliego }}" {% if vinc_actual == npliego %}selected{% endif %}>{{ npliego }}</option>
+        {% endfor %}
+      </select>
+      <small class="text-muted">El cliente no ve esta vinculación. Solo afecta el costo y el margen interno del rubro.</small>
+    </div>
+    {% endif %}
     <div id="etapa-interna-{{ loop.index }}" class="collapse">
       <div class="table-responsive">
         <table class="table table-hover mb-0 align-middle">
@@ -1163,6 +1210,28 @@ async function eliminarEtapaInterna(etapaNombre) {
       body: JSON.stringify({etapa_nombre: etapaNombre}),
     });
     const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+
+async function vincularEtapaInterna(etapaInternaNombre, etapaPliegoNombre) {
+  try {
+    const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/vincular-etapa`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify({
+        etapa_interna_nombre: etapaInternaNombre,
+        etapa_pliego_nombre: etapaPliegoNombre || null,
+      }),
+    });
+    let data;
+    try { data = await res.json(); } catch { data = {error: await res.text()}; }
     if (!res.ok || !data.ok) {
       alert(data.error || `Error ${res.status}`);
       return;

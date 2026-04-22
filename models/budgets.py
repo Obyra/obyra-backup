@@ -92,6 +92,10 @@ class Presupuesto(db.Model):
     # congelado y no se pueden agregar/editar composiciones sin revertir primero.
     ejecutivo_aprobado = db.Column(db.Boolean, default=False, nullable=False, server_default='false')
     ejecutivo_aprobado_at = db.Column(db.DateTime, nullable=True)
+    # Excel original del pliego importado (lo guardamos para que quede como
+    # documento contractual descargable en la obra).
+    archivo_pliego_path = db.Column(db.String(500), nullable=True)
+    archivo_pliego_nombre = db.Column(db.String(255), nullable=True)
     datos_proyecto = db.Column(db.Text)  # NUEVO: Datos del proyecto en JSON
     ubicacion_texto = db.Column(db.String(300))
     ubicacion_normalizada = db.Column(db.String(300))
@@ -810,6 +814,45 @@ class MaterialCotizable(db.Model):
 
     def __repr__(self):
         return f'<MaterialCotizable {self.descripcion[:40]} ({self.cantidad_total} {self.unidad})>'
+
+
+class EtapaInternaVinculo(db.Model):
+    """Vincula una etapa interna del ejecutivo a un rubro del pliego.
+
+    El costo total de la etapa interna se suma al costo del rubro pliego
+    vinculado (option A: asignación 1:1). El precio vendido del pliego NO
+    se toca — el cliente ve los precios que puso en su Excel, pero
+    internamente vemos el margen real.
+
+    Ej: la etapa interna "Mampostería" se vincula a la etapa del pliego
+    "Estructura". El costo de todas las composiciones de los items
+    internos de Mampostería se acumula en Estructura.
+    """
+    __tablename__ = 'etapa_interna_vinculos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    presupuesto_id = db.Column(
+        db.Integer,
+        db.ForeignKey('presupuestos.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    etapa_interna_nombre = db.Column(db.String(200), nullable=False)
+    etapa_pliego_nombre = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    presupuesto = db.relationship('Presupuesto')
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'presupuesto_id', 'etapa_interna_nombre',
+            name='uq_etapa_interna_vinculo',
+        ),
+        db.Index('ix_etapa_interna_vinculos_presupuesto', 'presupuesto_id'),
+    )
+
+    def __repr__(self):
+        return f'<EtapaInternaVinculo {self.etapa_interna_nombre} → {self.etapa_pliego_nombre}>'
 
 
 class ProveedorAsignadoMaterial(db.Model):

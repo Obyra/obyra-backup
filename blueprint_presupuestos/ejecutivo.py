@@ -23,6 +23,7 @@ from extensions import db
 from models import (
     Presupuesto, ItemPresupuesto, ItemPresupuestoComposicion, MaterialCotizable,
     ProveedorAsignadoMaterial, SolicitudCotizacionMaterial, SolicitudCotizacionMaterialItem,
+    EtapaInternaVinculo,
 )
 from models.proveedores_oc import ProveedorOC
 from services.memberships import get_current_org_id
@@ -273,16 +274,43 @@ def ejecutivo_vista(id):
             target[nombre_etapa]['total_vendido'] += Decimal(str(item.total or 0))
         target[nombre_etapa]['total_costo'] += costo_item
 
-    # Calcular margen y margen% por etapa (solo las del pliego tienen margen
-    # como tal, porque son las que se le vendieron al cliente)
+    # Gap 14+15: vínculos etapa interna -> rubro pliego. El costo de cada
+    # etapa interna vinculada se acumula en el rubro pliego destino (A+i:
+    # suma directa, precio vendido NO cambia).
+    vinculos_rows = EtapaInternaVinculo.query.filter_by(
+        presupuesto_id=presupuesto.id,
+    ).all()
+    vinculos_interna_a_pliego = {
+        v.etapa_interna_nombre: v.etapa_pliego_nombre for v in vinculos_rows
+    }
+
+    # Inicializar contribución por pliego y marcar cada interna con su vínculo
+    for d in etapas.values():
+        d['costo_internas_vinculadas'] = Decimal('0')
+        d['internas_vinculadas'] = []  # [(nombre, costo), ...]
+    for nombre_int, d in etapas_internas.items():
+        pliego_dest = vinculos_interna_a_pliego.get(nombre_int)
+        d['vinculada_a'] = pliego_dest
+        if pliego_dest and pliego_dest in etapas:
+            etapas[pliego_dest]['costo_internas_vinculadas'] += d['total_costo']
+            etapas[pliego_dest]['internas_vinculadas'].append(
+                (nombre_int, d['total_costo'])
+            )
+
+    # Calcular margen y margen% por etapa pliego, usando costo consolidado
+    # (propio + internas vinculadas). El vendido no cambia.
     for nombre_etapa, d in etapas.items():
-        d['margen'] = d['total_vendido'] - d['total_costo']
+        d['total_costo_consolidado'] = d['total_costo'] + d['costo_internas_vinculadas']
+        d['margen'] = d['total_vendido'] - d['total_costo_consolidado']
         d['margen_pct'] = (d['margen'] / d['total_vendido'] * 100) if d['total_vendido'] > 0 else Decimal('0')
 
     # Las etapas internas solo tienen costo (no margen porque no se venden)
     for d in etapas_internas.values():
         d['margen'] = Decimal('0')
         d['margen_pct'] = Decimal('0')
+
+    # Lista ordenada de nombres de etapas pliego (para el selector del vínculo)
+    nombres_etapas_pliego = list(etapas.keys())
 
     total_vendido = sum((d['total_vendido'] for d in etapas.values()), Decimal('0'))
     # Costo total = costo de etapas del pliego + costo de etapas internas
@@ -313,6 +341,7 @@ def ejecutivo_vista(id):
         margen=margen,
         margen_pct=margen_pct,
         materiales_sin_precio=materiales_sin_precio,
+        nombres_etapas_pliego=nombres_etapas_pliego,
     )
 
 
@@ -674,9 +703,88 @@ def ejecutivo_eliminar_etapa_interna(id):
     # Las composiciones tienen cascade DELETE desde item_presupuesto
     for item in items:
         db.session.delete(item)
+    # Y si había un vínculo, limpiarlo también
+    EtapaInternaVinculo.query.filter_by(
+        presupuesto_id=presupuesto.id,
+        etapa_interna_nombre=etapa_nombre,
+    ).delete()
     db.session.commit()
 
     return jsonify(ok=True, eliminados=len(items))
+
+
+@presupuestos_bp.route('/<int:id>/ejecutivo/vincular-etapa', methods=['POST'])
+@login_required
+def ejecutivo_vincular_etapa(id):
+    """Vincula (o desvincula) una etapa interna a un rubro del pliego.
+
+    Body JSON:
+      {"etapa_interna_nombre": "Mampostería", "etapa_pliego_nombre": "Estructura"}
+      {"etapa_interna_nombre": "Mampostería", "etapa_pliego_nombre": null}  -> desvincula
+
+    El costo total de la etapa interna se sumará al rubro pliego destino
+    (A+i: solo costo, precio vendido no se toca).
+    """
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organización activa'), 400
+
+    rol = getattr(current_user, 'role', '') or ''
+    if rol not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    if presupuesto.ejecutivo_aprobado:
+        return jsonify(ok=False, error='Ejecutivo aprobado. Revertí la aprobación primero.'), 400
+
+    data = request.get_json(silent=True) or {}
+    etapa_interna_nombre = (data.get('etapa_interna_nombre') or '').strip()
+    etapa_pliego_nombre = (data.get('etapa_pliego_nombre') or '').strip() or None
+
+    if not etapa_interna_nombre:
+        return jsonify(ok=False, error='etapa_interna_nombre requerido'), 400
+
+    # Validar que la etapa interna exista
+    existe_interna = db.session.query(ItemPresupuesto.id).filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuesto.solo_interno == True,  # noqa: E712
+        ItemPresupuesto.etapa_nombre == etapa_interna_nombre,
+    ).first()
+    if not existe_interna:
+        return jsonify(ok=False, error=f'No existe etapa interna "{etapa_interna_nombre}"'), 404
+
+    vinculo = EtapaInternaVinculo.query.filter_by(
+        presupuesto_id=presupuesto.id,
+        etapa_interna_nombre=etapa_interna_nombre,
+    ).first()
+
+    if etapa_pliego_nombre is None:
+        # Desvincular
+        if vinculo:
+            db.session.delete(vinculo)
+            db.session.commit()
+        return jsonify(ok=True, vinculada_a=None)
+
+    # Validar que la etapa pliego destino exista
+    existe_pliego = db.session.query(ItemPresupuesto.id).filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuesto.solo_interno == False,  # noqa: E712
+        ItemPresupuesto.etapa_nombre == etapa_pliego_nombre,
+    ).first()
+    if not existe_pliego:
+        return jsonify(ok=False, error=f'No existe etapa pliego "{etapa_pliego_nombre}"'), 404
+
+    if vinculo:
+        vinculo.etapa_pliego_nombre = etapa_pliego_nombre
+    else:
+        vinculo = EtapaInternaVinculo(
+            presupuesto_id=presupuesto.id,
+            etapa_interna_nombre=etapa_interna_nombre,
+            etapa_pliego_nombre=etapa_pliego_nombre,
+        )
+        db.session.add(vinculo)
+    db.session.commit()
+    return jsonify(ok=True, vinculada_a=etapa_pliego_nombre)
 
 
 @presupuestos_bp.route('/<int:id>/ejecutivo/etapas-estandar')
@@ -1179,3 +1287,248 @@ def ejecutivo_solicitud_marcar_enviada(solicitud_id):
         s.fecha_enviado = datetime.utcnow()
     db.session.commit()
     return jsonify(ok=True, estado=s.estado)
+
+
+# ============================================================================
+# FASE C - Cargar respuestas + comparativa + elegir ganador
+# ============================================================================
+
+@presupuestos_bp.route('/ejecutivo/solicitud/<int:solicitud_id>/respuestas', methods=['POST'])
+@login_required
+def ejecutivo_solicitud_cargar_respuestas(solicitud_id):
+    """Carga los precios que respondió un proveedor para cada item de la solicitud.
+
+    Body JSON: {
+      "items": [
+        {"item_id": 12, "precio": 8500, "notas": "entrega 48hs"},
+        {"item_id": 13, "precio": 1250, "notas": null}
+      ]
+    }
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    solicitud = SolicitudCotizacionMaterial.query.get_or_404(solicitud_id)
+    if solicitud.presupuesto.organizacion_id != org_id:
+        return jsonify(ok=False, error='No pertenece a tu organización'), 403
+
+    data = request.get_json(silent=True) or {}
+    items_data = data.get('items') or []
+    if not isinstance(items_data, list):
+        return jsonify(ok=False, error='items debe ser una lista'), 400
+
+    # Mapear items de la solicitud para validar que los ids enviados pertenecen a esta solicitud
+    items_by_id = {it.id: it for it in solicitud.items}
+
+    actualizados = 0
+    materiales_afectados = set()
+    for row in items_data:
+        item_id = row.get('item_id')
+        if item_id not in items_by_id:
+            continue
+        item = items_by_id[item_id]
+        precio_raw = row.get('precio')
+        notas = (row.get('notas') or '').strip() or None
+
+        if precio_raw is None or precio_raw == '':
+            # Sin precio = no cotizó ese ítem. Limpio cualquier respuesta previa.
+            item.precio_respuesta = None
+        else:
+            precio = _parse_decimal(precio_raw, '0')
+            if precio < 0:
+                continue
+            item.precio_respuesta = precio
+        item.notas_respuesta = notas
+        materiales_afectados.add(item.material_cotizable_id)
+        actualizados += 1
+
+    # Actualizar estado de la solicitud
+    if any(it.precio_respuesta is not None for it in solicitud.items):
+        solicitud.estado = 'respondido'
+        if not solicitud.fecha_respondido:
+            solicitud.fecha_respondido = datetime.utcnow()
+
+    # Actualizar estado de los materiales afectados
+    for mat_id in materiales_afectados:
+        mat = MaterialCotizable.query.get(mat_id)
+        if not mat:
+            continue
+        if mat.estado == 'elegido':
+            continue  # ya se eligió ganador, no bajar de estado
+        # Si hay al menos una respuesta con precio, estado='con_respuestas'
+        respuestas_count = db.session.query(SolicitudCotizacionMaterialItem).filter(
+            SolicitudCotizacionMaterialItem.material_cotizable_id == mat_id,
+            SolicitudCotizacionMaterialItem.precio_respuesta.isnot(None),
+        ).count()
+        mat.estado = 'con_respuestas' if respuestas_count > 0 else 'cotizando'
+
+    db.session.commit()
+    return jsonify(ok=True, actualizados=actualizados)
+
+
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/comparativa')
+@login_required
+def ejecutivo_material_comparativa(material_id):
+    """Devuelve la comparativa de precios de un material (todas las respuestas
+    de proveedores a través de todas las solicitudes/versiones).
+    """
+    org_id = get_current_org_id()
+    mat = MaterialCotizable.query.get_or_404(material_id)
+    if mat.presupuesto.organizacion_id != org_id:
+        return jsonify(ok=False, error='No pertenece a tu organización'), 403
+
+    # Traer todos los items de solicitud para este material con su solicitud+proveedor
+    items = db.session.query(SolicitudCotizacionMaterialItem).join(
+        SolicitudCotizacionMaterial,
+        SolicitudCotizacionMaterial.id == SolicitudCotizacionMaterialItem.solicitud_id,
+    ).filter(
+        SolicitudCotizacionMaterialItem.material_cotizable_id == mat.id,
+    ).order_by(SolicitudCotizacionMaterial.fecha_creacion.desc()).all()
+
+    respuestas = []
+    for it in items:
+        s = it.solicitud
+        prov = s.proveedor
+        precio = float(it.precio_respuesta) if it.precio_respuesta else None
+        subtotal = precio * float(mat.cantidad_total or 0) if precio else None
+        respuestas.append({
+            'item_id': it.id,
+            'solicitud_id': s.id,
+            'version': s.version,
+            'proveedor_id': prov.id if prov else None,
+            'proveedor_razon_social': prov.razon_social if prov else '—',
+            'proveedor_telefono': prov.telefono if prov else None,
+            'precio': precio,
+            'subtotal': subtotal,
+            'notas': it.notas_respuesta,
+            'elegido': it.elegido,
+            'fecha_solicitud': s.fecha_creacion.isoformat() if s.fecha_creacion else None,
+            'fecha_respuesta': s.fecha_respondido.isoformat() if s.fecha_respondido else None,
+            'estado_solicitud': s.estado,
+        })
+
+    # Identificar el mejor precio (más bajo, solo entre los con precio cargado)
+    precios_validos = [r for r in respuestas if r['precio'] is not None]
+    mejor_precio = min((r['precio'] for r in precios_validos), default=None)
+
+    return jsonify(
+        ok=True,
+        material={
+            'id': mat.id,
+            'descripcion': mat.descripcion,
+            'unidad': mat.unidad,
+            'cantidad_total': float(mat.cantidad_total or 0),
+            'estado': mat.estado,
+            'tipo': mat.tipo,
+            'proveedor_elegido_id': mat.proveedor_elegido_id,
+            'precio_elegido': float(mat.precio_elegido) if mat.precio_elegido else None,
+        },
+        respuestas=respuestas,
+        mejor_precio=mejor_precio,
+    )
+
+
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/elegir-ganador', methods=['POST'])
+@login_required
+def ejecutivo_material_elegir_ganador(material_id):
+    """Marca un SolicitudCotizacionMaterialItem como ganador y propaga su
+    precio a todas las composiciones que componen este MaterialCotizable.
+
+    Body JSON: {"item_id": 42}
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    mat = MaterialCotizable.query.get_or_404(material_id)
+    if mat.presupuesto.organizacion_id != org_id:
+        return jsonify(ok=False, error='No pertenece a tu organización'), 403
+
+    if mat.presupuesto.ejecutivo_aprobado:
+        return jsonify(
+            ok=False,
+            error='El ejecutivo está aprobado. Revertí la aprobación antes de elegir ganador.',
+        ), 400
+
+    data = request.get_json(silent=True) or {}
+    item_id = data.get('item_id')
+    if not item_id:
+        return jsonify(ok=False, error='item_id requerido'), 400
+
+    item = SolicitudCotizacionMaterialItem.query.get(item_id)
+    if not item or item.material_cotizable_id != mat.id:
+        return jsonify(ok=False, error='item no pertenece a este material'), 400
+
+    if item.precio_respuesta is None:
+        return jsonify(
+            ok=False,
+            error='Ese proveedor todavía no cargó precio para este recurso.',
+        ), 400
+
+    # 1. Marcar todos los items del material como NO elegidos
+    db.session.query(SolicitudCotizacionMaterialItem).filter_by(
+        material_cotizable_id=mat.id,
+    ).update({'elegido': False})
+
+    # 2. Marcar este item como ganador
+    item.elegido = True
+    mat.proveedor_elegido_id = item.solicitud.proveedor_id
+    mat.precio_elegido = item.precio_respuesta
+    mat.estado = 'elegido'
+
+    # 3. Propagar precio a todas las composiciones del material.
+    #    Esto actualiza el COSTO ESTIMADO del ejecutivo — NO afecta el precio
+    #    vendido al cliente (ese es el total del ItemPresupuesto padre).
+    comps_afectadas = 0
+    for comp in mat.composiciones:
+        comp.precio_unitario = item.precio_respuesta
+        comp.recalcular_total()
+        comps_afectadas += 1
+
+    db.session.commit()
+
+    return jsonify(
+        ok=True,
+        proveedor_razon_social=item.solicitud.proveedor.razon_social,
+        precio_elegido=float(item.precio_respuesta),
+        composiciones_actualizadas=comps_afectadas,
+    )
+
+
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/desmarcar-ganador', methods=['POST'])
+@login_required
+def ejecutivo_material_desmarcar_ganador(material_id):
+    """Deshace la elección de ganador para un material (devuelve a estado
+    'con_respuestas' y limpia precio_elegido / composiciones vuelven a 0).
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    mat = MaterialCotizable.query.get_or_404(material_id)
+    if mat.presupuesto.organizacion_id != org_id:
+        return jsonify(ok=False, error='No pertenece a tu organización'), 403
+
+    if mat.presupuesto.ejecutivo_aprobado:
+        return jsonify(
+            ok=False,
+            error='Ejecutivo aprobado. Revertí la aprobación primero.',
+        ), 400
+
+    db.session.query(SolicitudCotizacionMaterialItem).filter_by(
+        material_cotizable_id=mat.id,
+    ).update({'elegido': False})
+
+    mat.proveedor_elegido_id = None
+    mat.precio_elegido = None
+    mat.estado = 'con_respuestas' if mat.respuestas.filter(
+        SolicitudCotizacionMaterialItem.precio_respuesta.isnot(None)
+    ).count() > 0 else 'cotizando'
+
+    for comp in mat.composiciones:
+        comp.precio_unitario = Decimal('0')
+        comp.recalcular_total()
+
+    db.session.commit()
+    return jsonify(ok=True)

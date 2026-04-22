@@ -1433,6 +1433,49 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Migracion items_presupuesto_composicion: {e}")
 
+    # Presupuesto - Gap 18: guardar Excel pliego como documento contractual
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='presupuestos' AND column_name='archivo_pliego_path') THEN
+                ALTER TABLE presupuestos ADD COLUMN archivo_pliego_path VARCHAR(500);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='presupuestos' AND column_name='archivo_pliego_nombre') THEN
+                ALTER TABLE presupuestos ADD COLUMN archivo_pliego_nombre VARCHAR(255);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion archivo_pliego: {e}")
+
+    # Presupuesto Ejecutivo - Gap 14+15: vinculo etapa interna -> rubro pliego
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='etapa_interna_vinculos') THEN
+                CREATE TABLE etapa_interna_vinculos (
+                    id SERIAL PRIMARY KEY,
+                    presupuesto_id INTEGER NOT NULL REFERENCES presupuestos(id) ON DELETE CASCADE,
+                    etapa_interna_nombre VARCHAR(200) NOT NULL,
+                    etapa_pliego_nombre VARCHAR(200) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_etapa_interna_vinculo UNIQUE (presupuesto_id, etapa_interna_nombre)
+                );
+                CREATE INDEX ix_etapa_interna_vinculos_presupuesto ON etapa_interna_vinculos(presupuesto_id);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion etapa_interna_vinculos: {e}")
+
     # Migraciones runtime completadas y removidas (2026-03-25):
     # - Índices organizacion_id: ya creados en producción
     # - Unique constraint (org_id, codigo) en items: ya aplicado
