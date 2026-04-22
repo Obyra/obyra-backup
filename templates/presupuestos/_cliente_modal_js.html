@@ -1,0 +1,79 @@
+<script>
+async function guardarClienteModal() {
+    const form = document.getElementById('formCrearClienteModal');
+    const errorDiv = document.getElementById('modal_error');
+    errorDiv.classList.add('d-none');
+
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    const contactos = [];
+    const nombre = document.getElementById('modal_contacto_nombre').value.trim();
+    const apellido = document.getElementById('modal_contacto_apellido').value.trim();
+    if (nombre || apellido) {
+        contactos.push({
+            nombre: nombre,
+            apellido: apellido,
+            email: document.getElementById('modal_contacto_email').value.trim(),
+            telefono: '',
+            rol: document.getElementById('modal_contacto_rol').value.trim()
+        });
+    }
+
+    const data = {
+        empresa: document.getElementById('modal_empresa').value.trim(),
+        tipo_documento: document.getElementById('modal_tipo_documento').value,
+        numero_documento: document.getElementById('modal_numero_documento').value.trim(),
+        email: document.getElementById('modal_email').value.trim(),
+        telefono: document.getElementById('modal_telefono').value.trim(),
+        contactos: contactos
+    };
+
+    try {
+        const response = await fetch('/clientes/api/crear', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            const select = document.getElementById('cliente_id');
+            if (select) {
+                const option = document.createElement('option');
+                option.value = result.cliente.id;
+                option.textContent = `${result.cliente.nombre_completo} - ${result.cliente.email || 'Sin email'}`;
+                option.selected = true;
+                select.appendChild(option);
+            }
+
+            form.reset();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalCrearCliente'));
+            if (modal) modal.hide();
+
+            if (select) {
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success alert-dismissible fade show mt-2';
+                alert.innerHTML = `
+                    <strong>¡Éxito!</strong> Cliente "${result.cliente.nombre_completo}" creado y seleccionado.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                (select.closest('.mb-3') || select.parentElement).appendChild(alert);
+                setTimeout(() => alert.remove(), 5000);
+            }
+        } else {
+            errorDiv.textContent = result.error || 'Error al crear el cliente';
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (err) {
+        errorDiv.textContent = 'Error de red: ' + err.message;
+        errorDiv.classList.remove('d-none');
+    }
+}
+</script>

@@ -310,6 +310,8 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Nombre</th>
+                                    <th>Email</th>
+                                    <th>Teléfono</th>
                                     <th>Plan</th>
                                     <th>Estado</th>
                                     <th>Usuarios</th>
@@ -323,6 +325,20 @@
                                 <tr>
                                     <td>{{ org.id }}</td>
                                     <td><strong>{{ org.nombre }}</strong></td>
+                                    <td>
+                                        {% if org.email %}
+                                            <a href="mailto:{{ org.email }}" class="small">{{ org.email }}</a>
+                                        {% else %}
+                                            <small class="text-muted">—</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if org.telefono %}
+                                            <a href="tel:{{ org.telefono }}" class="small">{{ org.telefono }}</a>
+                                        {% else %}
+                                            <small class="text-muted">—</small>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         <span class="badge {% if org.plan_tipo == 'full_premium' %}bg-success{% elif org.plan_tipo == 'premium' %}bg-info{% elif org.plan_tipo == 'estandar' %}bg-primary{% else %}bg-secondary{% endif %}">
                                             {{ org.plan_tipo }}
@@ -354,7 +370,7 @@
                                     </td>
                                 </tr>
                                 {% else %}
-                                <tr><td colspan="8" class="text-center text-muted">Sin datos</td></tr>
+                                <tr><td colspan="10" class="text-center text-muted">Sin datos</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>

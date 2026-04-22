@@ -327,6 +327,8 @@ def get_organizaciones_detalle() -> list:
             result.append({
                 'id': o.id,
                 'nombre': o.nombre,
+                'email': getattr(o, 'email', None),
+                'telefono': getattr(o, 'telefono', None),
                 'plan_tipo': plan_tipo,
                 'activa': getattr(o, 'activa', True),
                 'fecha_creacion': o.fecha_creacion.isoformat() if getattr(o, 'fecha_creacion', None) else None,

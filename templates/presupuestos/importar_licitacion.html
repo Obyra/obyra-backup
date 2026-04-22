@@ -43,12 +43,19 @@
 
                         <div class="mb-3">
                             <label class="form-label fw-bold">Cliente (opcional)</label>
-                            <select class="form-select" name="cliente_id">
-                                <option value="">-- Sin cliente --</option>
-                                {% for c in clientes %}
-                                <option value="{{ c.id }}">{{ c.nombre }}{% if c.apellido %} {{ c.apellido }}{% endif %}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="input-group">
+                                <select class="form-select" id="cliente_id" name="cliente_id">
+                                    <option value="">-- Sin cliente --</option>
+                                    {% for c in clientes %}
+                                    <option value="{{ c.id }}">{{ c.nombre }}{% if c.apellido %} {{ c.apellido }}{% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal"
+                                        data-bs-target="#modalCrearCliente" title="Crear nuevo cliente">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">Seleccioná el cliente o creá uno nuevo con el botón <i class="fas fa-plus"></i>.</div>
                         </div>
 
                         {% include 'presupuestos/_ubicacion_widget.html' %}
@@ -131,10 +138,13 @@
     </div>
 </div>
 
+{% include 'presupuestos/_cliente_modal.html' %}
+
 {% if google_maps_key %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&loading=async" async defer></script>
 {% else %}
 <script>console.warn('[ubicacion] GOOGLE_MAPS_API_KEY no configurada. El mapa no va a renderizar.');</script>
 {% endif %}
 {% include 'presupuestos/_ubicacion_widget_js.html' %}
+{% include 'presupuestos/_cliente_modal_js.html' %}
 {% endblock %}

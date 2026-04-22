@@ -1,0 +1,80 @@
+<!-- Modal para Crear Cliente (partial reutilizable) -->
+<div class="modal fade" id="modalCrearCliente" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Crear Nuevo Cliente</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCrearClienteModal">
+                    <h6 class="mb-3">Información de la Empresa</h6>
+
+                    <div class="mb-3">
+                        <label class="form-label">Razón Social / Nombre de la Empresa <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="modal_empresa" name="empresa" required>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo de Documento <span class="text-danger">*</span></label>
+                            <select class="form-select" id="modal_tipo_documento" name="tipo_documento" required>
+                                <option value="CUIT" selected>CUIT</option>
+                                <option value="DNI">DNI</option>
+                                <option value="CUIL">CUIL</option>
+                                <option value="Pasaporte">Pasaporte</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Número de Documento <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="modal_numero_documento" name="numero_documento" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="modal_email" name="email">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="modal_telefono" name="telefono">
+                        </div>
+                    </div>
+
+                    <h6 class="mb-3 mt-4">Contacto Principal (opcional)</h6>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="modal_contacto_nombre" name="contacto_nombre">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Apellido</label>
+                            <input type="text" class="form-control" id="modal_contacto_apellido" name="contacto_apellido">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Email del Contacto</label>
+                            <input type="email" class="form-control" id="modal_contacto_email" name="contacto_email">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Rol</label>
+                            <input type="text" class="form-control" id="modal_contacto_rol" name="contacto_rol" placeholder="Ej: Gerente General">
+                        </div>
+                    </div>
+
+                    <div id="modal_error" class="alert alert-danger d-none"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarClienteModal()">
+                    <i class="fas fa-save"></i> Crear Cliente
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
