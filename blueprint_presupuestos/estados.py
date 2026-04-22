@@ -182,6 +182,25 @@ def confirmar_como_obra(id):
             ItemPresupuesto.presupuesto_id == presupuesto.id
         ).order_by(ItemPresupuesto.etapa_id, ItemPresupuesto.tipo).all()
 
+        # Si el ejecutivo está aprobado, el cronograma se arma SOLO con las
+        # etapas internas del ejecutivo (solo_interno=True). Los rubros del
+        # pliego son comerciales/contractuales (quedan en el presupuesto y
+        # en el Legajo), pero no son el plan de ejecución real.
+        if presupuesto.ejecutivo_aprobado:
+            items_internos = [it for it in items if it.solo_interno]
+            if items_internos:
+                items = items_internos
+                current_app.logger.info(
+                    f"Ejecutivo aprobado: cronograma usará solo {len(items_internos)} "
+                    f"items internos (se ignoran rubros del pliego)."
+                )
+            else:
+                current_app.logger.warning(
+                    f"Presupuesto {presupuesto.numero} con ejecutivo aprobado pero "
+                    f"sin etapas internas. Cronograma quedará vacío — agregalas manualmente en la obra."
+                )
+                items = []
+
         # Verificar si hay payload de IA guardado en datos_proyecto
         ia_payload = None
         if presupuesto.datos_proyecto:
