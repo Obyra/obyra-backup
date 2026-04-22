@@ -187,7 +187,7 @@ def _guardar_datos_proyecto(presupuesto, datos):
     presupuesto.datos_proyecto = json.dumps(datos, ensure_ascii=False)
 
 
-TIPOS_COMPOSICION = ('material', 'mano_obra', 'equipo')
+TIPOS_COMPOSICION = ('material', 'mano_obra', 'equipo', 'otro')
 
 
 def _puede_editar_ejecutivo(presupuesto):
@@ -563,10 +563,73 @@ def composiciones_listar(item_id):
     )
 
 
+def _crear_etapa_interna_para_slug(presupuesto, slug):
+    """Crea la etapa interna con sus items sinteticos. Retorna (ok, etapa_nombre, error)."""
+    from tareas_predefinidas import obtener_tareas_por_etapa
+
+    cat = obtener_etapa_por_slug(slug)
+    if not cat:
+        return False, slug, f'Etapa "{slug}" no existe en el catálogo'
+
+    etapa_nombre = cat['nombre']
+
+    ya_existe_interna = ItemPresupuesto.query.filter_by(
+        presupuesto_id=presupuesto.id,
+        solo_interno=True,
+        etapa_nombre=etapa_nombre,
+    ).first()
+    if ya_existe_interna:
+        return False, etapa_nombre, f'La etapa interna "{etapa_nombre}" ya está agregada.'
+
+    ya_en_pliego = ItemPresupuesto.query.filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuesto.solo_interno == False,  # noqa: E712
+        ItemPresupuesto.etapa_nombre == etapa_nombre,
+    ).first()
+    if ya_en_pliego:
+        return False, etapa_nombre, f'La etapa "{etapa_nombre}" ya forma parte del pliego.'
+
+    predefs = obtener_tareas_por_etapa(etapa_nombre) or []
+    predefs_core = [t for t in predefs if not t.get('si_aplica')]
+
+    if predefs_core:
+        for tdef in predefs_core:
+            item = ItemPresupuesto(
+                presupuesto_id=presupuesto.id,
+                tipo='material',
+                descripcion=tdef['nombre'][:300],
+                unidad='un' if tdef.get('aplica_cantidad') is False else 'h',
+                cantidad=Decimal('1'),
+                precio_unitario=Decimal('0'),
+                total=Decimal('0'),
+                etapa_nombre=etapa_nombre,
+                origen='ejecutivo_interno',
+                currency=presupuesto.currency or 'ARS',
+                solo_interno=True,
+            )
+            db.session.add(item)
+    else:
+        item = ItemPresupuesto(
+            presupuesto_id=presupuesto.id,
+            tipo='material',
+            descripcion=f'Ejecución {etapa_nombre}',
+            unidad='un',
+            cantidad=Decimal('1'),
+            precio_unitario=Decimal('0'),
+            total=Decimal('0'),
+            etapa_nombre=etapa_nombre,
+            origen='ejecutivo_interno',
+            currency=presupuesto.currency or 'ARS',
+            solo_interno=True,
+        )
+        db.session.add(item)
+    return True, etapa_nombre, None
+
+
 @presupuestos_bp.route('/<int:id>/ejecutivo/etapas-internas', methods=['POST'])
 @login_required
 def ejecutivo_agregar_etapa_interna(id):
-    """Agrega una etapa interna al ejecutivo.
+    """Agrega una o varias etapas internas al ejecutivo.
 
     Crea N ítems sintéticos (`solo_interno=True`) en el presupuesto, uno por
     cada tarea predefinida de la etapa elegida. Estos items:
@@ -574,7 +637,8 @@ def ejecutivo_agregar_etapa_interna(id):
       - NO suman al precio vendido.
       - SÍ pueden tener composiciones (materiales/MO/equipos) que sumen al costo.
 
-    Body JSON: {"slug": "mamposteria"}
+    Body JSON (un slug):      {"slug": "mamposteria"}
+    Body JSON (varios slugs): {"slugs": ["mamposteria", "pisos", "pintura"]}
     """
     org_id = get_current_org_id()
     if not org_id:
@@ -591,79 +655,41 @@ def ejecutivo_agregar_etapa_interna(id):
         return jsonify(ok=False, error=f'Estado {presupuesto.estado} no editable'), 400
 
     data = request.get_json(silent=True) or {}
-    slug = (data.get('slug') or '').strip()
-    cat = obtener_etapa_por_slug(slug)
-    if not cat:
-        return jsonify(ok=False, error=f'Etapa "{slug}" no existe en el catálogo'), 400
+    slugs = data.get('slugs')
+    if slugs is None:
+        slug_unico = (data.get('slug') or '').strip()
+        slugs = [slug_unico] if slug_unico else []
+    # Normalizar + deduplicar preservando orden
+    slugs_limpios = []
+    for s in slugs:
+        s = (s or '').strip()
+        if s and s not in slugs_limpios:
+            slugs_limpios.append(s)
+    if not slugs_limpios:
+        return jsonify(ok=False, error='Hay que mandar al menos un slug'), 400
 
-    etapa_nombre = cat['nombre']
+    exitosas = []
+    errores = []
+    for slug in slugs_limpios:
+        ok, etapa_nombre, err = _crear_etapa_interna_para_slug(presupuesto, slug)
+        if ok:
+            exitosas.append(etapa_nombre)
+        else:
+            errores.append({'slug': slug, 'etapa_nombre': etapa_nombre, 'error': err})
 
-    # Si esta etapa ya existe como interna, no duplicamos (retornamos como ok).
-    ya_existe_interna = ItemPresupuesto.query.filter_by(
-        presupuesto_id=presupuesto.id,
-        solo_interno=True,
-        etapa_nombre=etapa_nombre,
-    ).first()
-    if ya_existe_interna:
-        return jsonify(ok=False, error=f'La etapa interna "{etapa_nombre}" ya está agregada.'), 400
-
-    # Si el etapa_nombre ya está como etapa del pliego, mejor avisar.
-    ya_en_pliego = ItemPresupuesto.query.filter(
-        ItemPresupuesto.presupuesto_id == presupuesto.id,
-        ItemPresupuesto.solo_interno == False,  # noqa: E712
-        ItemPresupuesto.etapa_nombre == etapa_nombre,
-    ).first()
-    if ya_en_pliego:
-        return jsonify(ok=False, error=f'La etapa "{etapa_nombre}" ya forma parte del pliego.'), 400
-
-    # Crear 1 ítem sintético por cada tarea predefinida de la etapa.
-    # Si no hay tareas predefinidas, crear 1 placeholder "Ejecución {etapa}".
-    from tareas_predefinidas import obtener_tareas_por_etapa
-    predefs = obtener_tareas_por_etapa(etapa_nombre) or []
-    # Filtrar tareas opcionales (si_aplica=True)
-    predefs_core = [t for t in predefs if not t.get('si_aplica')]
-
-    items_creados = []
-    if predefs_core:
-        for tdef in predefs_core:
-            item = ItemPresupuesto(
-                presupuesto_id=presupuesto.id,
-                tipo='material',  # default; el PM puede cambiar la composición
-                descripcion=tdef['nombre'][:300],
-                unidad='un' if tdef.get('aplica_cantidad') is False else 'h',
-                cantidad=Decimal('1'),
-                precio_unitario=Decimal('0'),
-                total=Decimal('0'),
-                etapa_nombre=etapa_nombre,
-                origen='ejecutivo_interno',
-                currency=presupuesto.currency or 'ARS',
-                solo_interno=True,
-            )
-            db.session.add(item)
-            items_creados.append(item)
+    if exitosas:
+        db.session.commit()
     else:
-        item = ItemPresupuesto(
-            presupuesto_id=presupuesto.id,
-            tipo='material',
-            descripcion=f'Ejecución {etapa_nombre}',
-            unidad='un',
-            cantidad=Decimal('1'),
-            precio_unitario=Decimal('0'),
-            total=Decimal('0'),
-            etapa_nombre=etapa_nombre,
-            origen='ejecutivo_interno',
-            currency=presupuesto.currency or 'ARS',
-            solo_interno=True,
-        )
-        db.session.add(item)
-        items_creados.append(item)
+        db.session.rollback()
 
-    db.session.commit()
+    # Si pedimos una sola y falló, devolvemos 400 (compat con flujo anterior).
+    if len(slugs_limpios) == 1 and not exitosas:
+        return jsonify(ok=False, error=errores[0]['error']), 400
 
     return jsonify(
-        ok=True,
-        etapa_nombre=etapa_nombre,
-        items_creados=len(items_creados),
+        ok=bool(exitosas),
+        agregadas=exitosas,
+        errores=errores,
     )
 
 

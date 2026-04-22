@@ -263,13 +263,14 @@
                               {% if comp.modalidad_costo == 'alquiler' %}<span class="badge bg-primary" title="Alquiler">Alq.</span>
                               {% elif comp.modalidad_costo == 'compra' %}<span class="badge bg-success" title="Compra">Compra</span>
                               {% endif %}
+                            {% elif comp.tipo == 'otro' %}<span class="badge bg-primary" title="Gasto complementario (permisos, tasas, seguros, honorarios...)">Complem.</span>
                             {% endif %}
                           </td>
                           <td><small>{{ comp.descripcion }}</small></td>
                           <td class="text-center"><small>{{ comp.cantidad|float|round(3) }}</small></td>
                           <td class="text-center"><small>{{ comp.unidad }}</small></td>
                           <td class="text-end">
-                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                            {% if comp.tipo in ['material', 'equipo', 'otro'] and (comp.precio_unitario|float) == 0 %}
                               <span class="badge bg-warning text-dark" title="Sin precio todavía — pendiente de cotizar a proveedor">
                                 <i class="fas fa-hourglass-half me-1"></i>Pendiente
                               </span>
@@ -278,7 +279,7 @@
                             {% endif %}
                           </td>
                           <td class="text-end fw-bold">
-                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                            {% if comp.tipo in ['material', 'equipo', 'otro'] and (comp.precio_unitario|float) == 0 %}
                               <small class="text-muted">—</small>
                             {% else %}
                               <small>${{ '{:,.2f}'.format(comp.total|float) }}</small>
@@ -472,13 +473,14 @@
                               {% if comp.modalidad_costo == 'alquiler' %}<span class="badge bg-primary" title="Alquiler">Alq.</span>
                               {% elif comp.modalidad_costo == 'compra' %}<span class="badge bg-success" title="Compra">Compra</span>
                               {% endif %}
+                            {% elif comp.tipo == 'otro' %}<span class="badge bg-primary" title="Gasto complementario (permisos, tasas, seguros, honorarios...)">Complem.</span>
                             {% endif %}
                           </td>
                           <td><small>{{ comp.descripcion }}</small></td>
                           <td class="text-center"><small>{{ comp.cantidad|float|round(3) }}</small></td>
                           <td class="text-center"><small>{{ comp.unidad }}</small></td>
                           <td class="text-end">
-                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                            {% if comp.tipo in ['material', 'equipo', 'otro'] and (comp.precio_unitario|float) == 0 %}
                               <span class="badge bg-warning text-dark" title="Sin precio todavía — pendiente de cotizar a proveedor">
                                 <i class="fas fa-hourglass-half me-1"></i>Pendiente
                               </span>
@@ -487,7 +489,7 @@
                             {% endif %}
                           </td>
                           <td class="text-end fw-bold">
-                            {% if comp.tipo in ['material', 'equipo'] and (comp.precio_unitario|float) == 0 %}
+                            {% if comp.tipo in ['material', 'equipo', 'otro'] and (comp.precio_unitario|float) == 0 %}
                               <small class="text-muted">—</small>
                             {% else %}
                               <small>${{ '{:,.2f}'.format(comp.total|float) }}</small>
@@ -633,11 +635,16 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="small text-muted mb-3">
-          Elegí una etapa del catálogo estándar. Se van a crear sus tareas predefinidas como
+        <p class="small text-muted mb-2">
+          Elegí una o varias etapas del catálogo estándar. Se van a crear sus tareas predefinidas como
           <em>tareas internas</em> (no se ven en el PDF del cliente). Después podés
           descomponer cada tarea en materiales, MO y equipos.
         </p>
+        <div class="d-flex justify-content-end mb-2">
+          <button type="button" class="btn btn-sm btn-outline-primary" id="btnToggleSeleccionTodas">
+            <i class="fas fa-check-double me-1"></i>Seleccionar todas las disponibles
+          </button>
+        </div>
 
         <div id="etapasInternasLoader" class="text-center py-3">
           <span class="spinner-border spinner-border-sm"></span>
@@ -647,6 +654,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" id="btnAgregarSeleccionadas" disabled onclick="agregarEtapasInternasSeleccionadas()">
+          <i class="fas fa-plus me-1"></i>Agregar seleccionadas (<span id="contadorSeleccionadas">0</span>)
+        </button>
       </div>
     </div>
   </div>
@@ -687,7 +697,14 @@
               <label class="btn btn-outline-secondary" for="tipoEquipo">
                 <i class="fas fa-truck me-1"></i>Equipo
               </label>
+              <input type="radio" class="btn-check" name="tipo" id="tipoOtro" value="otro" onchange="onTipoChange()">
+              <label class="btn btn-outline-primary" for="tipoOtro">
+                <i class="fas fa-file-invoice-dollar me-1"></i>Complementario
+              </label>
             </div>
+            <small class="text-muted d-none" id="hintTipoOtro">
+              Gastos no cotizables: permisos, tasas municipales, ART, seguros, honorarios, estudios, etc.
+            </small>
           </div>
 
           <!-- Modalidad de costo: solo visible cuando tipo=equipo -->
@@ -854,6 +871,8 @@ function onTipoChange() {
   const wrap = document.getElementById('wrapperModalidad');
   const precioInput = document.getElementById('compPrecio');
   const hintPrecio = document.getElementById('compHintPrecio');
+  const hintOtro = document.getElementById('hintTipoOtro');
+  if (hintOtro) hintOtro.classList.toggle('d-none', tipo !== 'otro');
 
   if (tipo === 'equipo') {
     wrap.classList.remove('d-none');
@@ -870,6 +889,13 @@ function onTipoChange() {
     // MO: precio obligatorio (vos conocés los sueldos/jornales)
     precioInput.required = true;
     hintPrecio.innerHTML = '<i class="fas fa-info-circle me-1"></i>Costo interno conocido (jornal UOCRA, sueldo operario). No se cotiza a proveedores.';
+  } else if (tipo === 'otro') {
+    wrap.classList.add('d-none');
+    document.getElementById('labelUnidad').textContent = 'Unidad';
+    document.getElementById('labelCantidad').innerHTML = 'Cantidad <span class="text-danger">*</span>';
+    document.getElementById('labelPrecio').innerHTML = 'Precio unitario (ARS) <span class="text-muted" style="font-weight:normal;">(opcional)</span>';
+    precioInput.required = false;
+    hintPrecio.innerHTML = '<i class="fas fa-info-circle me-1"></i>Gasto complementario (permisos, tasas, ART, seguros, honorarios). No se cotiza a proveedores — dejá en <strong>0</strong> si todavía no tenés el monto.';
   } else {
     // Material: precio OPCIONAL. Por defecto se deja en 0 para cotizar después.
     wrap.classList.add('d-none');
@@ -1136,6 +1162,7 @@ async function abrirModalAgregarEtapaInterna() {
   loader.classList.remove('d-none');
   list.classList.add('d-none');
   list.innerHTML = '';
+  _actualizarContadorSeleccionadas();
 
   MODAL_ETAPA_INTERNA.show();
 
@@ -1148,29 +1175,28 @@ async function abrirModalAgregarEtapaInterna() {
       list.innerHTML = data.etapas.map(et => {
         let badge = '';
         let statusClass = '';
-        let btnHtml = '';
+        const disponible = !et.en_pliego && !et.ya_interna;
         if (et.en_pliego) {
           badge = '<span class="badge bg-success ms-1">Ya en pliego</span>';
           statusClass = 'opacity-50';
-          btnHtml = '<button class="btn btn-sm btn-outline-secondary" disabled>No disponible</button>';
         } else if (et.ya_interna) {
           badge = '<span class="badge bg-info ms-1">Ya agregada</span>';
           statusClass = 'opacity-50';
-          btnHtml = '<button class="btn btn-sm btn-outline-secondary" disabled>Ya agregada</button>';
-        } else {
-          if (et.nivel) badge = `<span class="badge bg-secondary ms-1">NV${et.nivel}</span>`;
-          btnHtml = `<button class="btn btn-sm btn-primary" onclick="agregarEtapaInterna('${et.slug}')">
-            <i class="fas fa-plus me-1"></i>Agregar
-          </button>`;
+        } else if (et.nivel) {
+          badge = `<span class="badge bg-secondary ms-1">NV${et.nivel}</span>`;
         }
+        const slugEscaped = _escape(et.slug);
+        const checkbox = disponible
+          ? `<input type="checkbox" class="form-check-input etapa-interna-check" value="${slugEscaped}" onchange="_actualizarContadorSeleccionadas()">`
+          : `<input type="checkbox" class="form-check-input" disabled>`;
         return `<div class="col-md-6 mb-2">
-          <div class="d-flex justify-content-between align-items-start p-2 border rounded ${statusClass}">
+          <label class="d-flex align-items-start p-2 border rounded ${statusClass} ${disponible ? 'cursor-pointer' : ''}" style="${disponible ? 'cursor:pointer;' : ''}">
+            <div class="me-2 pt-1">${checkbox}</div>
             <div style="flex:1;">
               <strong>${_escape(et.nombre)}</strong>${badge}
               <small class="d-block text-muted">${_escape(et.descripcion || '')}</small>
             </div>
-            <div class="ms-2">${btnHtml}</div>
-          </div>
+          </label>
         </div>`;
       }).join('');
     }
@@ -1179,23 +1205,63 @@ async function abrirModalAgregarEtapaInterna() {
   }
   loader.classList.add('d-none');
   list.classList.remove('d-none');
+  _actualizarContadorSeleccionadas();
 }
 
-async function agregarEtapaInterna(slug) {
+function _actualizarContadorSeleccionadas() {
+  const checks = document.querySelectorAll('.etapa-interna-check:checked');
+  const n = checks.length;
+  const contador = document.getElementById('contadorSeleccionadas');
+  const btn = document.getElementById('btnAgregarSeleccionadas');
+  if (contador) contador.textContent = n;
+  if (btn) btn.disabled = n === 0;
+}
+
+(function() {
+  const btnToggle = document.getElementById('btnToggleSeleccionTodas');
+  if (btnToggle) {
+    btnToggle.addEventListener('click', function() {
+      const checks = document.querySelectorAll('.etapa-interna-check');
+      const todas = Array.from(checks).every(c => c.checked);
+      checks.forEach(c => c.checked = !todas);
+      _actualizarContadorSeleccionadas();
+    });
+  }
+})();
+
+async function agregarEtapasInternasSeleccionadas() {
+  const checks = document.querySelectorAll('.etapa-interna-check:checked');
+  const slugs = Array.from(checks).map(c => c.value);
+  if (slugs.length === 0) return;
+
+  const btn = document.getElementById('btnAgregarSeleccionadas');
+  const labelOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Agregando...';
+
   try {
     const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/etapas-internas`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
-      body: JSON.stringify({slug: slug}),
+      body: JSON.stringify({slugs: slugs}),
     });
-    const data = await res.json();
+    let data;
+    try { data = await res.json(); } catch { data = {error: await res.text()}; }
     if (!res.ok || !data.ok) {
       alert(data.error || `Error ${res.status}`);
+      btn.disabled = false;
+      btn.innerHTML = labelOriginal;
       return;
+    }
+    if (data.errores && data.errores.length) {
+      const msgs = data.errores.map(e => `• ${e.etapa_nombre || e.slug}: ${e.error}`).join('\n');
+      alert(`Se agregaron ${data.agregadas.length} etapa(s). No se agregaron:\n${msgs}`);
     }
     location.reload();
   } catch (e) {
     alert('Error de red: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = labelOriginal;
   }
 }
 
