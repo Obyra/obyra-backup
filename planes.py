@@ -9,6 +9,7 @@ from models import Usuario
 from models.core import Organizacion
 from config.billing_config import BILLING
 from services.plan_service import PLAN_FEATURES
+from services.pricing_constants import MONTHLY_PLAN_PRICE_USD, FIVE_YEAR_LICENSE_PRICE_USD
 
 planes_bp = Blueprint('planes', __name__, url_prefix='/planes')
 
@@ -145,8 +146,8 @@ PLANES_CONFIG = {
     },
     'premium': {
         'nombre': 'OBYRA Profesional',
-        'precio_usd': Decimal('399.00'),
-        'precio_mensual_usd': Decimal('399.00'),
+        'precio_usd': MONTHLY_PLAN_PRICE_USD,
+        'precio_mensual_usd': MONTHLY_PLAN_PRICE_USD,
         'max_usuarios': 999,
         'max_obras': 999,
         'duracion_dias': 365,
@@ -169,7 +170,8 @@ PLANES_CONFIG = {
 }
 
 # Precio del plan unico OBYRA Profesional
-PLAN_PRECIO_USD = Decimal('399.00')
+# Fuente de verdad centralizada en services/pricing_constants.py
+PLAN_PRECIO_USD = MONTHLY_PLAN_PRICE_USD
 
 
 def obtener_cotizacion_bna():

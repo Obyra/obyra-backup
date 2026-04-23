@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 from flask import abort, flash, redirect, url_for, request, jsonify, current_app
 from flask_login import current_user
 from extensions import db
+from services.pricing_constants import MONTHLY_PLAN_PRICE_USD, FIVE_YEAR_LICENSE_PRICE_USD
 
 
 # ============================================================================
@@ -92,7 +93,7 @@ PLAN_FEATURES = {
     },
     'premium': {
         'nombre': 'OBYRA Profesional',
-        'precio_usd': 399,
+        'precio_usd': int(MONTHLY_PLAN_PRICE_USD),
         'max_obras': 999,
         'max_usuarios': 999,
         'duracion_dias': 365,
@@ -110,10 +111,13 @@ PLAN_FEATURES = {
     },
 }
 
+# Licencias 5 años. Solo existe comercialmente 'premium' (OBYRA Profesional);
+# los otros quedan por compatibilidad interna pero no se exponen en UI.
+# NO hay renovacion obligatoria — despues del año 5 se renegocia puntualmente.
 LICENSE_PRICES = {
-    'estandar': {'licencia_usd': 6900, 'renovacion_anual_pct': 20},
-    'premium': {'licencia_usd': 14900, 'renovacion_anual_pct': 20},
-    'full_premium': {'licencia_usd': 29900, 'renovacion_anual_pct': 20},
+    'estandar': {'licencia_usd': 6900, 'renovacion_anual_pct': 0},
+    'premium': {'licencia_usd': int(FIVE_YEAR_LICENSE_PRICE_USD), 'renovacion_anual_pct': 0},
+    'full_premium': {'licencia_usd': 29900, 'renovacion_anual_pct': 0},
 }
 
 # Features que se mantienen activas en licencia 5 años con renovación anual impaga

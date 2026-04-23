@@ -15,8 +15,18 @@ Variables de entorno:
 - MP_ACCESS_TOKEN_TEST: token de pruebas (sandbox)
 - MP_ACCESS_TOKEN: token de produccion
 - MP_USE_SANDBOX: '1' para usar el de prueba (default)
-- MP_PRECIO_ARS: precio fijo en pesos (default 499000)
+- MP_PRECIO_ARS: override manual de emergencia (si se setea, ignora BNA)
 - MP_BASE_URL: URL publica de la app (para back_url y notification_url)
+
+Politica de precio (2026):
+- El precio comercial es 300 USD/mes (ver services/pricing_constants.py).
+- Al crear cada suscripcion, se multiplica USD × cotizacion BNA del dia y
+  ese valor en ARS queda fijo para toda la vida de esa suscripcion (snapshot).
+- MP Preapproval NO permite cambiar transaction_amount sin re-autorizacion,
+  por eso el monto se congela al momento de la firma. Si el dolar sube/baja
+  despues, las suscripciones activas no se ven afectadas.
+- Nuevas suscripciones toman la cotizacion del dia en que se crean.
+- Si se setea MP_PRECIO_ARS en env, se usa ese valor fijo (override de emergencia).
 """
 import os
 import json
@@ -27,6 +37,7 @@ from flask import current_app
 
 from extensions import db
 from models.subscription import Subscription
+from services.pricing_constants import MONTHLY_PLAN_PRICE_USD
 
 
 def _get_access_token():
@@ -46,7 +57,32 @@ def _get_mp_client():
 
 
 def _get_precio_ars() -> Decimal:
-    return Decimal(os.environ.get('MP_PRECIO_ARS', '499000'))
+    """Calcula el precio en ARS al momento de suscribirse.
+
+    Politica: 300 USD × cotizacion BNA del dia (snapshot).
+    Fallback: si MP_PRECIO_ARS esta seteado en env, se usa (override manual).
+              Si BNA falla y no hay override, usa fallback de 420.000 ARS
+              (equivalente a 300 USD × 1400 ARS/USD).
+    """
+    override = os.environ.get('MP_PRECIO_ARS')
+    if override:
+        try:
+            return Decimal(override)
+        except Exception:
+            current_app.logger.warning(f"MP_PRECIO_ARS invalido: {override!r}")
+
+    try:
+        # Import tardio para evitar ciclo (planes.py importa este modulo)
+        from planes import obtener_cotizacion_bna
+        cot = obtener_cotizacion_bna()
+        if cot and cot.get('value'):
+            precio = MONTHLY_PLAN_PRICE_USD * Decimal(str(cot['value']))
+            return precio.quantize(Decimal('1'))
+    except Exception as e:
+        current_app.logger.warning(f"No se pudo obtener cotizacion BNA para MP: {e}")
+
+    # Fallback conservador: 300 USD × 1400 = 420.000 ARS
+    return MONTHLY_PLAN_PRICE_USD * Decimal('1400')
 
 
 def _get_base_url() -> str:
