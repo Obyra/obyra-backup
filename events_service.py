@@ -18,6 +18,41 @@ events_bp = Blueprint('events', __name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def event_target_exists(event) -> bool:
+    """Verifica si la entidad a la que apunta el evento sigue existiendo.
+
+    Si el evento tiene un meta con id de una entidad (ej: requerimiento_id),
+    valida que esa entidad aún exista. Así evitamos mostrar en el feed
+    alertas que linkean a items ya eliminados (404 al clickear).
+
+    Si el evento no tiene meta con entity ids conocidos -> asumimos válido
+    (eventos globales, notificaciones sueltas, etc).
+    """
+    meta = getattr(event, 'meta', None)
+    if not isinstance(meta, dict):
+        return True
+
+    # Requerimientos de compra
+    req_id = meta.get('requerimiento_id')
+    if req_id:
+        from models.inventory import RequerimientoCompra
+        exists = db.session.query(RequerimientoCompra.id).filter_by(id=req_id).first()
+        if not exists:
+            return False
+
+    # Si en el futuro se agregan más entity links (orden_id, presupuesto_id,
+    # etc), extender acá con mismo patrón.
+
+    return True
+
+
+def filter_valid_events(events):
+    """Filtra una lista de eventos descartando los que apuntan a entidades
+    eliminadas. Preserva el orden original.
+    """
+    return [e for e in events if event_target_exists(e)]
+
 @events_bp.route('/api/events')
 @login_required
 def get_events():
@@ -60,9 +95,11 @@ def get_events():
             else:
                 return jsonify({'error': 'Severidad inválida'}), 400
         
-        # Ejecutar query con paginación
-        events = query.order_by(desc(Event.created_at)).offset(offset).limit(limit).all()
-        total = query.count()
+        # Ejecutar query con paginación. Traemos 2x para compensar el
+        # filtro de eventos huerfanos (cuyo target fue eliminado).
+        events_raw = query.order_by(desc(Event.created_at)).offset(offset).limit(limit * 2).all()
+        events = filter_valid_events(events_raw)[:limit]
+        total = query.count()  # aproximado — puede incluir huerfanos
         
         # Serializar eventos
         events_data = []

@@ -90,9 +90,6 @@
                             <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}" class="btn btn-info">
                                 <i class="fas fa-envelope me-1"></i>Correo
                             </a>
-                            <a href="{{ url_for('presupuestos.cotizar_wa_vista', presupuesto_id=presupuesto.id) }}" class="btn btn-success">
-                                <i class="fab fa-whatsapp me-1"></i>Cotizar WA
-                            </a>
                             {% if presupuesto.archivo_pliego_path %}
                             <a href="{{ url_for('static', filename=presupuesto.archivo_pliego_path) }}"
                                class="btn btn-outline-secondary"

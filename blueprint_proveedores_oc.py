@@ -412,6 +412,50 @@ def api_detalle(id):
     return jsonify(prov.to_dict())
 
 
+@proveedores_oc_bp.route('/api/<int:id>/editar-contacto', methods=['POST'])
+@login_required
+def api_editar_contacto(id):
+    """Editar inline el telefono y/o email del proveedor.
+
+    Usado desde pantallas como "Recursos a cotizar" cuando falta el dato
+    y se necesita arreglarlo sin ir al formulario completo del proveedor.
+    Acepta cualquiera de los dos (no necesariamente ambos).
+    """
+    from models.proveedores_oc import ProveedorOC
+
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    prov = ProveedorOC.query.get_or_404(id)
+    if prov.organizacion_id != _get_org_id():
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+
+    data = request.get_json(silent=True) or {}
+    telefono = data.get('telefono')
+    email = data.get('email')
+
+    if telefono is None and email is None:
+        return jsonify({'ok': False, 'error': 'Al menos uno de telefono o email'}), 400
+
+    if telefono is not None:
+        telefono = (telefono or '').strip()[:50]
+        prov.telefono = telefono or None
+    if email is not None:
+        email = (email or '').strip()[:200]
+        prov.email = email or None
+
+    try:
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'telefono': prov.telefono,
+            'email': prov.email,
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @proveedores_oc_bp.route('/api/crear', methods=['POST'])
 @login_required
 def api_crear():

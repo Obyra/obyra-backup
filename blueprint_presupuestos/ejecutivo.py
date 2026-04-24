@@ -56,11 +56,11 @@ def _grupo_hash_material(descripcion, unidad, item_inventario_id=None, tipo='mat
 
 
 def sincronizar_materiales_cotizables(presupuesto):
-    """Consolida todas las composiciones COTIZABLES (material + equipo) del
-    presupuesto en registros MaterialCotizable agrupando por hash.
+    """Consolida todas las composiciones COTIZABLES (material + equipo + otro)
+    del presupuesto en registros MaterialCotizable agrupando por hash.
 
     Qué hace:
-      - Lee composiciones tipo='material' Y tipo='equipo' del presupuesto.
+      - Lee composiciones tipo='material', 'equipo' y 'otro' (complementarios).
       - Agrupa por hash determinístico (desc + unidad + item_inventario_id).
       - Crea/actualiza MaterialCotizable por grupo (upsert).
       - Linkea cada composición a su MaterialCotizable via FK.
@@ -71,12 +71,12 @@ def sincronizar_materiales_cotizables(presupuesto):
 
     Retorna lista ordenada de MaterialCotizable del presupuesto.
     """
-    # 1. Traer composiciones cotizables (material + equipo) del presupuesto
+    # 1. Traer composiciones cotizables (material + equipo + otro) del presupuesto
     comps = db.session.query(ItemPresupuestoComposicion).join(
         ItemPresupuesto, ItemPresupuesto.id == ItemPresupuestoComposicion.item_presupuesto_id,
     ).filter(
         ItemPresupuesto.presupuesto_id == presupuesto.id,
-        ItemPresupuestoComposicion.tipo.in_(['material', 'equipo']),
+        ItemPresupuestoComposicion.tipo.in_(['material', 'equipo', 'otro']),
     ).all()
 
     # 2. Agrupar por hash (prefijando tipo para no mezclar material vs equipo)
@@ -329,6 +329,38 @@ def ejecutivo_vista(id):
         ItemPresupuestoComposicion.precio_unitario == 0,
     ).count()
 
+    # Proveedores activos de la org — para el selector del modal "Agregar recurso"
+    proveedores_disponibles = ProveedorOC.query.filter_by(
+        organizacion_id=org_id, activo=True
+    ).order_by(ProveedorOC.razon_social).all()
+
+    # Para cada composición, traer los proveedores asignados y pasar al template
+    # como dict { comp_id: [(prov_id, razon_social), ...] }
+    comp_ids = [c.id for d in etapas.values() for it in d['items'] for c in it.comp_list]
+    comp_ids += [c.id for d in etapas_internas.values() for it in d['items'] for c in it.comp_list]
+    proveedores_por_comp = {}
+    if comp_ids:
+        asignaciones_rows = db.session.query(
+            ItemPresupuestoComposicion.id,
+            ProveedorOC.id,
+            ProveedorOC.razon_social,
+        ).join(
+            MaterialCotizable,
+            MaterialCotizable.id == ItemPresupuestoComposicion.material_cotizable_id,
+        ).join(
+            ProveedorAsignadoMaterial,
+            ProveedorAsignadoMaterial.material_cotizable_id == MaterialCotizable.id,
+        ).join(
+            ProveedorOC,
+            ProveedorOC.id == ProveedorAsignadoMaterial.proveedor_id,
+        ).filter(
+            ItemPresupuestoComposicion.id.in_(comp_ids),
+        ).all()
+        for comp_id, prov_id, razon in asignaciones_rows:
+            proveedores_por_comp.setdefault(comp_id, []).append(
+                {'id': prov_id, 'razon_social': razon}
+            )
+
     return render_template(
         'presupuestos/ejecutivo.html',
         presupuesto=presupuesto,
@@ -342,6 +374,8 @@ def ejecutivo_vista(id):
         margen_pct=margen_pct,
         materiales_sin_precio=materiales_sin_precio,
         nombres_etapas_pliego=nombres_etapas_pliego,
+        proveedores_disponibles=proveedores_disponibles,
+        proveedores_por_comp=proveedores_por_comp,
     )
 
 
@@ -358,6 +392,18 @@ def _item_pertenece_a_org(item, org_id):
 
 
 def _serializar_composicion(comp):
+    # Si está linkeada a un MaterialCotizable, devolver los proveedores asignados
+    proveedores = []
+    if comp.material_cotizable_id:
+        asignaciones = ProveedorAsignadoMaterial.query.filter_by(
+            material_cotizable_id=comp.material_cotizable_id,
+        ).all()
+        for a in asignaciones:
+            if a.proveedor:
+                proveedores.append({
+                    'id': a.proveedor.id,
+                    'razon_social': a.proveedor.razon_social,
+                })
     return {
         'id': comp.id,
         'tipo': comp.tipo,
@@ -369,6 +415,7 @@ def _serializar_composicion(comp):
         'item_inventario_id': comp.item_inventario_id,
         'modalidad_costo': comp.modalidad_costo,
         'notas': comp.notas,
+        'proveedores': proveedores,
     }
 
 
@@ -438,6 +485,47 @@ def composicion_crear(item_id):
     )
     db.session.add(comp)
     db.session.commit()
+
+    # Si vienen proveedor_ids y el tipo es cotizable (material/equipo/otro),
+    # sincronizar MaterialCotizable y crear asignaciones proveedor↔material.
+    # Esto implementa el flujo: al cargar un recurso, ya queda asignado a
+    # proveedores para pedir cotización, sin pasar por precio manual.
+    proveedor_ids = data.get('proveedor_ids') or []
+    if proveedor_ids and tipo in ('material', 'equipo', 'otro'):
+        try:
+            proveedor_ids = [int(pid) for pid in proveedor_ids if pid]
+            # Validar que los proveedores pertenecen a la org
+            proveedores_validos = ProveedorOC.query.filter(
+                ProveedorOC.id.in_(proveedor_ids),
+                ProveedorOC.organizacion_id == org_id,
+            ).all()
+            proveedor_ids_validos = {p.id for p in proveedores_validos}
+
+            if proveedor_ids_validos:
+                # Sincroniza MaterialCotizable — crea/actualiza uno para esta composición
+                sincronizar_materiales_cotizables(item.presupuesto)
+                db.session.refresh(comp)
+
+                if comp.material_cotizable_id:
+                    # Asignaciones (ignorando duplicados por unique constraint)
+                    for pid in proveedor_ids_validos:
+                        existe = ProveedorAsignadoMaterial.query.filter_by(
+                            material_cotizable_id=comp.material_cotizable_id,
+                            proveedor_id=pid,
+                        ).first()
+                        if not existe:
+                            db.session.add(ProveedorAsignadoMaterial(
+                                material_cotizable_id=comp.material_cotizable_id,
+                                proveedor_id=pid,
+                            ))
+                    db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.exception(
+                f"Error asignando proveedores a composición {comp.id}: {e}"
+            )
+            # No fallamos la creación de la composición — la composición quedó
+            # OK, solo falló la asignación de proveedores.
 
     return jsonify(ok=True, composicion=_serializar_composicion(comp))
 
@@ -994,6 +1082,38 @@ def ejecutivo_materiales_vista(id):
         mat.origenes = origenes
         # Asignaciones actuales (pendientes + enviadas, para mostrar chips completos)
         mat.asignaciones_list = list(mat.asignaciones)
+
+    # URLs de envío (WhatsApp + email) calculadas dinámicamente al render.
+    # Esto hace que si el usuario carga/edita el teléfono o email del proveedor
+    # DESPUÉS de crear la solicitud, los botones se habilitan sin tener que
+    # regenerar la solicitud. El wa_url guardado en DB se usa como fallback
+    # histórico pero no es lo que manda.
+    from urllib.parse import quote as _urlquote
+    from services.whatsapp_service import normalizar_telefono as _normalizar_telefono
+    from services.whatsapp_service import generar_url_wa_me as _generar_url_wa_me
+    for s in solicitudes:
+        prov = s.proveedor
+        # wa_url dinámico: usar teléfono actual del proveedor
+        prov_tel = None
+        if prov:
+            prov_tel = getattr(prov, 'telefono', None) or getattr(prov, 'contacto_telefono', None)
+        if prov_tel and s.mensaje_texto:
+            tel_norm = _normalizar_telefono(prov_tel)
+            s.wa_url_render = _generar_url_wa_me(tel_norm, s.mensaje_texto) if tel_norm else None
+        else:
+            s.wa_url_render = None
+
+        # mailto_url dinámico: usar email actual del proveedor
+        prov_email = getattr(prov, 'email', None) if prov else None
+        if prov_email and s.mensaje_texto:
+            subject = f"Cotización presupuesto {presupuesto.numero}"
+            s.mailto_url = (
+                f"mailto:{prov_email}"
+                f"?subject={_urlquote(subject)}"
+                f"&body={_urlquote(s.mensaje_texto)}"
+            )
+        else:
+            s.mailto_url = None
 
     return render_template(
         'presupuestos/ejecutivo_materiales.html',

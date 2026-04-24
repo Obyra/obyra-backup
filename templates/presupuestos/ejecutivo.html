@@ -271,9 +271,18 @@
                           <td class="text-center"><small>{{ comp.unidad }}</small></td>
                           <td class="text-end">
                             {% if comp.tipo in ['material', 'equipo', 'otro'] and (comp.precio_unitario|float) == 0 %}
-                              <span class="badge bg-warning text-dark" title="Sin precio todavía — pendiente de cotizar a proveedor">
+                              {% set provs_comp = proveedores_por_comp.get(comp.id) or [] %}
+                              <span class="badge bg-warning text-dark" title="Sin precio — pendiente de cotizar">
                                 <i class="fas fa-hourglass-half me-1"></i>Pendiente
                               </span>
+                              {% if provs_comp %}
+                              <div class="small text-muted mt-1" style="line-height:1.2;">
+                                <i class="fab fa-whatsapp text-success me-1"></i>Cotizando a:
+                                {% for p in provs_comp %}
+                                  <span class="badge bg-light text-dark border fw-normal">{{ p.razon_social }}</span>
+                                {% endfor %}
+                              </div>
+                              {% endif %}
                             {% else %}
                               <small>${{ '{:,.2f}'.format(comp.precio_unitario|float) }}</small>
                             {% endif %}
@@ -290,7 +299,7 @@
                             <div class="btn-group btn-group-sm" role="group">
                               <button class="btn btn-outline-primary"
                                       type="button"
-                                      onclick='editarComposicion({{ comp.id }}, {{ item.id }}, {{ {"tipo": comp.tipo, "descripcion": comp.descripcion, "unidad": comp.unidad, "cantidad": comp.cantidad|float, "precio_unitario": comp.precio_unitario|float, "modalidad_costo": comp.modalidad_costo, "notas": comp.notas}|tojson }}, "{{ item.descripcion|e }}")'
+                                      onclick='editarComposicion({{ comp.id }}, {{ item.id }}, {{ {"tipo": comp.tipo, "descripcion": comp.descripcion, "unidad": comp.unidad, "cantidad": comp.cantidad|float, "precio_unitario": comp.precio_unitario|float, "modalidad_costo": comp.modalidad_costo, "notas": comp.notas, "proveedores": proveedores_por_comp.get(comp.id) or []}|tojson }}, "{{ item.descripcion|e }}")'
                                       title="Editar">
                                 <i class="fas fa-pen"></i>
                               </button>
@@ -481,9 +490,18 @@
                           <td class="text-center"><small>{{ comp.unidad }}</small></td>
                           <td class="text-end">
                             {% if comp.tipo in ['material', 'equipo', 'otro'] and (comp.precio_unitario|float) == 0 %}
-                              <span class="badge bg-warning text-dark" title="Sin precio todavía — pendiente de cotizar a proveedor">
+                              {% set provs_comp = proveedores_por_comp.get(comp.id) or [] %}
+                              <span class="badge bg-warning text-dark" title="Sin precio — pendiente de cotizar">
                                 <i class="fas fa-hourglass-half me-1"></i>Pendiente
                               </span>
+                              {% if provs_comp %}
+                              <div class="small text-muted mt-1" style="line-height:1.2;">
+                                <i class="fab fa-whatsapp text-success me-1"></i>Cotizando a:
+                                {% for p in provs_comp %}
+                                  <span class="badge bg-light text-dark border fw-normal">{{ p.razon_social }}</span>
+                                {% endfor %}
+                              </div>
+                              {% endif %}
                             {% else %}
                               <small>${{ '{:,.2f}'.format(comp.precio_unitario|float) }}</small>
                             {% endif %}
@@ -500,7 +518,7 @@
                             <div class="btn-group btn-group-sm" role="group">
                               <button class="btn btn-outline-primary"
                                       type="button"
-                                      onclick='editarComposicion({{ comp.id }}, {{ item.id }}, {{ {"tipo": comp.tipo, "descripcion": comp.descripcion, "unidad": comp.unidad, "cantidad": comp.cantidad|float, "precio_unitario": comp.precio_unitario|float, "modalidad_costo": comp.modalidad_costo, "notas": comp.notas}|tojson }}, "{{ item.descripcion|e }}")'
+                                      onclick='editarComposicion({{ comp.id }}, {{ item.id }}, {{ {"tipo": comp.tipo, "descripcion": comp.descripcion, "unidad": comp.unidad, "cantidad": comp.cantidad|float, "precio_unitario": comp.precio_unitario|float, "modalidad_costo": comp.modalidad_costo, "notas": comp.notas, "proveedores": proveedores_por_comp.get(comp.id) or []}|tojson }}, "{{ item.descripcion|e }}")'
                                       title="Editar">
                                 <i class="fas fa-pen"></i>
                               </button>
@@ -758,7 +776,8 @@
             </div>
           </div>
 
-          <div class="mb-3">
+          <!-- Precio: visible solo para MO (vos conocés el jornal). Para material/equipo/otro se muestra el selector de proveedores. -->
+          <div class="mb-3" id="wrapperPrecio">
             <label class="form-label" id="labelPrecio">Precio unitario (ARS) <span class="text-danger" id="precioRequired">*</span></label>
             <div class="input-group">
               <span class="input-group-text">$</span>
@@ -766,6 +785,32 @@
             </div>
             <small class="text-muted d-block" id="compHintPrecio"></small>
             <small class="text-muted d-block" id="compSubtotalPreview"></small>
+          </div>
+
+          <!-- Selector de proveedores: visible para material/equipo/otro. El precio se completa cuando elegis ganador en 'Recursos a cotizar'. -->
+          <div class="mb-3 d-none" id="wrapperProveedores">
+            <label class="form-label">
+              <i class="fab fa-whatsapp text-success me-1"></i>Proveedores a pedir cotización
+              <small class="text-muted fw-normal">(opcional, podés elegir varios)</small>
+            </label>
+            <select class="form-select" id="compProveedores" multiple size="5">
+              {% for p in proveedores_disponibles %}
+              <option value="{{ p.id }}">
+                {{ p.razon_social }}{% if p.contacto_nombre %} · {{ p.contacto_nombre }}{% endif %}{% if p.contacto_telefono or p.telefono %} · {{ p.contacto_telefono or p.telefono }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <small class="text-muted d-block mt-1">
+              <i class="fas fa-info-circle me-1"></i>
+              Al guardar, el recurso queda asignado a los proveedores elegidos. El precio se completa cuando elegís el ganador en <strong>Recursos a cotizar</strong>.
+              Si todavía no tenés proveedores, dejalo vacío y los asignás después.
+            </small>
+            {% if not proveedores_disponibles %}
+            <div class="alert alert-warning small mt-2 mb-0">
+              <i class="fas fa-exclamation-triangle me-1"></i>
+              No tenés proveedores cargados. <a href="{{ url_for('proveedores_oc.nuevo') }}" target="_blank">Cargá uno</a> para poder pedir cotizaciones.
+            </div>
+            {% endif %}
           </div>
 
           <div class="mb-3">
@@ -804,6 +849,9 @@ function abrirModalComposicion(itemId, descripcion) {
   document.getElementById('modCompra').checked = true;
   document.getElementById('compError').classList.add('d-none');
   document.getElementById('compSubtotalPreview').textContent = '';
+  // Reset selector de proveedores
+  const selProv = document.getElementById('compProveedores');
+  if (selProv) Array.from(selProv.options).forEach(o => o.selected = false);
   document.getElementById('modalComposicionLabel').innerHTML = '<i class="fas fa-plus-circle text-success me-2"></i>Agregar recurso';
   document.getElementById('btnGuardarComposicion').innerHTML = '<i class="fas fa-save me-1"></i>Agregar';
   onTipoChange();
@@ -823,6 +871,17 @@ function editarComposicion(compId, itemId, compData, itemDescripcion) {
   document.getElementById('tipoMaterial').checked = tipo === 'material';
   document.getElementById('tipoManoObra').checked = tipo === 'mano_obra';
   document.getElementById('tipoEquipo').checked = tipo === 'equipo';
+  const tipoOtroEl = document.getElementById('tipoOtro');
+  if (tipoOtroEl) tipoOtroEl.checked = tipo === 'otro';
+
+  // Pre-seleccionar proveedores ya asignados a esta composición
+  const selProv2 = document.getElementById('compProveedores');
+  if (selProv2) {
+    const provIds = (compData.proveedores || []).map(p => String(p.id));
+    Array.from(selProv2.options).forEach(o => {
+      o.selected = provIds.includes(o.value);
+    });
+  }
 
   // Modalidad (solo equipos)
   if (tipo === 'equipo') {
@@ -872,7 +931,27 @@ function onTipoChange() {
   const precioInput = document.getElementById('compPrecio');
   const hintPrecio = document.getElementById('compHintPrecio');
   const hintOtro = document.getElementById('hintTipoOtro');
+  const wrapperPrecio = document.getElementById('wrapperPrecio');
+  const wrapperProveedores = document.getElementById('wrapperProveedores');
+
   if (hintOtro) hintOtro.classList.toggle('d-none', tipo !== 'otro');
+
+  // MO muestra precio; material/equipo/otro muestran selector de proveedor (sin precio).
+  // Excepción: si estamos EDITANDO una composición existente (compCompId tiene valor),
+  // mostramos el precio también para que puedas ajustarlo.
+  const esEdicion = !!document.getElementById('compCompId').value;
+  if (tipo === 'mano_obra') {
+    wrapperPrecio.classList.remove('d-none');
+    wrapperProveedores.classList.add('d-none');
+  } else if (esEdicion) {
+    // Edición: mostrar ambos (precio + proveedores) por si el usuario quiere cargar precio manual
+    wrapperPrecio.classList.remove('d-none');
+    wrapperProveedores.classList.remove('d-none');
+  } else {
+    // Creación nueva de material/equipo/otro: ocultar precio, mostrar proveedores
+    wrapperPrecio.classList.add('d-none');
+    wrapperProveedores.classList.remove('d-none');
+  }
 
   if (tipo === 'equipo') {
     wrap.classList.remove('d-none');
@@ -949,14 +1028,28 @@ async function guardarComposicion(ev) {
   const compId = document.getElementById('compCompId').value;
   const isEdit = !!compId;
   const tipo = document.querySelector('input[name="tipo"]:checked').value;
+
+  // Si es material/equipo/otro, el precio viene vacío (lo completa el proveedor).
+  // Se envía 0 explícitamente. El backend acepta precio=0 para esos tipos.
+  let precio = document.getElementById('compPrecio').value;
+  if (tipo !== 'mano_obra' && !isEdit) precio = '0';
+
+  // Proveedores elegidos (solo material/equipo/otro)
+  let proveedorIds = [];
+  if (tipo !== 'mano_obra') {
+    const sel = document.getElementById('compProveedores');
+    if (sel) proveedorIds = Array.from(sel.selectedOptions).map(o => parseInt(o.value)).filter(Boolean);
+  }
+
   const payload = {
     tipo: tipo,
     descripcion: document.getElementById('compDescripcion').value.trim(),
     unidad: document.getElementById('compUnidad').value,
     cantidad: document.getElementById('compCantidad').value,
-    precio_unitario: document.getElementById('compPrecio').value,
+    precio_unitario: precio,
     modalidad_costo: tipo === 'equipo' ? document.querySelector('input[name="modalidad_costo"]:checked').value : null,
     notas: document.getElementById('compNotas').value.trim() || null,
+    proveedor_ids: proveedorIds,
   };
 
   const url = isEdit ? `/presupuestos/composicion/${compId}` : `/presupuestos/items/${itemId}/composicion`;
@@ -1053,18 +1146,32 @@ function _renderCompTable(comps) {
     let badge;
     if (c.tipo === 'material') badge = '<span class="badge bg-info">Material</span>';
     else if (c.tipo === 'mano_obra') badge = '<span class="badge bg-warning text-dark">MO</span>';
-    else {
+    else if (c.tipo === 'equipo') {
       badge = '<span class="badge bg-secondary">Equipo</span>';
       if (c.modalidad_costo === 'alquiler') badge += ' <span class="badge bg-primary" title="Alquiler">Alq.</span>';
       else if (c.modalidad_costo === 'compra') badge += ' <span class="badge bg-success" title="Compra">Compra</span>';
+    } else if (c.tipo === 'otro') {
+      badge = '<span class="badge bg-primary" title="Gasto complementario">Complem.</span>';
+    } else {
+      badge = `<span class="badge bg-light text-dark">${_escape(c.tipo)}</span>`;
     }
     const itemId = document.getElementById('compItemId').value;
-    const pendiente = (c.tipo === 'material' || c.tipo === 'equipo') && (c.precio_unitario || 0) === 0;
-    const precioCell = pendiente
-      ? '<span class="badge bg-warning text-dark" title="Pendiente de cotizar"><i class="fas fa-hourglass-half me-1"></i>Pendiente</span>'
-      : `<small>$${c.precio_unitario.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small>`;
+    const pendiente = ['material', 'equipo', 'otro'].includes(c.tipo) && (c.precio_unitario || 0) === 0;
+    let precioCell;
+    if (pendiente) {
+      let provsHtml = '';
+      if (c.proveedores && c.proveedores.length) {
+        const chips = c.proveedores.map(p =>
+          `<span class="badge bg-light text-dark border fw-normal">${_escape(p.razon_social)}</span>`
+        ).join(' ');
+        provsHtml = `<div class="small text-muted mt-1" style="line-height:1.2;"><i class="fab fa-whatsapp text-success me-1"></i>Cotizando a: ${chips}</div>`;
+      }
+      precioCell = `<span class="badge bg-warning text-dark" title="Pendiente de cotizar"><i class="fas fa-hourglass-half me-1"></i>Pendiente</span>${provsHtml}`;
+    } else {
+      precioCell = `<small>$${c.precio_unitario.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small>`;
+    }
     const subtotalCell = pendiente
-      ? '<small class="text-muted">—</small>'
+      ? '<small class="text-muted">&mdash;</small>'
       : `<small>$${c.total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</small>`;
     return `<tr data-comp-id="${c.id}">
       <td>${badge}</td>

@@ -204,9 +204,14 @@
           <tr>
             <td>
               <strong>{{ s.proveedor.razon_social }}</strong>
-              {% if s.proveedor.telefono %}
-              <small class="d-block text-muted">{{ s.proveedor.telefono }}</small>
-              {% endif %}
+              <small class="d-block text-muted">
+                {% if s.proveedor.telefono %}
+                  <i class="fas fa-phone me-1"></i>{{ s.proveedor.telefono }}
+                {% endif %}
+                {% if s.proveedor.email %}
+                  {% if s.proveedor.telefono %} &middot; {% endif %}<i class="fas fa-envelope me-1"></i>{{ s.proveedor.email }}
+                {% endif %}
+              </small>
             </td>
             <td class="text-center">v{{ s.version }}</td>
             <td class="text-center">{{ s.items.count() }}</td>
@@ -224,15 +229,32 @@
             </td>
             <td class="text-end">
               <div class="btn-group btn-group-sm">
-                {% if s.wa_url %}
-                <a href="{{ s.wa_url }}" target="_blank"
+                {% if s.wa_url_render %}
+                <a href="{{ s.wa_url_render }}" target="_blank"
                    class="btn btn-success"
-                   onclick="marcarEnviada({{ s.id }})">
-                  <i class="fab fa-whatsapp me-1"></i>Abrir WA
+                   onclick="marcarEnviada({{ s.id }})"
+                   title="Abrir WhatsApp con el mensaje pre-cargado">
+                  <i class="fab fa-whatsapp me-1"></i>WA
                 </a>
                 {% else %}
-                <button class="btn btn-outline-secondary" disabled title="Proveedor sin teléfono">
+                <button class="btn btn-outline-secondary"
+                        onclick="editarContactoProveedor({{ s.proveedor.id }}, 'telefono', '{{ s.proveedor.razon_social|e }}', this)"
+                        title="Proveedor sin teléfono — click para cargar">
                   <i class="fas fa-phone-slash me-1"></i>Sin tel.
+                </button>
+                {% endif %}
+                {% if s.mailto_url %}
+                <a href="{{ s.mailto_url }}"
+                   class="btn btn-outline-primary"
+                   onclick="marcarEnviada({{ s.id }})"
+                   title="Abrir cliente de correo con el mensaje pre-cargado (sale desde tu casilla)">
+                  <i class="fas fa-envelope me-1"></i>Email
+                </a>
+                {% else %}
+                <button class="btn btn-outline-secondary"
+                        onclick="editarContactoProveedor({{ s.proveedor.id }}, 'email', '{{ s.proveedor.razon_social|e }}', this)"
+                        title="Proveedor sin email — click para cargar">
+                  <i class="fas fa-envelope-open me-1"></i>Sin mail
                 </button>
                 {% endif %}
                 <button class="btn btn-outline-info" onclick="verMensaje({{ s.id }})" title="Ver mensaje">
@@ -533,6 +555,37 @@ function mostrarResultadoGeneracion(solicitudes) {
     </div>`;
   }).join('');
   MODAL_RESULTADO.show();
+}
+
+async function editarContactoProveedor(proveedorId, campo, razonSocial, btnEl) {
+  const labels = {telefono: 'Teléfono', email: 'Email'};
+  const valorActual = btnEl && btnEl.dataset.valor ? btnEl.dataset.valor : '';
+  const nuevo = prompt(`${labels[campo]} de ${razonSocial}:`, valorActual);
+  if (nuevo === null) return; // canceló
+  const valor = nuevo.trim();
+  if (!valor) {
+    alert('Ingresá un valor válido.');
+    return;
+  }
+  try {
+    const payload = {};
+    payload[campo] = valor;
+    const res = await fetch(`/proveedores-oc/api/${proveedorId}/editar-contacto`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+      body: JSON.stringify(payload),
+    });
+    let data;
+    try { data = await res.json(); } catch { data = {error: await res.text()}; }
+    if (!res.ok || !data.ok) {
+      alert(data.error || `Error ${res.status}`);
+      return;
+    }
+    // Recargo la página para que se re-generen wa_url / mailto_url con el nuevo dato
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
 }
 
 async function marcarEnviada(solicitudId) {

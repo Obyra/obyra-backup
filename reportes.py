@@ -338,17 +338,24 @@ def dashboard():
 
     # Alertas del sistema - obtener eventos recientes
     from models import Event
+    from events_service import filter_valid_events
 
-    # Feed de eventos para "Actividad Reciente" - últimos 25
-    eventos_recientes = Event.query.filter(
-        Event.company_id == org_id
-    ).order_by(desc(Event.created_at)).limit(25).all()
+    # Feed de eventos para "Actividad Reciente" - últimos 25.
+    # Traemos 2x y filtramos huerfanos (targets ya eliminados) para no mostrar
+    # links que llevan a 404.
+    eventos_recientes = filter_valid_events(
+        Event.query.filter(
+            Event.company_id == org_id
+        ).order_by(desc(Event.created_at)).limit(50).all()
+    )[:25]
 
     # Alertas de alta prioridad para el panel lateral (eventos del sistema)
-    alertas_eventos = Event.query.filter(
-        Event.company_id == org_id,
-        Event.severity.in_(['media', 'alta', 'critica'])
-    ).order_by(desc(Event.created_at)).limit(10).all()
+    alertas_eventos = filter_valid_events(
+        Event.query.filter(
+            Event.company_id == org_id,
+            Event.severity.in_(['media', 'alta', 'critica'])
+        ).order_by(desc(Event.created_at)).limit(20).all()
+    )[:10]
 
     # Alertas reales del dashboard (stock, presupuestos, obras, tareas, sobrecosto)
     alertas_dashboard = obtener_alertas_para_dashboard(org_id, limite=10)

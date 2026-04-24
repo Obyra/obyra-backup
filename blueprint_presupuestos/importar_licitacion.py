@@ -544,11 +544,11 @@ def importar_licitacion():
                 try: os.remove(path)
                 except Exception: pass
                 if modo_licitacion:
-                    msg = f'Presupuesto {numero} creado con {len(items)} ítems en $0 (modo licitación). Ahora cargás precios desde proveedores por WhatsApp.'
+                    msg = f'Presupuesto {numero} creado con {len(items)} ítems en $0 (modo licitación). Armá el Ejecutivo para desglosar en materiales y pedir cotización.'
                 else:
                     msg = f'Presupuesto {numero} creado con {len(items)} ítems con precios del Excel.'
                 flash(msg, 'success')
-                return redirect(url_for('presupuestos.cotizar_wa_vista', presupuesto_id=presu.id))
+                return redirect(url_for('presupuestos.ejecutivo_vista', id=presu.id))
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.exception("Error creando presupuesto desde Excel")
@@ -675,7 +675,7 @@ def importar_licitacion_mapear(token):
             except Exception: pass
             suf = ' en $0 (modo licitación)' if modo_licitacion else ''
             flash(f'Presupuesto {numero} creado con {len(items)} ítems desde mapeo manual{suf}.', 'success')
-            return redirect(url_for('presupuestos.cotizar_wa_vista', presupuesto_id=presu.id))
+            return redirect(url_for('presupuestos.ejecutivo_vista', id=presu.id))
         except Exception as e:
             db.session.rollback()
             current_app.logger.exception("Error en mapeo manual")
