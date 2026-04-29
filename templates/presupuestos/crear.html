@@ -65,13 +65,32 @@
                         <input type="hidden" id="iaEtapasPayload" name="ia_etapas_payload">
                         <input type="hidden" id="presupuestoIdInput" name="presupuesto_id" value="{{ presupuesto.id if presupuesto is defined and presupuesto else '' }}">
                         
+                        <!-- Naturaleza del Proyecto -->
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <label for="naturaleza_proyecto" class="form-label fw-bold">
+                                    <i class="fas fa-tools text-info"></i> Naturaleza del Proyecto *
+                                </label>
+                                <select class="form-select form-select-lg" id="naturaleza_proyecto" name="naturaleza_proyecto" required onchange="aplicarNaturalezaProyecto()">
+                                    <option value="obra_nueva" selected>Obra Nueva — construcción desde cero</option>
+                                    <option value="remodelacion">Remodelación — trabajo sobre obra existente</option>
+                                    <option value="ampliacion">Ampliación — agregado a obra existente</option>
+                                </select>
+                                <div class="form-text">
+                                    En <strong>Remodelación</strong> la calculadora IA excluye excavación/fundaciones,
+                                    activa etapas específicas (retiros, refuerzos) y aplica un sobrecosto promedio del 20%
+                                    por trabajos en obra existente.
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Primera fila: Nombre y Tipo de Obra -->
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <label for="nombre_obra" class="form-label fw-bold">
                                     <i class="fas fa-building text-primary"></i> Nombre de la Obra *
                                 </label>
-                                <input type="text" class="form-control form-control-lg" 
+                                <input type="text" class="form-control form-control-lg"
                                        id="nombre_obra" name="nombre_obra" required
                                        placeholder="Ej: Casa Familiar Rodriguez">
                                 <div class="form-text">Nombre descriptivo del proyecto</div>
@@ -596,6 +615,9 @@ const ubicacionMapaWrapper = document.getElementById('ubicacion_mapa_wrapper');
 const ubicacionMeta = document.getElementById('ubicacion_meta');
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Inicializar info de etapas según naturaleza (sin auto-seleccionar al primer load)
+    aplicarNaturalezaProyecto({ autoseleccionar: false });
+
     if (ubicacionInput) {
         ubicacionInput.addEventListener('input', manejarCambioUbicacion);
         ubicacionInput.addEventListener('keydown', manejarTeclasUbicacion);
@@ -1079,8 +1101,86 @@ const ETAPAS_PREDEFINIDAS = [
     { nombre: 'Carpintería', descripcion: 'Puertas, ventanas, muebles', orden: 120, slug: 'carpinteria' },
     { nombre: 'Pintura', descripcion: 'Interior y exterior', orden: 130, slug: 'pintura' },
     { nombre: 'Instalaciones Complementarias', descripcion: 'A/A, calefacción, etc.', orden: 140, slug: 'instalaciones-complementarias' },
-    { nombre: 'Limpieza Final', descripcion: 'Acondicionamiento final', orden: 150, slug: 'limpieza-final' }
+    { nombre: 'Limpieza Final', descripcion: 'Acondicionamiento final', orden: 150, slug: 'limpieza-final' },
+    // Etapas específicas de Remodelación / Refacción
+    { nombre: 'Retiro de Revestimientos', descripcion: 'Retiro de pisos, azulejos y revestimientos existentes', orden: 7, slug: 'retiro-revestimientos', soloRemodelacion: true },
+    { nombre: 'Retiro de Instalaciones Existentes', descripcion: 'Desmonte de cañerías, cables y artefactos a reemplazar', orden: 8, slug: 'retiro-instalaciones', soloRemodelacion: true },
+    { nombre: 'Refuerzo Estructural', descripcion: 'Vigas, columnas y refuerzos en estructura existente', orden: 35, slug: 'refuerzo-estructural', soloRemodelacion: true },
+    { nombre: 'Tratamiento de Humedad', descripcion: 'Diagnóstico y reparación de humedad en muros existentes', orden: 88, slug: 'tratamiento-humedad', soloRemodelacion: true },
+    { nombre: 'Renovación de Aberturas', descripcion: 'Reemplazo de puertas y ventanas existentes', orden: 122, slug: 'renovacion-aberturas', soloRemodelacion: true }
 ];
+
+// Naturaleza del proyecto (obra_nueva | remodelacion | ampliacion).
+// Se actualiza desde el selector y modifica:
+//   - qué etapas se muestran/ocultan en el modal
+//   - qué etapas se preseleccionan
+//   - el factor de sobrecosto que aplica el backend al calcular
+let naturalezaProyecto = 'obra_nueva';
+let etapasNaturalezaInfo = { sugeridas: [], excluidas: [] };
+
+function naturalezaActual() {
+    const sel = document.getElementById('naturaleza_proyecto');
+    return (sel && sel.value) ? sel.value : 'obra_nueva';
+}
+
+async function aplicarNaturalezaProyecto({ autoseleccionar = true } = {}) {
+    naturalezaProyecto = naturalezaActual();
+    try {
+        const resp = await fetch(`/presupuestos/ia/etapas-sugeridas?naturaleza=${encodeURIComponent(naturalezaProyecto)}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await resp.json();
+        if (data && data.ok) {
+            etapasNaturalezaInfo = {
+                naturaleza: data.naturaleza,
+                sugeridas: data.sugeridas || [],
+                excluidas: data.excluidas || []
+            };
+        } else {
+            etapasNaturalezaInfo = { naturaleza: naturalezaProyecto, sugeridas: [], excluidas: [] };
+        }
+    } catch (err) {
+        console.warn('No se pudieron cargar etapas sugeridas:', err);
+        etapasNaturalezaInfo = { naturaleza: naturalezaProyecto, sugeridas: [], excluidas: [] };
+    }
+
+    if (autoseleccionar && naturalezaProyecto === 'remodelacion') {
+        // Quitar de la selección actual etapas excluidas (excavación, fundaciones, etc.)
+        const excluidas = new Set(etapasNaturalezaInfo.excluidas);
+        etapasSeleccionadasArray = etapasSeleccionadasArray.filter(e => {
+            const s = e.slug || slugifyEtapa(e.nombre);
+            if (excluidas.has(s)) etapasSeleccionadasIA.delete(s);
+            return !excluidas.has(s);
+        });
+        // Agregar las sugeridas que aún no estén
+        const sugeridas = etapasNaturalezaInfo.sugeridas;
+        sugeridas.forEach(slug => {
+            const yaEsta = etapasSeleccionadasArray.some(e => (e.slug || slugifyEtapa(e.nombre)) === slug);
+            if (yaEsta) return;
+            const etapa = ETAPAS_PREDEFINIDAS.find(e => e.slug === slug);
+            if (etapa) {
+                etapasSeleccionadasArray.push({ ...etapa, personalizada: false });
+                etapasSeleccionadasIA.add(slug);
+            }
+        });
+        limpiarResultadosEtapasIA();
+        actualizarVistaEtapas(false);
+    } else if (autoseleccionar && naturalezaProyecto === 'obra_nueva') {
+        // Volver a obra nueva: si había etapas exclusivas de remodelación seleccionadas, las quitamos
+        const slugsRemod = ETAPAS_PREDEFINIDAS.filter(e => e.soloRemodelacion).map(e => e.slug);
+        const setRemod = new Set(slugsRemod);
+        const antes = etapasSeleccionadasArray.length;
+        etapasSeleccionadasArray = etapasSeleccionadasArray.filter(e => {
+            const s = e.slug || slugifyEtapa(e.nombre);
+            if (setRemod.has(s)) etapasSeleccionadasIA.delete(s);
+            return !setRemod.has(s);
+        });
+        if (antes !== etapasSeleccionadasArray.length) {
+            limpiarResultadosEtapasIA();
+            actualizarVistaEtapas(false);
+        }
+    }
+}
 
 function mostrarPanelEtapas() {
     cargarEtapasPredefinidas();
@@ -1091,16 +1191,29 @@ function mostrarPanelEtapas() {
 function cargarEtapasPredefinidas() {
     const container = document.getElementById('etapasPredefinidas');
     container.innerHTML = '';
+    const naturaleza = naturalezaActual();
+    const excluidas = new Set(etapasNaturalezaInfo.excluidas || []);
+    const sugeridas = new Set(etapasNaturalezaInfo.sugeridas || []);
+
     ETAPAS_PREDEFINIDAS.forEach((etapa) => {
+        // Etapas marcadas como exclusivas de remodelación: solo se muestran si naturaleza == remodelacion
+        if (etapa.soloRemodelacion && naturaleza !== 'remodelacion') return;
+
         const yaSeleccionada = etapasSeleccionadasArray.some(e => (e.slug || slugifyEtapa(e.nombre)) === etapa.slug);
+        const esExcluida = naturaleza === 'remodelacion' && excluidas.has(etapa.slug);
+        const esSugerida = naturaleza === 'remodelacion' && sugeridas.has(etapa.slug);
         const checkboxId = `etapa_${etapa.slug}`;
+        const badgeSugerida = esSugerida ? '<span class="badge bg-info text-dark ms-1">Sugerida</span>' : '';
+        const badgeNoAplica = esExcluida ? '<span class="badge bg-secondary ms-1">No aplica en remodelación</span>' : '';
+        const disabledAttr = esExcluida ? 'disabled' : '';
+        const opacityStyle = esExcluida ? 'style="opacity:0.5;"' : '';
         const etapaHTML = `
-            <div class="col-md-4 mb-2">
+            <div class="col-md-4 mb-2" ${opacityStyle}>
                 <div class="form-check">
-                    <input class="form-check-input etapa-predefinida-checkbox" type="checkbox" id="${checkboxId}" ${yaSeleccionada ? 'checked' : ''}
+                    <input class="form-check-input etapa-predefinida-checkbox" type="checkbox" id="${checkboxId}" ${yaSeleccionada ? 'checked' : ''} ${disabledAttr}
                            onchange="toggleEtapaPredefinida('${etapa.slug}')">
                     <label class="form-check-label" for="${checkboxId}">
-                        <strong>${etapa.nombre}</strong>
+                        <strong>${etapa.nombre}</strong>${badgeSugerida}${badgeNoAplica}
                         <br><small class="text-muted">${etapa.descripcion}</small>
                     </label>
                 </div>
@@ -1304,9 +1417,11 @@ function solicitarCalculoEtapas(etapas) {
     }
 
     const tipoCalculo = document.getElementById('tipo_construccion').value || 'Estándar';
+    const naturaleza = naturalezaActual();
     const contexto = {
         ubicacion: document.getElementById('ubicacion').value || null,
-        tipo_obra: document.getElementById('tipo_obra').value || null
+        tipo_obra: document.getElementById('tipo_obra').value || null,
+        naturaleza_proyecto: naturaleza
     };
 
     const monedaSelectEl = document.getElementById('moneda');
@@ -1330,7 +1445,8 @@ function solicitarCalculoEtapas(etapas) {
         presupuesto_id: presupuestoId,
         currency: currency,
         moneda: currency,
-        aplicar_desperdicio: aplicarDesperdicio
+        aplicar_desperdicio: aplicarDesperdicio,
+        naturaleza_proyecto: naturaleza
     };
 
     // Incluir niveles del edificio si están configurados
@@ -1572,7 +1688,8 @@ function aplicarResultadosEtapasIA() {
             presupuesto_id: presupuestoId,
             persistir: true,
             currency: persistCurrency,
-            moneda: persistCurrency
+            moneda: persistCurrency,
+            naturaleza_proyecto: resultadoEtapasIA.naturaleza_proyecto || naturalezaActual()
         };
 
         const persistHeaders = { 'Content-Type': 'application/json' };

@@ -47,6 +47,16 @@ ETAPAS_CONSTRUCCION = [
     {"id": 14, "slug": "instalaciones-complementarias", "nombre": "Instalaciones Complementarias", "descripcion": "A/A, calefacción, etc.", "orden": 140, "nivel": 17},
     # Nivel 18
     {"id": 15, "slug": "limpieza-final", "nombre": "Limpieza Final", "descripcion": "Acondicionamiento final", "orden": 150, "nivel": 18},
+    # ============================================================
+    # Etapas específicas de Remodelación / Refacción
+    # Solo aplican cuando naturaleza_proyecto = 'remodelacion'.
+    # IDs altos (27+) para no chocar con catálogo histórico.
+    # ============================================================
+    {"id": 27, "slug": "retiro-revestimientos", "nombre": "Retiro de Revestimientos", "descripcion": "Retiro de pisos, azulejos y revestimientos existentes", "orden": 7, "nivel": 2},
+    {"id": 28, "slug": "retiro-instalaciones", "nombre": "Retiro de Instalaciones Existentes", "descripcion": "Desmonte de cañerías, cables y artefactos a reemplazar", "orden": 8, "nivel": 2},
+    {"id": 29, "slug": "refuerzo-estructural", "nombre": "Refuerzo Estructural", "descripcion": "Vigas, columnas y refuerzos en estructura existente", "orden": 35, "nivel": 6, "es_opcional": True},
+    {"id": 30, "slug": "tratamiento-humedad", "nombre": "Tratamiento de Humedad", "descripcion": "Diagnóstico y reparación de humedad en muros existentes", "orden": 88, "nivel": 8, "es_opcional": True},
+    {"id": 31, "slug": "renovacion-aberturas", "nombre": "Renovación de Aberturas", "descripcion": "Reemplazo de puertas y ventanas existentes", "orden": 122, "nivel": 15, "es_opcional": True},
 ]
 
 def obtener_etapas_disponibles():

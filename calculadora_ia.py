@@ -433,6 +433,123 @@ TIPO_MULTIPLICADOR = {
     'premium': 1.18,
 }
 
+# ============================================================
+# REMODELACIÓN — naturaleza_proyecto = 'remodelacion'
+# Una remodelación trabaja sobre obra existente: no se excava
+# ni se hacen fundaciones nuevas, pero se demuele, se retiran
+# revestimientos, se refuerza estructura puntualmente y se
+# rehacen instalaciones y terminaciones. Trabajar sobre obra
+# habitada/existente encarece mano de obra (~25%) y agrega
+# costos de protección, retiro de escombros y logística.
+# ============================================================
+
+# Etapas que NO aplican en remodelación (se excluyen del wizard).
+ETAPAS_EXCLUIDAS_REMODELACION = {
+    'excavacion',
+    'movimiento-de-suelos',
+    'fundaciones',
+    'depresion-de-napa',
+    'apuntalamientos',  # solo si se demuele, queda opcional vía refuerzo-estructural
+}
+
+# Etapas que el wizard preselecciona cuando se elige Remodelación.
+# Cubre el flujo típico: demoler/retirar → refuerzo opcional →
+# rehacer instalaciones → revoques/contrapisos → terminaciones.
+ETAPAS_SUGERIDAS_REMODELACION = {
+    'preliminares-obrador',
+    'demoliciones',
+    'retiro-revestimientos',
+    'retiro-instalaciones',
+    'mamposteria',                       # tabiques nuevos / cierres
+    'instalaciones-electricas',
+    'instalaciones-sanitarias',
+    'instalaciones-gas',
+    'impermeabilizaciones-aislaciones',
+    'revoque-grueso',
+    'contrapisos-carpetas',
+    'cielorrasos',
+    'revoque-fino',
+    'pisos',
+    'carpinteria',
+    'renovacion-aberturas',
+    'pintura',
+    'instalaciones-complementarias',
+    'limpieza-final',
+}
+
+# Sobrecosto por etapa al trabajar en obra existente (vs obra nueva).
+# Captura: protecciones, trabajo manual con menor rendimiento,
+# contención de polvo, retiro de escombros, horarios restringidos.
+# Se aplica como multiplicador al subtotal de mano_obra y materiales.
+FACTOR_REMODELACION = {
+    'demoliciones': 1.10,                # menor rendimiento si hay que cuidar lo que queda
+    'retiro-revestimientos': 1.00,       # ya cotizada como tarea de remodelación
+    'retiro-instalaciones': 1.00,
+    'mamposteria': 1.20,                 # tabiques cortos, replanteos contra muros existentes
+    'refuerzo-estructural': 1.30,
+    'instalaciones-electricas': 1.30,    # canaletas en muros existentes, parches
+    'instalaciones-sanitarias': 1.35,    # rotura de pisos/muros existentes
+    'instalaciones-gas': 1.30,
+    'ventilaciones-conductos': 1.25,
+    'impermeabilizaciones-aislaciones': 1.20,
+    'revoque-grueso': 1.15,              # mayor desperdicio empalmando con revoque viejo
+    'contrapisos-carpetas': 1.20,
+    'cielorrasos': 1.15,
+    'revoque-fino': 1.15,
+    'yeseria-enlucidos': 1.15,
+    'pisos': 1.15,
+    'carpinteria': 1.10,
+    'renovacion-aberturas': 1.20,        # retirar viejas + ajustar luces
+    'pintura': 1.10,                     # mayor protección de muebles/pisos
+    'tratamiento-humedad': 1.00,         # ya cotizada como tarea específica
+    'instalaciones-complementarias': 1.20,
+    'limpieza-final': 1.30,              # más residuos, más detalle de obra entregada
+    '_default': 1.20,
+}
+
+
+def normalizar_naturaleza_proyecto(valor):
+    """Normaliza el campo naturaleza_proyecto (obra_nueva | remodelacion | ampliacion).
+
+    Defaults a 'obra_nueva' si está vacío o no es reconocido.
+    """
+    if not valor:
+        return 'obra_nueva'
+    val = str(valor).strip().lower().replace('ó', 'o').replace('á', 'a')
+    if val in ('remodelacion', 'remodelación', 'refaccion', 'refacción', 'refacion'):
+        return 'remodelacion'
+    if val in ('ampliacion', 'ampliación'):
+        return 'ampliacion'
+    return 'obra_nueva'
+
+
+def factor_sobrecosto_remodelacion(slug_etapa):
+    """Retorna el multiplicador de sobrecosto a aplicar a una etapa en remodelación."""
+    if not slug_etapa:
+        return FACTOR_REMODELACION['_default']
+    return FACTOR_REMODELACION.get(slug_etapa, FACTOR_REMODELACION['_default'])
+
+
+def obtener_etapas_para_naturaleza(naturaleza_proyecto):
+    """Retorna {sugeridas: [slugs], excluidas: [slugs]} para preseleccionar el wizard.
+
+    Para 'obra_nueva' y 'ampliacion' no filtra ni sugiere nada (lista vacía).
+    Para 'remodelacion' devuelve las etapas típicas y las excluidas.
+    """
+    naturaleza = normalizar_naturaleza_proyecto(naturaleza_proyecto)
+    if naturaleza == 'remodelacion':
+        return {
+            'naturaleza': naturaleza,
+            'sugeridas': sorted(ETAPAS_SUGERIDAS_REMODELACION),
+            'excluidas': sorted(ETAPAS_EXCLUIDAS_REMODELACION),
+        }
+    # ampliacion: como obra nueva pero sin filtros específicos por ahora
+    return {
+        'naturaleza': naturaleza,
+        'sugeridas': [],
+        'excluidas': [],
+    }
+
 PRECIO_REFERENCIA = {
     # ====================== MATERIALES ======================
     # Aridos y suelos
@@ -3359,6 +3476,50 @@ def _consolidar_items(items):
     return resultado
 
 
+def _aplicar_factor_remodelacion(resultado_etapa, factor):
+    """Aplica un multiplicador de sobrecosto a los items y subtotales de una etapa.
+
+    Modifica el dict in-place y deja una marca informativa en `notas`.
+    Solo afecta `subtotal` por item (preservando cantidad y precio_unit base);
+    los subtotales agregados se recalculan a partir de los items.
+    """
+    if not factor or factor == 1.0:
+        return resultado_etapa
+
+    for item in resultado_etapa.get('items', []) or []:
+        try:
+            sub = float(item.get('subtotal', 0) or 0)
+        except (TypeError, ValueError):
+            sub = 0.0
+        nuevo = float(_quantize_currency(_to_decimal(sub * factor, '0')))
+        item['subtotal'] = nuevo
+        # Reflejar también en precio unitario para que el desglose siga siendo coherente
+        try:
+            cant = float(item.get('cantidad', 0) or 0)
+        except (TypeError, ValueError):
+            cant = 0.0
+        if cant > 0:
+            item['precio_unit'] = float(_quantize_currency(_to_decimal(nuevo / cant, '0')))
+        item['origen'] = item.get('origen') or 'ia'
+        item['_remodelacion_factor'] = factor
+
+    items = resultado_etapa.get('items', []) or []
+    sub_mat = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items if i.get('tipo') == 'material')
+    sub_mo = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items if i.get('tipo') == 'mano_obra')
+    sub_eq = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items if i.get('tipo') == 'equipo')
+    resultado_etapa['subtotal_materiales'] = float(_quantize_currency(sub_mat))
+    resultado_etapa['subtotal_mano_obra'] = float(_quantize_currency(sub_mo))
+    resultado_etapa['subtotal_equipos'] = float(_quantize_currency(sub_eq))
+    resultado_etapa['subtotal_total'] = float(_quantize_currency(sub_mat + sub_mo + sub_eq))
+
+    notas = resultado_etapa.get('notas') or ''
+    extra = f" Sobrecosto remodelación aplicado: x{factor:.2f}."
+    if extra not in notas:
+        resultado_etapa['notas'] = (notas + extra).strip()
+    resultado_etapa['remodelacion_factor'] = factor
+    return resultado_etapa
+
+
 def calcular_etapas_seleccionadas(
     etapas_payload,
     superficie_m2,
@@ -3369,6 +3530,7 @@ def calcular_etapas_seleccionadas(
     fx_snapshot: Optional[ExchangeRateSnapshot] = None,
     aplicar_desperdicio: bool = True,
     org_id: Optional[int] = None,
+    naturaleza_proyecto: Optional[str] = None,
 ):
     if superficie_m2 is None:
         raise ValueError('superficie_m2 es obligatoria')
@@ -3376,6 +3538,8 @@ def calcular_etapas_seleccionadas(
     superficie_decimal = _quantize_quantity(_to_decimal(superficie_m2, '0'))
     if superficie_decimal <= DECIMAL_ZERO:
         raise ValueError('superficie_m2 debe ser mayor a cero')
+
+    naturaleza = normalizar_naturaleza_proyecto(naturaleza_proyecto)
 
     etapas_payload = etapas_payload or []
     etapa_identificadores = []
@@ -3387,6 +3551,14 @@ def calcular_etapas_seleccionadas(
         else:
             slug = slugify_etapa(etapa)
             etapa_identificadores.append({'slug': slug, 'nombre': etapa, 'id': None})
+
+    # En remodelación, descartar silenciosamente etapas que no aplican aunque
+    # el usuario las haya enviado (excavación, fundaciones, etc.).
+    if naturaleza == 'remodelacion':
+        etapa_identificadores = [
+            e for e in etapa_identificadores
+            if e['slug'] not in ETAPAS_EXCLUIDAS_REMODELACION
+        ]
 
     if not etapa_identificadores:
         raise ValueError('Debes seleccionar al menos una etapa para calcular')
@@ -3402,6 +3574,7 @@ def calcular_etapas_seleccionadas(
         'contexto': contexto or {},
         'currency': currency,
         'fx_rate': str(fx_rate) if fx_rate else None,
+        'naturaleza': naturaleza,
     }, sort_keys=True)
 
     if cache_key in STAGE_CALC_CACHE:
@@ -3424,6 +3597,9 @@ def calcular_etapas_seleccionadas(
             aplicar_desperdicio=aplicar_desperdicio,
             org_id=org_id,
         )
+        if naturaleza == 'remodelacion':
+            factor = factor_sobrecosto_remodelacion(etapa['slug'])
+            resultado = _aplicar_factor_remodelacion(resultado, factor)
         etapas_resultado.append(resultado)
         total_parcial += _to_decimal(resultado.get('subtotal_total'), '0')
 
@@ -3435,6 +3611,7 @@ def calcular_etapas_seleccionadas(
         'metodo': 'reglas',
         'presupuesto_id': presupuesto_id,
         'tipo_cambio': None,
+        'naturaleza_proyecto': naturaleza,
     }
 
     if fx_snapshot:

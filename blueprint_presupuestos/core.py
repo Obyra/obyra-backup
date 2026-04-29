@@ -147,9 +147,13 @@ def crear():
                     cliente_nombre = cliente.nombre_completo
 
             # Preparar datos del proyecto como JSON
+            from calculadora_ia import normalizar_naturaleza_proyecto
             datos_proyecto = {
                 'nombre_obra': request.form.get('nombre_obra', '').strip(),
                 'tipo_obra': request.form.get('tipo_obra', '').strip(),
+                'naturaleza_proyecto': normalizar_naturaleza_proyecto(
+                    request.form.get('naturaleza_proyecto', 'obra_nueva')
+                ),
                 'ubicacion': request.form.get('ubicacion', '').strip(),
                 'tipo_construccion': request.form.get('tipo_construccion', '').strip(),
                 'superficie_m2': request.form.get('superficie_m2', '').strip(),

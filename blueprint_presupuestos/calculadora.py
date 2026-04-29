@@ -13,6 +13,31 @@ from services.memberships import get_current_org_id
 from blueprint_presupuestos import presupuestos_bp
 
 
+@presupuestos_bp.route('/ia/etapas-sugeridas', methods=['GET'])
+@login_required
+def etapas_sugeridas_naturaleza():
+    """
+    Devuelve qué etapas debe preseleccionar/excluir el wizard según
+    la naturaleza del proyecto (obra_nueva | remodelacion | ampliacion).
+
+    Query params:
+        - naturaleza: string (default 'obra_nueva')
+
+    Response:
+        {ok, naturaleza, sugeridas: [slugs], excluidas: [slugs]}
+    """
+    try:
+        from calculadora_ia import obtener_etapas_para_naturaleza
+
+        naturaleza = request.args.get('naturaleza', 'obra_nueva')
+        info = obtener_etapas_para_naturaleza(naturaleza)
+        info['ok'] = True
+        return jsonify(info), 200
+    except Exception as e:
+        current_app.logger.error(f"Error en etapas_sugeridas_naturaleza: {e}")
+        return jsonify({'ok': False, 'error': 'Error al obtener etapas sugeridas'}), 500
+
+
 @presupuestos_bp.route('/ia/calcular/etapas', methods=['POST'])
 @login_required
 def calcular_etapas_ia():
@@ -53,6 +78,7 @@ def calcular_etapas_ia():
         aplicar_desperdicio = data.get('aplicar_desperdicio', True)  # Por defecto True
         aplicar_redondeo = data.get('aplicar_redondeo', True)  # Redondeo de compras
         mostrar_sobrante = data.get('mostrar_sobrante', True)  # Mostrar sobrantes
+        naturaleza_proyecto = data.get('naturaleza_proyecto') or (parametros_contexto or {}).get('naturaleza_proyecto')
 
         # Siempre obtener tipo de cambio para precios duales
         fx_snapshot = None
@@ -104,6 +130,7 @@ def calcular_etapas_ia():
                 fx_snapshot=None,
                 aplicar_desperdicio=aplicar_desperdicio,
                 org_id=org_id,
+                naturaleza_proyecto=naturaleza_proyecto,
             )
 
         if resultado.get('ok') and resultado.get('etapas'):
