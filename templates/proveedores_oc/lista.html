@@ -6,10 +6,60 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="fas fa-truck me-2"></i>Proveedores</h2>
-        <a href="{{ url_for('proveedores_oc.crear') }}" class="btn btn-primary">
-            <i class="fas fa-plus me-1"></i>Nuevo Proveedor
-        </a>
+        <div class="d-flex gap-2">
+            {% if es_super_admin %}
+            <button type="button" class="btn btn-info text-dark" data-bs-toggle="modal" data-bs-target="#modalImportarDirectorio">
+                <i class="fas fa-globe me-1"></i>Importar Directorio OBYRA
+            </button>
+            {% endif %}
+            <a href="{{ url_for('proveedores_oc.crear') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i>Nuevo Proveedor
+            </a>
+        </div>
     </div>
+
+    {% if es_super_admin %}
+    <!-- Modal: importar directorio OBYRA (solo superadmin) -->
+    <div class="modal fade" id="modalImportarDirectorio" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-globe me-2"></i>Importar Directorio OBYRA</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <form id="frmImportarDirectorio" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <p class="text-muted small">
+                            Subí el Excel <code>OBYRA_directorio_proveedores_v2.xlsx</code> con los proveedores curados.
+                            Idempotente: si ya existen, los actualiza; si no, los crea.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
+                            <input type="file" name="archivo" class="form-control" accept=".xlsx,.xls" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Hoja a leer</label>
+                            <input type="text" name="hoja" class="form-control" value="Todos para importar">
+                        </div>
+                        <div class="form-check mb-2">
+                            <input type="checkbox" name="dry_run" value="1" id="dryRunDirectorio" class="form-check-input">
+                            <label for="dryRunDirectorio" class="form-check-label small">
+                                Modo prueba (no commitea, solo cuenta lo que haría)
+                            </label>
+                        </div>
+                        <div id="resumenImportDirectorio"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="submit" class="btn btn-primary" id="btnImportarDirectorio">
+                            <i class="fas fa-upload me-1"></i>Importar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Filtros -->
     <div class="card mb-4">
@@ -262,5 +312,54 @@ function cambiarEstado(id, nombre) {
     })
     .catch(function() { alert('Error al cambiar estado'); });
 }
+
+(function() {
+    var form = document.getElementById('frmImportarDirectorio');
+    if (!form) return;
+    form.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        var btn = document.getElementById('btnImportarDirectorio');
+        var resumen = document.getElementById('resumenImportDirectorio');
+        var csrf = document.querySelector('meta[name="csrf-token"]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importando...';
+        resumen.innerHTML = '<div class="alert alert-info small mb-0">Procesando, esto puede tardar unos segundos…</div>';
+
+        var fd = new FormData(form);
+        fetch('/proveedores-oc/admin/importar-directorio', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf ? csrf.getAttribute('content') : '' },
+            body: fd,
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(resp) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+            if (!resp.ok || !resp.data.ok) {
+                resumen.innerHTML = '<div class="alert alert-danger small mb-0">Error: ' + (resp.data.error || 'desconocido') + '</div>';
+                return;
+            }
+            var r = resp.data.resumen;
+            var dryNote = r.dry_run ? '<div class="small text-warning"><strong>Modo prueba</strong> — no se commitearon cambios.</div>' : '';
+            resumen.innerHTML = '<div class="alert alert-success small mb-0">' +
+                '<strong>Importación OK</strong><br>' +
+                'Creados: <strong>' + r.creados + '</strong> · ' +
+                'Actualizados: <strong>' + r.actualizados + '</strong> · ' +
+                'Omitidos: ' + r.skipped + ' · ' +
+                'Zonas creadas: ' + r.zonas_creadas + ' · ' +
+                'Errores: ' + r.errores +
+                dryNote +
+                '</div>';
+            if (!r.dry_run) {
+                setTimeout(function() { window.location.reload(); }, 2500);
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+            resumen.innerHTML = '<div class="alert alert-danger small mb-0">Error de red: ' + err.message + '</div>';
+        });
+    });
+})();
 </script>
 {% endblock %}

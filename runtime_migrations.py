@@ -1583,3 +1583,22 @@ def run_runtime_migrations(db, app):
             print(f"[WARN] indice proveedores_oc: {e}")
 
     print("[OK] Migracion runtime: directorio global de proveedores (scope/zona/categoria)")
+
+    # =====================================================
+    # 2026-04-29: Seed superadmin OBYRA
+    # Asegura que admin@obyra.com (y brenda@gmail.com como fallback historico)
+    # tengan is_super_admin=True. Idempotente: solo updatea si esta en False.
+    # =====================================================
+    try:
+        result = db.session.execute(db.text("""
+            UPDATE usuarios
+               SET is_super_admin = TRUE
+             WHERE LOWER(email) IN ('admin@obyra.com', 'brenda@gmail.com')
+               AND (is_super_admin IS NULL OR is_super_admin = FALSE);
+        """))
+        db.session.commit()
+        if result.rowcount:
+            print(f"[OK] Marcados como super_admin: {result.rowcount} usuario(s)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Seed super_admin: {e}")

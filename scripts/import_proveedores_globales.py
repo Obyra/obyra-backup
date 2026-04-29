@@ -103,44 +103,40 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def importar_directorio_global(archivo_o_stream, hoja='Todos para importar', dry_run=False, verbose=False, log=print):
+    """Importa el directorio global de proveedores desde un Excel.
 
-    # Imports tardios para que --help no requiera el entorno completo
-    try:
-        import openpyxl
-    except ImportError:
-        print('ERROR: instala openpyxl: pip install openpyxl', file=sys.stderr)
-        sys.exit(2)
+    `archivo_o_stream` puede ser:
+      - Una ruta absoluta a un .xlsx (str/Path).
+      - Un file-like object (BytesIO) — útil para uploads HTTP.
+      - Un FileStorage de Flask (tiene `.stream` o `.read()`).
 
-    # Inicializa la app Flask + DB
-    sys.path.insert(0, os.getcwd())
-    from app import app  # noqa: E402
-    from extensions import db  # noqa: E402
-    from models.proveedores_oc import ProveedorOC, Zona  # noqa: E402
+    Usa la sesion `db` activa (de Flask). REQUIERE estar dentro de un
+    `app.app_context()`. NO crea ni cierra la app.
 
-    archivo = args.archivo
-    if not os.path.isabs(archivo):
-        archivo = os.path.join(os.getcwd(), archivo)
+    Retorna dict: {creados, actualizados, skipped, zonas_creadas, errores}
+    donde `errores` es lista de (fila, mensaje).
+    """
+    import openpyxl
+    from extensions import db
+    from models.proveedores_oc import ProveedorOC, Zona
 
-    if not os.path.exists(archivo):
-        print(f'ERROR: no existe el archivo {archivo}', file=sys.stderr)
-        sys.exit(1)
+    # Aceptar FileStorage (flask) o file-like
+    if hasattr(archivo_o_stream, 'stream'):
+        archivo_in = archivo_o_stream.stream
+    else:
+        archivo_in = archivo_o_stream
 
-    print(f'[IMPORT] Leyendo {archivo} - hoja {args.hoja!r}')
-    wb = openpyxl.load_workbook(archivo, data_only=True, read_only=True)
-    if args.hoja not in wb.sheetnames:
-        print(f'ERROR: la hoja {args.hoja!r} no existe. Hojas: {wb.sheetnames}', file=sys.stderr)
-        sys.exit(1)
-    ws = wb[args.hoja]
+    log(f'[IMPORT] Leyendo Excel - hoja {hoja!r}')
+    wb = openpyxl.load_workbook(archivo_in, data_only=True, read_only=True)
+    if hoja not in wb.sheetnames:
+        raise ValueError(f'La hoja {hoja!r} no existe. Hojas: {wb.sheetnames}')
+    ws = wb[hoja]
 
-    # Mapear columnas por nombre (acepta variantes con/sin acentos)
     rows = ws.iter_rows(values_only=True)
     header = next(rows)
 
     def encontrar_col(nombres):
-        """Devuelve el indice (0-based) de la primera columna cuyo header
-        normalizado coincide con alguno de los `nombres` normalizados."""
         for i, h in enumerate(header):
             if h is None:
                 continue
@@ -166,8 +162,7 @@ def main():
     col_notas        = encontrar_col(['Notas', 'Observaciones'])
 
     if col_empresa is None or col_provincia is None:
-        print('ERROR: faltan columnas obligatorias Empresa / Provincia.', file=sys.stderr)
-        sys.exit(1)
+        raise ValueError('Faltan columnas obligatorias Empresa / Provincia.')
 
     creados = 0
     actualizados = 0
@@ -175,116 +170,145 @@ def main():
     zonas_creadas = 0
     errores = []
 
-    with app.app_context():
-        # Cache de zonas existentes
-        zonas_cache = {z.slug: z for z in Zona.query.all()}
+    zonas_cache = {z.slug: z for z in Zona.query.all()}
 
-        for i, row in enumerate(rows, start=2):  # comienza en fila 2 (header es 1)
-            try:
-                empresa_raw = row[col_empresa] if col_empresa is not None else None
-                empresa = limpiar_consultar(empresa_raw)
-                if not empresa:
-                    skipped += 1
-                    continue
+    for i, row in enumerate(rows, start=2):
+        try:
+            empresa = limpiar_consultar(row[col_empresa] if col_empresa is not None else None)
+            if not empresa:
+                skipped += 1
+                continue
 
-                provincia = limpiar_consultar(row[col_provincia]) if col_provincia is not None else None
-                if not provincia:
-                    # Si no hay provincia el external_key seria ambiguo: lo permitimos
-                    # pero usamos un sufijo "sin-provincia" para diferenciar.
-                    provincia = None
+            provincia = limpiar_consultar(row[col_provincia]) if col_provincia is not None else None
 
-                # external_key determinístico
-                key_base = slugify(empresa)
-                key_prov = slugify(provincia) if provincia else 'sin-provincia'
-                external_key = f'{key_base}-{key_prov}'[:160]
-                if not key_base:
-                    skipped += 1
-                    continue
+            key_base = slugify(empresa)
+            key_prov = slugify(provincia) if provincia else 'sin-provincia'
+            external_key = f'{key_base}-{key_prov}'[:160]
+            if not key_base:
+                skipped += 1
+                continue
 
-                # Resolver zona (catalogo zonas)
-                zona_id = None
-                if col_zona is not None:
-                    zona_nombre = limpiar_consultar(row[col_zona])
-                    if zona_nombre:
-                        zona_slug = slugify(zona_nombre)
-                        zona = zonas_cache.get(zona_slug)
-                        if not zona:
-                            zona = Zona(
-                                nombre=zona_nombre[:120],
-                                slug=zona_slug[:140],
-                                provincia=truncar(provincia, 100),
-                            )
-                            db.session.add(zona)
-                            db.session.flush()
-                            zonas_cache[zona_slug] = zona
-                            zonas_creadas += 1
-                        zona_id = zona.id
+            zona_id = None
+            if col_zona is not None:
+                zona_nombre = limpiar_consultar(row[col_zona])
+                if zona_nombre:
+                    zona_slug = slugify(zona_nombre)
+                    zona = zonas_cache.get(zona_slug)
+                    if not zona:
+                        zona = Zona(
+                            nombre=zona_nombre[:120],
+                            slug=zona_slug[:140],
+                            provincia=truncar(provincia, 100),
+                        )
+                        db.session.add(zona)
+                        db.session.flush()
+                        zonas_cache[zona_slug] = zona
+                        zonas_creadas += 1
+                    zona_id = zona.id
 
-                campos = dict(
-                    razon_social=truncar(empresa, 200),
-                    categoria=truncar(limpiar_consultar(row[col_categoria]) if col_categoria is not None else None, 120),
-                    subcategoria=truncar(limpiar_consultar(row[col_subcategoria]) if col_subcategoria is not None else None, 160),
-                    tier=truncar(limpiar_consultar(row[col_tier]) if col_tier is not None else None, 20),
-                    provincia=truncar(provincia, 100),
-                    zona_id=zona_id,
-                    ubicacion_detalle=truncar(limpiar_consultar(row[col_zona_det]) if col_zona_det is not None else None, 255),
-                    cobertura=truncar(limpiar_consultar(row[col_cobertura]) if col_cobertura is not None else None, 255),
-                    web=truncar(limpiar_consultar(row[col_web]) if col_web is not None else None, 300),
-                    telefono=truncar(limpiar_consultar(row[col_telefono]) if col_telefono is not None else None, 50),
-                    email=normalizar_email(row[col_email]) if col_email is not None else None,
-                    direccion=truncar(limpiar_consultar(row[col_direccion]) if col_direccion is not None else None, 300),
-                    tipo_alianza=truncar(limpiar_consultar(row[col_alianza]) if col_alianza is not None else None, 80),
-                    notas=limpiar_consultar(row[col_notas]) if col_notas is not None else None,
+            campos = dict(
+                razon_social=truncar(empresa, 200),
+                categoria=truncar(limpiar_consultar(row[col_categoria]) if col_categoria is not None else None, 120),
+                subcategoria=truncar(limpiar_consultar(row[col_subcategoria]) if col_subcategoria is not None else None, 160),
+                tier=truncar(limpiar_consultar(row[col_tier]) if col_tier is not None else None, 20),
+                provincia=truncar(provincia, 100),
+                zona_id=zona_id,
+                ubicacion_detalle=truncar(limpiar_consultar(row[col_zona_det]) if col_zona_det is not None else None, 255),
+                cobertura=truncar(limpiar_consultar(row[col_cobertura]) if col_cobertura is not None else None, 255),
+                web=truncar(limpiar_consultar(row[col_web]) if col_web is not None else None, 300),
+                telefono=truncar(limpiar_consultar(row[col_telefono]) if col_telefono is not None else None, 50),
+                email=normalizar_email(row[col_email]) if col_email is not None else None,
+                direccion=truncar(limpiar_consultar(row[col_direccion]) if col_direccion is not None else None, 300),
+                tipo_alianza=truncar(limpiar_consultar(row[col_alianza]) if col_alianza is not None else None, 80),
+                notas=limpiar_consultar(row[col_notas]) if col_notas is not None else None,
+            )
+
+            prov = ProveedorOC.query.filter_by(scope='global', external_key=external_key).first()
+            if prov:
+                for k, v in campos.items():
+                    setattr(prov, k, v)
+                actualizados += 1
+                if verbose:
+                    log(f'  [UPDATE] {external_key}')
+            else:
+                prov = ProveedorOC(
+                    scope='global',
+                    organizacion_id=None,
+                    external_key=external_key,
+                    activo=True,
+                    tipo='materiales',
+                    **campos,
                 )
+                db.session.add(prov)
+                creados += 1
+                if verbose:
+                    log(f'  [CREATE] {external_key}')
 
-                # Upsert por external_key (solo entre globales)
-                prov = ProveedorOC.query.filter_by(scope='global', external_key=external_key).first()
-                if prov:
-                    for k, v in campos.items():
-                        setattr(prov, k, v)
-                    actualizados += 1
-                    if args.verbose:
-                        print(f'  [UPDATE] {external_key}')
-                else:
-                    prov = ProveedorOC(
-                        scope='global',
-                        organizacion_id=None,
-                        external_key=external_key,
-                        activo=True,
-                        tipo='materiales',
-                        **campos,
-                    )
-                    db.session.add(prov)
-                    creados += 1
-                    if args.verbose:
-                        print(f'  [CREATE] {external_key}')
+        except Exception as e:
+            errores.append((i, str(e)))
+            log(f'  [ERROR fila {i}] {e}')
 
-            except Exception as e:
-                errores.append((i, str(e)))
-                print(f'  [ERROR fila {i}] {e}')
+    if dry_run:
+        log('[DRY-RUN] Rollback - no se commitean cambios.')
+        db.session.rollback()
+    else:
+        db.session.commit()
+        log('[OK] Commit realizado.')
 
-        if args.dry_run:
-            print('[DRY-RUN] Rollback - no se commitean cambios.')
-            db.session.rollback()
-        else:
-            db.session.commit()
-            print('[OK] Commit realizado.')
+    return {
+        'creados': creados,
+        'actualizados': actualizados,
+        'skipped': skipped,
+        'zonas_creadas': zonas_creadas,
+        'errores': errores,
+    }
+
+
+def main():
+    args = parse_args()
+
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError:
+        print('ERROR: instala openpyxl: pip install openpyxl', file=sys.stderr)
+        sys.exit(2)
+
+    sys.path.insert(0, os.getcwd())
+    from app import app  # noqa: E402
+
+    archivo = args.archivo
+    if not os.path.isabs(archivo):
+        archivo = os.path.join(os.getcwd(), archivo)
+
+    if not os.path.exists(archivo):
+        print(f'ERROR: no existe el archivo {archivo}', file=sys.stderr)
+        sys.exit(1)
+
+    with app.app_context():
+        try:
+            resumen = importar_directorio_global(
+                archivo, hoja=args.hoja,
+                dry_run=args.dry_run, verbose=args.verbose,
+            )
+        except Exception as e:
+            print(f'ERROR: {e}', file=sys.stderr)
+            sys.exit(1)
 
     print()
     print('=' * 60)
-    print(f' RESUMEN IMPORT DIRECTORIO GLOBAL')
+    print(' RESUMEN IMPORT DIRECTORIO GLOBAL')
     print('=' * 60)
-    print(f'  Proveedores creados      : {creados}')
-    print(f'  Proveedores actualizados : {actualizados}')
-    print(f'  Filas omitidas (vacias)  : {skipped}')
-    print(f'  Zonas nuevas creadas     : {zonas_creadas}')
-    print(f'  Errores                  : {len(errores)}')
-    if errores:
+    print(f"  Proveedores creados      : {resumen['creados']}")
+    print(f"  Proveedores actualizados : {resumen['actualizados']}")
+    print(f"  Filas omitidas (vacias)  : {resumen['skipped']}")
+    print(f"  Zonas nuevas creadas     : {resumen['zonas_creadas']}")
+    print(f"  Errores                  : {len(resumen['errores'])}")
+    if resumen['errores']:
         print('  Detalle de errores:')
-        for fila, msg in errores[:10]:
+        for fila, msg in resumen['errores'][:10]:
             print(f'    fila {fila}: {msg}')
-        if len(errores) > 10:
-            print(f'    ... ({len(errores) - 10} mas)')
+        if len(resumen['errores']) > 10:
+            print(f"    ... ({len(resumen['errores']) - 10} mas)")
 
 
 if __name__ == '__main__':

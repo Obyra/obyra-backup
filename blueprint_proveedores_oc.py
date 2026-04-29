@@ -624,6 +624,58 @@ def api_precios(id):
 
 
 # ============================================================
+# ADMIN: importar directorio global desde Excel (solo superadmin)
+# ============================================================
+
+@proveedores_oc_bp.route('/admin/importar-directorio', methods=['POST'])
+@login_required
+def admin_importar_directorio():
+    """Sube el Excel del directorio OBYRA y crea/actualiza proveedores globales.
+
+    Solo superadmin. Body: multipart/form-data con 'archivo' (.xlsx) y
+    opcionalmente 'hoja' (default 'Todos para importar').
+    """
+    if not _es_super_admin():
+        return jsonify({'ok': False, 'error': 'Solo superadmin puede importar el directorio.'}), 403
+
+    archivo = request.files.get('archivo')
+    if not archivo or not archivo.filename:
+        return jsonify({'ok': False, 'error': 'Adjuntá el archivo Excel del directorio.'}), 400
+    if not archivo.filename.lower().endswith(('.xlsx', '.xls')):
+        return jsonify({'ok': False, 'error': 'El archivo debe ser .xlsx o .xls'}), 400
+
+    hoja = (request.form.get('hoja') or 'Todos para importar').strip()
+    dry_run = request.form.get('dry_run') == '1'
+
+    try:
+        from scripts.import_proveedores_globales import importar_directorio_global
+
+        # Leer el upload a un BytesIO porque openpyxl read_only se molesta con
+        # el FileStorage que no es seekable en algunos casos.
+        import io
+        contenido = archivo.read()
+        stream = io.BytesIO(contenido)
+
+        resumen = importar_directorio_global(
+            stream, hoja=hoja, dry_run=dry_run, verbose=False,
+            log=lambda msg: current_app.logger.info(f'[DIR_IMPORT] {msg}'),
+        )
+        return jsonify({'ok': True, 'resumen': {
+            'creados': resumen['creados'],
+            'actualizados': resumen['actualizados'],
+            'skipped': resumen['skipped'],
+            'zonas_creadas': resumen['zonas_creadas'],
+            'errores': len(resumen['errores']),
+            'dry_run': dry_run,
+        }})
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.exception('Error importando directorio global')
+        return jsonify({'ok': False, 'error': f'Error al importar: {e}'}), 500
+
+
+# ============================================================
 # CONTACTOS DE PROVEEDOR (multi-contacto, scoped por tenant)
 # ============================================================
 
