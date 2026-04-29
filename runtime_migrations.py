@@ -1727,6 +1727,49 @@ def run_runtime_migrations(db, app):
     print("[OK] Migracion runtime: equipos de alquiler (proveedor + fechas)")
 
     # =====================================================
+    # 2026-04-29: Fase 1 maquinaria en obra
+    # Agrega fechas de planificacion + jornada_base + responsable_recepcion
+    # a equipment_assignment para gestion completa del ciclo de uso.
+    # =====================================================
+    columnas_assignment = [
+        ("fecha_recepcion", "DATE"),
+        ("fecha_inicio_uso_estimada", "DATE"),
+        ("fecha_fin_uso_estimada", "DATE"),
+        ("fecha_devolucion_estimada", "DATE"),
+        ("fecha_devolucion_real", "DATE"),
+        ("jornada_base_horas", "INTEGER NOT NULL DEFAULT 8"),
+        ("responsable_recepcion_id", "INTEGER"),
+        ("observaciones", "TEXT"),
+    ]
+    for col, ddl in columnas_assignment:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE equipment_assignment ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] equipment_assignment.{col}: {e}")
+
+    # FK responsable_recepcion_id -> usuarios(id)
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_assignment_responsable_recepcion') THEN
+                ALTER TABLE equipment_assignment
+                    ADD CONSTRAINT fk_assignment_responsable_recepcion
+                    FOREIGN KEY (responsable_recepcion_id) REFERENCES usuarios(id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] FK assignment.responsable_recepcion_id: {e}")
+
+    print("[OK] Migracion runtime: equipment_assignment - fechas Fase 1 maquinaria")
+
+    # =====================================================
     # 2026-04-29: Tabla variaciones_cac_pendientes
     # Cada vez que el scraper detecta un boletin Camarco nuevo, registra aca
     # la variacion mensual. El superadmin la aplica/descarta desde la UI.

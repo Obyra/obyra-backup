@@ -98,12 +98,72 @@ class EquipmentAssignment(db.Model):
     estado = db.Column(db.Enum('asignado', 'liberado', name='assignment_estado'), default='asignado')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Fase 1 — fechas y planificacion del uso del equipo en la obra:
+    #  - fecha_recepcion: cuando llego efectivamente a la obra (default = fecha
+    #    de llegada del EquipmentMovement asociado).
+    #  - fecha_inicio_uso_estimada / fecha_fin_uso_estimada: planificacion.
+    #  - fecha_devolucion_estimada: cuando se planifica devolver/trasladar.
+    #  - fecha_devolucion_real: si ya se devolvio/trasladado.
+    #  - jornada_base_horas: para calculo de horas estimadas (default 8).
+    #  - responsable_recepcion_id / observaciones: trazabilidad.
+    fecha_recepcion = db.Column(db.Date, nullable=True)
+    fecha_inicio_uso_estimada = db.Column(db.Date, nullable=True)
+    fecha_fin_uso_estimada = db.Column(db.Date, nullable=True)
+    fecha_devolucion_estimada = db.Column(db.Date, nullable=True)
+    fecha_devolucion_real = db.Column(db.Date, nullable=True)
+    jornada_base_horas = db.Column(db.Integer, nullable=False, default=8, server_default='8')
+    responsable_recepcion_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    observaciones = db.Column(db.Text)
+
     # Relaciones
     equipment = db.relationship('Equipment', back_populates='assignments')
     project = db.relationship('Obra', backref='equipment_assignments')
+    responsable_recepcion = db.relationship('Usuario', foreign_keys=[responsable_recepcion_id])
 
     def __repr__(self):
         return f'<EquipmentAssignment {self.equipment.nombre} → {self.project.nombre}>'
+
+    @property
+    def dias_en_obra(self):
+        """Dias transcurridos desde la recepcion hasta hoy o devolucion real."""
+        if not self.fecha_recepcion:
+            return None
+        from datetime import date as _date
+        fin = self.fecha_devolucion_real or _date.today()
+        delta = (fin - self.fecha_recepcion).days
+        return max(delta, 0)
+
+    @property
+    def horas_estimadas_jornada(self):
+        """Horas estimadas calculadas como dias_en_obra × jornada_base_horas."""
+        dias = self.dias_en_obra
+        if dias is None:
+            return None
+        return dias * (self.jornada_base_horas or 8)
+
+    @property
+    def dias_hasta_fin_uso(self):
+        """Cuantos dias quedan hasta fecha_fin_uso_estimada (negativo si paso)."""
+        if not self.fecha_fin_uso_estimada:
+            return None
+        from datetime import date as _date
+        return (self.fecha_fin_uso_estimada - _date.today()).days
+
+    @property
+    def estado_uso(self):
+        """Estado derivado para UI: en_uso | por_vencer | vencido | devuelto | sin_recepcion."""
+        if self.estado == 'liberado' or self.fecha_devolucion_real:
+            return 'devuelto'
+        if not self.fecha_recepcion:
+            return 'sin_recepcion'
+        d = self.dias_hasta_fin_uso
+        if d is None:
+            return 'en_uso'
+        if d < 0:
+            return 'vencido'
+        if d <= 3:
+            return 'por_vencer'
+        return 'en_uso'
 
 
 class EquipmentUsage(db.Model):

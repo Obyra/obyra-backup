@@ -415,8 +415,17 @@ def equipos_ubicaciones_json():
 @obras_bp.route('/equipos/movimiento/<int:mov_id>/aceptar', methods=['POST'])
 @login_required
 def aceptar_movimiento(mov_id):
-    """Aceptar recepcion de equipo en la obra"""
-    from models.equipment import Equipment, EquipmentMovement
+    """Aceptar recepcion de equipo en la obra.
+
+    Ademas de marcar el movimiento como recibido y actualizar la ubicacion
+    del equipo, crea/actualiza un EquipmentAssignment con la fecha de
+    recepcion (= fecha_llegada del movimiento). Si ya hay un assignment
+    activo del equipo en esa obra, lo reutiliza completando fecha_recepcion
+    si todavia esta vacia. Si el equipo viene de OTRA obra, libera el
+    assignment anterior.
+    """
+    from models.equipment import Equipment, EquipmentMovement, EquipmentAssignment
+    from datetime import date as _date
     org_id = current_user.organizacion_id
     mov = EquipmentMovement.query.filter_by(id=mov_id, company_id=org_id, estado='en_transito').first_or_404()
 
@@ -426,8 +435,64 @@ def aceptar_movimiento(mov_id):
         mov.fecha_llegada = datetime.utcnow()
 
         equipo = mov.equipment
+        ubicacion_anterior_obra_id = equipo.ubicacion_obra_id
         equipo.ubicacion_tipo = mov.destino_tipo
         equipo.ubicacion_obra_id = mov.destino_obra_id
+
+        # Auto-gestion de EquipmentAssignment cuando el destino es una obra
+        if mov.destino_tipo == 'obra' and mov.destino_obra_id:
+            fecha_llegada_dt = mov.fecha_llegada.date() if mov.fecha_llegada else _date.today()
+
+            # 1. Liberar assignment activo en otra obra (origen) si lo habia
+            if ubicacion_anterior_obra_id and ubicacion_anterior_obra_id != mov.destino_obra_id:
+                anterior = EquipmentAssignment.query.filter_by(
+                    equipment_id=equipo.id,
+                    project_id=ubicacion_anterior_obra_id,
+                    estado='asignado',
+                ).first()
+                if anterior:
+                    anterior.estado = 'liberado'
+                    anterior.fecha_devolucion_real = fecha_llegada_dt
+                    if not anterior.fecha_hasta:
+                        anterior.fecha_hasta = fecha_llegada_dt
+
+            # 2. Buscar/crear assignment activo en la obra destino
+            asg = EquipmentAssignment.query.filter_by(
+                equipment_id=equipo.id,
+                project_id=mov.destino_obra_id,
+                estado='asignado',
+            ).first()
+            if asg:
+                # Si ya existe, completar fecha_recepcion si estaba vacia.
+                if not asg.fecha_recepcion:
+                    asg.fecha_recepcion = fecha_llegada_dt
+                if not asg.responsable_recepcion_id:
+                    asg.responsable_recepcion_id = current_user.id
+            else:
+                asg = EquipmentAssignment(
+                    equipment_id=equipo.id,
+                    project_id=mov.destino_obra_id,
+                    fecha_desde=fecha_llegada_dt,
+                    fecha_recepcion=fecha_llegada_dt,
+                    responsable_recepcion_id=current_user.id,
+                    estado='asignado',
+                    jornada_base_horas=8,
+                )
+                db.session.add(asg)
+
+        # Si el destino es deposito y habia un assignment activo en obra origen, liberarlo
+        elif mov.destino_tipo == 'deposito' and mov.origen_tipo == 'obra' and mov.origen_obra_id:
+            asg = EquipmentAssignment.query.filter_by(
+                equipment_id=equipo.id,
+                project_id=mov.origen_obra_id,
+                estado='asignado',
+            ).first()
+            if asg:
+                asg.estado = 'liberado'
+                fecha_devol = mov.fecha_llegada.date() if mov.fecha_llegada else _date.today()
+                asg.fecha_devolucion_real = fecha_devol
+                if not asg.fecha_hasta:
+                    asg.fecha_hasta = fecha_devol
 
         db.session.commit()
         flash(f'Equipo "{equipo.nombre}" recibido correctamente', 'success')
@@ -632,4 +697,98 @@ def api_registrar_uso_equipo(equipment_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error registrando uso de equipo')
+        return jsonify(ok=False, error=str(e)), 500
+
+
+
+# ============================================================
+# Fase 1 maquinaria: fechas planificadas + recepcion del Assignment
+# ============================================================
+
+@obras_bp.route('/<int:obra_id>/maquinaria/<int:asg_id>/fechas', methods=['POST'])
+@login_required
+def editar_fechas_assignment(obra_id, asg_id):
+    """Editar fechas planificadas y datos de recepcion del EquipmentAssignment.
+
+    Body JSON o form:
+      - fecha_recepcion: YYYY-MM-DD (opcional)
+      - fecha_inicio_uso_estimada: YYYY-MM-DD (opcional)
+      - fecha_fin_uso_estimada: YYYY-MM-DD (opcional)
+      - fecha_devolucion_estimada: YYYY-MM-DD (opcional)
+      - jornada_base_horas: int (default 8)
+      - responsable_recepcion_id: int (opcional)
+      - observaciones: text (opcional)
+    """
+    from models.equipment import EquipmentAssignment
+    from datetime import datetime as _dt
+
+    org_id = current_user.organizacion_id
+
+    asg = EquipmentAssignment.query.filter_by(id=asg_id, project_id=obra_id).first_or_404()
+    # Validar que la obra pertenece a la organizacion
+    if not asg.project or asg.project.organizacion_id != org_id:
+        return jsonify(ok=False, error='No autorizado'), 403
+
+    data = request.get_json(silent=True) or request.form
+
+    def _parse_date(key):
+        s = (data.get(key) or '').strip() if hasattr(data, 'get') else ''
+        if not s:
+            return None
+        try:
+            return _dt.strptime(s, '%Y-%m-%d').date()
+        except ValueError:
+            return False  # marca error
+
+    try:
+        fechas = {}
+        for k in ('fecha_recepcion', 'fecha_inicio_uso_estimada',
+                  'fecha_fin_uso_estimada', 'fecha_devolucion_estimada'):
+            if k in data:
+                v = _parse_date(k)
+                if v is False:
+                    return jsonify(ok=False, error=f'Fecha {k} invalida (use YYYY-MM-DD)'), 400
+                fechas[k] = v
+
+        for k, v in fechas.items():
+            setattr(asg, k, v)
+
+        if 'jornada_base_horas' in data:
+            try:
+                jb = int(data.get('jornada_base_horas') or 8)
+                if jb < 1 or jb > 24:
+                    return jsonify(ok=False, error='jornada_base_horas debe estar entre 1 y 24'), 400
+                asg.jornada_base_horas = jb
+            except (TypeError, ValueError):
+                return jsonify(ok=False, error='jornada_base_horas invalida'), 400
+
+        if 'responsable_recepcion_id' in data:
+            try:
+                rid = data.get('responsable_recepcion_id')
+                asg.responsable_recepcion_id = int(rid) if rid else None
+            except (TypeError, ValueError):
+                pass
+
+        if 'observaciones' in data:
+            obs = (data.get('observaciones') or '').strip()
+            asg.observaciones = obs or None
+
+        db.session.commit()
+        return jsonify(ok=True, assignment={
+            'id': asg.id,
+            'fecha_recepcion': asg.fecha_recepcion.isoformat() if asg.fecha_recepcion else None,
+            'fecha_inicio_uso_estimada': asg.fecha_inicio_uso_estimada.isoformat() if asg.fecha_inicio_uso_estimada else None,
+            'fecha_fin_uso_estimada': asg.fecha_fin_uso_estimada.isoformat() if asg.fecha_fin_uso_estimada else None,
+            'fecha_devolucion_estimada': asg.fecha_devolucion_estimada.isoformat() if asg.fecha_devolucion_estimada else None,
+            'jornada_base_horas': asg.jornada_base_horas,
+            'responsable_recepcion_id': asg.responsable_recepcion_id,
+            'observaciones': asg.observaciones,
+            'estado_uso': asg.estado_uso,
+            'horas_estimadas_jornada': asg.horas_estimadas_jornada,
+            'dias_en_obra': asg.dias_en_obra,
+            'dias_hasta_fin_uso': asg.dias_hasta_fin_uso,
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error editando fechas de assignment')
         return jsonify(ok=False, error=str(e)), 500

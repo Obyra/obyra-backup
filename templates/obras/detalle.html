@@ -925,15 +925,19 @@
 
                     {% if equipos_en_obra|length > 0 %}
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                        <table class="table table-hover mb-0 align-middle" style="font-size: 0.9rem;">
                             <thead class="table-light">
                                 <tr>
                                     <th>Código</th>
                                     <th>Equipo</th>
                                     <th>Modalidad</th>
+                                    <th class="text-center">Recepción</th>
+                                    <th class="text-center">Fin uso est.</th>
                                     <th>Tarifa</th>
-                                    <th class="text-end">Uso acumulado</th>
+                                    <th class="text-end">Uso real</th>
+                                    <th class="text-end">Uso est. (8h)</th>
                                     <th class="text-end">Costo imputado</th>
+                                    <th class="text-center">Estado</th>
                                     <th class="text-center">Acciones</th>
                                 </tr>
                             </thead>
@@ -941,11 +945,16 @@
                                 {% for eq in equipos_en_obra %}
                                 {% set mod = eq.modalidad_costo or 'compra' %}
                                 {% set uso_info = equipos_uso_map.get(eq.id, {'horas': 0, 'costo': 0}) if equipos_uso_map is defined else {'horas': 0, 'costo': 0} %}
+                                {% set asg = uso_info.assignment %}
+                                {% set estado_uso = uso_info.estado_uso or 'sin_recepcion' %}
                                 <tr>
                                     <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
                                     <td>
                                         <strong>{{ eq.nombre }}</strong>
                                         {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }} · {{ eq.tipo }}</small>{% endif %}
+                                        {% if eq.es_alquilado and eq.proveedor_alquiler %}
+                                            <br><small class="text-info"><i class="fas fa-user me-1"></i>{{ eq.proveedor_alquiler.razon_social }}</small>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         {% if mod == 'alquiler_hora' %}
@@ -962,13 +971,39 @@
                                             </span>
                                         {% endif %}
                                     </td>
+                                    <td class="text-center">
+                                        {% if uso_info.fecha_recepcion %}
+                                            <small><strong>{{ uso_info.fecha_recepcion.strftime('%d/%m/%Y') }}</strong></small>
+                                            {% if uso_info.dias_en_obra is not none %}
+                                                <br><small class="text-muted">{{ uso_info.dias_en_obra }}d en obra</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <small class="text-muted">—</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if uso_info.fecha_fin_uso_est %}
+                                            <small>{{ uso_info.fecha_fin_uso_est.strftime('%d/%m/%Y') }}</small>
+                                            {% if uso_info.dias_hasta_fin_uso is not none %}
+                                                {% if uso_info.dias_hasta_fin_uso < 0 %}
+                                                    <br><small class="text-danger fw-bold">{{ -uso_info.dias_hasta_fin_uso }}d vencido</small>
+                                                {% elif uso_info.dias_hasta_fin_uso <= 3 %}
+                                                    <br><small class="text-warning fw-bold">{{ uso_info.dias_hasta_fin_uso }}d restante</small>
+                                                {% else %}
+                                                    <br><small class="text-muted">{{ uso_info.dias_hasta_fin_uso }}d restante</small>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% else %}
+                                            <small class="text-muted">—</small>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         {% set eq_moneda = eq.moneda or 'ARS' %}
                                         {% set simbolo = 'US$' if eq_moneda == 'USD' else '$' %}
                                         {% if mod == 'alquiler_dia' %}
-                                            {{ "{} {:,.2f}/día".format(simbolo, eq.costo_dia|float) if eq.costo_dia else '—' }}
+                                            <small>{{ "{} {:,.2f}/día".format(simbolo, eq.costo_dia|float) if eq.costo_dia else '—' }}</small>
                                         {% else %}
-                                            {{ "{} {:,.2f}/h".format(simbolo, eq.costo_hora|float) if eq.costo_hora else '—' }}
+                                            <small>{{ "{} {:,.2f}/h".format(simbolo, eq.costo_hora|float) if eq.costo_hora else '—' }}</small>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
@@ -977,19 +1012,57 @@
                                             {{ "{:,.2f}".format(uso_info.horas|float) }} {{ unidad_uso }}
                                         </span>
                                     </td>
+                                    <td class="text-end">
+                                        {% if uso_info.horas_estimadas is not none %}
+                                            <small class="text-muted">{{ uso_info.horas_estimadas }} h</small>
+                                            {% if uso_info.costo_estimado %}
+                                                <br><small class="text-muted">≈ $ {{ "{:,.2f}".format(uso_info.costo_estimado|float) }}</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <small class="text-muted">—</small>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end fw-bold {% if uso_info.costo|float > 0 %}text-primary{% else %}text-muted{% endif %}">
-                                        {{ "$ {:,.2f}".format(uso_info.costo|float) }}
+                                        $ {{ "{:,.2f}".format(uso_info.costo|float) }}
                                         {% if eq_moneda == 'USD' and uso_info.costo_nominal is defined %}
                                         <br><small class="text-muted fw-normal">(US$ {{ "{:,.2f}".format(uso_info.costo_nominal|float) }})</small>
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
+                                        {% if estado_uso == 'vencido' %}
+                                            <span class="badge bg-danger" title="Pasó la fecha de fin de uso estimada">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>Vencido
+                                            </span>
+                                        {% elif estado_uso == 'por_vencer' %}
+                                            <span class="badge bg-warning text-dark" title="Vence en pocos días">
+                                                <i class="far fa-clock me-1"></i>Por vencer
+                                            </span>
+                                        {% elif estado_uso == 'devuelto' %}
+                                            <span class="badge bg-secondary"><i class="fas fa-check me-1"></i>Devuelto</span>
+                                        {% elif estado_uso == 'en_uso' %}
+                                            <span class="badge bg-success"><i class="fas fa-cogs me-1"></i>En uso</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark border" title="Falta confirmar recepción">
+                                                <i class="fas fa-question me-1"></i>Sin recepción
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
                                         {% if can_manage %}
-                                        <button class="btn btn-sm btn-outline-success"
-                                                title="Registrar uso (horas o días según modalidad)"
-                                                onclick="abrirRegistrarUsoEquipo({{ eq.id }}, '{{ eq.nombre|replace("'", "\\'") }}', '{{ mod }}')">
-                                            <i class="fas fa-clock"></i>
-                                        </button>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-success"
+                                                    title="Registrar uso (horas o días según modalidad)"
+                                                    onclick="abrirRegistrarUsoEquipo({{ eq.id }}, '{{ eq.nombre|replace("'", "\\'") }}', '{{ mod }}')">
+                                                <i class="fas fa-clock"></i>
+                                            </button>
+                                            {% if asg %}
+                                            <button class="btn btn-outline-info"
+                                                    title="Editar fechas de planificación"
+                                                    onclick='abrirEditarFechasEquipo({{ asg.id }}, {{ obra.id }}, {{ {"fecha_recepcion": (asg.fecha_recepcion.isoformat() if asg.fecha_recepcion else None), "fecha_inicio_uso_estimada": (asg.fecha_inicio_uso_estimada.isoformat() if asg.fecha_inicio_uso_estimada else None), "fecha_fin_uso_estimada": (asg.fecha_fin_uso_estimada.isoformat() if asg.fecha_fin_uso_estimada else None), "fecha_devolucion_estimada": (asg.fecha_devolucion_estimada.isoformat() if asg.fecha_devolucion_estimada else None), "jornada_base_horas": asg.jornada_base_horas, "observaciones": (asg.observaciones or "")}|tojson }}, "{{ eq.nombre|replace("'", "\\'") }}")'>
+                                                <i class="fas fa-calendar-alt"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
                                         {% endif %}
                                     </td>
                                 </tr>
@@ -2546,6 +2619,66 @@
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-success btn-sm" onclick="guardarUsoEquipo()">
                     <i class="fas fa-save me-1"></i>Registrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Editar fechas de planificacion del Assignment de equipo -->
+<div class="modal fade" id="modalEditarFechasEquipo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white py-2">
+                <h6 class="modal-title">
+                    <i class="fas fa-calendar-alt me-2"></i>Fechas de planificación: <span id="efeq-nombre"></span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="efeq-asg-id">
+                <input type="hidden" id="efeq-obra-id">
+                <p class="text-muted small mb-3">
+                    Las fechas estimadas permiten calcular automáticamente las horas de uso por jornada (8 hs por defecto)
+                    y avisar cuándo está por vencer el uso planificado del equipo en esta obra.
+                </p>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Fecha de recepción</label>
+                        <input type="date" class="form-control" id="efeq-fecha-recepcion">
+                        <small class="text-muted">Cuándo llegó el equipo a la obra.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Jornada base (horas/día)</label>
+                        <input type="number" class="form-control" id="efeq-jornada" min="1" max="24" step="1" value="8">
+                        <small class="text-muted">Default 8h. Para cálculo de uso estimado.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Inicio de uso estimado</label>
+                        <input type="date" class="form-control" id="efeq-fecha-inicio">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Fin de uso estimado</label>
+                        <input type="date" class="form-control" id="efeq-fecha-fin">
+                        <small class="text-muted">Genera alertas cuando se acerca.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Devolución estimada</label>
+                        <input type="date" class="form-control" id="efeq-fecha-devol">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="efeq-observaciones" rows="2" maxlength="1000"
+                                  placeholder="Estado al recibir, condiciones, etc."></textarea>
+                    </div>
+                </div>
+                <div id="efeq-feedback" class="mt-3"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info btn-sm text-white" onclick="guardarFechasEquipo()">
+                    <i class="fas fa-save me-1"></i>Guardar fechas
                 </button>
             </div>
         </div>
@@ -4838,6 +4971,59 @@ document.addEventListener('DOMContentLoaded', initGantt);
         if (c) c.style.transform = 'rotate(0deg)';
     });
 });
+
+
+/* ===== Modal Editar Fechas de Equipo en Obra ===== */
+function abrirEditarFechasEquipo(asgId, obraId, asg, nombre) {
+    document.getElementById('efeq-asg-id').value = asgId;
+    document.getElementById('efeq-obra-id').value = obraId;
+    document.getElementById('efeq-nombre').textContent = nombre || '';
+    document.getElementById('efeq-fecha-recepcion').value = asg.fecha_recepcion || '';
+    document.getElementById('efeq-fecha-inicio').value = asg.fecha_inicio_uso_estimada || '';
+    document.getElementById('efeq-fecha-fin').value = asg.fecha_fin_uso_estimada || '';
+    document.getElementById('efeq-fecha-devol').value = asg.fecha_devolucion_estimada || '';
+    document.getElementById('efeq-jornada').value = asg.jornada_base_horas || 8;
+    document.getElementById('efeq-observaciones').value = asg.observaciones || '';
+    document.getElementById('efeq-feedback').innerHTML = '';
+    new bootstrap.Modal(document.getElementById('modalEditarFechasEquipo')).show();
+}
+
+function guardarFechasEquipo() {
+    var asgId = document.getElementById('efeq-asg-id').value;
+    var obraId = document.getElementById('efeq-obra-id').value;
+    var feedback = document.getElementById('efeq-feedback');
+    feedback.innerHTML = '';
+
+    var data = {
+        fecha_recepcion: document.getElementById('efeq-fecha-recepcion').value || null,
+        fecha_inicio_uso_estimada: document.getElementById('efeq-fecha-inicio').value || null,
+        fecha_fin_uso_estimada: document.getElementById('efeq-fecha-fin').value || null,
+        fecha_devolucion_estimada: document.getElementById('efeq-fecha-devol').value || null,
+        jornada_base_horas: parseInt(document.getElementById('efeq-jornada').value || 8, 10),
+        observaciones: document.getElementById('efeq-observaciones').value || ''
+    };
+
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    var csrf = meta ? meta.getAttribute('content') : '';
+
+    fetch('/obras/' + obraId + '/maquinaria/' + asgId + '/fechas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify(data)
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(resp) {
+        if (!resp.ok || !resp.data.ok) {
+            feedback.innerHTML = '<div class="alert alert-danger small mb-0">' + (resp.data.error || 'Error') + '</div>';
+            return;
+        }
+        feedback.innerHTML = '<div class="alert alert-success small mb-0">Fechas guardadas. Recargando...</div>';
+        setTimeout(function() { window.location.reload(); }, 600);
+    })
+    .catch(function(err) {
+        feedback.innerHTML = '<div class="alert alert-danger small mb-0">Error de red: ' + err.message + '</div>';
+    });
+}
 
 
 /* ===== Modal Registrar Uso de Equipo ===== */

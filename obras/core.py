@@ -982,6 +982,16 @@ def detalle(id):
             pass
 
         usos_dict = {eq_id: float(h or 0) for eq_id, h in usos_por_equipo}
+
+        # Cargar EquipmentAssignment activo para cada equipo en esta obra
+        # (Fase 1: agregamos fechas y calculo de horas/costo estimado).
+        from models.equipment import EquipmentAssignment
+        assignments_dict = {}
+        for asg in EquipmentAssignment.query.filter_by(
+            project_id=obra.id, estado='asignado'
+        ).all():
+            assignments_dict[asg.equipment_id] = asg
+
         for eq in equipos_en_obra:
             horas_uso = usos_dict.get(eq.id, 0)
             mod = getattr(eq, 'modalidad_costo', None) or 'compra'
@@ -992,11 +1002,44 @@ def detalle(id):
                 costo_ars = costo_nominal * tc_ars_map
             else:
                 costo_ars = costo_nominal
+
+            # Calculo estimado por jornada (Fase 1)
+            asg = assignments_dict.get(eq.id)
+            horas_estimadas = None
+            costo_estimado_ars = None
+            dias_en_obra = None
+            dias_hasta_fin = None
+            if asg:
+                dias_en_obra = asg.dias_en_obra
+                horas_estimadas = asg.horas_estimadas_jornada
+                dias_hasta_fin = asg.dias_hasta_fin_uso
+                if horas_estimadas is not None and tarifa:
+                    if mod == 'alquiler_dia':
+                        # Para alquiler_dia, el costo se mide por dias en obra (no por horas)
+                        costo_est_nom = (dias_en_obra or 0) * tarifa
+                    else:
+                        costo_est_nom = horas_estimadas * tarifa
+                    if (eq.moneda or 'ARS').upper() == 'USD':
+                        costo_estimado_ars = costo_est_nom * tc_ars_map
+                    else:
+                        costo_estimado_ars = costo_est_nom
+
             equipos_uso_map[eq.id] = {
                 'horas': horas_uso,
                 'costo': costo_ars,
                 'costo_nominal': costo_nominal,
                 'moneda': eq.moneda or 'ARS',
+                'assignment': asg,
+                'fecha_recepcion': asg.fecha_recepcion if asg else None,
+                'fecha_inicio_uso_est': asg.fecha_inicio_uso_estimada if asg else None,
+                'fecha_fin_uso_est': asg.fecha_fin_uso_estimada if asg else None,
+                'fecha_devolucion_est': asg.fecha_devolucion_estimada if asg else None,
+                'jornada_base': asg.jornada_base_horas if asg else 8,
+                'dias_en_obra': dias_en_obra,
+                'dias_hasta_fin_uso': dias_hasta_fin,
+                'horas_estimadas': horas_estimadas,
+                'costo_estimado': costo_estimado_ars,
+                'estado_uso': asg.estado_uso if asg else 'sin_recepcion',
             }
     except Exception as e:
         db.session.rollback()
