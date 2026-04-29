@@ -1482,3 +1482,104 @@ def run_runtime_migrations(db, app):
     # - CASCADE DELETE en tarea_miembros/tarea_responsables: ya aplicado
     # - Limpieza de duplicados inventario: completada manualmente
     # - Reclasificación encofrados: completada
+
+    # =====================================================
+    # 2026-04-29: Directorio global de proveedores
+    # Espejo de migrations/versions/20260429_directorio_proveedores_globales.py
+    # En Railway las migraciones Alembic con schema 'app' no corren bien,
+    # asi que replicamos los ALTER aca (idempotentes con IF NOT EXISTS).
+    # `db.create_all()` ya crea las tablas zonas y contactos_proveedor por modelos.
+    # =====================================================
+    try:
+        # 1) organizacion_id nullable (NULL = proveedor global)
+        db.session.execute(db.text(
+            "ALTER TABLE proveedores_oc ALTER COLUMN organizacion_id DROP NOT NULL;"
+        ))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] proveedores_oc.organizacion_id nullable: {e}")
+
+    # 2) Columnas nuevas del directorio
+    columnas_proveedores = [
+        ("scope", "VARCHAR(20) NOT NULL DEFAULT 'tenant'"),
+        ("external_key", "VARCHAR(160)"),
+        ("categoria", "VARCHAR(120)"),
+        ("subcategoria", "VARCHAR(160)"),
+        ("tier", "VARCHAR(20)"),
+        ("zona_id", "INTEGER"),
+        ("ubicacion_detalle", "VARCHAR(255)"),
+        ("cobertura", "VARCHAR(255)"),
+        ("web", "VARCHAR(300)"),
+        ("tipo_alianza", "VARCHAR(80)"),
+    ]
+    for col, ddl in columnas_proveedores:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE proveedores_oc ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] proveedores_oc.{col}: {e}")
+
+    # 3) FK zona_id -> zonas(id) (solo si la tabla zonas existe)
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='zonas')
+               AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_proveedores_oc_zona') THEN
+                ALTER TABLE proveedores_oc
+                    ADD CONSTRAINT fk_proveedores_oc_zona
+                    FOREIGN KEY (zona_id) REFERENCES zonas(id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] FK proveedores_oc.zona_id: {e}")
+
+    # 4) CHECK constraint scope IN ('tenant','global')
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='ck_proveedores_oc_scope') THEN
+                ALTER TABLE proveedores_oc
+                    ADD CONSTRAINT ck_proveedores_oc_scope
+                    CHECK (scope IN ('tenant', 'global'));
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] check scope: {e}")
+
+    # 5) UNIQUE parcial sobre external_key cuando scope='global'
+    try:
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_proveedores_oc_external_key_global
+                ON proveedores_oc(external_key)
+                WHERE scope = 'global' AND external_key IS NOT NULL;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] unique external_key: {e}")
+
+    # 6) Indices auxiliares para filtros
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS ix_proveedores_oc_scope ON proveedores_oc(scope);",
+        "CREATE INDEX IF NOT EXISTS ix_proveedores_oc_zona_id ON proveedores_oc(zona_id);",
+        "CREATE INDEX IF NOT EXISTS ix_proveedores_oc_categoria ON proveedores_oc(categoria);",
+        "CREATE INDEX IF NOT EXISTS ix_proveedores_oc_tier ON proveedores_oc(tier);",
+    ]:
+        try:
+            db.session.execute(db.text(idx_sql))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] indice proveedores_oc: {e}")
+
+    print("[OK] Migracion runtime: directorio global de proveedores (scope/zona/categoria)")
