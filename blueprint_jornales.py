@@ -171,6 +171,110 @@ def editar(id):
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@jornales_bp.route('/aplicar-variacion', methods=['POST'])
+@login_required
+def aplicar_variacion():
+    """Aplica una variacion porcentual a las categorias visibles.
+
+    Body JSON:
+      - porcentaje: float (ej 3.2 = +3.2%, -1.5 = -1.5%)
+      - alcance: 'globales' | 'mias' | 'todas' (segun permisos)
+      - confirmar: bool (false = preview, true = aplicar)
+      - nota: string opcional (queda en `notas` de cada categoria como traza)
+
+    Retorna:
+      - preview: lista de {id, nombre, precio_actual, precio_nuevo, delta}
+      - aplicados: cuantas filas se modificaron (solo si confirmar=true)
+    """
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    from models.budgets import CategoriaJornal
+    from sqlalchemy import or_
+    from decimal import Decimal, ROUND_HALF_UP
+
+    org_id = get_current_org_id()
+    data = request.get_json(silent=True) or {}
+
+    try:
+        porcentaje = float(data.get('porcentaje'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'Porcentaje invalido'}), 400
+    if porcentaje < -50 or porcentaje > 100:
+        return jsonify({'ok': False, 'error': 'Porcentaje fuera de rango razonable (-50% a +100%)'}), 400
+
+    alcance = (data.get('alcance') or 'mias').strip().lower()
+    confirmar = bool(data.get('confirmar'))
+    nota = (data.get('nota') or '').strip()
+
+    # Construir query segun alcance
+    q = CategoriaJornal.query.filter_by(activo=True)
+    if alcance == 'globales':
+        if not _es_super_admin():
+            return jsonify({'ok': False, 'error': 'Solo superadmin puede actualizar las globales.'}), 403
+        q = q.filter(CategoriaJornal.organizacion_id.is_(None))
+    elif alcance == 'todas':
+        if not _es_super_admin():
+            # tenant no superadmin: 'todas' = visibles para mi (globales + mias)
+            q = q.filter(or_(
+                CategoriaJornal.organizacion_id.is_(None),
+                CategoriaJornal.organizacion_id == org_id,
+            ))
+        # superadmin ve todas, sin filtro
+    else:  # 'mias'
+        q = q.filter(CategoriaJornal.organizacion_id == org_id)
+
+    cats = q.order_by(CategoriaJornal.nombre).all()
+    if not cats:
+        return jsonify({'ok': False, 'error': 'No hay categorias para actualizar con ese alcance.'}), 400
+
+    factor = Decimal(str(1 + (porcentaje / 100)))
+    quant = Decimal('0.01')
+
+    preview = []
+    for c in cats:
+        actual = Decimal(str(c.precio_jornal or 0))
+        nuevo = (actual * factor).quantize(quant, rounding=ROUND_HALF_UP)
+        preview.append({
+            'id': c.id,
+            'nombre': c.nombre,
+            'is_global': c.is_global,
+            'precio_actual': float(actual),
+            'precio_nuevo': float(nuevo),
+            'delta': float(nuevo - actual),
+        })
+
+    if not confirmar:
+        return jsonify({'ok': True, 'preview': preview, 'aplicado': False})
+
+    # Aplicar
+    from datetime import date as _date
+    aplicados = 0
+    for c, item in zip(cats, preview):
+        if alcance == 'globales' and not c.is_global:
+            continue
+        # Defensa: tenant no puede tocar globales
+        if c.is_global and not _es_super_admin():
+            continue
+        if not c.is_global and c.organizacion_id != org_id and not _es_super_admin():
+            continue
+        c.precio_jornal = item['precio_nuevo']
+        c.vigencia_desde = _date.today()
+        if nota:
+            existente = (c.notas or '').strip()
+            traza = f'[{_date.today().isoformat()}] {nota} ({porcentaje:+.2f}%)'
+            c.notas = (existente + '\n' + traza).strip() if existente else traza
+        aplicados += 1
+
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'preview': preview, 'aplicado': True, 'aplicados': aplicados})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error aplicando variacion jornales')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @jornales_bp.route('/<int:id>/eliminar', methods=['POST'])
 @login_required
 def eliminar(id):

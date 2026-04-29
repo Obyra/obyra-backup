@@ -14,10 +14,77 @@
                 Las categorías propias quedan visibles solo para tu organización.
             </p>
         </div>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria"
-                onclick="abrirCrearCategoria()">
-            <i class="fas fa-plus me-1"></i>Nueva categoría
-        </button>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#modalAplicarCac">
+                <i class="fas fa-percent me-1"></i>Aplicar variación CAC
+            </button>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria"
+                    onclick="abrirCrearCategoria()">
+                <i class="fas fa-plus me-1"></i>Nueva categoría
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal aplicar variacion CAC -->
+    <div class="modal fade" id="modalAplicarCac" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-percent me-2"></i>Aplicar variación de CAC a los jornales</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Pegá el porcentaje de variación mensual del componente <strong>Mano de Obra</strong> del
+                        Indicador Camarco. El sistema arma una previsualización con los valores nuevos antes de aplicar.
+                        El indicador mensual lo encontrás en
+                        <a href="https://www.camarco.org.ar/economia-y-estadistica/" target="_blank" rel="noopener">
+                            camarco.org.ar/economia-y-estadistica
+                        </a>.
+                    </p>
+
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Variación %</label>
+                            <div class="input-group">
+                                <input type="number" id="cacPorcentaje" class="form-control" step="0.01" placeholder="3.20">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <small class="text-muted">+ aumenta · − reduce</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Aplicar a</label>
+                            <select id="cacAlcance" class="form-select">
+                                <option value="mias" selected>Mis categorías</option>
+                                {% if es_super_admin %}
+                                <option value="globales">Globales (OBYRA)</option>
+                                <option value="todas">Todas las que veo</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nota (opcional)</label>
+                            <input type="text" id="cacNota" class="form-control" maxlength="100"
+                                   placeholder='ej: "Indicador Camarco abr 2026"'>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 d-flex gap-2">
+                        <button type="button" class="btn btn-outline-info" onclick="cacPreview()">
+                            <i class="fas fa-eye me-1"></i>Calcular preview
+                        </button>
+                    </div>
+
+                    <div id="cacPreviewArea" class="mt-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmarCac" onclick="cacAplicar()" disabled>
+                        <i class="fas fa-check me-1"></i>Aplicar variación
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="card">
@@ -246,6 +313,97 @@ function eliminarCategoria(id, nombre) {
         else alert(d.error || 'No se pudo eliminar');
     })
     .catch(function(err) { alert('Error: ' + err.message); });
+}
+
+// =====================================================
+// Aplicar variación CAC (preview + confirmar)
+// =====================================================
+function _formatARS(n) {
+    return '$' + (Number(n) || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+async function cacPreview() {
+    const pct = parseFloat(document.getElementById('cacPorcentaje').value);
+    const alcance = document.getElementById('cacAlcance').value;
+    const nota = document.getElementById('cacNota').value;
+    const area = document.getElementById('cacPreviewArea');
+    const btnAplicar = document.getElementById('btnConfirmarCac');
+
+    btnAplicar.disabled = true;
+
+    if (!Number.isFinite(pct)) {
+        area.innerHTML = '<div class="alert alert-warning small mb-0">Ingresá un porcentaje válido (ej: 3.2 o -1.5).</div>';
+        return;
+    }
+    area.innerHTML = '<div class="text-center text-muted small py-2"><span class="spinner-border spinner-border-sm me-1"></span>Calculando…</div>';
+
+    try {
+        const r = await fetch('/jornales/aplicar-variacion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+            body: JSON.stringify({ porcentaje: pct, alcance: alcance, nota: nota, confirmar: false }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            area.innerHTML = '<div class="alert alert-danger small mb-0">' + (d.error || 'Error') + '</div>';
+            return;
+        }
+        if (!d.preview || d.preview.length === 0) {
+            area.innerHTML = '<div class="alert alert-warning small mb-0">No hay categorías para aplicar.</div>';
+            return;
+        }
+        let html = '<div class="table-responsive"><table class="table table-sm align-middle">';
+        html += '<thead class="table-light"><tr><th>Categoría</th><th class="text-end">Actual</th><th class="text-end">Nuevo</th><th class="text-end">Δ</th></tr></thead><tbody>';
+        d.preview.forEach(function(p) {
+            const color = p.delta > 0 ? 'text-success' : (p.delta < 0 ? 'text-danger' : 'text-muted');
+            const sign = p.delta >= 0 ? '+' : '';
+            const tag = p.is_global ? ' <span class="badge bg-info text-dark">OBYRA</span>' : '';
+            html += '<tr>';
+            html += '<td>' + p.nombre + tag + '</td>';
+            html += '<td class="text-end">' + _formatARS(p.precio_actual) + '</td>';
+            html += '<td class="text-end fw-bold">' + _formatARS(p.precio_nuevo) + '</td>';
+            html += '<td class="text-end ' + color + '">' + sign + _formatARS(p.delta) + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        html += '<div class="alert alert-info small mb-0"><i class="fas fa-info-circle me-1"></i>Revisá los valores nuevos. Si están bien, hacé click en <strong>Aplicar variación</strong>.</div>';
+        area.innerHTML = html;
+        btnAplicar.disabled = false;
+    } catch (e) {
+        area.innerHTML = '<div class="alert alert-danger small mb-0">Error de red: ' + e.message + '</div>';
+    }
+}
+
+async function cacAplicar() {
+    const pct = parseFloat(document.getElementById('cacPorcentaje').value);
+    const alcance = document.getElementById('cacAlcance').value;
+    const nota = document.getElementById('cacNota').value;
+    if (!Number.isFinite(pct)) return;
+    if (!confirm('Confirmás aplicar ' + pct + '% al alcance "' + alcance + '"? Esta operación no se puede deshacer automáticamente.')) return;
+
+    const btn = document.getElementById('btnConfirmarCac');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aplicando...';
+    try {
+        const r = await fetch('/jornales/aplicar-variacion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+            body: JSON.stringify({ porcentaje: pct, alcance: alcance, nota: nota, confirmar: true }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert(d.error || 'Error al aplicar');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar variación';
+            return;
+        }
+        alert('Aplicado en ' + (d.aplicados || 0) + ' categorías.');
+        window.location.reload();
+    } catch (e) {
+        alert('Error: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar variación';
+    }
 }
 </script>
 {% endblock %}
