@@ -960,13 +960,15 @@
                         </label>
                         <select class="form-select" name="etapa_pliego_vinculada" id="etapaPliegoSelect">
                             <option value="">— No vincular (item independiente) —</option>
+                            {# Recolectamos etapas unicas de las 3 listas (materiales son las del pliego;
+                               MO/Equipos pueden tener etapa_nombre tambien si ya estan vinculadas). #}
                             {% set etapas_unicas = [] %}
-                            {% for it in items %}
+                            {% for it in (materiales or []) + (mano_obra or []) + (equipos or []) %}
                                 {% if it.etapa_nombre and it.etapa_nombre not in etapas_unicas and not it.solo_interno %}
                                     {% set _ = etapas_unicas.append(it.etapa_nombre) %}
                                 {% endif %}
                             {% endfor %}
-                            {% for et in etapas_unicas %}
+                            {% for et in etapas_unicas|sort %}
                             <option value="{{ et }}">{{ et }}</option>
                             {% endfor %}
                         </select>

@@ -1637,24 +1637,52 @@ def run_runtime_migrations(db, app):
             db.session.rollback()
             print(f"[WARN] indice: {e}")
 
-    # Seed: categorias jornal globales sugeridas por OBYRA (si la tabla esta vacia
-    # de globales). Idempotente: solo crea si no existen.
+    # Seed: categorias jornal globales sugeridas por OBYRA con valores UOCRA
+    # Zona A vigentes (paritaria abril 2026, jornal de 8h, basico sin antiguedad).
+    # Idempotente: solo crea si no existen, y solo actualiza precio si esta en 0
+    # (no pisa valores que ya edito el superadmin).
+    JORNAL_SEED_ABRIL_2026 = [
+        ('Oficial Especializado', 'oficial_esp',  48088.00),
+        ('Oficial',                'oficial',      41136.00),
+        ('Medio Oficial',          'medio_oficial', 38016.00),
+        ('Ayudante',               'ayudante',     34992.00),
+        ('Sereno',                 'sereno',           0.00),  # se cobra mensual, no por jornal
+    ]
     try:
         seed_globales = db.session.execute(db.text("""
             SELECT COUNT(*) FROM categorias_jornal WHERE organizacion_id IS NULL;
-        """)).scalar()
-        if seed_globales == 0:
-            db.session.execute(db.text("""
-                INSERT INTO categorias_jornal (organizacion_id, nombre, codigo, precio_jornal, moneda, fuente, activo, created_at, updated_at)
-                VALUES
-                  (NULL, 'Oficial Especializado', 'oficial_esp', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
-                  (NULL, 'Oficial', 'oficial', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
-                  (NULL, 'Medio Oficial', 'medio_oficial', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
-                  (NULL, 'Ayudante', 'ayudante', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
-                  (NULL, 'Sereno', 'sereno', 0, 'ARS', 'manual', TRUE, NOW(), NOW());
-            """))
-            db.session.commit()
-            print("[OK] Seed: 5 categorias jornal globales (precio en 0, editar desde admin)")
+        """)).scalar() or 0
+        for nombre, codigo, precio in JORNAL_SEED_ABRIL_2026:
+            existe = db.session.execute(db.text("""
+                SELECT id, precio_jornal FROM categorias_jornal
+                 WHERE organizacion_id IS NULL AND LOWER(nombre) = LOWER(:nombre)
+                 LIMIT 1;
+            """), {'nombre': nombre}).fetchone()
+            if existe:
+                # Solo actualizar precio si esta en 0 (no pisar lo que el superadmin haya editado)
+                if existe[1] is None or float(existe[1]) == 0.0:
+                    db.session.execute(db.text("""
+                        UPDATE categorias_jornal
+                           SET precio_jornal = :precio,
+                               codigo = COALESCE(NULLIF(codigo, ''), :codigo),
+                               fuente = 'uocra',
+                               vigencia_desde = '2026-04-01',
+                               notas = COALESCE(NULLIF(notas, ''), 'UOCRA Zona A - basico abril 2026 (jornal 8h sin antiguedad ni cargas)')
+                         WHERE id = :id;
+                    """), {'precio': precio, 'codigo': codigo, 'id': existe[0]})
+            else:
+                db.session.execute(db.text("""
+                    INSERT INTO categorias_jornal
+                        (organizacion_id, nombre, codigo, precio_jornal, moneda, fuente,
+                         vigencia_desde, notas, activo, created_at, updated_at)
+                    VALUES
+                        (NULL, :nombre, :codigo, :precio, 'ARS', 'uocra',
+                         '2026-04-01',
+                         'UOCRA Zona A - basico abril 2026 (jornal 8h sin antiguedad ni cargas)',
+                         TRUE, NOW(), NOW());
+                """), {'nombre': nombre, 'codigo': codigo, 'precio': precio})
+        db.session.commit()
+        print(f"[OK] Seed categorias jornal globales (UOCRA Zona A abril 2026)")
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Seed categorias jornal: {e}")
