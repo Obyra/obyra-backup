@@ -9,7 +9,7 @@
             <h2 class="mb-1">
                 <i class="fas fa-truck me-2"></i>{{ proveedor.razon_social }}
                 {% if proveedor.is_global %}
-                <span class="badge bg-info text-dark fs-6 align-middle" title="Catálogo curado por OBYRA">
+                <span class="badge bg-success fs-6 align-middle" title="Catálogo curado por OBYRA">
                     <i class="fas fa-globe me-1"></i>Directorio OBYRA
                 </span>
                 {% else %}
@@ -17,7 +17,18 @@
                     <i class="fas fa-building me-1"></i>Mi proveedor
                 </span>
                 {% endif %}
-                {% if proveedor.tier %}<span class="badge bg-dark fs-6 align-middle ms-1">{{ proveedor.tier }}</span>{% endif %}
+                {% if proveedor.tier %}
+                    {% set t = proveedor.tier|upper %}
+                    {% if 'TIER 1' in t %}
+                        <span class="badge bg-warning text-dark fs-6 align-middle ms-1">{{ proveedor.tier }}</span>
+                    {% elif 'TIER 2' in t %}
+                        <span class="badge bg-primary fs-6 align-middle ms-1">{{ proveedor.tier }}</span>
+                    {% elif 'TIER 3' in t %}
+                        <span class="badge bg-secondary fs-6 align-middle ms-1">{{ proveedor.tier }}</span>
+                    {% else %}
+                        <span class="badge bg-light text-dark border fs-6 align-middle ms-1">{{ proveedor.tier }}</span>
+                    {% endif %}
+                {% endif %}
             </h2>
             {% if proveedor.nombre_fantasia %}
             <p class="text-muted mb-0">{{ proveedor.nombre_fantasia }}</p>

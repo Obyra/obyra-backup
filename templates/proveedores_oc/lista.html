@@ -177,12 +177,21 @@
                             </td>
                             <td>
                                 {% if prov.tier %}
-                                <span class="badge bg-dark">{{ prov.tier }}</span>
+                                    {% set t = prov.tier|upper %}
+                                    {% if 'TIER 1' in t %}
+                                        <span class="badge bg-warning text-dark">{{ prov.tier }}</span>
+                                    {% elif 'TIER 2' in t %}
+                                        <span class="badge bg-primary">{{ prov.tier }}</span>
+                                    {% elif 'TIER 3' in t %}
+                                        <span class="badge bg-secondary">{{ prov.tier }}</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-dark border">{{ prov.tier }}</span>
+                                    {% endif %}
                                 {% else %}-{% endif %}
                             </td>
                             <td>
                                 {% if prov.is_global %}
-                                <span class="badge bg-info text-dark" title="Catálogo curado por OBYRA">
+                                <span class="badge bg-success" title="Catálogo curado por OBYRA">
                                     <i class="fas fa-globe me-1"></i>OBYRA
                                 </span>
                                 {% else %}
