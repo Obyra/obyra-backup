@@ -1,17 +1,53 @@
 """
 Models para gestión de Proveedores de Órdenes de Compra.
 Separado del modelo legacy Proveedor (marketplace) en models/suppliers.py.
+
+Soporta directorio global curado por OBYRA (`scope='global'`,
+`organizacion_id IS NULL`) visible a todos los tenants en modo lectura,
+y proveedores propios de cada tenant (`scope='tenant'`).
 """
 from extensions import db
 from datetime import datetime
 
 
+class Zona(db.Model):
+    """Zona geográfica normalizada para filtrar proveedores."""
+    __tablename__ = 'zonas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(120), nullable=False)
+    slug = db.Column(db.String(140), nullable=False, unique=True)
+    provincia = db.Column(db.String(100))
+    activa = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Zona {self.nombre}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'slug': self.slug,
+            'provincia': self.provincia,
+            'activa': self.activa,
+        }
+
+
 class ProveedorOC(db.Model):
-    """Proveedor vinculado a Órdenes de Compra."""
+    """Proveedor vinculado a Órdenes de Compra (propio del tenant o global)."""
     __tablename__ = 'proveedores_oc'
 
     id = db.Column(db.Integer, primary_key=True)
-    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
+    # NULL => proveedor global (curado por OBYRA, visible a todos los tenants)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True, index=True)
+
+    # Scope de visibilidad: 'tenant' (privado del tenant) | 'global' (catalogo OBYRA)
+    scope = db.Column(db.String(20), nullable=False, default='tenant')
+    # Llave determinística para idempotencia en imports del catalogo global.
+    # UNIQUE solo cuando scope='global' (constraint a nivel BD via partial index).
+    external_key = db.Column(db.String(160))
 
     # Datos principales
     razon_social = db.Column(db.String(200), nullable=False)
@@ -19,14 +55,24 @@ class ProveedorOC(db.Model):
     cuit = db.Column(db.String(20))
     tipo = db.Column(db.String(50), default='materiales')  # materiales, servicios, equipos, otros
 
+    # Categorización del directorio
+    categoria = db.Column(db.String(120))            # Cemento, Hormigón, Pinturas, etc.
+    subcategoria = db.Column(db.String(160))         # detalle de la categoría
+    tier = db.Column(db.String(20))                  # 'TIER 1' | 'TIER 2' | 'TIER 3'
+    tipo_alianza = db.Column(db.String(80))          # Distribuidor, Alianza estratégica, etc.
+
     # Contacto
     email = db.Column(db.String(200))
     telefono = db.Column(db.String(50))
+    web = db.Column(db.String(300))
     direccion = db.Column(db.String(300))
     ciudad = db.Column(db.String(100))
     provincia = db.Column(db.String(100))
+    zona_id = db.Column(db.Integer, db.ForeignKey('zonas.id', ondelete='SET NULL'))
+    ubicacion_detalle = db.Column(db.String(255))    # texto libre (barrio/partido/ciudad)
+    cobertura = db.Column(db.String(255))            # hasta dónde llega comercialmente
 
-    # Persona de contacto
+    # Persona de contacto (legacy: campos sueltos. Para multi-contacto usar ContactoProveedor)
     contacto_nombre = db.Column(db.String(200))
     contacto_telefono = db.Column(db.String(50))
 
@@ -45,8 +91,29 @@ class ProveedorOC(db.Model):
     # Relaciones
     organizacion = db.relationship('Organizacion', backref='proveedores_oc')
     created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+    zona = db.relationship('Zona', foreign_keys=[zona_id])
     historial_precios = db.relationship('HistorialPrecioProveedor', back_populates='proveedor',
                                         lazy='dynamic', order_by='HistorialPrecioProveedor.fecha.desc()')
+    contactos = db.relationship('ContactoProveedor', back_populates='proveedor',
+                                cascade='all, delete-orphan', lazy='dynamic')
+
+    @property
+    def is_global(self):
+        """True si el proveedor pertenece al catalogo global de OBYRA."""
+        return self.scope == 'global'
+
+    def puede_editar(self, current_user, current_org_id=None):
+        """Reglas de edicion:
+        - Globales: solo super_admin.
+        - Tenant: cualquier usuario de la organizacion duenia con permiso.
+        """
+        if not current_user or not getattr(current_user, 'is_authenticated', False):
+            return False
+        if self.is_global:
+            return bool(getattr(current_user, 'is_super_admin', False))
+        # tenant: organizacion del proveedor debe coincidir con la activa
+        org_id = current_org_id if current_org_id is not None else getattr(current_user, 'organizacion_id', None)
+        return self.organizacion_id == org_id
 
     def __repr__(self):
         return f'<ProveedorOC {self.razon_social}>'
@@ -156,16 +223,27 @@ class ProveedorOC(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'scope': self.scope,
+            'is_global': self.is_global,
             'razon_social': self.razon_social,
             'nombre_fantasia': self.nombre_fantasia,
             'nombre_display': self.nombre_display,
             'cuit': self.cuit,
             'tipo': self.tipo,
+            'categoria': self.categoria,
+            'subcategoria': self.subcategoria,
+            'tier': self.tier,
+            'tipo_alianza': self.tipo_alianza,
             'email': self.email,
             'telefono': self.telefono,
+            'web': self.web,
             'direccion': self.direccion,
             'ciudad': self.ciudad,
             'provincia': self.provincia,
+            'zona_id': self.zona_id,
+            'zona_nombre': self.zona.nombre if self.zona else None,
+            'ubicacion_detalle': self.ubicacion_detalle,
+            'cobertura': self.cobertura,
             'contacto_nombre': self.contacto_nombre,
             'contacto_telefono': self.contacto_telefono,
             'condicion_pago': self.condicion_pago,
@@ -378,4 +456,67 @@ class CotizacionProveedorItem(db.Model):
             'precio_unitario': float(self.precio_unitario or 0),
             'subtotal': float(self.subtotal or 0),
             'notas': self.notas,
+        }
+
+
+# ============================================================
+# CONTACTOS DE PROVEEDOR (multi-contacto, scoped por tenant)
+# ============================================================
+
+class ContactoProveedor(db.Model):
+    """Contacto comercial vinculado a un proveedor.
+
+    Cada tenant agrega sus propios contactos sobre proveedores propios o
+    globales. Los contactos creados por un tenant solo son visibles para ese
+    tenant; los creados por el superadmin (sin organizacion_id) son visibles
+    a todos los tenants.
+    """
+    __tablename__ = 'contactos_proveedor'
+
+    id = db.Column(db.Integer, primary_key=True)
+    proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id', ondelete='CASCADE'),
+                             nullable=False, index=True)
+    # NULL => contacto global cargado por el superadmin (visible a todos los tenants)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id', ondelete='CASCADE'),
+                                nullable=True, index=True)
+
+    nombre = db.Column(db.String(200), nullable=False)
+    cargo = db.Column(db.String(120))
+    email = db.Column(db.String(200))
+    telefono = db.Column(db.String(50))
+    whatsapp = db.Column(db.String(50))
+    notas = db.Column(db.Text)
+
+    principal = db.Column(db.Boolean, nullable=False, default=False)
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    proveedor = db.relationship('ProveedorOC', back_populates='contactos')
+    organizacion = db.relationship('Organizacion')
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+
+    def __repr__(self):
+        return f'<ContactoProveedor {self.nombre} (prov {self.proveedor_id})>'
+
+    @property
+    def is_global(self):
+        return self.organizacion_id is None
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'proveedor_id': self.proveedor_id,
+            'organizacion_id': self.organizacion_id,
+            'is_global': self.is_global,
+            'nombre': self.nombre,
+            'cargo': self.cargo,
+            'email': self.email,
+            'telefono': self.telefono,
+            'whatsapp': self.whatsapp,
+            'notas': self.notas,
+            'principal': self.principal,
+            'activo': self.activo,
         }

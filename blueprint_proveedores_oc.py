@@ -24,6 +24,51 @@ def _get_org_id():
     return getattr(current_user, 'organizacion_id', None)
 
 
+def _es_super_admin():
+    """True si el usuario actual es superadmin de OBYRA (cruza tenants)."""
+    return bool(getattr(current_user, 'is_super_admin', False))
+
+
+def _query_visible(org_id):
+    """Query base de ProveedorOC visible para el tenant `org_id`.
+
+    El superadmin ve TODO (globales + todos los tenants).
+    Cada tenant ve los suyos + los globales (scope='global', org_id NULL).
+    """
+    from models.proveedores_oc import ProveedorOC
+    base = ProveedorOC.query
+    if _es_super_admin():
+        return base
+    return base.filter(
+        or_(
+            ProveedorOC.scope == 'global',
+            ProveedorOC.organizacion_id == org_id,
+        )
+    )
+
+
+def _puede_ver(prov, org_id):
+    """True si el proveedor es visible para `org_id` (o superadmin)."""
+    if _es_super_admin():
+        return True
+    if prov.scope == 'global':
+        return True
+    return prov.organizacion_id == org_id
+
+
+def _puede_editar(prov, org_id):
+    """True si el proveedor es editable por el usuario actual.
+
+    - Globales: solo superadmin.
+    - Tenant: usuario con permiso de la organizacion duenia.
+    """
+    if not _tiene_permiso():
+        return False
+    if prov.scope == 'global':
+        return _es_super_admin()
+    return prov.organizacion_id == org_id
+
+
 # ============================================================
 # LISTA DE PROVEEDORES
 # ============================================================
@@ -31,7 +76,7 @@ def _get_org_id():
 @proveedores_oc_bp.route('/')
 @login_required
 def lista():
-    from models.proveedores_oc import ProveedorOC
+    from models.proveedores_oc import ProveedorOC, Zona
 
     if not _tiene_permiso():
         flash('No tiene permisos para acceder a proveedores.', 'danger')
@@ -43,8 +88,12 @@ def lista():
     buscar = request.args.get('buscar', '').strip()
     tipo = request.args.get('tipo', '')
     activo = request.args.get('activo', '')
+    scope = request.args.get('scope', '')           # '', 'global', 'tenant'
+    zona_id = request.args.get('zona_id', type=int)
+    tier = request.args.get('tier', '')
+    categoria = request.args.get('categoria', '')
 
-    query = ProveedorOC.query.filter_by(organizacion_id=org_id)
+    query = _query_visible(org_id)
 
     if buscar:
         query = query.filter(
@@ -53,26 +102,45 @@ def lista():
                 ProveedorOC.nombre_fantasia.ilike(f'%{buscar}%'),
                 ProveedorOC.cuit.ilike(f'%{buscar}%'),
                 ProveedorOC.contacto_nombre.ilike(f'%{buscar}%'),
+                ProveedorOC.categoria.ilike(f'%{buscar}%'),
+                ProveedorOC.subcategoria.ilike(f'%{buscar}%'),
             )
         )
 
     if tipo:
-        query = query.filter_by(tipo=tipo)
+        query = query.filter(ProveedorOC.tipo == tipo)
+    if scope in ('global', 'tenant'):
+        query = query.filter(ProveedorOC.scope == scope)
+    if zona_id:
+        query = query.filter(ProveedorOC.zona_id == zona_id)
+    if tier:
+        query = query.filter(ProveedorOC.tier == tier)
+    if categoria:
+        query = query.filter(ProveedorOC.categoria == categoria)
 
     if activo == 'true':
-        query = query.filter_by(activo=True)
+        query = query.filter(ProveedorOC.activo.is_(True))
     elif activo == 'false':
-        query = query.filter_by(activo=False)
+        query = query.filter(ProveedorOC.activo.is_(False))
 
-    query = query.order_by(ProveedorOC.razon_social)
+    query = query.order_by(ProveedorOC.scope.desc(), ProveedorOC.razon_social)
 
     page = request.args.get('page', 1, type=int)
     proveedores = query.paginate(page=page, per_page=20, error_out=False)
 
+    # Catalogos para los filtros
+    zonas = Zona.query.filter_by(activa=True).order_by(Zona.nombre).all()
+    categorias = [c[0] for c in db.session.query(ProveedorOC.categoria)
+                  .filter(ProveedorOC.categoria.isnot(None))
+                  .distinct().order_by(ProveedorOC.categoria).all()]
+
     return render_template('proveedores_oc/lista.html',
                          proveedores=proveedores.items,
                          pagination=proveedores,
-                         buscar=buscar, tipo=tipo, activo=activo)
+                         buscar=buscar, tipo=tipo, activo=activo,
+                         scope=scope, zona_id=zona_id, tier=tier, categoria=categoria,
+                         zonas=zonas, categorias=categorias,
+                         es_super_admin=_es_super_admin())
 
 
 # ============================================================
@@ -154,16 +222,18 @@ def detalle(id):
         flash('No tiene permisos.', 'danger')
         return redirect(url_for('main.dashboard'))
 
+    org_id = _get_org_id()
     prov = ProveedorOC.query.get_or_404(id)
-    if prov.organizacion_id != _get_org_id():
+    if not _puede_ver(prov, org_id):
         flash('No tiene acceso a este proveedor.', 'danger')
         return redirect(url_for('proveedores_oc.lista'))
 
-    # OC vinculadas
+    # OC vinculadas (solo del propio tenant; si es global no filtramos)
     try:
-        ordenes = OrdenCompra.query.filter_by(
-            proveedor_oc_id=prov.id
-        ).order_by(OrdenCompra.created_at.desc()).all()
+        oc_query = OrdenCompra.query.filter_by(proveedor_oc_id=prov.id)
+        if prov.scope == 'tenant':
+            oc_query = oc_query.filter_by(organizacion_id=org_id)
+        ordenes = oc_query.order_by(OrdenCompra.created_at.desc()).all()
     except Exception:
         ordenes = []
 
@@ -194,10 +264,27 @@ def detalle(id):
     except Exception:
         pass
 
+    # Contactos: del tenant + globales (creados por superadmin) sobre este proveedor.
+    # Si soy superadmin veo todos.
+    from models.proveedores_oc import ContactoProveedor
+    contactos_q = ContactoProveedor.query.filter_by(proveedor_id=prov.id, activo=True)
+    if not _es_super_admin():
+        contactos_q = contactos_q.filter(
+            or_(
+                ContactoProveedor.organizacion_id == org_id,
+                ContactoProveedor.organizacion_id.is_(None),
+            )
+        )
+    contactos = contactos_q.order_by(
+        ContactoProveedor.principal.desc(), ContactoProveedor.nombre
+    ).all()
+
     return render_template('proveedores_oc/detalle.html',
                          proveedor=prov, ordenes=ordenes, precios=precios,
                          cotizaciones=cotizaciones, evaluaciones=evaluaciones,
-                         scorecard=scorecard)
+                         scorecard=scorecard, contactos=contactos,
+                         puede_editar=_puede_editar(prov, org_id),
+                         es_super_admin=_es_super_admin())
 
 
 @proveedores_oc_bp.route('/<int:id>/evaluar', methods=['POST'])
@@ -211,7 +298,7 @@ def evaluar_proveedor(id):
 
     prov = ProveedorOC.query.get_or_404(id)
     org_id = _get_org_id()
-    if prov.organizacion_id != org_id:
+    if not _puede_ver(prov, org_id):
         return jsonify(ok=False, error='Sin acceso'), 403
 
     data = request.get_json(silent=True) or {}
@@ -252,10 +339,14 @@ def editar(id):
         flash('No tiene permisos.', 'danger')
         return redirect(url_for('proveedores_oc.lista'))
 
+    org_id = _get_org_id()
     prov = ProveedorOC.query.get_or_404(id)
-    if prov.organizacion_id != _get_org_id():
-        flash('No tiene acceso.', 'danger')
-        return redirect(url_for('proveedores_oc.lista'))
+    if not _puede_editar(prov, org_id):
+        if prov.scope == 'global':
+            flash('Los proveedores del directorio global solo puede editarlos OBYRA.', 'warning')
+        else:
+            flash('No tiene acceso.', 'danger')
+        return redirect(url_for('proveedores_oc.detalle', id=prov.id))
 
     if request.method == 'POST':
         try:
@@ -266,13 +357,18 @@ def editar(id):
 
             cuit = request.form.get('cuit', '').strip()
 
-            # Verificar CUIT duplicado (excluyendo el actual)
+            # Verificar CUIT duplicado (excluyendo el actual). Solo aplica entre
+            # proveedores del mismo tenant; los globales no compiten.
             if cuit:
-                existente = ProveedorOC.query.filter(
-                    ProveedorOC.organizacion_id == _get_org_id(),
+                dup_q = ProveedorOC.query.filter(
                     ProveedorOC.cuit == cuit,
-                    ProveedorOC.id != prov.id
-                ).first()
+                    ProveedorOC.id != prov.id,
+                )
+                if prov.scope == 'global':
+                    dup_q = dup_q.filter(ProveedorOC.scope == 'global')
+                else:
+                    dup_q = dup_q.filter(ProveedorOC.organizacion_id == org_id)
+                existente = dup_q.first()
                 if existente:
                     flash(f'Ya existe otro proveedor con CUIT {cuit}.', 'warning')
                     return render_template('proveedores_oc/crear.html', proveedor=prov)
@@ -316,8 +412,9 @@ def cambiar_estado(id):
     if not _tiene_permiso():
         return jsonify({'error': 'Sin permisos'}), 403
 
+    org_id = _get_org_id()
     prov = ProveedorOC.query.get_or_404(id)
-    if prov.organizacion_id != _get_org_id():
+    if not _puede_editar(prov, org_id):
         return jsonify({'error': 'No autorizado'}), 403
 
     prov.activo = not prov.activo
@@ -348,8 +445,8 @@ def api_buscar():
     if len(termino) < 2:
         return jsonify([])
 
-    proveedores = ProveedorOC.query.filter_by(
-        organizacion_id=org_id, activo=True
+    proveedores = _query_visible(org_id).filter(
+        ProveedorOC.activo.is_(True)
     ).filter(
         or_(
             ProveedorOC.razon_social.ilike(f'%{termino}%'),
@@ -406,7 +503,7 @@ def api_detalle(id):
     from models.proveedores_oc import ProveedorOC
 
     prov = ProveedorOC.query.get_or_404(id)
-    if prov.organizacion_id != _get_org_id():
+    if not _puede_ver(prov, _get_org_id()):
         return jsonify({'error': 'No autorizado'}), 403
 
     return jsonify(prov.to_dict())
@@ -426,9 +523,10 @@ def api_editar_contacto(id):
     if not _tiene_permiso():
         return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
 
+    org_id = _get_org_id()
     prov = ProveedorOC.query.get_or_404(id)
-    if prov.organizacion_id != _get_org_id():
-        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+    if not _puede_editar(prov, org_id):
+        return jsonify({'ok': False, 'error': 'Los proveedores globales solo los edita OBYRA'}), 403
 
     data = request.get_json(silent=True) or {}
     telefono = data.get('telefono')
@@ -518,8 +616,155 @@ def api_precios(id):
     from models.proveedores_oc import ProveedorOC
 
     prov = ProveedorOC.query.get_or_404(id)
-    if prov.organizacion_id != _get_org_id():
+    if not _puede_ver(prov, _get_org_id()):
         return jsonify({'error': 'No autorizado'}), 403
 
     precios = prov.historial_precios.limit(50).all()
     return jsonify([p.to_dict() for p in precios])
+
+
+# ============================================================
+# CONTACTOS DE PROVEEDOR (multi-contacto, scoped por tenant)
+# ============================================================
+
+@proveedores_oc_bp.route('/<int:id>/contactos', methods=['POST'])
+@login_required
+def crear_contacto(id):
+    """Agrega un contacto a un proveedor.
+
+    Reglas:
+      - Cualquier usuario con permiso puede agregar contactos sobre proveedores
+        que ve (propios o globales). El contacto queda scopeado a su tenant.
+      - Si el usuario es superadmin, puede crear el contacto como global
+        (sin organizacion_id, visible a todos los tenants).
+    """
+    from models.proveedores_oc import ProveedorOC, ContactoProveedor
+
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    org_id = _get_org_id()
+    prov = ProveedorOC.query.get_or_404(id)
+    if not _puede_ver(prov, org_id):
+        return jsonify({'ok': False, 'error': 'Sin acceso'}), 403
+
+    data = request.get_json(silent=True) or request.form
+    nombre = (data.get('nombre') or '').strip()
+    if not nombre:
+        return jsonify({'ok': False, 'error': 'Nombre obligatorio'}), 400
+
+    es_global = bool(data.get('global')) and _es_super_admin()
+    contacto = ContactoProveedor(
+        proveedor_id=prov.id,
+        organizacion_id=None if es_global else org_id,
+        nombre=nombre[:200],
+        cargo=(data.get('cargo') or '').strip()[:120] or None,
+        email=(data.get('email') or '').strip()[:200] or None,
+        telefono=(data.get('telefono') or '').strip()[:50] or None,
+        whatsapp=(data.get('whatsapp') or '').strip()[:50] or None,
+        notas=(data.get('notas') or '').strip() or None,
+        principal=bool(data.get('principal')),
+        activo=True,
+        created_by_id=current_user.id,
+    )
+
+    # Si se marca como principal, desmarcar el resto del mismo scope
+    if contacto.principal:
+        siblings = ContactoProveedor.query.filter_by(
+            proveedor_id=prov.id, organizacion_id=contacto.organizacion_id
+        ).all()
+        for s in siblings:
+            s.principal = False
+
+    try:
+        db.session.add(contacto)
+        db.session.commit()
+        return jsonify({'ok': True, 'contacto': contacto.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error creando contacto: {e}')
+        return jsonify({'ok': False, 'error': 'Error al crear el contacto'}), 500
+
+
+def _puede_modificar_contacto(contacto, org_id):
+    """True si el usuario actual puede editar/borrar este contacto."""
+    if _es_super_admin():
+        return True
+    # Tenant solo puede tocar sus propios contactos (no los globales del catalogo)
+    return contacto.organizacion_id == org_id
+
+
+@proveedores_oc_bp.route('/<int:proveedor_id>/contactos/<int:contacto_id>', methods=['POST'])
+@login_required
+def editar_contacto(proveedor_id, contacto_id):
+    """Editar un contacto. Devuelve JSON."""
+    from models.proveedores_oc import ContactoProveedor
+
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    org_id = _get_org_id()
+    contacto = ContactoProveedor.query.get_or_404(contacto_id)
+    if contacto.proveedor_id != proveedor_id:
+        return jsonify({'ok': False, 'error': 'Contacto no pertenece a ese proveedor'}), 400
+    if not _puede_modificar_contacto(contacto, org_id):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+
+    data = request.get_json(silent=True) or request.form
+    if 'nombre' in data:
+        contacto.nombre = (data.get('nombre') or '').strip()[:200] or contacto.nombre
+    if 'cargo' in data:
+        contacto.cargo = (data.get('cargo') or '').strip()[:120] or None
+    if 'email' in data:
+        contacto.email = (data.get('email') or '').strip()[:200] or None
+    if 'telefono' in data:
+        contacto.telefono = (data.get('telefono') or '').strip()[:50] or None
+    if 'whatsapp' in data:
+        contacto.whatsapp = (data.get('whatsapp') or '').strip()[:50] or None
+    if 'notas' in data:
+        contacto.notas = (data.get('notas') or '').strip() or None
+    if 'principal' in data:
+        nuevo_principal = bool(data.get('principal'))
+        if nuevo_principal and not contacto.principal:
+            siblings = ContactoProveedor.query.filter(
+                ContactoProveedor.proveedor_id == contacto.proveedor_id,
+                ContactoProveedor.organizacion_id == contacto.organizacion_id,
+                ContactoProveedor.id != contacto.id,
+            ).all()
+            for s in siblings:
+                s.principal = False
+        contacto.principal = nuevo_principal
+
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'contacto': contacto.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error editando contacto: {e}')
+        return jsonify({'ok': False, 'error': 'Error al editar el contacto'}), 500
+
+
+@proveedores_oc_bp.route('/<int:proveedor_id>/contactos/<int:contacto_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_contacto(proveedor_id, contacto_id):
+    """Soft delete (activo=False) del contacto."""
+    from models.proveedores_oc import ContactoProveedor
+
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    org_id = _get_org_id()
+    contacto = ContactoProveedor.query.get_or_404(contacto_id)
+    if contacto.proveedor_id != proveedor_id:
+        return jsonify({'ok': False, 'error': 'Contacto no pertenece a ese proveedor'}), 400
+    if not _puede_modificar_contacto(contacto, org_id):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+
+    contacto.activo = False
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error eliminando contacto: {e}')
+        return jsonify({'ok': False, 'error': 'Error al eliminar'}), 500

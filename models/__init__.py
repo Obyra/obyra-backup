@@ -88,6 +88,7 @@ from models.subscription import Subscription
 from models.proveedores_oc import (
     ProveedorOC, HistorialPrecioProveedor, ProveedorEvaluacion,
     CotizacionProveedor, CotizacionProveedorItem,
+    Zona, ContactoProveedor,
 )
 
 # Solicitud de cotizacion via WhatsApp (desde Presupuesto)
@@ -301,6 +302,8 @@ __all__ = [
     'ProveedorEvaluacion',
     'CotizacionProveedor',
     'CotizacionProveedorItem',
+    'Zona',
+    'ContactoProveedor',
     # Solicitud cotizacion WhatsApp
     'ItemPresupuestoProveedor',
     'SolicitudCotizacionWA',

@@ -159,6 +159,8 @@ excel_calculadora/
 data/
 scripts/import_*.py
 scripts/generate_*.py
+# Excepciones: scripts oficiales de import que SI se versionan
+!scripts/import_proveedores_globales.py
 
 # =========================
 # Archivos generados
