@@ -1663,14 +1663,18 @@ def run_runtime_migrations(db, app):
 
     # =====================================================
     # 2026-04-29: Seed superadmin OBYRA
-    # Asegura que admin@obyra.com (y brenda@gmail.com como fallback historico)
-    # tengan is_super_admin=True. Idempotente: solo updatea si esta en False.
+    # Asegura que los duenios del sistema tengan is_super_admin=True.
+    # Idempotente: solo updatea si esta en False.
     # =====================================================
     try:
         result = db.session.execute(db.text("""
             UPDATE usuarios
                SET is_super_admin = TRUE
-             WHERE LOWER(email) IN ('admin@obyra.com', 'brenda@gmail.com')
+             WHERE LOWER(email) IN (
+                'admin@obyra.com',
+                'brenda@gmail.com',
+                'obyra.servicios@gmail.com'
+             )
                AND (is_super_admin IS NULL OR is_super_admin = FALSE);
         """))
         db.session.commit()
