@@ -150,7 +150,24 @@
                                     </td>
                                     <td class="text-center">
                                         <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-info" onclick="abrirModalEditar({{ eq.id }}, '{{ eq.nombre }}', '{{ eq.codigo or '' }}', '{{ eq.tipo }}', '{{ eq.marca or '' }}', '{{ eq.modelo or '' }}', '{{ eq.nro_serie or '' }}', {{ eq.costo_hora|float if eq.costo_hora else 0 }}, {{ eq.costo_adquisicion|float if eq.costo_adquisicion else 0 }}, '{{ eq.estado }}', '{{ eq.moneda or "ARS" }}')" title="Editar">
+                                            <button class="btn btn-outline-info" onclick='abrirModalEditar({{ {
+                                                "id": eq.id,
+                                                "nombre": eq.nombre,
+                                                "codigo": eq.codigo or "",
+                                                "tipo": eq.tipo,
+                                                "marca": eq.marca or "",
+                                                "modelo": eq.modelo or "",
+                                                "nro_serie": eq.nro_serie or "",
+                                                "costo_hora": eq.costo_hora|float if eq.costo_hora else 0,
+                                                "costo_dia": eq.costo_dia|float if eq.costo_dia else 0,
+                                                "costo_adquisicion": eq.costo_adquisicion|float if eq.costo_adquisicion else 0,
+                                                "estado": eq.estado,
+                                                "moneda": eq.moneda or "ARS",
+                                                "modalidad_costo": eq.modalidad_costo or "compra",
+                                                "proveedor_alquiler_id": eq.proveedor_alquiler_id or "",
+                                                "fecha_inicio_alquiler": eq.fecha_inicio_alquiler.isoformat() if eq.fecha_inicio_alquiler else "",
+                                                "fecha_fin_alquiler": eq.fecha_fin_alquiler.isoformat() if eq.fecha_fin_alquiler else ""
+                                            }|tojson }})' title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             <button class="btn btn-outline-danger" onclick="eliminarEquipo({{ eq.id }}, '{{ eq.nombre }}')" title="Dar de baja">
@@ -528,9 +545,19 @@
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-3 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Nro. Serie</label>
                             <input type="text" class="form-control" id="editar_nro_serie">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-tags me-1 text-info"></i>Modalidad
+                            </label>
+                            <select class="form-select" id="editar_modalidad_costo" onchange="actualizarModalidadEditar()">
+                                <option value="compra">Compra (equipo propio)</option>
+                                <option value="alquiler_hora">Alquiler por hora</option>
+                                <option value="alquiler_dia">Alquiler por día</option>
+                            </select>
                         </div>
                         <div class="col-md-2 mb-3">
                             <label class="form-label">Moneda</label>
@@ -540,20 +567,71 @@
                             </select>
                         </div>
                         <div class="col-md-2 mb-3">
-                            <label class="form-label">Costo/hora</label>
-                            <input type="number" class="form-control" id="editar_costo_hora" step="0.01" min="0">
-                        </div>
-                        <div class="col-md-2 mb-3">
-                            <label class="form-label">Adquisicion</label>
-                            <input type="number" class="form-control" id="editar_costo_adquisicion" step="0.01" min="0">
-                        </div>
-                        <div class="col-md-3 mb-3">
                             <label class="form-label">Estado</label>
                             <select class="form-select" id="editar_estado">
                                 <option value="activo">Activo</option>
                                 <option value="mantenimiento">Mantenimiento</option>
                                 <option value="baja">Baja</option>
                             </select>
+                        </div>
+                    </div>
+
+                    <div class="row" id="editar_costos_compra">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Costo por hora</label>
+                            <input type="number" class="form-control" id="editar_costo_hora" step="0.01" min="0" value="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Costo adquisición</label>
+                            <input type="number" class="form-control" id="editar_costo_adquisicion" step="0.01" min="0" value="0">
+                        </div>
+                    </div>
+
+                    <div class="row d-none" id="editar_costos_alquiler">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                Costo por hora <small class="text-muted" id="editar_label_alq_hora">(opcional)</small>
+                            </label>
+                            <input type="number" class="form-control" id="editar_costo_hora_alq" step="0.01" min="0" value="0">
+                            <small class="text-muted">Dejá en 0 si todavía no sabés el precio del proveedor.</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                Costo por día <small class="text-muted" id="editar_label_alq_dia">(opcional)</small>
+                            </label>
+                            <input type="number" class="form-control" id="editar_costo_dia" step="0.01" min="0" value="0">
+                        </div>
+                    </div>
+
+                    <div class="row d-none" id="editar_alquiler_panel">
+                        <div class="col-12">
+                            <div class="card border-info mb-3">
+                                <div class="card-body bg-info bg-opacity-10">
+                                    <h6 class="text-info mb-2"><i class="fas fa-handshake me-1"></i>Datos del alquiler</h6>
+                                    <div class="row">
+                                        <div class="col-md-12 mb-2">
+                                            <label class="form-label small fw-bold">Proveedor</label>
+                                            <select class="form-select form-select-sm" id="editar_proveedor_alquiler">
+                                                <option value="">— Sin asignar (cargar luego) —</option>
+                                                {% for p in proveedores_alquiler %}
+                                                <option value="{{ p.id }}">
+                                                    {{ p.razon_social }}{% if p.is_global %} [OBYRA]{% endif %}{% if p.categoria %} — {{ p.categoria }}{% endif %}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                            <small class="text-muted">Vinculá con un proveedor del directorio aunque todavía no sepas el precio.</small>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Fecha inicio</label>
+                                            <input type="date" class="form-control form-control-sm" id="editar_fecha_inicio_alq">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Fecha fin</label>
+                                            <input type="date" class="form-control form-control-sm" id="editar_fecha_fin_alq">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -711,33 +789,67 @@ function cargarProximoCodigoEquipo() {
         });
 }
 
-function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, costoHora, costoAdq, estado, moneda) {
-    document.getElementById('editar_id').value = id;
-    document.getElementById('editar_nombre').value = nombre;
-    document.getElementById('editar_codigo').value = codigo;
-    // Si el tipo no esta en el select, mostrar campo custom
+function abrirModalEditar(eq) {
+    document.getElementById('editar_id').value = eq.id;
+    document.getElementById('editar_nombre').value = eq.nombre || '';
+    document.getElementById('editar_codigo').value = eq.codigo || '';
     var sel = document.getElementById('editar_tipo');
     var custom = document.getElementById('editar_tipo_custom');
-    sel.value = tipo;
+    sel.value = eq.tipo || '';
     if (!sel.value || sel.value === '') {
-        // Tipo personalizado que no esta en la lista
         sel.value = '__otro__';
         custom.classList.remove('d-none');
-        custom.value = tipo;
+        custom.value = eq.tipo || '';
         custom.required = true;
     } else {
         custom.classList.add('d-none');
         custom.value = '';
         custom.required = false;
     }
-    document.getElementById('editar_marca').value = marca;
-    document.getElementById('editar_modelo').value = modelo;
-    document.getElementById('editar_nro_serie').value = nroSerie;
-    document.getElementById('editar_costo_hora').value = costoHora;
-    document.getElementById('editar_costo_adquisicion').value = costoAdq;
-    document.getElementById('editar_estado').value = estado;
-    document.getElementById('editar_moneda').value = moneda || 'ARS';
+    document.getElementById('editar_marca').value = eq.marca || '';
+    document.getElementById('editar_modelo').value = eq.modelo || '';
+    document.getElementById('editar_nro_serie').value = eq.nro_serie || '';
+    document.getElementById('editar_costo_hora').value = eq.costo_hora || 0;
+    document.getElementById('editar_costo_adquisicion').value = eq.costo_adquisicion || 0;
+    document.getElementById('editar_estado').value = eq.estado || 'activo';
+    document.getElementById('editar_moneda').value = eq.moneda || 'ARS';
+
+    // Modalidad y campos de alquiler
+    var modalidad = eq.modalidad_costo || 'compra';
+    document.getElementById('editar_modalidad_costo').value = modalidad;
+    document.getElementById('editar_costo_hora_alq').value = (modalidad !== 'compra' ? (eq.costo_hora || 0) : 0);
+    document.getElementById('editar_costo_dia').value = eq.costo_dia || 0;
+    document.getElementById('editar_proveedor_alquiler').value = eq.proveedor_alquiler_id || '';
+    document.getElementById('editar_fecha_inicio_alq').value = eq.fecha_inicio_alquiler || '';
+    document.getElementById('editar_fecha_fin_alq').value = eq.fecha_fin_alquiler || '';
+    actualizarModalidadEditar();
+
     new bootstrap.Modal(document.getElementById('modalEditar')).show();
+}
+
+function actualizarModalidadEditar() {
+    var modalidad = document.getElementById('editar_modalidad_costo').value;
+    var compra = document.getElementById('editar_costos_compra');
+    var alquiler = document.getElementById('editar_costos_alquiler');
+    var panel = document.getElementById('editar_alquiler_panel');
+    if (modalidad === 'compra') {
+        compra.classList.remove('d-none');
+        alquiler.classList.add('d-none');
+        panel.classList.add('d-none');
+    } else {
+        compra.classList.add('d-none');
+        alquiler.classList.remove('d-none');
+        panel.classList.remove('d-none');
+        var labelHora = document.getElementById('editar_label_alq_hora');
+        var labelDia = document.getElementById('editar_label_alq_dia');
+        if (modalidad === 'alquiler_hora') {
+            labelHora.innerHTML = '<strong class="text-info">(usar este)</strong>';
+            labelDia.textContent = '(opcional)';
+        } else {
+            labelHora.textContent = '(opcional)';
+            labelDia.innerHTML = '<strong class="text-info">(usar este)</strong>';
+        }
+    }
 }
 
 function actualizarModalidadCrear() {
@@ -808,6 +920,8 @@ document.getElementById('formEditar').addEventListener('submit', function(e) {
     var id = document.getElementById('editar_id').value;
     var tipoVal = getTipoValue('editar_tipo', 'editar_tipo_custom');
     if (!tipoVal) { alert('Debe seleccionar o escribir un tipo'); return; }
+    var modalidad = document.getElementById('editar_modalidad_costo').value;
+
     var form = new FormData();
     form.append('csrf_token', csrfToken);
     form.append('nombre', document.getElementById('editar_nombre').value);
@@ -817,9 +931,22 @@ document.getElementById('formEditar').addEventListener('submit', function(e) {
     form.append('modelo', document.getElementById('editar_modelo').value);
     form.append('nro_serie', document.getElementById('editar_nro_serie').value);
     form.append('moneda', document.getElementById('editar_moneda').value);
-    form.append('costo_hora', document.getElementById('editar_costo_hora').value);
-    form.append('costo_adquisicion', document.getElementById('editar_costo_adquisicion').value);
     form.append('estado', document.getElementById('editar_estado').value);
+    form.append('modalidad_costo', modalidad);
+
+    if (modalidad === 'compra') {
+        form.append('costo_hora', document.getElementById('editar_costo_hora').value || 0);
+        form.append('costo_adquisicion', document.getElementById('editar_costo_adquisicion').value || 0);
+        form.append('costo_dia', 0);
+    } else {
+        form.append('costo_hora', document.getElementById('editar_costo_hora_alq').value || 0);
+        form.append('costo_dia', document.getElementById('editar_costo_dia').value || 0);
+        form.append('costo_adquisicion', 0);
+        form.append('proveedor_alquiler_id', document.getElementById('editar_proveedor_alquiler').value);
+        form.append('fecha_inicio_alquiler', document.getElementById('editar_fecha_inicio_alq').value);
+        form.append('fecha_fin_alquiler', document.getElementById('editar_fecha_fin_alq').value);
+    }
+
     fetch('/obras/equipos/' + id + '/editar', { method: 'POST', body: form })
         .then(r => r.json()).then(data => {
             if (data.ok) location.reload();

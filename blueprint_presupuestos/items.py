@@ -349,8 +349,19 @@ def agregar_item(id):
         if tipo in ('mano_obra', 'equipo'):
             etapa_pliego_vinculada = (request.form.get('etapa_pliego_vinculada') or '').strip() or None
 
-        if not descripcion or cantidad <= 0 or precio_unitario <= 0:
-            flash('Datos inválidos para el item', 'danger')
+        # Validacion campo a campo con mensaje claro. Permitimos precio_unitario=0
+        # porque es valido cuando se carga un alquiler/MO con categoria que aun
+        # no tiene precio definitivo (lo termina de definir el proveedor o el
+        # superadmin actualiza el jornal mas tarde).
+        errores = []
+        if not descripcion:
+            errores.append('Falta la descripción')
+        if cantidad is None or cantidad <= 0:
+            errores.append('La cantidad debe ser mayor a 0')
+        if precio_unitario is None or precio_unitario < 0:
+            errores.append('El precio unitario no puede ser negativo')
+        if errores:
+            flash('No se pudo cargar el item: ' + ' · '.join(errores), 'danger')
             return redirect(url_for('presupuestos.detalle', id=id))
 
         # Calcular total (cantidad = jornales totales para MO)
