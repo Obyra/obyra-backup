@@ -61,16 +61,25 @@ def lista():
         flash('No tiene permisos para ver categorias de jornal.', 'danger')
         return redirect(url_for('main.dashboard'))
 
-    from models.budgets import CategoriaJornal
+    from models.budgets import CategoriaJornal, VariacionCacPendiente
     org_id = get_current_org_id()
     cats = _query_visible(org_id).order_by(
         CategoriaJornal.organizacion_id.asc().nullsfirst(),  # globales primero
         CategoriaJornal.nombre,
     ).all()
+
+    # Variaciones CAC pendientes (solo para superadmin)
+    pendientes = []
+    if _es_super_admin():
+        pendientes = VariacionCacPendiente.query.filter_by(estado='pendiente').order_by(
+            VariacionCacPendiente.periodo.desc()
+        ).limit(5).all()
+
     return render_template('jornales/lista.html',
                            jornales=cats,
                            es_super_admin=_es_super_admin(),
-                           org_id=org_id)
+                           org_id=org_id,
+                           variaciones_pendientes=pendientes)
 
 
 @jornales_bp.route('/api')
@@ -272,6 +281,137 @@ def aplicar_variacion():
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error aplicando variacion jornales')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ============================================================
+# CAC: variaciones pendientes (scraper Indicador Camarco)
+# ============================================================
+
+@jornales_bp.route('/cac/buscar', methods=['POST'])
+@login_required
+def cac_buscar_variacion():
+    """Dispara el scraper, registra la variacion como pendiente si no existe."""
+    if not _es_super_admin():
+        return jsonify({'ok': False, 'error': 'Solo superadmin puede buscar variaciones CAC.'}), 403
+
+    from services.cac_scraper import buscar_ultimo_indicador
+    from models.budgets import VariacionCacPendiente
+
+    info = buscar_ultimo_indicador()
+    if not info:
+        return jsonify({'ok': False, 'error': 'No se pudo obtener el ultimo Indicador Camarco. Revisa el sitio manualmente y carga la variacion con el boton "Aplicar variacion CAC".'}), 502
+
+    # Upsert por periodo
+    existente = VariacionCacPendiente.query.filter_by(periodo=info['periodo']).first()
+    if existente:
+        # actualizar valores si cambiaron, pero no pisar estado
+        existente.porcentaje_mo = info.get('porcentaje_mo')
+        existente.porcentaje_general = info.get('porcentaje_general')
+        existente.indice_general = info.get('indice_general')
+        existente.fuente_url = info.get('fuente_url')
+        existente.fuente_titulo = info.get('fuente_titulo')
+        nuevo = False
+    else:
+        existente = VariacionCacPendiente(
+            periodo=info['periodo'],
+            porcentaje_mo=info.get('porcentaje_mo'),
+            porcentaje_general=info.get('porcentaje_general'),
+            indice_general=info.get('indice_general'),
+            fuente_url=info.get('fuente_url'),
+            fuente_titulo=info.get('fuente_titulo'),
+            estado='pendiente',
+        )
+        db.session.add(existente)
+        nuevo = True
+
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'nuevo': nuevo, 'variacion': existente.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@jornales_bp.route('/cac/pendientes')
+@login_required
+def cac_listar_pendientes():
+    """Devuelve las variaciones CAC en estado pendiente."""
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+    from models.budgets import VariacionCacPendiente
+    rows = VariacionCacPendiente.query.filter_by(estado='pendiente').order_by(
+        VariacionCacPendiente.periodo.desc()
+    ).all()
+    return jsonify({'ok': True, 'pendientes': [r.to_dict() for r in rows]})
+
+
+@jornales_bp.route('/cac/<int:variacion_id>/aplicar', methods=['POST'])
+@login_required
+def cac_aplicar_variacion(variacion_id):
+    """Aplica el % de la variacion pendiente a las globales y la marca como aplicada."""
+    if not _es_super_admin():
+        return jsonify({'ok': False, 'error': 'Solo superadmin'}), 403
+
+    from models.budgets import VariacionCacPendiente, CategoriaJornal
+    from datetime import date as _date, datetime
+    from decimal import Decimal, ROUND_HALF_UP
+
+    var = VariacionCacPendiente.query.get_or_404(variacion_id)
+    if var.estado != 'pendiente':
+        return jsonify({'ok': False, 'error': f'Variacion ya esta {var.estado}'}), 400
+    if var.porcentaje_mo is None:
+        return jsonify({'ok': False, 'error': 'Sin % de MO para aplicar'}), 400
+
+    pct = float(var.porcentaje_mo)
+    factor = Decimal(str(1 + pct / 100))
+    quant = Decimal('0.01')
+
+    cats = CategoriaJornal.query.filter(
+        CategoriaJornal.activo.is_(True),
+        CategoriaJornal.organizacion_id.is_(None),
+    ).all()
+    aplicados = 0
+    for c in cats:
+        actual = Decimal(str(c.precio_jornal or 0))
+        if actual <= 0:
+            continue
+        c.precio_jornal = (actual * factor).quantize(quant, rounding=ROUND_HALF_UP)
+        c.vigencia_desde = var.periodo
+        traza = f'[{var.periodo.strftime("%b %Y")}] CAC MO {pct:+.2f}%'
+        c.notas = ((c.notas or '').strip() + '\n' + traza).strip()
+        aplicados += 1
+
+    var.estado = 'aplicada'
+    var.aplicado_at = datetime.utcnow()
+    var.aplicado_por_id = current_user.id
+
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'aplicados': aplicados, 'porcentaje': pct})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@jornales_bp.route('/cac/<int:variacion_id>/descartar', methods=['POST'])
+@login_required
+def cac_descartar_variacion(variacion_id):
+    """Marca la variacion como descartada (no aplicar)."""
+    if not _es_super_admin():
+        return jsonify({'ok': False, 'error': 'Solo superadmin'}), 403
+    from models.budgets import VariacionCacPendiente
+    var = VariacionCacPendiente.query.get_or_404(variacion_id)
+    if var.estado != 'pendiente':
+        return jsonify({'ok': False, 'error': f'Ya esta {var.estado}'}), 400
+    motivo = (request.get_json(silent=True) or {}).get('motivo') or ''
+    var.estado = 'descartada'
+    var.descartado_motivo = motivo[:500]
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 

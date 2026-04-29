@@ -1690,6 +1690,43 @@ def run_runtime_migrations(db, app):
     print("[OK] Migracion runtime: categorias_jornal + columnas MO en items_presupuesto")
 
     # =====================================================
+    # 2026-04-29: Tabla variaciones_cac_pendientes
+    # Cada vez que el scraper detecta un boletin Camarco nuevo, registra aca
+    # la variacion mensual. El superadmin la aplica/descarta desde la UI.
+    # `db.create_all()` la crea por modelo en Railway. Aca solo aseguramos
+    # tabla via SQL para entornos sin create_all.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='variaciones_cac_pendientes') THEN
+                CREATE TABLE variaciones_cac_pendientes (
+                    id SERIAL PRIMARY KEY,
+                    periodo DATE NOT NULL,
+                    porcentaje_mo NUMERIC(6, 2),
+                    porcentaje_general NUMERIC(6, 2),
+                    indice_general NUMERIC(15, 2),
+                    indice_mo NUMERIC(15, 2),
+                    fuente_url VARCHAR(500),
+                    fuente_titulo VARCHAR(255),
+                    estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+                    detectado_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    aplicado_at TIMESTAMP,
+                    aplicado_por_id INTEGER REFERENCES usuarios(id),
+                    descartado_motivo TEXT,
+                    CONSTRAINT uq_variacion_cac_periodo UNIQUE (periodo)
+                );
+                CREATE INDEX ix_variaciones_cac_estado ON variaciones_cac_pendientes(estado);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] tabla variaciones_cac_pendientes asegurada")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] variaciones_cac_pendientes: {e}")
+
+    # =====================================================
     # 2026-04-29: Seed superadmin OBYRA
     # Asegura que los duenios del sistema tengan is_super_admin=True.
     # Idempotente: solo updatea si esta en False.

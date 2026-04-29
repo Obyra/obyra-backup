@@ -15,8 +15,13 @@
             </p>
         </div>
         <div class="d-flex gap-2">
+            {% if es_super_admin %}
+            <button type="button" class="btn btn-outline-secondary" onclick="cacBuscarVariacion()" title="Busca el último Indicador Camarco y deja una variación pendiente de aprobar">
+                <i class="fas fa-cloud-download-alt me-1"></i>Buscar variación CAC
+            </button>
+            {% endif %}
             <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#modalAplicarCac">
-                <i class="fas fa-percent me-1"></i>Aplicar variación CAC
+                <i class="fas fa-percent me-1"></i>Aplicar variación manual
             </button>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria"
                     onclick="abrirCrearCategoria()">
@@ -24,6 +29,36 @@
             </button>
         </div>
     </div>
+
+    {% if es_super_admin and variaciones_pendientes %}
+    {% for v in variaciones_pendientes %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center" data-variacion-id="{{ v.id }}">
+        <div>
+            <i class="fas fa-bell me-2"></i>
+            <strong>Variación CAC pendiente — {{ v.periodo.strftime('%B %Y').capitalize() }}:</strong>
+            {% if v.porcentaje_mo is not none %}
+                Mano de Obra <strong class="{{ 'text-success' if v.porcentaje_mo >= 0 else 'text-danger' }}">{{ '+' if v.porcentaje_mo >= 0 }}{{ v.porcentaje_mo }}%</strong>
+            {% endif %}
+            {% if v.porcentaje_general is not none %}
+                · General {{ '+' if v.porcentaje_general >= 0 }}{{ v.porcentaje_general }}%
+            {% endif %}
+            {% if v.fuente_url %}
+                · <a href="{{ v.fuente_url }}" target="_blank" rel="noopener" class="small">ver fuente</a>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            {% if v.porcentaje_mo is not none %}
+            <button class="btn btn-sm btn-success" onclick="cacAplicarPendiente({{ v.id }}, {{ v.porcentaje_mo }})">
+                <i class="fas fa-check me-1"></i>Aplicar a globales
+            </button>
+            {% endif %}
+            <button class="btn btn-sm btn-outline-secondary" onclick="cacDescartarPendiente({{ v.id }})">
+                <i class="fas fa-times me-1"></i>Descartar
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
 
     <!-- Modal aplicar variacion CAC -->
     <div class="modal fade" id="modalAplicarCac" tabindex="-1" aria-hidden="true">
@@ -372,6 +407,72 @@ async function cacPreview() {
     } catch (e) {
         area.innerHTML = '<div class="alert alert-danger small mb-0">Error de red: ' + e.message + '</div>';
     }
+}
+
+async function cacBuscarVariacion() {
+    const btn = event.currentTarget;
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Buscando...';
+    try {
+        const r = await fetch('/jornales/cac/buscar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+        });
+        const d = await r.json();
+        btn.disabled = false;
+        btn.innerHTML = original;
+        if (!r.ok || !d.ok) {
+            alert(d.error || 'No se pudo obtener el indicador. Cargá la variación manualmente.');
+            return;
+        }
+        const v = d.variacion;
+        const periodo = v.periodo_legible || v.periodo;
+        if (d.nuevo) {
+            alert('Detectada variación de ' + periodo + '. Revisá el banner y aplicá si corresponde.');
+        } else {
+            alert('Ya teníamos registrada la variación de ' + periodo + '. Estado actual: ' + v.estado);
+        }
+        window.location.reload();
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = original;
+        alert('Error de red: ' + e.message);
+    }
+}
+
+async function cacAplicarPendiente(varId, pct) {
+    if (!confirm('Aplicar +' + pct + '% (Mano de Obra) a las categorías GLOBALES de OBYRA?\nEsta operación es irreversible.')) return;
+    try {
+        const r = await fetch('/jornales/cac/' + varId + '/aplicar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert(d.error || 'No se pudo aplicar');
+            return;
+        }
+        alert('Aplicado a ' + (d.aplicados || 0) + ' categorías globales (' + (d.porcentaje >= 0 ? '+' : '') + d.porcentaje + '%).');
+        window.location.reload();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function cacDescartarPendiente(varId) {
+    const motivo = prompt('Motivo del descarte (opcional):') || '';
+    try {
+        const r = await fetch('/jornales/cac/' + varId + '/descartar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+            body: JSON.stringify({ motivo: motivo }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert(d.error || 'No se pudo descartar');
+            return;
+        }
+        window.location.reload();
+    } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function cacAplicar() {

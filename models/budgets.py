@@ -355,6 +355,58 @@ class ItemPresupuesto(db.Model):
         return float(self.dias) if self.dias is not None else None
 
 
+class VariacionCacPendiente(db.Model):
+    """Variacion de costos detectada en el Indicador Camarco mensual.
+
+    Cada vez que el scraper encuentra un boletin nuevo, registra aca:
+      - El periodo (mes/anio del boletin).
+      - El % de variacion del componente Mano de Obra.
+      - El % general del indicador.
+      - La fuente_url para poder verificar.
+
+    Estado:
+      - 'pendiente': detectada, esperando que el superadmin aplique o descarte.
+      - 'aplicada': el superadmin ya la aplico a las categorias.
+      - 'descartada': el superadmin la descarto (no aplicable).
+    """
+    __tablename__ = 'variaciones_cac_pendientes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    periodo = db.Column(db.Date, nullable=False)            # primer dia del mes
+    porcentaje_mo = db.Column(db.Numeric(6, 2), nullable=True)
+    porcentaje_general = db.Column(db.Numeric(6, 2), nullable=True)
+    indice_general = db.Column(db.Numeric(15, 2), nullable=True)
+    indice_mo = db.Column(db.Numeric(15, 2), nullable=True)
+    fuente_url = db.Column(db.String(500))
+    fuente_titulo = db.Column(db.String(255))
+
+    estado = db.Column(db.String(20), nullable=False, default='pendiente')
+    detectado_at = db.Column(db.DateTime, default=datetime.utcnow)
+    aplicado_at = db.Column(db.DateTime)
+    aplicado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    descartado_motivo = db.Column(db.Text)
+
+    __table_args__ = (
+        db.UniqueConstraint('periodo', name='uq_variacion_cac_periodo'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'periodo': self.periodo.isoformat() if self.periodo else None,
+            'periodo_legible': self.periodo.strftime('%B %Y').capitalize() if self.periodo else None,
+            'porcentaje_mo': float(self.porcentaje_mo) if self.porcentaje_mo is not None else None,
+            'porcentaje_general': float(self.porcentaje_general) if self.porcentaje_general is not None else None,
+            'indice_general': float(self.indice_general) if self.indice_general is not None else None,
+            'indice_mo': float(self.indice_mo) if self.indice_mo is not None else None,
+            'fuente_url': self.fuente_url,
+            'fuente_titulo': self.fuente_titulo,
+            'estado': self.estado,
+            'detectado_at': self.detectado_at.isoformat() if self.detectado_at else None,
+            'aplicado_at': self.aplicado_at.isoformat() if self.aplicado_at else None,
+        }
+
+
 class CategoriaJornal(db.Model):
     """Categoría de mano de obra con su precio por jornal (UOCRA u otra fuente).
 
