@@ -126,11 +126,20 @@ def crear_equipo():
         costo_hora_usd = round(costo_hora / cotizacion, 2) if costo_hora else None
         costo_adquisicion_usd = round(costo_adquisicion / cotizacion, 2) if costo_adquisicion else None
 
+    # Si no se manda codigo, generar correlativo MAQ-NNN automaticamente.
+    codigo_form = (request.form.get('codigo') or '').strip()
+    if not codigo_form:
+        try:
+            codigo_form = _proximo_codigo_equipo(org_id)
+        except Exception as e:
+            current_app.logger.warning(f'No se pudo autogenerar codigo: {e}')
+            codigo_form = None
+
     try:
         equipo = Equipment(
             company_id=org_id,
             nombre=nombre,
-            codigo=request.form.get('codigo', '').strip() or None,
+            codigo=codigo_form,
             tipo=tipo,
             marca=request.form.get('marca', '').strip() or None,
             modelo=request.form.get('modelo', '').strip() or None,
@@ -792,3 +801,52 @@ def editar_fechas_assignment(obra_id, asg_id):
         db.session.rollback()
         current_app.logger.exception('Error editando fechas de assignment')
         return jsonify(ok=False, error=str(e)), 500
+
+
+# ============================================================
+# Codigo automatico de equipo (MAQ-NNN correlativo)
+# ============================================================
+
+def _proximo_codigo_equipo(org_id, prefijo='MAQ-'):
+    """Devuelve el proximo codigo correlativo MAQ-NNN para la organizacion."""
+    import re
+    from models.equipment import Equipment
+    existentes = Equipment.query.filter(
+        Equipment.company_id == org_id,
+        Equipment.codigo.like(f'{prefijo}%'),
+    ).all()
+    max_num = 0
+    for eq in existentes:
+        m = re.search(r'-(\d+)$', eq.codigo or '')
+        if m:
+            try:
+                n = int(m.group(1))
+                if n > max_num:
+                    max_num = n
+            except ValueError:
+                continue
+    siguiente = max_num + 1
+    codigo = f'{prefijo}{siguiente:03d}'
+    # Garantia anti-colisiones (por si hay codigos manuales con mismo formato)
+    while Equipment.query.filter_by(company_id=org_id, codigo=codigo).first():
+        siguiente += 1
+        codigo = f'{prefijo}{siguiente:03d}'
+    return codigo
+
+
+@obras_bp.route('/api/equipos/proximo-codigo')
+@login_required
+def api_proximo_codigo_equipo():
+    """Devuelve el proximo codigo correlativo de equipo para la org actual.
+
+    Patron: MAQ-001, MAQ-002, ...
+    """
+    org_id = current_user.organizacion_id
+    if not org_id:
+        return jsonify(ok=False, error='Sin organizacion activa'), 400
+    try:
+        codigo = _proximo_codigo_equipo(org_id)
+        return jsonify(ok=True, codigo=codigo)
+    except Exception as e:
+        current_app.logger.exception('Error generando codigo de equipo')
+        return jsonify(ok=False, error=f'Error: {type(e).__name__}: {str(e)[:200]}'), 500

@@ -292,7 +292,13 @@
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Codigo interno</label>
-                            <input type="text" class="form-control" id="crear_codigo" placeholder="Ej: MAQ-001">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="crear_codigo" placeholder="Se genera automaticamente">
+                                <button type="button" class="btn btn-outline-secondary" id="btnRegenerarCodigoEq" title="Regenerar código" onclick="cargarProximoCodigoEquipo()">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted">Se genera al abrir el modal. Podés sobrescribirlo.</small>
                         </div>
                     </div>
                     <div class="row">
@@ -674,6 +680,35 @@ function abrirModalCrear() {
     document.getElementById('formCrear').reset();
     document.getElementById('crear_tipo_custom').classList.add('d-none');
     new bootstrap.Modal(document.getElementById('modalCrear')).show();
+    // Cargar codigo correlativo automatico
+    cargarProximoCodigoEquipo();
+}
+
+function cargarProximoCodigoEquipo() {
+    var input = document.getElementById('crear_codigo');
+    var btn = document.getElementById('btnRegenerarCodigoEq');
+    if (!input) return;
+    input.value = '';
+    input.placeholder = 'Generando...';
+    if (btn) btn.disabled = true;
+    fetch('/obras/api/equipos/proximo-codigo')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            input.placeholder = 'Se genera automaticamente';
+            if (d.ok && d.codigo) {
+                input.value = d.codigo;
+            } else {
+                input.placeholder = 'Ingresar manualmente';
+                console.warn('No se pudo generar codigo:', d.error);
+            }
+        })
+        .catch(function(err) {
+            input.placeholder = 'Ingresar manualmente';
+            console.error('Error:', err);
+        })
+        .finally(function() {
+            if (btn) btn.disabled = false;
+        });
 }
 
 function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, costoHora, costoAdq, estado, moneda) {
