@@ -1585,6 +1585,83 @@ def run_runtime_migrations(db, app):
     print("[OK] Migracion runtime: directorio global de proveedores (scope/zona/categoria)")
 
     # =====================================================
+    # 2026-04-29: Tabla categorias_jornal + columnas MO en items_presupuesto
+    # Fuente: jornales UOCRA / Camarco. Hibrido: NULL org = global.
+    # `db.create_all()` en Railway crea la tabla; aca aseguramos las columnas
+    # nuevas en items_presupuesto (que ya existia antes).
+    # =====================================================
+    columnas_items = [
+        ("personas", "INTEGER"),
+        ("dias", "NUMERIC(10, 2)"),
+        ("categoria_jornal_id", "INTEGER"),
+        ("etapa_pliego_vinculada", "VARCHAR(200)"),
+    ]
+    for col, ddl in columnas_items:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] items_presupuesto.{col}: {e}")
+
+    # FK categoria_jornal_id -> categorias_jornal(id) (solo si la tabla existe)
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='categorias_jornal')
+               AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_items_presupuesto_categoria_jornal') THEN
+                ALTER TABLE items_presupuesto
+                    ADD CONSTRAINT fk_items_presupuesto_categoria_jornal
+                    FOREIGN KEY (categoria_jornal_id) REFERENCES categorias_jornal(id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] FK items_presupuesto.categoria_jornal_id: {e}")
+
+    # Indices auxiliares
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS ix_items_presupuesto_etapa_vinculada ON items_presupuesto(etapa_pliego_vinculada);",
+        "CREATE INDEX IF NOT EXISTS ix_items_presupuesto_cat_jornal ON items_presupuesto(categoria_jornal_id);",
+        "CREATE INDEX IF NOT EXISTS ix_categorias_jornal_org ON categorias_jornal(organizacion_id);",
+        "CREATE INDEX IF NOT EXISTS ix_categorias_jornal_activo ON categorias_jornal(activo);",
+    ]:
+        try:
+            db.session.execute(db.text(idx_sql))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] indice: {e}")
+
+    # Seed: categorias jornal globales sugeridas por OBYRA (si la tabla esta vacia
+    # de globales). Idempotente: solo crea si no existen.
+    try:
+        seed_globales = db.session.execute(db.text("""
+            SELECT COUNT(*) FROM categorias_jornal WHERE organizacion_id IS NULL;
+        """)).scalar()
+        if seed_globales == 0:
+            db.session.execute(db.text("""
+                INSERT INTO categorias_jornal (organizacion_id, nombre, codigo, precio_jornal, moneda, fuente, activo, created_at, updated_at)
+                VALUES
+                  (NULL, 'Oficial Especializado', 'oficial_esp', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
+                  (NULL, 'Oficial', 'oficial', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
+                  (NULL, 'Medio Oficial', 'medio_oficial', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
+                  (NULL, 'Ayudante', 'ayudante', 0, 'ARS', 'manual', TRUE, NOW(), NOW()),
+                  (NULL, 'Sereno', 'sereno', 0, 'ARS', 'manual', TRUE, NOW(), NOW());
+            """))
+            db.session.commit()
+            print("[OK] Seed: 5 categorias jornal globales (precio en 0, editar desde admin)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Seed categorias jornal: {e}")
+
+    print("[OK] Migracion runtime: categorias_jornal + columnas MO en items_presupuesto")
+
+    # =====================================================
     # 2026-04-29: Seed superadmin OBYRA
     # Asegura que admin@obyra.com (y brenda@gmail.com como fallback historico)
     # tengan is_super_admin=True. Idempotente: solo updatea si esta en False.

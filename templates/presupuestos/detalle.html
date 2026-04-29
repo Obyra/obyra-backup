@@ -912,6 +912,69 @@
                                placeholder="Descripción del item" required>
                     </div>
 
+                    <!-- Categoría de jornal (solo para mano de obra) -->
+                    <div class="mb-3" id="categoriaJornalWrapper" style="display: none;">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-hard-hat me-1 text-warning"></i>Categoría (UOCRA / Camarco)
+                        </label>
+                        <select class="form-select" name="categoria_jornal_id" id="categoriaJornalSelect">
+                            <option value="">— Seleccionar categoría —</option>
+                        </select>
+                        <small class="text-muted">
+                            Carga el precio del jornal automáticamente. Mantené la tabla en
+                            <a href="{{ url_for('jornales.lista') }}" target="_blank">/jornales</a>.
+                        </small>
+                    </div>
+
+                    <!-- Personas y Días (solo MO): autocalculan jornales -->
+                    <div class="row" id="personasDiasWrapper" style="display: none;">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Personas</label>
+                                <input type="number" class="form-control" name="personas" id="moPersonas"
+                                       min="1" step="1" value="1" oninput="recalcMOTotal()">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Días</label>
+                                <input type="number" class="form-control" name="dias" id="moDias"
+                                       min="0.5" step="0.5" value="1" oninput="recalcMOTotal()">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Jornales</label>
+                                <input type="number" class="form-control bg-light" id="moJornales"
+                                       readonly value="1">
+                                <small class="text-muted">personas × días</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Vincular a etapa del pliego (MO/Equipos) -->
+                    <div class="mb-3" id="etapaPliegoWrapper" style="display: none;">
+                        <label class="form-label">
+                            <i class="fas fa-link me-1 text-info"></i>Vincular a etapa del pliego
+                            <small class="text-muted">(opcional)</small>
+                        </label>
+                        <select class="form-select" name="etapa_pliego_vinculada" id="etapaPliegoSelect">
+                            <option value="">— No vincular (item independiente) —</option>
+                            {% set etapas_unicas = [] %}
+                            {% for it in items %}
+                                {% if it.etapa_nombre and it.etapa_nombre not in etapas_unicas and not it.solo_interno %}
+                                    {% set _ = etapas_unicas.append(it.etapa_nombre) %}
+                                {% endif %}
+                            {% endfor %}
+                            {% for et in etapas_unicas %}
+                            <option value="{{ et }}">{{ et }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">
+                            Si vinculás a una etapa, su costo se imputa ahí y el cliente no ve este renglón por separado.
+                        </small>
+                    </div>
+
                     <!-- Modalidad de costo (solo para equipos) -->
                     <div class="mb-3" id="modalidadCostoWrapper" style="display: none;">
                         <label class="form-label">
@@ -1236,7 +1299,6 @@ function abrirModalItem(tipo) {
     document.getElementById('tipoItem').value = tipo;
     document.getElementById('tipoItemTexto').textContent = tipos[tipo];
 
-    // Mostrar selector de inventario solo para materiales
     const selectorInventario = document.getElementById('selectorInventario');
     if (tipo === 'material') {
         selectorInventario.style.display = 'block';
@@ -1245,7 +1307,7 @@ function abrirModalItem(tipo) {
         document.getElementById('itemInventarioSelect').value = '';
     }
 
-    // Mostrar selector de modalidad de costo solo para equipos
+    // Modalidad: solo equipos
     const modalidadWrapper = document.getElementById('modalidadCostoWrapper');
     if (modalidadWrapper) {
         if (tipo === 'equipo') {
@@ -1257,11 +1319,97 @@ function abrirModalItem(tipo) {
         }
     }
 
-    // Limpiar formulario
+    // Categoría jornal + personas/dias: solo MO
+    const catWrap = document.getElementById('categoriaJornalWrapper');
+    const persWrap = document.getElementById('personasDiasWrapper');
+    if (tipo === 'mano_obra') {
+        catWrap.style.display = 'block';
+        persWrap.style.display = 'flex';
+        cargarCategoriasJornal();
+        // defaults
+        document.getElementById('moPersonas').value = 1;
+        document.getElementById('moDias').value = 1;
+        document.getElementById('moJornales').value = 1;
+        // pre-seleccionar unidad jornal
+        const unidadSelect = document.querySelector('select[name="unidad"]');
+        if (unidadSelect) unidadSelect.value = 'jornal';
+    } else {
+        catWrap.style.display = 'none';
+        persWrap.style.display = 'none';
+    }
+
+    // Vincular a etapa pliego: solo MO o equipos
+    const etapaWrap = document.getElementById('etapaPliegoWrapper');
+    if (tipo === 'mano_obra' || tipo === 'equipo') {
+        etapaWrap.style.display = 'block';
+    } else {
+        etapaWrap.style.display = 'none';
+    }
+    document.getElementById('etapaPliegoSelect').value = '';
+
+    // Limpiar
     document.getElementById('descripcionItem').value = '';
     document.getElementById('itemInventarioSelect').value = '';
 
     new bootstrap.Modal(document.getElementById('agregarItemModal')).show();
+}
+
+let _jornalesCache = null;
+async function cargarCategoriasJornal() {
+    const sel = document.getElementById('categoriaJornalSelect');
+    if (!sel) return;
+    if (_jornalesCache) {
+        _renderJornalesEnSelect(_jornalesCache);
+        return;
+    }
+    sel.innerHTML = '<option value="">Cargando...</option>';
+    try {
+        const r = await fetch('/jornales/api');
+        const d = await r.json();
+        if (d.ok) {
+            _jornalesCache = d.jornales || [];
+            _renderJornalesEnSelect(_jornalesCache);
+        } else {
+            sel.innerHTML = '<option value="">No se pudo cargar</option>';
+        }
+    } catch (e) {
+        sel.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
+
+function _renderJornalesEnSelect(jornales) {
+    const sel = document.getElementById('categoriaJornalSelect');
+    let html = '<option value="">— Seleccionar categoría —</option>';
+    jornales.forEach(function(j) {
+        const tag = j.is_global ? ' [OBYRA]' : '';
+        const precio = (j.precio_jornal || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        html += `<option value="${j.id}" data-precio="${j.precio_jornal || 0}" data-nombre="${j.nombre}">${j.nombre}${tag} — $${precio}/jornal</option>`;
+    });
+    sel.innerHTML = html;
+}
+
+document.getElementById('categoriaJornalSelect')?.addEventListener('change', function() {
+    const opt = this.options[this.selectedIndex];
+    const precio = parseFloat(opt.dataset.precio || 0);
+    const nombre = opt.dataset.nombre || '';
+    if (precio > 0) {
+        const inputPrecio = document.querySelector('input[name="precio_unitario"]');
+        if (inputPrecio) inputPrecio.value = precio;
+    }
+    if (nombre && !document.getElementById('descripcionItem').value) {
+        document.getElementById('descripcionItem').value = 'Jornal ' + nombre;
+    }
+    recalcMOTotal();
+});
+
+function recalcMOTotal() {
+    const personas = parseInt(document.getElementById('moPersonas').value || '1', 10) || 1;
+    const dias = parseFloat(document.getElementById('moDias').value || '1') || 1;
+    const jornales = personas * dias;
+    document.getElementById('moJornales').value = jornales.toFixed(1);
+    // Setear el campo cantidad oculto (que el backend lee)
+    const inputCantidad = document.querySelector('input[name="cantidad"]');
+    if (inputCantidad) inputCantidad.value = jornales.toFixed(2);
 }
 
 function actualizarHintsModalidad(modalidad) {

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Categorías de Jornal - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-hard-hat me-2"></i>Categorías de Jornal (UOCRA)</h2>
+            <p class="text-muted mb-0 small">
+                Tabla de jornales por categoría que se usa al cargar mano de obra en presupuestos.
+                Las categorías marcadas como <span class="badge bg-info text-dark">OBYRA</span>
+                son comunes a todas las constructoras (las edita el superadmin).
+                Las categorías propias quedan visibles solo para tu organización.
+            </p>
+        </div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria"
+                onclick="abrirCrearCategoria()">
+            <i class="fas fa-plus me-1"></i>Nueva categoría
+        </button>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            {% if jornales %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Categoría</th>
+                            <th>Código</th>
+                            <th>Origen</th>
+                            <th class="text-end">Precio jornal</th>
+                            <th>Moneda</th>
+                            <th>Fuente</th>
+                            <th>Vigencia desde</th>
+                            <th class="text-end" style="width:140px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in jornales %}
+                        <tr>
+                            <td><strong>{{ c.nombre }}</strong>
+                                {% if c.notas %}<br><small class="text-muted">{{ c.notas }}</small>{% endif %}
+                            </td>
+                            <td>{{ c.codigo or '-' }}</td>
+                            <td>
+                                {% if c.is_global %}
+                                <span class="badge bg-info text-dark"><i class="fas fa-globe me-1"></i>OBYRA</span>
+                                {% else %}
+                                <span class="badge bg-light text-dark border"><i class="fas fa-building me-1"></i>Mía</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end fw-bold">${{ '{:,.2f}'.format(c.precio_jornal|float) }}</td>
+                            <td>{{ c.moneda }}</td>
+                            <td><small class="text-muted">{{ c.fuente }}</small></td>
+                            <td><small>{{ c.vigencia_desde.strftime('%d/%m/%Y') if c.vigencia_desde else '-' }}</small></td>
+                            <td class="text-end">
+                                {% set editable = es_super_admin or not c.is_global %}
+                                {% if editable %}
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        onclick='abrirEditarCategoria({{ c.to_dict()|tojson }})' title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        onclick="eliminarCategoria({{ c.id }}, '{{ c.nombre|e }}')" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% else %}
+                                <span class="btn btn-sm btn-outline-secondary disabled" title="Solo OBYRA puede editar globales">
+                                    <i class="fas fa-lock"></i>
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-hard-hat fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No hay categorías cargadas todavía.</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria" onclick="abrirCrearCategoria()">
+                    <i class="fas fa-plus me-1"></i>Crear la primera
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal crear/editar categoria -->
+<div class="modal fade" id="modalCategoria" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="frmCategoria">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalCategoriaTitulo">Nueva categoría</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="catId">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold">Nombre <span class="text-danger">*</span></label>
+                            <input type="text" name="nombre" id="catNombre" class="form-control" required maxlength="120">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Código</label>
+                            <input type="text" name="codigo" id="catCodigo" class="form-control" maxlength="40" placeholder="oficial, ayudante, ...">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Precio jornal <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" name="precio_jornal" id="catPrecio" class="form-control" min="0" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Moneda</label>
+                            <select name="moneda" id="catMoneda" class="form-select">
+                                <option value="ARS" selected>ARS</option>
+                                <option value="USD">USD</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Fuente</label>
+                            <select name="fuente" id="catFuente" class="form-select">
+                                <option value="manual">Manual</option>
+                                <option value="camarco">Camarco</option>
+                                <option value="uocra">UOCRA</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Notas</label>
+                            <textarea name="notas" id="catNotas" class="form-control" rows="2" maxlength="500"></textarea>
+                        </div>
+                        {% if es_super_admin %}
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="global" id="catGlobal" value="1">
+                                <label class="form-check-label small" for="catGlobal">
+                                    <i class="fas fa-globe text-info me-1"></i>
+                                    Global de OBYRA (visible para todas las constructoras)
+                                </label>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div id="catFeedback" class="mt-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnGuardarCategoria">
+                        <i class="fas fa-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function _csrf() {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') : '';
+}
+
+function abrirCrearCategoria() {
+    document.getElementById('modalCategoriaTitulo').textContent = 'Nueva categoría';
+    document.getElementById('catId').value = '';
+    document.getElementById('catNombre').value = '';
+    document.getElementById('catCodigo').value = '';
+    document.getElementById('catPrecio').value = '';
+    document.getElementById('catMoneda').value = 'ARS';
+    document.getElementById('catFuente').value = 'manual';
+    document.getElementById('catNotas').value = '';
+    var g = document.getElementById('catGlobal'); if (g) g.checked = false;
+    document.getElementById('catFeedback').innerHTML = '';
+}
+
+function abrirEditarCategoria(cat) {
+    document.getElementById('modalCategoriaTitulo').textContent = 'Editar categoría';
+    document.getElementById('catId').value = cat.id;
+    document.getElementById('catNombre').value = cat.nombre || '';
+    document.getElementById('catCodigo').value = cat.codigo || '';
+    document.getElementById('catPrecio').value = cat.precio_jornal || 0;
+    document.getElementById('catMoneda').value = cat.moneda || 'ARS';
+    document.getElementById('catFuente').value = cat.fuente || 'manual';
+    document.getElementById('catNotas').value = cat.notas || '';
+    var g = document.getElementById('catGlobal'); if (g) { g.checked = cat.is_global; g.disabled = true; }
+    document.getElementById('catFeedback').innerHTML = '';
+    new bootstrap.Modal(document.getElementById('modalCategoria')).show();
+}
+
+document.getElementById('frmCategoria').addEventListener('submit', function(ev) {
+    ev.preventDefault();
+    var btn = document.getElementById('btnGuardarCategoria');
+    var feedback = document.getElementById('catFeedback');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+
+    var data = {};
+    new FormData(this).forEach(function(v, k) {
+        if (k === 'global') data[k] = true;
+        else data[k] = v;
+    });
+
+    var id = data.id;
+    delete data.id;
+    var url = id ? ('/jornales/' + id) : '/jornales/';
+
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+        body: JSON.stringify(data),
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(resp) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar';
+        if (!resp.ok || !resp.data.ok) {
+            feedback.innerHTML = '<div class="alert alert-danger small mb-0">' + (resp.data.error || 'Error') + '</div>';
+            return;
+        }
+        feedback.innerHTML = '<div class="alert alert-success small mb-0">Guardado.</div>';
+        setTimeout(function() { window.location.reload(); }, 600);
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar';
+        feedback.innerHTML = '<div class="alert alert-danger small mb-0">Error: ' + err.message + '</div>';
+    });
+});
+
+function eliminarCategoria(id, nombre) {
+    if (!confirm('Eliminar la categoría "' + nombre + '"?')) return;
+    fetch('/jornales/' + id + '/eliminar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.ok) window.location.reload();
+        else alert(d.error || 'No se pudo eliminar');
+    })
+    .catch(function(err) { alert('Error: ' + err.message); });
+}
+</script>
+{% endblock %}

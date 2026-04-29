@@ -315,11 +315,45 @@ def agregar_item(id):
         if tipo != 'equipo':
             modalidad_costo = None  # Solo persiste para equipos
 
+        # Mano de obra: personas, dias, categoria_jornal_id (autocalcula cantidad/precio).
+        personas = None
+        dias = None
+        categoria_jornal_id = None
+        if tipo == 'mano_obra':
+            personas = request.form.get('personas', type=int) or None
+            try:
+                dias = Decimal(request.form.get('dias') or '0') or None
+                if dias is not None and dias <= 0:
+                    dias = None
+            except Exception:
+                dias = None
+            categoria_jornal_id = request.form.get('categoria_jornal_id', type=int)
+            # Si vino una categoria valida y NO se ingreso precio manualmente, usar el del jornal.
+            if categoria_jornal_id:
+                from models.budgets import CategoriaJornal
+                cat = CategoriaJornal.query.get(categoria_jornal_id)
+                if cat and cat.activo and (cat.organizacion_id is None or cat.organizacion_id == org_id):
+                    if precio_unitario <= 0:
+                        precio_unitario = Decimal(str(cat.precio_jornal or 0))
+                    if not descripcion:
+                        descripcion = f'Jornal {cat.nombre}'
+                else:
+                    categoria_jornal_id = None
+            # Si vienen personas y dias, recalcular cantidad = personas * dias.
+            if personas and dias:
+                cantidad = Decimal(str(personas)) * dias
+
+        # Vinculacion a etapa del pliego (MO/Equipos): ocultar al cliente,
+        # imputar costo a la etapa indicada.
+        etapa_pliego_vinculada = None
+        if tipo in ('mano_obra', 'equipo'):
+            etapa_pliego_vinculada = (request.form.get('etapa_pliego_vinculada') or '').strip() or None
+
         if not descripcion or cantidad <= 0 or precio_unitario <= 0:
             flash('Datos inválidos para el item', 'danger')
             return redirect(url_for('presupuestos.detalle', id=id))
 
-        # Calcular total
+        # Calcular total (cantidad = jornales totales para MO)
         total = cantidad * precio_unitario
 
         # Calcular equivalentes en ARS y USD
@@ -361,7 +395,11 @@ def agregar_item(id):
             total_ars=total_ars,
             origen='manual',
             item_inventario_id=item_inventario_id if item_inventario_id else None,
-            modalidad_costo=modalidad_costo
+            modalidad_costo=modalidad_costo,
+            personas=personas,
+            dias=dias,
+            categoria_jornal_id=categoria_jornal_id,
+            etapa_pliego_vinculada=etapa_pliego_vinculada,
         )
 
         db.session.add(item)

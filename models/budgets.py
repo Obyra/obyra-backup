@@ -321,13 +321,90 @@ class ItemPresupuesto(db.Model):
     # necesita ejecutar pero que no se facturan como renglón separado al cliente.
     solo_interno = db.Column(db.Boolean, default=False, nullable=False, server_default='false')
 
+    # Mano de obra: desglose persona × días para cálculo de jornales.
+    # cantidad = personas * dias (jornales totales).
+    # Si categoria_jornal_id está set, precio_unitario se carga del jornal de la categoría.
+    personas = db.Column(db.Integer, nullable=True)
+    dias = db.Column(db.Numeric(10, 2), nullable=True)
+    categoria_jornal_id = db.Column(db.Integer, db.ForeignKey('categorias_jornal.id', ondelete='SET NULL'), nullable=True)
+
+    # Vinculación a etapa del pliego (MO/Equipos): si está set, el costo de este
+    # item se imputa al consolidado de esa etapa pliego. El cliente no ve el item
+    # como renglón separado, solo el total de la etapa pliego.
+    etapa_pliego_vinculada = db.Column(db.String(200), nullable=True)
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')
     item_inventario = db.relationship('ItemInventario', foreign_keys=[item_inventario_id])
+    categoria_jornal = db.relationship('CategoriaJornal', foreign_keys=[categoria_jornal_id])
 
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'
+
+    @property
+    def jornales(self):
+        """Total de jornales = personas × días. Solo aplica para mano de obra."""
+        if self.personas and self.dias:
+            return float(self.personas) * float(self.dias)
+        return None
+
+    @property
+    def duracion_dias(self):
+        """Alias para compatibilidad con templates existentes."""
+        return float(self.dias) if self.dias is not None else None
+
+
+class CategoriaJornal(db.Model):
+    """Categoría de mano de obra con su precio por jornal (UOCRA u otra fuente).
+
+    Modelo híbrido: organizacion_id NULL = global (curado por OBYRA, visible
+    a todos los tenants); con valor = privado del tenant. Los tenants pueden
+    crear sus propias categorías que coexisten con las globales.
+    """
+    __tablename__ = 'categorias_jornal'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id', ondelete='CASCADE'),
+                                nullable=True, index=True)
+    nombre = db.Column(db.String(120), nullable=False)        # ej "Oficial Albañil"
+    codigo = db.Column(db.String(40))                          # opcional: 'oficial', 'medio_oficial', 'ayudante'
+    precio_jornal = db.Column(db.Numeric(15, 2), nullable=False, default=0)
+    moneda = db.Column(db.String(3), nullable=False, default='ARS')
+
+    # Trazabilidad de la fuente (para futuro scraper Camarco/UOCRA)
+    fuente = db.Column(db.String(40), default='manual')        # 'manual' | 'camarco' | 'uocra'
+    vigencia_desde = db.Column(db.Date, nullable=True)         # mes/anio del valor (cuando fue publicado)
+
+    notas = db.Column(db.Text)
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organizacion = db.relationship('Organizacion')
+
+    def __repr__(self):
+        return f'<CategoriaJornal {self.nombre} ${self.precio_jornal}>'
+
+    @property
+    def is_global(self):
+        return self.organizacion_id is None
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'organizacion_id': self.organizacion_id,
+            'is_global': self.is_global,
+            'nombre': self.nombre,
+            'codigo': self.codigo,
+            'precio_jornal': float(self.precio_jornal or 0),
+            'moneda': self.moneda,
+            'fuente': self.fuente,
+            'vigencia_desde': self.vigencia_desde.isoformat() if self.vigencia_desde else None,
+            'notas': self.notas,
+            'activo': self.activo,
+        }
 
 
 class NivelPresupuesto(db.Model):

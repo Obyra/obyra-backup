@@ -73,6 +73,7 @@ from models.budgets import (
     CuadrillaTipo,
     MiembroCuadrilla,
     EtapaInternaVinculo,
+    CategoriaJornal,
 )
 
 # Client models
@@ -291,6 +292,7 @@ __all__ = [
     'WizardStageVariant',
     'WizardStageCoefficient',
     'EscalaSalarialUOCRA',
+    'CategoriaJornal',
     'CuadrillaTipo',
     'MiembroCuadrilla',
     'EtapaInternaVinculo',

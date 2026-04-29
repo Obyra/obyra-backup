@@ -1097,6 +1097,14 @@ try:
 except ImportError as e:
     print(f"[WARN] Proveedores OC blueprint not available: {e}")
 
+# Categorias de Jornal (mano de obra)
+try:
+    from blueprint_jornales import jornales_bp
+    app.register_blueprint(jornales_bp)
+    print("[OK] Jornales blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Jornales blueprint not available: {e}")
+
 # Cotizaciones de Proveedores
 try:
     from blueprint_cotizaciones import cotizaciones_bp
