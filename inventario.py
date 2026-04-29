@@ -1455,19 +1455,30 @@ def api_generar_codigo():
         return jsonify({'error': 'La categoría es requerida'}), 400
 
     try:
-        # Obtener categoría
-        categoria = InventoryCategory.query.filter_by(id=categoria_id, company_id=org_id).first()
+        # Obtener categoría: aceptar tanto del tenant como las globales (is_global=TRUE).
+        # Antes se filtraba estrictamente por company_id y devolvia 404 cuando el
+        # usuario seleccionaba una categoria global como "Maquinarias y Equipos".
+        from sqlalchemy import or_
+        categoria = InventoryCategory.query.filter(
+            InventoryCategory.id == categoria_id,
+            or_(
+                InventoryCategory.company_id == org_id,
+                InventoryCategory.is_global.is_(True),
+            ),
+        ).first()
         if not categoria:
             return jsonify({'error': 'Categoría no encontrada'}), 404
 
-        # Generar prefijo de 3 letras basado en el nombre de la categoría
-        categoria_nombre = categoria.nombre.upper()
-        # Remover caracteres especiales y quedarse con letras
-        prefijo = re.sub(r'[^A-Z]', '', categoria_nombre)[:3]
+        # Generar prefijo de 3 letras basado en el nombre de la categoría.
+        # Normalizar acentos (Maquinarias -> MAQUINARIAS, Plomeria -> PLOMERIA).
+        import unicodedata
+        nombre_norm = unicodedata.normalize('NFKD', categoria.nombre or '')
+        nombre_norm = nombre_norm.encode('ascii', 'ignore').decode('ascii').upper()
+        prefijo = re.sub(r'[^A-Z]', '', nombre_norm)[:3]
 
         # Si el prefijo es muy corto, completar
         if len(prefijo) < 3:
-            prefijo = prefijo.ljust(3, 'X')
+            prefijo = (prefijo or 'GEN').ljust(3, 'X')
 
         # Buscar el último código con este prefijo en la organización
         ultimo_item = ItemInventario.query.filter(
@@ -1500,8 +1511,9 @@ def api_generar_codigo():
         })
 
     except Exception as e:
-        current_app.logger.error(f"Error generando código: {str(e)}")
-        return jsonify({'error': 'Error al generar código automático'}), 500
+        current_app.logger.exception("Error generando código automático")
+        # Devolvemos el detalle al frontend para que se vea en el alert/UI.
+        return jsonify({'error': f'Error al generar código: {type(e).__name__}: {str(e)[:200]}'}), 500
 
 
 @inventario_bp.route('/api/crear-item', methods=['POST'])

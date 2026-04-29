@@ -1690,6 +1690,43 @@ def run_runtime_migrations(db, app):
     print("[OK] Migracion runtime: categorias_jornal + columnas MO en items_presupuesto")
 
     # =====================================================
+    # 2026-04-29: Equipos de alquiler - columnas en equipment
+    # =====================================================
+    columnas_equipment = [
+        ("proveedor_alquiler_id", "INTEGER"),
+        ("fecha_inicio_alquiler", "DATE"),
+        ("fecha_fin_alquiler", "DATE"),
+    ]
+    for col, ddl in columnas_equipment:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE equipment ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] equipment.{col}: {e}")
+
+    # FK proveedor_alquiler_id -> proveedores_oc(id) (idempotente)
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='proveedores_oc')
+               AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_equipment_proveedor_alquiler') THEN
+                ALTER TABLE equipment
+                    ADD CONSTRAINT fk_equipment_proveedor_alquiler
+                    FOREIGN KEY (proveedor_alquiler_id) REFERENCES proveedores_oc(id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] FK equipment.proveedor_alquiler_id: {e}")
+
+    print("[OK] Migracion runtime: equipos de alquiler (proveedor + fechas)")
+
+    # =====================================================
     # 2026-04-29: Tabla variaciones_cac_pendientes
     # Cada vez que el scraper detecta un boletin Camarco nuevo, registra aca
     # la variacion mensual. El superadmin la aplica/descarta desde la UI.

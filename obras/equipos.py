@@ -43,9 +43,18 @@ def equipos_movimientos():
 
     cotizacion_usd = _get_cotizacion_usd()
 
+    # Proveedores visibles para selector de alquiler (propios + globales OBYRA)
+    from models.proveedores_oc import ProveedorOC
+    from sqlalchemy import or_
+    proveedores_alquiler = ProveedorOC.query.filter(
+        ProveedorOC.activo.is_(True),
+        or_(ProveedorOC.scope == 'global', ProveedorOC.organizacion_id == org_id),
+    ).order_by(ProveedorOC.razon_social).all()
+
     return render_template('obras/equipos_movimientos.html',
                            equipos=equipos, obras=obras, movimientos=movimientos,
-                           en_transito=en_transito, cotizacion_usd=cotizacion_usd)
+                           en_transito=en_transito, cotizacion_usd=cotizacion_usd,
+                           proveedores_alquiler=proveedores_alquiler)
 
 
 @obras_bp.route('/equipos/crear', methods=['POST'])
@@ -65,7 +74,41 @@ def crear_equipo():
 
     moneda = request.form.get('moneda', 'ARS')
     costo_hora = request.form.get('costo_hora', 0, type=float)
+    costo_dia = request.form.get('costo_dia', 0, type=float)
     costo_adquisicion = request.form.get('costo_adquisicion', 0, type=float)
+
+    # Modalidad: compra | alquiler_hora | alquiler_dia
+    modalidad_costo = (request.form.get('modalidad_costo') or 'compra').strip()
+    if modalidad_costo not in ('compra', 'alquiler_hora', 'alquiler_dia'):
+        modalidad_costo = 'compra'
+
+    # Datos de alquiler (si aplica)
+    proveedor_alquiler_id = request.form.get('proveedor_alquiler_id', type=int)
+    fecha_inicio_str = (request.form.get('fecha_inicio_alquiler') or '').strip()
+    fecha_fin_str = (request.form.get('fecha_fin_alquiler') or '').strip()
+    fecha_inicio_alquiler = None
+    fecha_fin_alquiler = None
+    if modalidad_costo != 'compra':
+        from datetime import datetime as _dt
+        try:
+            if fecha_inicio_str:
+                fecha_inicio_alquiler = _dt.strptime(fecha_inicio_str, '%Y-%m-%d').date()
+            if fecha_fin_str:
+                fecha_fin_alquiler = _dt.strptime(fecha_fin_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify(ok=False, error='Fechas de alquiler invalidas (use YYYY-MM-DD)'), 400
+        # Validar proveedor visible para el tenant (propio o global)
+        if proveedor_alquiler_id:
+            from models.proveedores_oc import ProveedorOC
+            from sqlalchemy import or_
+            prov_ok = ProveedorOC.query.filter(
+                ProveedorOC.id == proveedor_alquiler_id,
+                or_(ProveedorOC.scope == 'global', ProveedorOC.organizacion_id == org_id),
+            ).first()
+            if not prov_ok:
+                proveedor_alquiler_id = None
+    else:
+        proveedor_alquiler_id = None
 
     cotizacion = _get_cotizacion_usd()
     costo_hora_usd = None
@@ -76,6 +119,9 @@ def crear_equipo():
         costo_hora = round(costo_hora * cotizacion, 2)
         costo_adquisicion_usd = costo_adquisicion
         costo_adquisicion = round(costo_adquisicion * cotizacion, 2)
+        # costo_dia tambien convertir si viene en USD
+        if costo_dia:
+            costo_dia = round(costo_dia * cotizacion, 2)
     elif moneda == 'ARS' and cotizacion:
         costo_hora_usd = round(costo_hora / cotizacion, 2) if costo_hora else None
         costo_adquisicion_usd = round(costo_adquisicion / cotizacion, 2) if costo_adquisicion else None
@@ -91,9 +137,14 @@ def crear_equipo():
             nro_serie=request.form.get('nro_serie', '').strip() or None,
             costo_hora=costo_hora,
             costo_hora_usd=costo_hora_usd,
+            costo_dia=costo_dia,
             costo_adquisicion=costo_adquisicion,
             costo_adquisicion_usd=costo_adquisicion_usd,
             moneda=moneda,
+            modalidad_costo=modalidad_costo,
+            proveedor_alquiler_id=proveedor_alquiler_id,
+            fecha_inicio_alquiler=fecha_inicio_alquiler,
+            fecha_fin_alquiler=fecha_fin_alquiler,
             estado='activo',
             ubicacion_tipo='deposito',
         )
@@ -125,7 +176,41 @@ def editar_equipo(equipo_id):
 
         moneda = request.form.get('moneda', equipo.moneda or 'ARS')
         costo_hora = request.form.get('costo_hora', type=float) or 0
+        costo_dia = request.form.get('costo_dia', type=float) or 0
         costo_adquisicion = request.form.get('costo_adquisicion', type=float) or 0
+
+        # Modalidad y datos de alquiler
+        modalidad_costo = (request.form.get('modalidad_costo') or equipo.modalidad_costo or 'compra').strip()
+        if modalidad_costo not in ('compra', 'alquiler_hora', 'alquiler_dia'):
+            modalidad_costo = 'compra'
+        equipo.modalidad_costo = modalidad_costo
+
+        if modalidad_costo == 'compra':
+            equipo.proveedor_alquiler_id = None
+            equipo.fecha_inicio_alquiler = None
+            equipo.fecha_fin_alquiler = None
+        else:
+            from datetime import datetime as _dt
+            from sqlalchemy import or_
+            from models.proveedores_oc import ProveedorOC
+
+            prov_id = request.form.get('proveedor_alquiler_id', type=int)
+            if prov_id:
+                prov_ok = ProveedorOC.query.filter(
+                    ProveedorOC.id == prov_id,
+                    or_(ProveedorOC.scope == 'global', ProveedorOC.organizacion_id == org_id),
+                ).first()
+                equipo.proveedor_alquiler_id = prov_id if prov_ok else None
+            else:
+                equipo.proveedor_alquiler_id = None
+
+            fi = (request.form.get('fecha_inicio_alquiler') or '').strip()
+            ff = (request.form.get('fecha_fin_alquiler') or '').strip()
+            try:
+                equipo.fecha_inicio_alquiler = _dt.strptime(fi, '%Y-%m-%d').date() if fi else None
+                equipo.fecha_fin_alquiler = _dt.strptime(ff, '%Y-%m-%d').date() if ff else None
+            except ValueError:
+                return jsonify(ok=False, error='Fechas de alquiler invalidas (use YYYY-MM-DD)'), 400
 
         cotizacion = _get_cotizacion_usd()
         if moneda == 'USD' and cotizacion:
@@ -133,14 +218,17 @@ def editar_equipo(equipo_id):
             equipo.costo_hora = round(costo_hora * cotizacion, 2)
             equipo.costo_adquisicion_usd = costo_adquisicion
             equipo.costo_adquisicion = round(costo_adquisicion * cotizacion, 2)
+            equipo.costo_dia = round(costo_dia * cotizacion, 2) if costo_dia else 0
         elif moneda == 'ARS' and cotizacion:
             equipo.costo_hora = costo_hora
             equipo.costo_hora_usd = round(costo_hora / cotizacion, 2) if costo_hora else None
             equipo.costo_adquisicion = costo_adquisicion
             equipo.costo_adquisicion_usd = round(costo_adquisicion / cotizacion, 2) if costo_adquisicion else None
+            equipo.costo_dia = costo_dia
         else:
             equipo.costo_hora = costo_hora
             equipo.costo_adquisicion = costo_adquisicion
+            equipo.costo_dia = costo_dia
         equipo.moneda = moneda
 
         db.session.commit()

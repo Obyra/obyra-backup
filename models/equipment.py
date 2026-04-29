@@ -33,11 +33,17 @@ class Equipment(db.Model):
     # Ubicación actual: 'deposito' o ID de obra
     ubicacion_tipo = db.Column(db.String(20), default='deposito')  # deposito, obra
     ubicacion_obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
+    # Datos de alquiler (cuando modalidad_costo != 'compra').
+    # proveedor_alquiler_id apunta al directorio de proveedores (proveedores_oc).
+    proveedor_alquiler_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id', ondelete='SET NULL'), nullable=True)
+    fecha_inicio_alquiler = db.Column(db.Date, nullable=True)
+    fecha_fin_alquiler = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relaciones
     company = db.relationship('Organizacion', backref='equipments')
     ubicacion_obra = db.relationship('Obra', foreign_keys=[ubicacion_obra_id])
+    proveedor_alquiler = db.relationship('ProveedorOC', foreign_keys=[proveedor_alquiler_id])
     assignments = db.relationship('EquipmentAssignment', back_populates='equipment', cascade='all, delete-orphan')
     usages = db.relationship('EquipmentUsage', back_populates='equipment', cascade='all, delete-orphan')
     maintenance_tasks = db.relationship('MaintenanceTask', back_populates='equipment', cascade='all, delete-orphan')
@@ -58,6 +64,27 @@ class Equipment(db.Model):
     def is_available(self):
         """Verifica si el equipo está disponible para asignación"""
         return self.estado == 'activo' and not self.current_assignment
+
+    @property
+    def es_alquilado(self):
+        """True si el equipo es alquilado (no propio)."""
+        return (self.modalidad_costo or 'compra') != 'compra'
+
+    @property
+    def alquiler_vencido(self):
+        """True si el alquiler ya pasó su fecha fin."""
+        if not self.fecha_fin_alquiler:
+            return False
+        from datetime import date as _date
+        return self.fecha_fin_alquiler < _date.today()
+
+    @property
+    def dias_restantes_alquiler(self):
+        """Cuantos dias quedan hasta fin de alquiler (None si no aplica)."""
+        if not self.fecha_fin_alquiler:
+            return None
+        from datetime import date as _date
+        return (self.fecha_fin_alquiler - _date.today()).days
 
 
 class EquipmentAssignment(db.Model):

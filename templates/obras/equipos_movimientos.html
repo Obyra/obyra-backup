@@ -78,7 +78,29 @@
                                     <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
                                     <td>
                                         <strong>{{ eq.nombre }}</strong>
+                                        {% if eq.es_alquilado %}
+                                            {% set per = 'hora' if eq.modalidad_costo == 'alquiler_hora' else 'día' %}
+                                            <span class="badge bg-info text-dark ms-1" title="Alquiler por {{ per }}">
+                                                <i class="fas fa-handshake me-1"></i>Alquilado
+                                            </span>
+                                            {% if eq.fecha_fin_alquiler %}
+                                                {% if eq.alquiler_vencido %}
+                                                <span class="badge bg-danger ms-1" title="Alquiler vencido">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>Vencido {{ eq.fecha_fin_alquiler.strftime('%d/%m') }}
+                                                </span>
+                                                {% elif eq.dias_restantes_alquiler is not none and eq.dias_restantes_alquiler <= 7 %}
+                                                <span class="badge bg-warning text-dark ms-1" title="Alquiler por vencer">
+                                                    <i class="far fa-clock me-1"></i>Vence {{ eq.fecha_fin_alquiler.strftime('%d/%m') }}
+                                                </span>
+                                                {% else %}
+                                                <small class="text-muted ms-1">Vence {{ eq.fecha_fin_alquiler.strftime('%d/%m/%Y') }}</small>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endif %}
                                         {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }}</small>{% endif %}
+                                        {% if eq.es_alquilado and eq.proveedor_alquiler %}
+                                            <br><small class="text-info"><i class="fas fa-user me-1"></i>{{ eq.proveedor_alquiler.razon_social }}</small>
+                                        {% endif %}
                                     </td>
                                     <td>{{ eq.tipo }}</td>
                                     <td>
@@ -327,24 +349,87 @@
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-3 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Nro. de Serie</label>
                             <input type="text" class="form-control" id="crear_nro_serie">
                         </div>
-                        <div class="col-md-2 mb-3">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-tags me-1 text-info"></i>Modalidad
+                            </label>
+                            <select class="form-select" id="crear_modalidad_costo" onchange="actualizarModalidadCrear()">
+                                <option value="compra">Compra (equipo propio)</option>
+                                <option value="alquiler_hora">Alquiler por hora</option>
+                                <option value="alquiler_dia">Alquiler por día</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Moneda</label>
                             <select class="form-select" id="crear_moneda">
                                 <option value="ARS">$ ARS</option>
                                 <option value="USD">USD</option>
                             </select>
                         </div>
-                        <div class="col-md-3 mb-3">
+                    </div>
+
+                    <div class="row" id="crear_costos_compra">
+                        <div class="col-md-6 mb-3">
                             <label class="form-label">Costo por hora</label>
                             <input type="number" class="form-control" id="crear_costo_hora" step="0.01" value="0" min="0">
+                            <small class="text-muted">Para sumar al costo de obra cuando se carguen partes de uso.</small>
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">Costo adquisicion</label>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Costo adquisición</label>
                             <input type="number" class="form-control" id="crear_costo_adquisicion" step="0.01" value="0" min="0">
+                            <small class="text-muted">Valor de compra (para amortización).</small>
+                        </div>
+                    </div>
+
+                    <div class="row d-none" id="crear_costos_alquiler">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                Costo por hora
+                                <small class="text-muted" id="crear_label_alq_hora">(si alquiler por hora)</small>
+                            </label>
+                            <input type="number" class="form-control" id="crear_costo_hora_alq" step="0.01" value="0" min="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                Costo por día
+                                <small class="text-muted" id="crear_label_alq_dia">(si alquiler por día)</small>
+                            </label>
+                            <input type="number" class="form-control" id="crear_costo_dia" step="0.01" value="0" min="0">
+                        </div>
+                    </div>
+
+                    <div class="row d-none" id="crear_alquiler_panel">
+                        <div class="col-12">
+                            <div class="card border-info mb-3">
+                                <div class="card-body bg-info bg-opacity-10">
+                                    <h6 class="text-info mb-2"><i class="fas fa-handshake me-1"></i>Datos del alquiler</h6>
+                                    <div class="row">
+                                        <div class="col-md-12 mb-2">
+                                            <label class="form-label small fw-bold">Proveedor</label>
+                                            <select class="form-select form-select-sm" id="crear_proveedor_alquiler">
+                                                <option value="">— Sin asignar (cargar luego) —</option>
+                                                {% for p in proveedores_alquiler %}
+                                                <option value="{{ p.id }}">
+                                                    {{ p.razon_social }}{% if p.is_global %} [OBYRA]{% endif %}{% if p.categoria %} — {{ p.categoria }}{% endif %}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Fecha inicio</label>
+                                            <input type="date" class="form-control form-control-sm" id="crear_fecha_inicio_alq">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small">Fecha fin</label>
+                                            <input type="date" class="form-control form-control-sm" id="crear_fecha_fin_alq">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     {% if cotizacion_usd %}
@@ -620,10 +705,38 @@ function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, cos
     new bootstrap.Modal(document.getElementById('modalEditar')).show();
 }
 
+function actualizarModalidadCrear() {
+    var modalidad = document.getElementById('crear_modalidad_costo').value;
+    var compra = document.getElementById('crear_costos_compra');
+    var alquiler = document.getElementById('crear_costos_alquiler');
+    var panel = document.getElementById('crear_alquiler_panel');
+    if (modalidad === 'compra') {
+        compra.classList.remove('d-none');
+        alquiler.classList.add('d-none');
+        panel.classList.add('d-none');
+    } else {
+        compra.classList.add('d-none');
+        alquiler.classList.remove('d-none');
+        panel.classList.remove('d-none');
+        // Resaltar el costo correspondiente
+        var labelHora = document.getElementById('crear_label_alq_hora');
+        var labelDia = document.getElementById('crear_label_alq_dia');
+        if (modalidad === 'alquiler_hora') {
+            labelHora.innerHTML = '<strong class="text-info">(usar este)</strong>';
+            labelDia.textContent = '(opcional)';
+        } else {
+            labelHora.textContent = '(opcional)';
+            labelDia.innerHTML = '<strong class="text-info">(usar este)</strong>';
+        }
+    }
+}
+
 document.getElementById('formCrear').addEventListener('submit', function(e) {
     e.preventDefault();
     var tipoVal = getTipoValue('crear_tipo', 'crear_tipo_custom');
     if (!tipoVal) { alert('Debe seleccionar o escribir un tipo'); return; }
+    var modalidad = document.getElementById('crear_modalidad_costo').value;
+
     var form = new FormData();
     form.append('csrf_token', csrfToken);
     form.append('nombre', document.getElementById('crear_nombre').value);
@@ -633,8 +746,21 @@ document.getElementById('formCrear').addEventListener('submit', function(e) {
     form.append('modelo', document.getElementById('crear_modelo').value);
     form.append('nro_serie', document.getElementById('crear_nro_serie').value);
     form.append('moneda', document.getElementById('crear_moneda').value);
-    form.append('costo_hora', document.getElementById('crear_costo_hora').value);
-    form.append('costo_adquisicion', document.getElementById('crear_costo_adquisicion').value);
+    form.append('modalidad_costo', modalidad);
+
+    if (modalidad === 'compra') {
+        form.append('costo_hora', document.getElementById('crear_costo_hora').value || 0);
+        form.append('costo_adquisicion', document.getElementById('crear_costo_adquisicion').value || 0);
+        form.append('costo_dia', 0);
+    } else {
+        form.append('costo_hora', document.getElementById('crear_costo_hora_alq').value || 0);
+        form.append('costo_dia', document.getElementById('crear_costo_dia').value || 0);
+        form.append('costo_adquisicion', 0);
+        form.append('proveedor_alquiler_id', document.getElementById('crear_proveedor_alquiler').value);
+        form.append('fecha_inicio_alquiler', document.getElementById('crear_fecha_inicio_alq').value);
+        form.append('fecha_fin_alquiler', document.getElementById('crear_fecha_fin_alq').value);
+    }
+
     fetch('/obras/equipos/crear', { method: 'POST', body: form })
         .then(r => r.json()).then(data => {
             if (data.ok) location.reload();
