@@ -1667,6 +1667,19 @@ def run_runtime_migrations(db, app):
     # Idempotente: solo updatea si esta en False.
     # =====================================================
     try:
+        # Debug: mostrar quienes ya son super_admin para detectar mismatches.
+        admins_actuales = db.session.execute(db.text("""
+            SELECT email, is_super_admin FROM usuarios
+             WHERE is_super_admin = TRUE
+                OR LOWER(email) LIKE '%obyra%'
+                OR LOWER(email) LIKE '%brenda%'
+             ORDER BY email;
+        """)).fetchall()
+        if admins_actuales:
+            print(f"[DEBUG] Usuarios candidatos a super_admin (antes del seed):")
+            for row in admins_actuales:
+                print(f"        {row[0]!r}  is_super_admin={row[1]}")
+
         result = db.session.execute(db.text("""
             UPDATE usuarios
                SET is_super_admin = TRUE
@@ -1680,6 +1693,20 @@ def run_runtime_migrations(db, app):
         db.session.commit()
         if result.rowcount:
             print(f"[OK] Marcados como super_admin: {result.rowcount} usuario(s)")
+        elif not admins_actuales:
+            print("[INFO] Seed super_admin: no se encontro ningun usuario con email matcheable.")
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Seed super_admin: {e}")
+
+    # =====================================================
+    # 2026-04-29: Seed Directorio Global de Proveedores OBYRA
+    # Carga los 303 proveedores del Excel curado por OBYRA con scope='global'.
+    # Solo corre si todavia no estan cargados (chequea por count >= 50).
+    # =====================================================
+    try:
+        from seeds.proveedores_globales_seed import seed_proveedores_globales
+        seed_proveedores_globales(db)
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Seed Directorio Global: {e}")
