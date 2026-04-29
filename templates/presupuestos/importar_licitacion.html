@@ -29,6 +29,22 @@
                                    placeholder="Ej: Licitación Edificio Rivadavia 1234">
                         </div>
 
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-tools text-info me-1"></i>Naturaleza del proyecto <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" name="naturaleza_proyecto" required>
+                                <option value="obra_nueva" selected>Obra Nueva — construcción desde cero</option>
+                                <option value="remodelacion">Remodelación — trabajo sobre obra existente</option>
+                                <option value="ampliacion">Ampliación — agregado a obra existente</option>
+                            </select>
+                            <small class="text-muted">
+                                En <strong>Remodelación</strong>, el Ejecutivo sugiere etapas internas típicas (demoliciones,
+                                retiros, refuerzos, instalaciones, terminaciones) y excluye las que no aplican
+                                (excavación, fundaciones nuevas).
+                            </small>
+                        </div>
+
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label fw-bold">Número de presupuesto</label>

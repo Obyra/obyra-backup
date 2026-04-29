@@ -323,17 +323,23 @@ def _leer_preview(path, max_rows=30):
     return sheets
 
 
-def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, nombre_obra, items, modo_licitacion=True, ubicacion=None, ubicacion_lat=None, ubicacion_lng=None, ubicacion_normalizada=None):
+def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, nombre_obra, items, modo_licitacion=True, ubicacion=None, ubicacion_lat=None, ubicacion_lng=None, ubicacion_normalizada=None, naturaleza_proyecto=None):
     """Helper compartido para crear el presupuesto + items.
 
     Si modo_licitacion=True (default), los precios del Excel se ignoran y
     los items se crean con precio_unitario=0 para que los carguen los proveedores.
+
+    `naturaleza_proyecto` (obra_nueva | remodelacion | ampliacion) se persiste
+    en `datos_proyecto` para que el modulo Ejecutivo (APU) filtre/sugiera las
+    etapas internas que aplican al tipo de obra.
     """
     import json
+    from calculadora_ia import normalizar_naturaleza_proyecto
     datos_proyecto = {
         'nombre_obra': nombre_obra,
         'modo_creacion': 'excel_licitacion',
         'modo_licitacion': modo_licitacion,
+        'naturaleza_proyecto': normalizar_naturaleza_proyecto(naturaleza_proyecto),
     }
     if ubicacion:
         datos_proyecto['ubicacion'] = ubicacion
@@ -441,6 +447,7 @@ def importar_licitacion():
     ubicacion_lat = request.form.get('ubicacion_lat', type=float)
     ubicacion_lng = request.form.get('ubicacion_lng', type=float)
     ubicacion_normalizada = (request.form.get('ubicacion_normalizada') or '').strip() or None
+    naturaleza_proyecto = (request.form.get('naturaleza_proyecto') or 'obra_nueva').strip()
 
     if not archivo or not archivo.filename:
         flash('Subí un archivo Excel', 'danger')
@@ -538,6 +545,7 @@ def importar_licitacion():
                     modo_licitacion=modo_licitacion, ubicacion=ubicacion,
                     ubicacion_lat=ubicacion_lat, ubicacion_lng=ubicacion_lng,
                     ubicacion_normalizada=ubicacion_normalizada,
+                    naturaleza_proyecto=naturaleza_proyecto,
                 )
                 _persistir_pliego(presu, path, nombre_original=archivo.filename)
                 import os
@@ -569,6 +577,7 @@ def importar_licitacion():
         ubicacion_lat=ubicacion_lat or '',
         ubicacion_lng=ubicacion_lng or '',
         ubicacion_normalizada=ubicacion_normalizada or '',
+        naturaleza_proyecto=naturaleza_proyecto or 'obra_nueva',
     ))
 
 
@@ -603,6 +612,7 @@ def importar_licitacion_mapear(token):
     except (ValueError, TypeError):
         ubicacion_lng = None
     ubicacion_normalizada = (request.values.get('ubicacion_normalizada') or '').strip() or None
+    naturaleza_proyecto = (request.values.get('naturaleza_proyecto') or 'obra_nueva').strip()
 
     if request.method == 'POST':
         # Procesar mapeo manual
@@ -668,6 +678,7 @@ def importar_licitacion_mapear(token):
                 modo_licitacion=modo_licitacion, ubicacion=ubicacion,
                 ubicacion_lat=ubicacion_lat, ubicacion_lng=ubicacion_lng,
                 ubicacion_normalizada=ubicacion_normalizada,
+                naturaleza_proyecto=naturaleza_proyecto,
             )
             _persistir_pliego(presu, path)
             import os

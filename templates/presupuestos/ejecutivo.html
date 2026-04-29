@@ -1279,22 +1279,43 @@ async function abrirModalAgregarEtapaInterna() {
     if (!data.ok) {
       list.innerHTML = `<div class="col-12 text-danger small">Error: ${data.error || res.status}</div>`;
     } else {
-      list.innerHTML = data.etapas.map(et => {
+      // Mostrar banner con la naturaleza del proyecto si es remodelacion/ampliacion
+      const naturaleza = data.naturaleza_proyecto || 'obra_nueva';
+      let banner = '';
+      if (naturaleza === 'remodelacion') {
+        banner = `<div class="col-12 mb-3"><div class="alert alert-info py-2 mb-0 small">
+          <i class="fas fa-tools me-1"></i>
+          <strong>Remodelación</strong>: las etapas <em>Sugeridas</em> son las típicas para este tipo de obra (ya vienen marcadas).
+          Las etapas que no aplican (excavación, fundaciones, etc.) están deshabilitadas.
+        </div></div>`;
+      } else if (naturaleza === 'ampliacion') {
+        banner = `<div class="col-12 mb-3"><div class="alert alert-warning py-2 mb-0 small">
+          <i class="fas fa-tools me-1"></i><strong>Ampliación</strong>: revisá manualmente qué etapas aplican.
+        </div></div>`;
+      }
+
+      list.innerHTML = banner + data.etapas.map(et => {
         let badge = '';
         let statusClass = '';
-        const disponible = !et.en_pliego && !et.ya_interna;
+        const disponible = !et.en_pliego && !et.ya_interna && !et.excluida;
         if (et.en_pliego) {
           badge = '<span class="badge bg-success ms-1">Ya en pliego</span>';
           statusClass = 'opacity-50';
         } else if (et.ya_interna) {
           badge = '<span class="badge bg-info ms-1">Ya agregada</span>';
           statusClass = 'opacity-50';
+        } else if (et.excluida) {
+          badge = '<span class="badge bg-secondary ms-1">No aplica en remodelación</span>';
+          statusClass = 'opacity-50';
+        } else if (et.sugerida) {
+          badge = '<span class="badge bg-info text-dark ms-1">Sugerida</span>';
         } else if (et.nivel) {
           badge = `<span class="badge bg-secondary ms-1">NV${et.nivel}</span>`;
         }
         const slugEscaped = _escape(et.slug);
+        const autoCheck = disponible && et.sugerida ? 'checked' : '';
         const checkbox = disponible
-          ? `<input type="checkbox" class="form-check-input etapa-interna-check" value="${slugEscaped}" onchange="_actualizarContadorSeleccionadas()">`
+          ? `<input type="checkbox" class="form-check-input etapa-interna-check" value="${slugEscaped}" ${autoCheck} onchange="_actualizarContadorSeleccionadas()">`
           : `<input type="checkbox" class="form-check-input" disabled>`;
         return `<div class="col-md-6 mb-2">
           <label class="d-flex align-items-start p-2 border rounded ${statusClass} ${disponible ? 'cursor-pointer' : ''}" style="${disponible ? 'cursor:pointer;' : ''}">

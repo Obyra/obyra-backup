@@ -654,12 +654,33 @@ def composiciones_listar(item_id):
 def _crear_etapa_interna_para_slug(presupuesto, slug):
     """Crea la etapa interna con sus items sinteticos. Retorna (ok, etapa_nombre, error)."""
     from tareas_predefinidas import obtener_tareas_por_etapa
+    from calculadora_ia import (
+        normalizar_naturaleza_proyecto,
+        ETAPAS_EXCLUIDAS_REMODELACION,
+    )
+    import json as _json
 
     cat = obtener_etapa_por_slug(slug)
     if not cat:
         return False, slug, f'Etapa "{slug}" no existe en el catálogo'
 
     etapa_nombre = cat['nombre']
+
+    # Si la naturaleza del proyecto es remodelacion, bloquear etapas que no
+    # aplican (excavacion, fundaciones, movimiento de suelos, depresion napa).
+    naturaleza = 'obra_nueva'
+    try:
+        if presupuesto.datos_proyecto:
+            dp = _json.loads(presupuesto.datos_proyecto)
+            naturaleza = normalizar_naturaleza_proyecto(dp.get('naturaleza_proyecto'))
+    except Exception:
+        naturaleza = 'obra_nueva'
+
+    if naturaleza == 'remodelacion' and slug in ETAPAS_EXCLUIDAS_REMODELACION:
+        return False, etapa_nombre, (
+            f'La etapa "{etapa_nombre}" no aplica a una remodelación. '
+            f'Si corresponde, cambiá la naturaleza del proyecto.'
+        )
 
     ya_existe_interna = ItemPresupuesto.query.filter_by(
         presupuesto_id=presupuesto.id,
@@ -911,12 +932,42 @@ def ejecutivo_etapas_estandar(id):
       - en_pliego: ya es parte del pliego (items con solo_interno=False)
       - ya_interna: ya fue agregada como etapa interna (items con solo_interno=True)
       - disponible: se puede agregar
+      - excluida: la naturaleza del proyecto no aplica esta etapa (ej: fundaciones
+        en una remodelación)
+      - sugerida: la naturaleza la marca como típica del flujo (ej: demoliciones
+        y retiros en una remodelación)
+      - solo_remodelacion: etapa que solo tiene sentido en obras de remodelación;
+        se oculta cuando la naturaleza es obra nueva.
     """
+    from calculadora_ia import (
+        normalizar_naturaleza_proyecto,
+        ETAPAS_EXCLUIDAS_REMODELACION,
+        ETAPAS_SUGERIDAS_REMODELACION,
+    )
+    import json as _json
+
+    SLUGS_SOLO_REMODELACION = {
+        'retiro-revestimientos',
+        'retiro-instalaciones',
+        'refuerzo-estructural',
+        'tratamiento-humedad',
+        'renovacion-aberturas',
+    }
+
     org_id = get_current_org_id()
     if not org_id:
         return jsonify(ok=False, error='Sin organización activa'), 400
 
     presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    # Leer naturaleza_proyecto del presupuesto (datos_proyecto JSON)
+    naturaleza = 'obra_nueva'
+    try:
+        if presupuesto.datos_proyecto:
+            dp = _json.loads(presupuesto.datos_proyecto)
+            naturaleza = normalizar_naturaleza_proyecto(dp.get('naturaleza_proyecto'))
+    except Exception:
+        naturaleza = 'obra_nueva'
 
     nombres_pliego = set(
         n for (n,) in db.session.query(ItemPresupuesto.etapa_nombre).filter(
@@ -937,17 +988,31 @@ def ejecutivo_etapas_estandar(id):
     for et in ETAPAS_CONSTRUCCION:
         en_pliego = _matchea_etapa_del_pliego(et['nombre'], nombres_pliego)
         ya_interna = et['nombre'] in nombres_internos
+        slug = et['slug']
+        es_solo_remod = slug in SLUGS_SOLO_REMODELACION
+        # En obra nueva o ampliacion ocultamos las etapas exclusivas de remodelacion
+        if es_solo_remod and naturaleza != 'remodelacion':
+            continue
+        excluida = naturaleza == 'remodelacion' and slug in ETAPAS_EXCLUIDAS_REMODELACION
+        sugerida = naturaleza == 'remodelacion' and slug in ETAPAS_SUGERIDAS_REMODELACION
         catalogo.append({
-            'slug': et['slug'],
+            'slug': slug,
             'nombre': et['nombre'],
             'descripcion': et['descripcion'],
             'nivel': et.get('nivel'),
             'en_pliego': en_pliego,
             'ya_interna': ya_interna,
-            'disponible': not en_pliego and not ya_interna,
+            'disponible': not en_pliego and not ya_interna and not excluida,
+            'excluida': excluida,
+            'sugerida': sugerida,
+            'solo_remodelacion': es_solo_remod,
         })
 
-    return jsonify(ok=True, etapas=catalogo)
+    return jsonify(
+        ok=True,
+        etapas=catalogo,
+        naturaleza_proyecto=naturaleza,
+    )
 
 
 @presupuestos_bp.route('/<int:id>/ejecutivo/aprobar', methods=['POST'])
