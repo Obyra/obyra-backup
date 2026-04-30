@@ -166,7 +166,7 @@
         <small class="text-light"
                title="Costo interno (NO visible al cliente){% if et_costo_vinc > 0 %} - Propio: ${{ '{:,.0f}'.format(et_costo_propio) }} + Internas vinculadas: ${{ '{:,.0f}'.format(et_costo_vinc) }}{% endif %}">
           <i class="fas fa-eye-slash me-1 text-warning"></i>Costo interno:
-          <strong class="text-warning">${{ '{:,.0f}'.format(et_costo_consol) }}</strong>
+          <strong class="text-warning" data-etapa-costo>${{ '{:,.0f}'.format(et_costo_consol) }}</strong>
           {% if et_costo_vinc > 0 %}
           <span class="text-info ms-1">(+${{ '{:,.0f}'.format(et_costo_vinc) }} int.)</span>
           {% endif %}
@@ -404,7 +404,7 @@
       </div>
       <div class="d-flex gap-3 align-items-center">
         <small class="text-light">
-          Costo: <strong>${{ '{:,.0f}'.format(et_margen_costo) }}</strong>
+          Costo: <strong data-etapa-costo>${{ '{:,.0f}'.format(et_margen_costo) }}</strong>
         </small>
         {% if not presupuesto.ejecutivo_aprobado %}
         <button class="btn btn-sm btn-outline-light"
@@ -1208,6 +1208,26 @@ async function refrescarComposicionesDeItem(itemId) {
       costoCell.innerHTML = '<small class="text-muted">—</small>';
       margenCell.innerHTML = '<small class="text-muted">—</small>';
     }
+    // Tras actualizar la celda, recalcular el costo del header de la etapa
+    _actualizarHeaderCostoEtapa(row);
+  }
+}
+
+function _actualizarHeaderCostoEtapa(rowElement) {
+  // Encuentra el card padre (etapa pliego o etapa interna) y suma todos los
+  // costos visibles de sus filas. Actualiza el strong[data-etapa-costo] del
+  // header. Funciona tanto para etapas pliego como internas.
+  const card = rowElement.closest('.card');
+  if (!card) return;
+  let total = 0;
+  card.querySelectorAll('tr[data-item-row] [data-costo-cell]').forEach(function(cell) {
+    const text = (cell.textContent || '').replace(/[^\d.,-]/g, '').replace(/\./g, '').replace(',', '.');
+    const num = parseFloat(text);
+    if (Number.isFinite(num)) total += num;
+  });
+  const headerCostoEl = card.querySelector('[data-etapa-costo]');
+  if (headerCostoEl) {
+    headerCostoEl.textContent = '$' + total.toLocaleString('es-AR', { maximumFractionDigits: 0 });
   }
 }
 
