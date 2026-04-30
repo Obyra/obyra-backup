@@ -390,15 +390,17 @@
         <strong>{{ nombre_etapa }}</strong>
         <span class="badge bg-light text-dark ms-2">{{ etapa_data['items']|length }} tareas</span>
         <span class="badge bg-info text-dark ms-1">Interna</span>
-        {% if vinc_actual %}
-        <span class="badge bg-success ms-1" title="Costo volcado a este rubro del pliego">
-          <i class="fas fa-link me-1"></i>→ {{ vinc_actual }}
+        <span data-vinculo-badge="{{ nombre_etapa|e }}">
+          {% if vinc_actual %}
+          <span class="badge bg-success ms-1" title="Costo volcado a este rubro del pliego">
+            <i class="fas fa-link me-1"></i>→ {{ vinc_actual }}
+          </span>
+          {% else %}
+          <span class="badge bg-warning text-dark ms-1" title="Sin vínculo: el costo no se suma a ningún rubro del pliego">
+            <i class="fas fa-unlink me-1"></i>Sin vincular
+          </span>
+          {% endif %}
         </span>
-        {% else %}
-        <span class="badge bg-warning text-dark ms-1" title="Sin vínculo: el costo no se suma a ningún rubro del pliego">
-          <i class="fas fa-unlink me-1"></i>Sin vincular
-        </span>
-        {% endif %}
       </div>
       <div class="d-flex gap-3 align-items-center">
         <small class="text-light">
@@ -1441,6 +1443,17 @@ async function eliminarEtapaInterna(etapaNombre) {
 }
 
 async function vincularEtapaInterna(etapaInternaNombre, etapaPliegoNombre) {
+  // Actualizacion inline sin recargar la pagina: cambia el badge "→ X" /
+  // "Sin vincular" del header de la etapa y muestra un toast.
+  // Los totales por etapa NO se recalculan inline (vienen del server);
+  // se muestran tras el siguiente refresh manual (banner de aviso).
+  const select = document.querySelector(
+    `select[onchange*="vincularEtapaInterna"][onchange*="${CSS.escape(etapaInternaNombre)}"]`
+  );
+  if (select) {
+    select.disabled = true;
+    select.classList.add('opacity-50');
+  }
   try {
     const res = await fetch(`/presupuestos/${PRESUPUESTO_ID}/ejecutivo/vincular-etapa`, {
       method: 'POST',
@@ -1453,13 +1466,78 @@ async function vincularEtapaInterna(etapaInternaNombre, etapaPliegoNombre) {
     let data;
     try { data = await res.json(); } catch { data = {error: await res.text()}; }
     if (!res.ok || !data.ok) {
-      alert(data.error || `Error ${res.status}`);
+      _toast(data.error || `Error ${res.status}`, 'danger');
       return;
     }
-    location.reload();
+    _actualizarBadgeVinculo(etapaInternaNombre, etapaPliegoNombre);
+    _marcarHayCambiosTotales();
+    if (etapaPliegoNombre) {
+      _toast(`Vinculada: <strong>${_escapeHtml(etapaInternaNombre)}</strong> → ${_escapeHtml(etapaPliegoNombre)}`, 'success');
+    } else {
+      _toast(`Desvinculada: <strong>${_escapeHtml(etapaInternaNombre)}</strong>`, 'info');
+    }
   } catch (e) {
-    alert('Error de red: ' + e.message);
+    _toast('Error de red: ' + e.message, 'danger');
+  } finally {
+    if (select) {
+      select.disabled = false;
+      select.classList.remove('opacity-50');
+    }
   }
+}
+
+function _actualizarBadgeVinculo(etapaInternaNombre, etapaPliegoNombre) {
+  const wrap = document.querySelector(`[data-vinculo-badge="${CSS.escape(etapaInternaNombre)}"]`);
+  if (!wrap) return;
+  if (etapaPliegoNombre) {
+    wrap.innerHTML =
+      '<span class="badge bg-success ms-1" title="Costo volcado a este rubro del pliego">' +
+      '<i class="fas fa-link me-1"></i>→ ' + _escapeHtml(etapaPliegoNombre) +
+      '</span>';
+  } else {
+    wrap.innerHTML =
+      '<span class="badge bg-warning text-dark ms-1" title="Sin vínculo: el costo no se suma a ningún rubro del pliego">' +
+      '<i class="fas fa-unlink me-1"></i>Sin vincular' +
+      '</span>';
+  }
+}
+
+let _bannerTotalesCambiados = null;
+function _marcarHayCambiosTotales() {
+  if (_bannerTotalesCambiados) return;
+  _bannerTotalesCambiados = document.createElement('div');
+  _bannerTotalesCambiados.className = 'alert alert-info d-flex justify-content-between align-items-center position-sticky';
+  _bannerTotalesCambiados.style.cssText = 'top:0; z-index:1090; margin:0; border-radius:0;';
+  _bannerTotalesCambiados.innerHTML =
+    '<div><i class="fas fa-sync-alt me-2"></i>Cambiaste vínculos de etapas internas. Refrescá para ver los totales actualizados por rubro.</div>' +
+    '<button class="btn btn-sm btn-info text-white" onclick="location.reload()">' +
+    '<i class="fas fa-redo me-1"></i>Refrescar ahora' +
+    '</button>';
+  document.body.prepend(_bannerTotalesCambiados);
+}
+
+// Toasts simples (no necesita Bootstrap toast)
+function _toast(html, tipo) {
+  const cls = tipo === 'danger' ? 'bg-danger' :
+              tipo === 'info'   ? 'bg-info text-dark' :
+              tipo === 'warning'? 'bg-warning text-dark' :
+                                  'bg-success';
+  const div = document.createElement('div');
+  div.className = `toast align-items-center text-white ${cls} border-0 show position-fixed`;
+  div.style.cssText = 'top:20px; right:20px; z-index:1100; min-width:280px;';
+  div.innerHTML =
+    '<div class="d-flex">' +
+      '<div class="toast-body">' + html + '</div>' +
+      '<button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest(\'.toast\').remove()"></button>' +
+    '</div>';
+  document.body.appendChild(div);
+  setTimeout(function() { if (div && div.parentNode) div.remove(); }, 3500);
+}
+
+function _escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 async function revertirEjecutivo(presupuestoId) {
