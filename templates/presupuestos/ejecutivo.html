@@ -20,6 +20,11 @@
       <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-outline-secondary">
         <i class="fas fa-arrow-left me-1"></i>Volver al presupuesto
       </a>
+      <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
+         class="btn btn-outline-info" target="_blank" rel="noopener"
+         title="Abre en pestaña nueva el PDF tal como lo verá el cliente (sin composiciones internas)">
+        <i class="fas fa-eye me-1"></i>Vista cliente
+      </a>
       <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}" class="btn btn-outline-primary">
         <i class="fas fa-dolly-flatbed me-1"></i>Recursos a cotizar
       </a>
@@ -33,6 +38,16 @@
         <i class="fas fa-check-double me-1"></i>Aprobar ejecutivo
       </button>
       {% endif %}
+    </div>
+  </div>
+
+  <!-- Banner: aclaracion de privacidad de la info del Ejecutivo -->
+  <div class="alert alert-warning d-flex align-items-center py-2 mb-3" role="alert">
+    <i class="fas fa-eye-slash fa-lg me-2"></i>
+    <div class="flex-grow-1 small">
+      <strong>Esta vista es interna.</strong>
+      Nada de lo que carges aquí (composiciones, costos internos, proveedores, márgenes) se muestra al cliente en el PDF del presupuesto.
+      Para ver lo que verá el cliente, usá el botón <strong>"Vista cliente"</strong> arriba.
     </div>
   </div>
 
@@ -142,19 +157,26 @@
         </span>
         {% endif %}
       </div>
-      <div class="d-flex gap-3 align-items-center">
-        <small class="text-light">
-          Vendido: <strong>${{ '{:,.0f}'.format(etapa_data['total_vendido']|float) }}</strong>
+      <div class="d-flex gap-3 align-items-center flex-wrap">
+        {% set et_margen_total = etapa_data['total_vendido']|float - et_costo_consol %}
+        <small class="text-light" title="Lo que ve el cliente en el PDF">
+          <i class="fas fa-user me-1 text-success"></i>Vendido:
+          <strong class="text-success">${{ '{:,.0f}'.format(etapa_data['total_vendido']|float) }}</strong>
         </small>
         <small class="text-light"
-               {% if et_costo_vinc > 0 %}title="Propio: ${{ '{:,.0f}'.format(et_costo_propio) }} + Internas vinculadas: ${{ '{:,.0f}'.format(et_costo_vinc) }}"{% endif %}>
-          Costo: <strong>${{ '{:,.0f}'.format(et_costo_consol) }}</strong>
+               title="Costo interno (NO visible al cliente){% if et_costo_vinc > 0 %} - Propio: ${{ '{:,.0f}'.format(et_costo_propio) }} + Internas vinculadas: ${{ '{:,.0f}'.format(et_costo_vinc) }}{% endif %}">
+          <i class="fas fa-eye-slash me-1 text-warning"></i>Costo interno:
+          <strong class="text-warning">${{ '{:,.0f}'.format(et_costo_consol) }}</strong>
           {% if et_costo_vinc > 0 %}
           <span class="text-info ms-1">(+${{ '{:,.0f}'.format(et_costo_vinc) }} int.)</span>
           {% endif %}
         </small>
         {% if et_costo_consol > 0 %}
-        <span class="badge {{ et_sem_class }}" title="Margen de la etapa">
+        <small class="text-light" title="Margen = Vendido - Costo interno">
+          Margen:
+          <strong class="{{ 'text-success' if et_margen_total >= 0 else 'text-danger' }}">${{ '{:,.0f}'.format(et_margen_total) }}</strong>
+        </small>
+        <span class="badge {{ et_sem_class }}" title="Margen porcentual de la etapa">
           {{ '{:+.1f}'.format(et_margen_pct) }}%
         </span>
         {% endif %}
@@ -793,24 +815,32 @@
               <i class="fab fa-whatsapp text-success me-1"></i>Proveedores a pedir cotización
               <small class="text-muted fw-normal">(opcional, podés elegir varios)</small>
             </label>
-            <select class="form-select" id="compProveedores" multiple size="5">
-              {% for p in proveedores_disponibles %}
-              <option value="{{ p.id }}">
-                {{ p.razon_social }}{% if p.contacto_nombre %} · {{ p.contacto_nombre }}{% endif %}{% if p.contacto_telefono or p.telefono %} · {{ p.contacto_telefono or p.telefono }}{% endif %}
-              </option>
-              {% endfor %}
+
+            <!-- Autocomplete: input de busqueda + dropdown + chips de seleccionados -->
+            <div class="position-relative">
+              <input type="text" class="form-control" id="compProveedoresSearch"
+                     placeholder="Escribí 3+ letras para buscar (nombre, CUIT o categoría)..."
+                     autocomplete="off">
+              <div id="compProveedoresResults" class="list-group position-absolute w-100 shadow-sm d-none"
+                   style="z-index:1080; max-height:240px; overflow-y:auto;"></div>
+            </div>
+
+            <!-- Chips: proveedores ya seleccionados -->
+            <div id="compProveedoresChips" class="d-flex flex-wrap gap-1 mt-2"></div>
+
+            <!-- Datos: array hidden con IDs (mantenemos compatibilidad con el backend) -->
+            <select class="d-none" id="compProveedores" multiple>
+              {# Lo poblamos dinámicamente desde JS al elegir cada chip. Sigue
+                 siendo el "source of truth" que el JS de guardar lee. #}
             </select>
+
             <small class="text-muted d-block mt-1">
               <i class="fas fa-info-circle me-1"></i>
-              Al guardar, el recurso queda asignado a los proveedores elegidos. El precio se completa cuando elegís el ganador en <strong>Recursos a cotizar</strong>.
-              Si todavía no tenés proveedores, dejalo vacío y los asignás después.
+              Buscá por nombre, CUIT o categoría. Las opciones marcadas con
+              <span class="badge bg-success">OBYRA</span> son del directorio curado;
+              <span class="badge bg-light text-dark border">Mío</span> son los que cargaste vos.
+              El precio se completa cuando elegís el ganador en <strong>Recursos a cotizar</strong>.
             </small>
-            {% if not proveedores_disponibles %}
-            <div class="alert alert-warning small mt-2 mb-0">
-              <i class="fas fa-exclamation-triangle me-1"></i>
-              No tenés proveedores cargados. <a href="{{ url_for('proveedores_oc.nuevo') }}" target="_blank">Cargá uno</a> para poder pedir cotizaciones.
-            </div>
-            {% endif %}
           </div>
 
           <div class="mb-3">
@@ -849,9 +879,8 @@ function abrirModalComposicion(itemId, descripcion) {
   document.getElementById('modCompra').checked = true;
   document.getElementById('compError').classList.add('d-none');
   document.getElementById('compSubtotalPreview').textContent = '';
-  // Reset selector de proveedores
-  const selProv = document.getElementById('compProveedores');
-  if (selProv) Array.from(selProv.options).forEach(o => o.selected = false);
+  // Reset selector de proveedores (autocomplete + chips)
+  provPickerClear();
   document.getElementById('modalComposicionLabel').innerHTML = '<i class="fas fa-plus-circle text-success me-2"></i>Agregar recurso';
   document.getElementById('btnGuardarComposicion').innerHTML = '<i class="fas fa-save me-1"></i>Agregar';
   onTipoChange();
@@ -874,14 +903,11 @@ function editarComposicion(compId, itemId, compData, itemDescripcion) {
   const tipoOtroEl = document.getElementById('tipoOtro');
   if (tipoOtroEl) tipoOtroEl.checked = tipo === 'otro';
 
-  // Pre-seleccionar proveedores ya asignados a esta composición
-  const selProv2 = document.getElementById('compProveedores');
-  if (selProv2) {
-    const provIds = (compData.proveedores || []).map(p => String(p.id));
-    Array.from(selProv2.options).forEach(o => {
-      o.selected = provIds.includes(o.value);
-    });
-  }
+  // Pre-seleccionar proveedores ya asignados a esta composición (autocomplete + chips)
+  provPickerClear();
+  (compData.proveedores || []).forEach(p => {
+    provPickerAdd({ id: p.id, razon_social: p.razon_social || ('Proveedor #' + p.id), is_global: !!p.is_global });
+  });
 
   // Modalidad (solo equipos)
   if (tipo === 'equipo') {
@@ -1454,6 +1480,170 @@ async function revertirEjecutivo(presupuestoId) {
   } catch (e) {
     alert('Error de red: ' + e.message);
   }
+}
+
+// ============================================================================
+// Autocomplete: buscador de proveedores con chips multi-select
+// ============================================================================
+// Source of truth: el <select id="compProveedores" multiple> oculto. Los chips
+// reflejan sus options selected. La funcion guardarComposicion() ya lee de ese
+// select via .selectedOptions, asi mantenemos compatibilidad.
+
+function _provPickerSelectEl() {
+  return document.getElementById('compProveedores');
+}
+
+function _provPickerChipsEl() {
+  return document.getElementById('compProveedoresChips');
+}
+
+function provPickerClear() {
+  const sel = _provPickerSelectEl();
+  if (sel) sel.innerHTML = '';
+  const chips = _provPickerChipsEl();
+  if (chips) chips.innerHTML = '';
+  const inp = document.getElementById('compProveedoresSearch');
+  if (inp) inp.value = '';
+  const res = document.getElementById('compProveedoresResults');
+  if (res) { res.innerHTML = ''; res.classList.add('d-none'); }
+}
+
+function provPickerHas(id) {
+  const sel = _provPickerSelectEl();
+  if (!sel) return false;
+  return Array.from(sel.options).some(o => String(o.value) === String(id));
+}
+
+function provPickerAdd(prov) {
+  if (!prov || !prov.id) return;
+  if (provPickerHas(prov.id)) return;
+  const sel = _provPickerSelectEl();
+  if (!sel) return;
+  const opt = document.createElement('option');
+  opt.value = prov.id;
+  opt.text = prov.razon_social || ('Proveedor #' + prov.id);
+  opt.selected = true;
+  // guardo info extra en dataset por si la necesito para re-render del chip
+  if (prov.is_global) opt.dataset.global = '1';
+  sel.appendChild(opt);
+  _provPickerRenderChips();
+}
+
+function provPickerRemove(id) {
+  const sel = _provPickerSelectEl();
+  if (!sel) return;
+  Array.from(sel.options).forEach(o => {
+    if (String(o.value) === String(id)) sel.removeChild(o);
+  });
+  _provPickerRenderChips();
+}
+
+function _provPickerRenderChips() {
+  const sel = _provPickerSelectEl();
+  const cont = _provPickerChipsEl();
+  if (!sel || !cont) return;
+  cont.innerHTML = '';
+  Array.from(sel.options).forEach(o => {
+    const chip = document.createElement('span');
+    chip.className = 'badge bg-light text-dark border d-inline-flex align-items-center gap-1';
+    chip.style.fontSize = '.85rem';
+    chip.style.padding = '.4rem .6rem';
+    let inner = '';
+    if (o.dataset.global === '1') {
+      inner += '<span class="badge bg-success me-1" style="font-size:.65rem;">OBYRA</span>';
+    }
+    inner += '<span>' + _escape(o.text) + '</span>';
+    inner += '<button type="button" class="btn-close ms-1" style="font-size:.55rem;"' +
+             ' aria-label="Quitar" onclick="provPickerRemove(' + o.value + ')"></button>';
+    chip.innerHTML = inner;
+    cont.appendChild(chip);
+  });
+}
+
+let _provPickerSearchTimer = null;
+
+(function() {
+  const inp = document.getElementById('compProveedoresSearch');
+  const results = document.getElementById('compProveedoresResults');
+  if (!inp || !results) return;
+
+  function showResults(items) {
+    if (!items || items.length === 0) {
+      results.innerHTML = '<div class="list-group-item text-muted small">Sin resultados.</div>';
+      results.classList.remove('d-none');
+      return;
+    }
+    results.innerHTML = items.map(p => {
+      const tag = p.is_global ? '<span class="badge bg-success ms-1">OBYRA</span>'
+                              : '<span class="badge bg-light text-dark border ms-1">Mío</span>';
+      const cuit = p.cuit ? ' · CUIT ' + _escape(p.cuit) : '';
+      const cat = p.categoria ? ' · ' + _escape(p.categoria) : '';
+      const yaSel = provPickerHas(p.id);
+      return '<button type="button" class="list-group-item list-group-item-action ' +
+             (yaSel ? 'disabled' : '') + '"' +
+             ' data-prov=\'' + JSON.stringify({id: p.id, razon_social: p.razon_social, is_global: !!p.is_global}).replace(/'/g, '&#39;') + '\'' +
+             ' onclick=\'_provPickerSelectFromResult(this)\'>' +
+             '<strong>' + _escape(p.razon_social) + '</strong>' + tag + cuit + cat +
+             (yaSel ? ' <small class="text-muted ms-2">(ya agregado)</small>' : '') +
+             '</button>';
+    }).join('');
+    results.classList.remove('d-none');
+  }
+
+  inp.addEventListener('input', function() {
+    const q = (inp.value || '').trim();
+    if (_provPickerSearchTimer) clearTimeout(_provPickerSearchTimer);
+    if (q.length < 3) {
+      results.innerHTML = '';
+      results.classList.add('d-none');
+      return;
+    }
+    _provPickerSearchTimer = setTimeout(function() {
+      fetch('/proveedores-oc/api/buscar?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(items) {
+          if (!Array.isArray(items)) items = [];
+          showResults(items);
+        })
+        .catch(function(err) {
+          console.error('Error buscando proveedores:', err);
+          results.innerHTML = '<div class="list-group-item text-danger small">Error de red.</div>';
+          results.classList.remove('d-none');
+        });
+    }, 250);
+  });
+
+  // Cerrar dropdown al hacer click afuera
+  document.addEventListener('click', function(ev) {
+    if (!results.contains(ev.target) && ev.target !== inp) {
+      results.classList.add('d-none');
+    }
+  });
+
+  // Reabrir si vuelve a foco
+  inp.addEventListener('focus', function() {
+    if (results.innerHTML.trim() && (inp.value || '').length >= 3) {
+      results.classList.remove('d-none');
+    }
+  });
+})();
+
+function _provPickerSelectFromResult(btn) {
+  try {
+    const prov = JSON.parse(btn.dataset.prov.replace(/&#39;/g, "'"));
+    provPickerAdd(prov);
+    document.getElementById('compProveedoresSearch').value = '';
+    document.getElementById('compProveedoresResults').classList.add('d-none');
+    document.getElementById('compProveedoresSearch').focus();
+  } catch (e) {
+    console.error('No se pudo parsear data-prov:', e);
+  }
+}
+
+function _escape(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 </script>
 {% endblock %}
