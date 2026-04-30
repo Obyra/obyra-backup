@@ -333,6 +333,18 @@ class ItemPresupuesto(db.Model):
     # como renglón separado, solo el total de la etapa pliego.
     etapa_pliego_vinculada = db.Column(db.String(200), nullable=True)
 
+    # Analisis IA sobre presupuestos importados desde Excel:
+    #  - descripcion_original / unidad_original: snapshot de lo que vino del Excel
+    #    antes de aplicar sugerencias IA (preservar dato contractual).
+    #  - analisis_ia: blob JSON con la salida completa de la IA (rubro/etapa
+    #    sugerida, materiales sugeridos, observaciones, confianza, etc.).
+    #  - revisado_ia / fecha_analisis_ia: flags de auditoria.
+    descripcion_original = db.Column(db.String(300), nullable=True)
+    unidad_original = db.Column(db.String(20), nullable=True)
+    analisis_ia = db.Column(db.JSON, nullable=True)
+    revisado_ia = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    fecha_analisis_ia = db.Column(db.DateTime, nullable=True)
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')

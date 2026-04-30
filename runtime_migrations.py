@@ -1770,6 +1770,30 @@ def run_runtime_migrations(db, app):
     print("[OK] Migracion runtime: equipment_assignment - fechas Fase 1 maquinaria")
 
     # =====================================================
+    # 2026-04-30: Fase A - Analisis IA sobre presupuesto importado
+    # Conserva descripcion y unidad ORIGINALES del Excel + guarda blob de
+    # analisis IA y flags de revision sin tocar campos existentes.
+    # Idempotente con ADD COLUMN IF NOT EXISTS.
+    # =====================================================
+    columnas_items_ia = [
+        ("descripcion_original", "VARCHAR(300)"),
+        ("unidad_original", "VARCHAR(20)"),
+        ("analisis_ia", "JSONB"),
+        ("revisado_ia", "BOOLEAN DEFAULT FALSE"),
+        ("fecha_analisis_ia", "TIMESTAMP"),
+    ]
+    for col, ddl in columnas_items_ia:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] items_presupuesto.{col}: {e}")
+    print("[OK] Migracion runtime: columnas analisis IA en items_presupuesto")
+
+    # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como
     # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).

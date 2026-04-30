@@ -226,3 +226,4 @@ from blueprint_presupuestos import calculadora  # noqa: E402, F401
 from blueprint_presupuestos import cotizar_wa  # noqa: E402, F401
 from blueprint_presupuestos import importar_licitacion  # noqa: E402, F401
 from blueprint_presupuestos import ejecutivo  # noqa: E402, F401
+from blueprint_presupuestos import analisis_ia  # noqa: E402, F401

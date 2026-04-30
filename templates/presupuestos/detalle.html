@@ -97,6 +97,13 @@
                                title="Descargar Excel original del pliego importado">
                                 <i class="fas fa-file-excel me-1"></i>Pliego
                             </a>
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
+                            <button type="button" class="btn btn-outline-info"
+                                    onclick="abrirAnalisisIA({{ presupuesto.id }})"
+                                    title="Analizá los ítems con la Calculadora IA: clasifica rubros, normaliza unidades y sugiere materiales.">
+                                <i class="fas fa-magic me-1"></i>Analizar con IA
+                            </button>
+                            {% endif %}
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado', 'aprobado'] %}
                             <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-primary">
@@ -1098,6 +1105,73 @@
 </div>
 
 {% endif %}
+
+<!-- Modal: Analizar con IA (solo presupuestos con pliego Excel) -->
+<div class="modal fade" id="modalAnalizarIA" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-magic me-2"></i>Análisis IA del presupuesto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    La IA analiza cada ítem importado y propone normalizaciones (rubro, unidad, descripción) +
+                    sugerencias de materiales y maquinaria. <strong>No se modifica nada</strong> hasta que
+                    confirmes con "Aplicar seleccionadas". Los datos originales del Excel se conservan.
+                </p>
+
+                <div id="iaLoading" class="text-center py-5">
+                    <div class="spinner-border text-info" role="status"></div>
+                    <p class="mt-3 text-muted">Analizando ítems...</p>
+                </div>
+
+                <div id="iaError" class="alert alert-danger d-none"></div>
+
+                <div id="iaResultados" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <span class="badge bg-info text-dark me-1" id="iaTotalItems">0</span> ítems analizados ·
+                            <span class="badge bg-warning text-dark me-1" id="iaItemsCambios">0</span> con sugerencias
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="iaToggleAll(true)">
+                                <i class="fas fa-check-double me-1"></i>Marcar todas
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="iaToggleAll(false)">
+                                <i class="far fa-square me-1"></i>Desmarcar todas
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle" style="font-size: 0.875rem;">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:40px;"><i class="fas fa-check"></i></th>
+                                    <th>Ítem original</th>
+                                    <th>Rubro / Etapa</th>
+                                    <th>Unidad</th>
+                                    <th>Materiales sugeridos</th>
+                                    <th class="text-center">Confianza</th>
+                                </tr>
+                            </thead>
+                            <tbody id="iaTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btnAplicarIA" onclick="aplicarAnalisisIA()" disabled>
+                    <i class="fas fa-save me-1"></i>Aplicar seleccionadas
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -2210,5 +2284,160 @@ document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(el) {
         });
     }
 });
+
+// ============================================================================
+// Analizar con IA (presupuestos importados desde Excel)
+// ============================================================================
+let _iaPresupuestoId = null;
+let _iaResultadoCache = null;
+
+async function abrirAnalisisIA(presupuestoId) {
+    _iaPresupuestoId = presupuestoId;
+    _iaResultadoCache = null;
+    const modal = new bootstrap.Modal(document.getElementById('modalAnalizarIA'));
+    document.getElementById('iaLoading').classList.remove('d-none');
+    document.getElementById('iaResultados').classList.add('d-none');
+    document.getElementById('iaError').classList.add('d-none');
+    document.getElementById('btnAplicarIA').disabled = true;
+    modal.show();
+
+    try {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const r = await fetch(`/presupuestos/${presupuestoId}/analizar-ia`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }
+        });
+        const data = await r.json();
+        document.getElementById('iaLoading').classList.add('d-none');
+        if (!r.ok || !data.ok) {
+            const err = document.getElementById('iaError');
+            err.textContent = data.error || `Error ${r.status}`;
+            err.classList.remove('d-none');
+            return;
+        }
+        _iaResultadoCache = data;
+        _iaRenderResultados(data);
+    } catch (e) {
+        document.getElementById('iaLoading').classList.add('d-none');
+        const err = document.getElementById('iaError');
+        err.textContent = 'Error de red: ' + e.message;
+        err.classList.remove('d-none');
+    }
+}
+
+function _iaRenderResultados(data) {
+    document.getElementById('iaTotalItems').textContent = data.total_items || 0;
+    document.getElementById('iaItemsCambios').textContent = data.items_con_cambios || 0;
+    const tbody = document.getElementById('iaTbody');
+    tbody.innerHTML = '';
+    (data.items || []).forEach(function(item) {
+        const orig = item.original || {};
+        const sug = item.sugerencias || {};
+        const cambios = !!item.cambios_detectados;
+        const conf = sug.confianza || 0;
+        const confBadge = conf >= 0.7 ? 'bg-success' : (conf >= 0.4 ? 'bg-warning text-dark' : 'bg-secondary');
+        const tr = document.createElement('tr');
+        if (!cambios) tr.classList.add('table-light');
+        tr.innerHTML = `
+          <td class="text-center">
+            <input type="checkbox" class="form-check-input ia-check" data-item-id="${item.id}"
+                   ${cambios ? 'checked' : ''} ${cambios ? '' : 'disabled'}
+                   onchange="_iaActualizarBoton()">
+          </td>
+          <td>
+            <div><strong>${_iaEsc(orig.descripcion || '')}</strong></div>
+            ${sug.descripcion_normalizada ? `<small class="text-info">→ ${_iaEsc(sug.descripcion_normalizada)}</small>` : ''}
+            <div class="small text-muted">Cant: ${orig.cantidad || 0} · Tipo: ${_iaEsc(orig.tipo || '-')}</div>
+          </td>
+          <td>
+            <div class="small">${orig.etapa_nombre ? '<span class="text-muted">' + _iaEsc(orig.etapa_nombre) + '</span>' : '<span class="text-muted">—</span>'}</div>
+            ${sug.etapa_sugerida ? `<div class="small text-info">→ <strong>${_iaEsc(sug.etapa_sugerida)}</strong></div>` : ''}
+          </td>
+          <td>
+            <div class="small">${orig.unidad ? _iaEsc(orig.unidad) : '<span class="text-muted">—</span>'}</div>
+            ${sug.unidad_sugerida ? `<div class="small text-info">→ <strong>${_iaEsc(sug.unidad_sugerida)}</strong></div>` : ''}
+          </td>
+          <td class="small">
+            ${(sug.materiales_sugeridos || []).slice(0, 4).map(m => `<span class="badge bg-light text-dark border me-1">${_iaEsc(m)}</span>`).join('')}
+            ${sug.observaciones_ia ? `<div class="text-muted mt-1" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>${_iaEsc(sug.observaciones_ia)}</div>` : ''}
+          </td>
+          <td class="text-center">
+            <span class="badge ${confBadge}">${Math.round(conf * 100)}%</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    document.getElementById('iaResultados').classList.remove('d-none');
+    _iaActualizarBoton();
+}
+
+function _iaActualizarBoton() {
+    const checks = document.querySelectorAll('.ia-check:checked').length;
+    document.getElementById('btnAplicarIA').disabled = checks === 0;
+    document.getElementById('btnAplicarIA').innerHTML =
+        `<i class="fas fa-save me-1"></i>Aplicar a ${checks} ítem${checks === 1 ? '' : 's'}`;
+}
+
+function iaToggleAll(checked) {
+    document.querySelectorAll('.ia-check').forEach(function(cb) {
+        if (!cb.disabled) cb.checked = checked;
+    });
+    _iaActualizarBoton();
+}
+
+async function aplicarAnalisisIA() {
+    if (!_iaResultadoCache || !_iaPresupuestoId) return;
+    const seleccionados = new Set(
+        Array.from(document.querySelectorAll('.ia-check:checked'))
+             .map(cb => parseInt(cb.dataset.itemId, 10))
+    );
+    if (seleccionados.size === 0) return;
+
+    const items = (_iaResultadoCache.items || [])
+        .filter(it => seleccionados.has(it.id))
+        .map(it => {
+            const sug = it.sugerencias || {};
+            return {
+                item_id: it.id,
+                aplicar: true,
+                descripcion: sug.descripcion_normalizada || null,
+                unidad: sug.unidad_sugerida || null,
+                etapa_nombre: sug.etapa_sugerida || null,
+                analisis: sug,  // blob completo para auditoria
+            };
+        });
+
+    const btn = document.getElementById('btnAplicarIA');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aplicando...';
+
+    try {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const r = await fetch(`/presupuestos/${_iaPresupuestoId}/aplicar-analisis-ia`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            body: JSON.stringify({ items: items }),
+        });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+            alert(data.error || `Error ${r.status}`);
+            btn.disabled = false;
+            _iaActualizarBoton();
+            return;
+        }
+        alert(`Aplicado a ${data.aplicados} ítem${data.aplicados === 1 ? '' : 's'}.`);
+        window.location.reload();
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+        btn.disabled = false;
+        _iaActualizarBoton();
+    }
+}
+
+function _iaEsc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 </script>
 {% endblock %}
