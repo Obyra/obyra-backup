@@ -152,22 +152,67 @@ def sincronizar_materiales_cotizables(presupuesto):
     ).order_by(MaterialCotizable.descripcion).all()
 
 
+_STOPWORDS_ETAPA = {
+    'y', 'de', 'del', 'la', 'el', 'los', 'las', 'en', 'al', 'para', 'con', 'sin',
+    'por', 'sobre', 'bajo', 'a', 'o', 'u',
+}
+
+
+def _tokens_etapa(nombre):
+    """Extrae palabras clave significativas de un nombre de etapa.
+
+    Normaliza acentos, separa por espacios/signos, descarta stopwords y
+    palabras cortas (<5 letras). Devuelve un set de tokens lowercased.
+    """
+    if not nombre:
+        return set()
+    import re
+    import unicodedata
+    s = unicodedata.normalize('NFKD', nombre).encode('ascii', 'ignore').decode('ascii')
+    s = s.lower()
+    palabras = re.split(r'[^a-z0-9]+', s)
+    return {p for p in palabras if p and len(p) >= 5 and p not in _STOPWORDS_ETAPA}
+
+
+def _normalizar_etapa(s):
+    """Normaliza un nombre de etapa para comparacion: lowercase + sin acentos."""
+    if not s:
+        return ''
+    import unicodedata
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii')
+    return s.strip().lower()
+
+
 def _matchea_etapa_del_pliego(etapa_estandar_nombre, nombres_pliego_set):
-    """True si esta etapa estándar ya está cubierta por una etapa del pliego."""
+    """True si esta etapa estándar ya está cubierta por una etapa del pliego.
+
+    Estrategias (en orden, todas case+acentos insensitive):
+      1. Match exacto.
+      2. Match por la parte antes de "/" (ej: "Depresión de Napa / Bombeo"
+         matchea con "Depresion de Napa").
+      3. Match por palabras clave compartidas (>= 5 letras, ignorando stopwords):
+         "Preliminares y Obrador" matchea con "Preliminares y Organización"
+         porque comparten "preliminares".
+    """
     if not etapa_estandar_nombre or not nombres_pliego_set:
         return False
-    nombre_lower = etapa_estandar_nombre.strip().lower()
+    nombre_norm = _normalizar_etapa(etapa_estandar_nombre)
+    tokens_estandar = _tokens_etapa(etapa_estandar_nombre)
+
     for n in nombres_pliego_set:
         if not n:
             continue
-        n_lower = n.strip().lower()
-        if nombre_lower == n_lower:
+        n_norm = _normalizar_etapa(n)
+        if nombre_norm == n_norm:
             return True
-        # Matching flexible: "Depresión de Napa / Bombeo" matchea con "Depresion de Napa"
-        base_standard = nombre_lower.split('/')[0].strip()
-        base_pliego = n_lower.split('/')[0].strip()
+        base_standard = nombre_norm.split('/')[0].strip()
+        base_pliego = n_norm.split('/')[0].strip()
         if base_standard and base_standard == base_pliego:
             return True
+        if tokens_estandar:
+            tokens_pliego = _tokens_etapa(n)
+            if tokens_estandar & tokens_pliego:
+                return True
     return False
 
 
