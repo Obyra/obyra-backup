@@ -1132,6 +1132,64 @@
                 <div id="iaError" class="alert alert-danger d-none"></div>
 
                 <div id="iaResultados" class="d-none">
+                    <!-- AUDITORIA del analisis: panel plegable -->
+                    <div class="card border-warning mb-3">
+                        <div class="card-header bg-warning bg-opacity-10 py-2 d-flex justify-content-between align-items-center"
+                             style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#iaAuditoriaPanel"
+                             role="button" aria-expanded="false">
+                            <span class="fw-bold">
+                                <i class="fas fa-microscope text-warning me-1"></i>Auditoría del análisis IA
+                                <small class="text-muted ms-2 fw-normal">(plegable — útil para validar antes de aplicar)</small>
+                            </span>
+                            <i class="fas fa-chevron-down small text-muted"></i>
+                        </div>
+                        <div id="iaAuditoriaPanel" class="collapse">
+                            <div class="card-body py-3">
+                                <div class="row g-3">
+                                    <!-- Distribución por rubro -->
+                                    <div class="col-md-6">
+                                        <h6 class="small fw-bold text-muted mb-2">
+                                            <i class="fas fa-layer-group me-1"></i>Distribución por rubro sugerido
+                                        </h6>
+                                        <div id="iaBreakdownRubro" class="small">
+                                            <!-- llenado por JS -->
+                                        </div>
+                                    </div>
+                                    <!-- Items en Preliminares (potenciales falsos positivos) -->
+                                    <div class="col-md-6">
+                                        <h6 class="small fw-bold text-muted mb-2">
+                                            <i class="fas fa-search-minus me-1"></i>Ítems clasificados en "Preliminares y Organización"
+                                            <small class="text-muted fw-normal">(revisar falsos positivos)</small>
+                                        </h6>
+                                        <div id="iaPreliminares" class="small" style="max-height:200px; overflow-y:auto;">
+                                            <!-- llenado por JS -->
+                                        </div>
+                                    </div>
+                                    <!-- Top 10 menor confianza -->
+                                    <div class="col-12">
+                                        <h6 class="small fw-bold text-muted mb-2 mt-2">
+                                            <i class="fas fa-arrow-down me-1"></i>10 ítems con menor confianza
+                                            <small class="text-muted fw-normal">(arrancar revisión por estos)</small>
+                                        </h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover mb-0" style="font-size:.8rem;">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width:80px;">Confianza</th>
+                                                        <th>Descripción</th>
+                                                        <th style="width:80px;">Unidad</th>
+                                                        <th>Rubro sugerido</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="iaTopBaja"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Resumen + filtros -->
                     <div class="card border-info mb-3">
                         <div class="card-body py-2">
@@ -2381,6 +2439,13 @@ function _iaRenderResultados(data) {
     document.getElementById('iaCntBaja').textContent = breakdown.baja || 0;
     document.getElementById('iaCntSin').textContent = breakdown.sin || 0;
 
+    // Auditoria: distribucion por rubro como barras horizontales simples
+    _iaRenderBreakdownRubro(data.breakdown_rubro || {}, data.total_items || 1);
+    // Top 10 menor confianza
+    _iaRenderTopBaja(data.top_baja_confianza || []);
+    // Items en Preliminares (potenciales falsos positivos)
+    _iaRenderPreliminares(data.items_preliminares || []);
+
     // Construir filtros dinámicos (rubros y unidades únicas)
     const rubros = new Set();
     const unidades = new Set();
@@ -2596,6 +2661,91 @@ async function aplicarAnalisisIA() {
         btn.disabled = false;
         _iaActualizarBoton();
     }
+}
+
+function _iaRenderBreakdownRubro(breakdown, total) {
+    const cont = document.getElementById('iaBreakdownRubro');
+    if (!cont) return;
+    const entries = Object.entries(breakdown);
+    if (entries.length === 0) {
+        cont.innerHTML = '<div class="text-muted">Sin datos.</div>';
+        return;
+    }
+    const max = Math.max(...entries.map(([, v]) => v));
+    cont.innerHTML = entries.map(function([rubro, count]) {
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const widthPct = max > 0 ? Math.round((count / max) * 100) : 0;
+        const isSin = rubro.startsWith('(Sin');
+        const barColor = isSin ? 'bg-secondary' : 'bg-info';
+        return `
+          <div class="mb-1 d-flex align-items-center" style="font-size:.78rem;">
+            <div style="flex: 0 0 45%; padding-right:6px;" class="${isSin ? 'text-muted' : ''}">${_iaEsc(rubro)}</div>
+            <div style="flex: 1;">
+              <div class="progress" style="height:14px; background:#f0f0f0;">
+                <div class="progress-bar ${barColor}" style="width:${widthPct}%;"></div>
+              </div>
+            </div>
+            <div style="flex: 0 0 70px; text-align:right; padding-left:6px;">
+              <strong>${count}</strong> <span class="text-muted">(${pct}%)</span>
+            </div>
+          </div>`;
+    }).join('');
+}
+
+function _iaRenderTopBaja(items) {
+    const tbody = document.getElementById('iaTopBaja');
+    if (!tbody) return;
+    if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Sin datos.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(function(it) {
+        const lab = it.confianza_label || 'sin';
+        const cls =
+            lab === 'alta'  ? 'bg-success' :
+            lab === 'media' ? 'bg-warning text-dark' :
+            lab === 'baja'  ? 'bg-secondary' :
+                              'bg-light text-dark border';
+        return `
+          <tr>
+            <td><span class="badge ${cls}">${Math.round((it.confianza || 0) * 100)}%</span></td>
+            <td>${_iaEsc(it.descripcion || '')}</td>
+            <td>${_iaEsc(it.unidad || '—')}</td>
+            <td class="text-muted">${_iaEsc(it.rubro_sugerido || (it.tarea_sugerida ? '' : 'sin sugerencia'))}</td>
+          </tr>`;
+    }).join('');
+}
+
+function _iaRenderPreliminares(items) {
+    const cont = document.getElementById('iaPreliminares');
+    if (!cont) return;
+    if (items.length === 0) {
+        cont.innerHTML = '<div class="text-muted">Ningún ítem fue clasificado en Preliminares.</div>';
+        return;
+    }
+    const sospechosos = items.filter(i => i.sospechoso).length;
+    let header = '';
+    if (sospechosos > 0) {
+        header = `<div class="alert alert-warning py-1 px-2 mb-2 small">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <strong>${sospechosos}</strong> ítem(s) con confianza media/baja en Preliminares.
+                    Revisalos a ver si no son falsos positivos.
+                  </div>`;
+    }
+    cont.innerHTML = header + items.map(function(it) {
+        const lab = it.confianza_label || 'sin';
+        const cls =
+            lab === 'alta'  ? 'bg-success' :
+            lab === 'media' ? 'bg-warning text-dark' :
+                              'bg-secondary';
+        const flag = it.sospechoso ? '<i class="fas fa-flag text-warning me-1" title="Posible falso positivo"></i>' : '';
+        return `
+          <div class="border-bottom py-1">
+            ${flag}<span class="badge ${cls} me-1">${Math.round((it.confianza || 0) * 100)}%</span>
+            <strong>${_iaEsc(it.descripcion || '')}</strong>
+            ${it.tarea_sugerida ? `<div class="text-muted ps-3" style="font-size:.7rem;">→ ${_iaEsc(it.tarea_sugerida)}</div>` : ''}
+          </div>`;
+    }).join('');
 }
 
 function _iaEsc(s) {

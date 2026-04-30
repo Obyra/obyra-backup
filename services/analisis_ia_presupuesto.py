@@ -287,10 +287,54 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]]) -> Dict[str, Any]
             'cambios_detectados': cambios,
         })
 
+    # Auditoria adicional: distribucion por rubro, top baja confianza,
+    # y candidatos a falsos positivos en "Preliminares y Organización".
+    breakdown_rubro = {}
+    items_preliminares = []
+    items_para_ranking = []
+
+    for r in resultados:
+        sug = r['sugerencias']
+        rubro = sug.get('rubro_sugerido') or '(Sin clasificar)'
+        breakdown_rubro[rubro] = breakdown_rubro.get(rubro, 0) + 1
+
+        # Candidatos a falso positivo: caen en Preliminares con confianza < alta
+        # (los que coinciden bien con preliminares quedan en alta y son legítimos)
+        if rubro and 'Preliminares' in rubro:
+            items_preliminares.append({
+                'id': r['id'],
+                'descripcion': r['original']['descripcion'],
+                'tarea_sugerida': sug.get('tarea_sugerida'),
+                'confianza': sug['confianza'],
+                'confianza_label': sug['confianza_label'],
+                'sospechoso': sug['confianza_label'] in ('baja', 'media'),
+            })
+
+        # Para ranking de menor confianza (excluir los que ya son 0 sin sugerencia)
+        items_para_ranking.append({
+            'id': r['id'],
+            'descripcion': r['original']['descripcion'],
+            'unidad': r['original']['unidad'],
+            'rubro_sugerido': sug.get('rubro_sugerido'),
+            'tarea_sugerida': sug.get('tarea_sugerida'),
+            'confianza': sug['confianza'],
+            'confianza_label': sug['confianza_label'],
+        })
+
+    # Orden ascendente por confianza para mostrar los 10 más débiles
+    items_para_ranking.sort(key=lambda x: (x['confianza'], x['descripcion'] or ''))
+    top_baja_confianza = items_para_ranking[:10]
+
+    # Orden alfabetico breakdown_rubro descendente por count
+    breakdown_rubro_ordenado = dict(sorted(breakdown_rubro.items(), key=lambda kv: -kv[1]))
+
     return {
         'items': resultados,
         'total_items': len(resultados),
         'items_con_cambios': items_con_cambios,
         'breakdown_confianza': breakdown,
+        'breakdown_rubro': breakdown_rubro_ordenado,
+        'top_baja_confianza': top_baja_confianza,
+        'items_preliminares': items_preliminares,
         'fuente': 'base_tecnica_computos_v2',
     }
