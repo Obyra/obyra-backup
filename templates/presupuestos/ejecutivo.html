@@ -773,6 +773,39 @@
                    placeholder="Ej: Cemento Portland x 50kg / Oficial albañil / Andamio">
           </div>
 
+          <!-- Categoría jornal (UOCRA / Camarco) — solo MO -->
+          <div class="mb-3 d-none" id="wrapperCategoriaJornal">
+            <label class="form-label fw-bold">
+              <i class="fas fa-hard-hat me-1 text-warning"></i>Categoría (UOCRA / Camarco)
+            </label>
+            <select class="form-select" id="compCategoriaJornal">
+              <option value="">— Seleccionar categoría —</option>
+            </select>
+            <small class="text-muted">
+              Carga el precio del jornal automáticamente. Mantené la tabla en
+              <a href="{{ url_for('jornales.lista') }}" target="_blank">/jornales</a>.
+            </small>
+          </div>
+
+          <!-- Personas y Días — solo MO, autocalcula jornales y total -->
+          <div class="row d-none" id="wrapperPersonasDias">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Personas</label>
+              <input type="number" class="form-control" id="compPersonas" min="1" step="1" value="1"
+                     oninput="recalcularJornalesEjec()">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Días</label>
+              <input type="number" class="form-control" id="compDias" min="0.5" step="0.5" value="1"
+                     oninput="recalcularJornalesEjec()">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Jornales</label>
+              <input type="number" class="form-control bg-light" id="compJornalesPreview" readonly value="1">
+              <small class="text-muted">personas × días</small>
+            </div>
+          </div>
+
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label" id="labelUnidad">Unidad</label>
@@ -960,6 +993,14 @@ function onTipoChange() {
   const hintPrecio = document.getElementById('compHintPrecio');
   const hintOtro = document.getElementById('hintTipoOtro');
   const wrapperPrecio = document.getElementById('wrapperPrecio');
+
+  // Categoria jornal + personas/dias: ocultos por default (se muestran solo en MO)
+  const wrapperCategoriaJornal = document.getElementById('wrapperCategoriaJornal');
+  const wrapperPersonasDias = document.getElementById('wrapperPersonasDias');
+  if (tipo !== 'mano_obra') {
+    if (wrapperCategoriaJornal) wrapperCategoriaJornal.classList.add('d-none');
+    if (wrapperPersonasDias) wrapperPersonasDias.classList.add('d-none');
+  }
   const wrapperProveedores = document.getElementById('wrapperProveedores');
 
   if (hintOtro) hintOtro.classList.toggle('d-none', tipo !== 'otro');
@@ -991,11 +1032,17 @@ function onTipoChange() {
   } else if (tipo === 'mano_obra') {
     wrap.classList.add('d-none');
     document.getElementById('labelUnidad').textContent = 'Unidad';
-    document.getElementById('labelCantidad').innerHTML = 'Cantidad <span class="text-danger">*</span>';
-    document.getElementById('labelPrecio').innerHTML = 'Precio unitario (ARS) <span class="text-danger">*</span>';
+    document.getElementById('labelCantidad').innerHTML = 'Jornales (auto)';
+    document.getElementById('labelPrecio').innerHTML = 'Precio por jornal (ARS) <span class="text-danger">*</span>';
     // MO: precio obligatorio (vos conocés los sueldos/jornales)
     precioInput.required = true;
-    hintPrecio.innerHTML = '<i class="fas fa-info-circle me-1"></i>Costo interno conocido (jornal UOCRA, sueldo operario). No se cotiza a proveedores.';
+    hintPrecio.innerHTML = '<i class="fas fa-info-circle me-1"></i>Se carga automáticamente al elegir categoría. Mantené la tabla en <a href="{{ url_for("jornales.lista") }}" target="_blank">/jornales</a>.';
+    // Mostrar categoría + personas/días, cargar dropdown
+    document.getElementById('wrapperCategoriaJornal').classList.remove('d-none');
+    document.getElementById('wrapperPersonasDias').classList.remove('d-none');
+    document.querySelector('#compUnidad').value = 'jornal';
+    cargarCategoriasJornalEjec();
+    recalcularJornalesEjec();
   } else if (tipo === 'otro') {
     wrap.classList.add('d-none');
     document.getElementById('labelUnidad').textContent = 'Unidad';
@@ -1723,5 +1770,85 @@ function _escape(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+// ============================================================================
+// Mano de Obra: selector categoria UOCRA + personas/dias + autocalc
+// ============================================================================
+let _jornalesCacheEjec = null;
+
+async function cargarCategoriasJornalEjec() {
+  const sel = document.getElementById('compCategoriaJornal');
+  if (!sel) return;
+  if (_jornalesCacheEjec) {
+    _renderJornalesEnSelectEjec(_jornalesCacheEjec);
+    return;
+  }
+  sel.innerHTML = '<option value="">Cargando...</option>';
+  try {
+    const r = await fetch('/jornales/api');
+    const d = await r.json();
+    if (d.ok) {
+      _jornalesCacheEjec = d.jornales || [];
+      _renderJornalesEnSelectEjec(_jornalesCacheEjec);
+    } else {
+      sel.innerHTML = '<option value="">No se pudo cargar</option>';
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">Error al cargar</option>';
+  }
+}
+
+function _renderJornalesEnSelectEjec(jornales) {
+  const sel = document.getElementById('compCategoriaJornal');
+  if (!sel) return;
+  let html = '<option value="">— Seleccionar categoría —</option>';
+  jornales.forEach(function(j) {
+    const tag = j.is_global ? ' [OBYRA]' : '';
+    const precio = (j.precio_jornal || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    html += `<option value="${j.id}" data-precio="${j.precio_jornal || 0}" data-nombre="${_escape(j.nombre)}">${_escape(j.nombre)}${tag} — $${precio}/jornal</option>`;
+  });
+  sel.innerHTML = html;
+}
+
+document.getElementById('compCategoriaJornal')?.addEventListener('change', function() {
+  const opt = this.options[this.selectedIndex];
+  const precio = parseFloat(opt.dataset.precio || 0);
+  const nombre = opt.dataset.nombre || '';
+  if (precio > 0) {
+    const inputPrecio = document.getElementById('compPrecio');
+    if (inputPrecio) inputPrecio.value = precio;
+  }
+  const desc = document.getElementById('compDescripcion');
+  if (desc && nombre && !desc.value) {
+    desc.value = 'Jornal ' + nombre;
+  }
+  recalcularJornalesEjec();
+});
+
+function recalcularJornalesEjec() {
+  const personas = parseInt(document.getElementById('compPersonas')?.value || '1', 10) || 1;
+  const dias = parseFloat(document.getElementById('compDias')?.value || '1') || 1;
+  const jornales = personas * dias;
+  const preview = document.getElementById('compJornalesPreview');
+  if (preview) preview.value = jornales.toFixed(2);
+  // El campo cantidad oculto que el backend lee se setea con jornales totales
+  const inputCant = document.getElementById('compCantidad');
+  if (inputCant) inputCant.value = jornales.toFixed(2);
+  // Actualizar preview de subtotal
+  const precio = parseFloat(document.getElementById('compPrecio')?.value || '0') || 0;
+  const subtotal = jornales * precio;
+  const subPreview = document.getElementById('compSubtotalPreview');
+  if (subPreview && subtotal > 0) {
+    subPreview.textContent = `Subtotal: $ ${subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${jornales.toFixed(2)} jornales × $ ${precio.toLocaleString('es-AR', {minimumFractionDigits: 2})})`;
+  } else if (subPreview) {
+    subPreview.textContent = '';
+  }
+}
+
+// Recalcular cuando cambia precio manualmente
+document.getElementById('compPrecio')?.addEventListener('input', function() {
+  const tipo = document.querySelector('input[name="tipo"]:checked')?.value;
+  if (tipo === 'mano_obra') recalcularJornalesEjec();
+});
 </script>
 {% endblock %}
