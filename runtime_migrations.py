@@ -1770,6 +1770,35 @@ def run_runtime_migrations(db, app):
     print("[OK] Migracion runtime: equipment_assignment - fechas Fase 1 maquinaria")
 
     # =====================================================
+    # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
+    # El modelo define UniqueConstraint(organizacion_id, numero) como
+    # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).
+    # Pero quedo un constraint viejo presupuestos_numero_key que es UNIQUE
+    # sobre solo `numero` y bloquea numeros que ya existen en OTROS tenants.
+    # Lo dropeamos si existe. Idempotente.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+            ALTER TABLE presupuestos DROP CONSTRAINT IF EXISTS presupuestos_numero_key;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] drop constraint presupuestos_numero_key: {e}")
+
+    # Por las dudas, drop tambien si esta como index suelto (algunas versiones
+    # de Postgres lo guardan asi cuando se cambia de definicion).
+    try:
+        db.session.execute(db.text("""
+            DROP INDEX IF EXISTS presupuestos_numero_key;
+        """))
+        db.session.commit()
+        print("[OK] presupuestos_numero_key (legacy unique global sobre numero) - dropeado si existia")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] drop index presupuestos_numero_key: {e}")
+
+    # =====================================================
     # 2026-04-29: Tabla variaciones_cac_pendientes
     # Cada vez que el scraper detecta un boletin Camarco nuevo, registra aca
     # la variacion mensual. El superadmin la aplica/descarta desde la UI.
