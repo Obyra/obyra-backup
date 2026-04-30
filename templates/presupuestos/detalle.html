@@ -1118,43 +1118,85 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-3">
-                    La IA analiza cada ítem importado y propone normalizaciones (rubro, unidad, descripción) +
-                    sugerencias de materiales y maquinaria. <strong>No se modifica nada</strong> hasta que
-                    confirmes con "Aplicar seleccionadas". Los datos originales del Excel se conservan.
+                    La IA analiza cada ítem importado contra una base técnica de cómputos y propone normalizaciones
+                    (rubro, etapa, unidad, descripción) + sugerencias de materiales y maquinaria.
+                    <strong>No se modifica nada</strong> hasta que apretes <strong>"Aplicar seleccionadas"</strong>.
+                    Los datos originales del Excel se conservan.
                 </p>
 
                 <div id="iaLoading" class="text-center py-5">
                     <div class="spinner-border text-info" role="status"></div>
-                    <p class="mt-3 text-muted">Analizando ítems...</p>
+                    <p class="mt-3 text-muted">Analizando ítems contra la base técnica...</p>
                 </div>
 
                 <div id="iaError" class="alert alert-danger d-none"></div>
 
                 <div id="iaResultados" class="d-none">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div>
-                            <span class="badge bg-info text-dark me-1" id="iaTotalItems">0</span> ítems analizados ·
-                            <span class="badge bg-warning text-dark me-1" id="iaItemsCambios">0</span> con sugerencias
-                        </div>
-                        <div>
-                            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="iaToggleAll(true)">
-                                <i class="fas fa-check-double me-1"></i>Marcar todas
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="iaToggleAll(false)">
-                                <i class="far fa-square me-1"></i>Desmarcar todas
-                            </button>
+                    <!-- Resumen + filtros -->
+                    <div class="card border-info mb-3">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="small">
+                                    <span class="badge bg-info text-dark me-1" id="iaTotalItems">0</span> ítems ·
+                                    <span class="badge bg-success me-1"><span id="iaCntAlta">0</span> alta</span>
+                                    <span class="badge bg-warning text-dark me-1"><span id="iaCntMedia">0</span> media</span>
+                                    <span class="badge bg-secondary me-1"><span id="iaCntBaja">0</span> baja</span>
+                                    <span class="badge bg-light text-dark border me-1"><span id="iaCntSin">0</span> sin sugerencia</span>
+                                </div>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-success" type="button" onclick="iaMarcarPorConfianza('alta')" title="Marcar solo alta confianza">
+                                        <i class="fas fa-star me-1"></i>Solo alta
+                                    </button>
+                                    <button class="btn btn-outline-warning" type="button" onclick="iaMarcarPorConfianza('alta_media')" title="Marcar alta + media">
+                                        <i class="fas fa-stars me-1"></i>Alta + media
+                                    </button>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="iaToggleAll(false)">
+                                        <i class="far fa-square me-1"></i>Desmarcar todas
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="row g-2 mt-2">
+                                <div class="col-md-4">
+                                    <input type="text" id="iaFiltroBuscar" class="form-control form-control-sm" placeholder="Buscar texto en descripción, rubro, etapa..." oninput="iaAplicarFiltros()">
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="iaFiltroConfianza" class="form-select form-select-sm" onchange="iaAplicarFiltros()">
+                                        <option value="">Todas las confianzas</option>
+                                        <option value="alta">Alta</option>
+                                        <option value="media">Media</option>
+                                        <option value="baja">Baja</option>
+                                        <option value="sin">Sin sugerencia</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="iaFiltroRubro" class="form-select form-select-sm" onchange="iaAplicarFiltros()">
+                                        <option value="">Todos los rubros</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select id="iaFiltroUnidad" class="form-select form-select-sm" onchange="iaAplicarFiltros()">
+                                        <option value="">Todas las unidades</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <div class="alert alert-warning small mb-2 py-2">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Los ítems con confianza <strong>menor a 60%</strong> NO se preseleccionan. Marcalos a mano si querés aplicarlos.
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-hover align-middle" style="font-size: 0.875rem;">
                             <thead class="table-light sticky-top">
                                 <tr>
                                     <th style="width:40px;"><i class="fas fa-check"></i></th>
-                                    <th>Ítem original</th>
-                                    <th>Rubro / Etapa</th>
-                                    <th>Unidad</th>
-                                    <th>Materiales sugeridos</th>
-                                    <th class="text-center">Confianza</th>
+                                    <th style="min-width:220px;">Ítem original</th>
+                                    <th style="min-width:180px;">Rubro / Etapa</th>
+                                    <th style="min-width:90px;">Unidad</th>
+                                    <th style="min-width:200px;">Materiales sugeridos</th>
+                                    <th class="text-center" style="width:90px;">Confianza</th>
                                 </tr>
                             </thead>
                             <tbody id="iaTbody"></tbody>
@@ -2286,19 +2328,25 @@ document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(el) {
 });
 
 // ============================================================================
-// Analizar con IA (presupuestos importados desde Excel)
+// Analizar con IA v2 — base técnica + filtros + edición inline
 // ============================================================================
 let _iaPresupuestoId = null;
 let _iaResultadoCache = null;
+let _iaEdiciones = {};  // { item_id: { descripcion, unidad, etapa_nombre } }
 
 async function abrirAnalisisIA(presupuestoId) {
     _iaPresupuestoId = presupuestoId;
     _iaResultadoCache = null;
+    _iaEdiciones = {};
     const modal = new bootstrap.Modal(document.getElementById('modalAnalizarIA'));
     document.getElementById('iaLoading').classList.remove('d-none');
     document.getElementById('iaResultados').classList.add('d-none');
     document.getElementById('iaError').classList.add('d-none');
     document.getElementById('btnAplicarIA').disabled = true;
+    document.getElementById('iaFiltroBuscar').value = '';
+    document.getElementById('iaFiltroConfianza').value = '';
+    document.getElementById('iaFiltroRubro').value = '';
+    document.getElementById('iaFiltroUnidad').value = '';
     modal.show();
 
     try {
@@ -2327,60 +2375,173 @@ async function abrirAnalisisIA(presupuestoId) {
 
 function _iaRenderResultados(data) {
     document.getElementById('iaTotalItems').textContent = data.total_items || 0;
-    document.getElementById('iaItemsCambios').textContent = data.items_con_cambios || 0;
+    const breakdown = data.breakdown_confianza || { alta: 0, media: 0, baja: 0, sin: 0 };
+    document.getElementById('iaCntAlta').textContent = breakdown.alta || 0;
+    document.getElementById('iaCntMedia').textContent = breakdown.media || 0;
+    document.getElementById('iaCntBaja').textContent = breakdown.baja || 0;
+    document.getElementById('iaCntSin').textContent = breakdown.sin || 0;
+
+    // Construir filtros dinámicos (rubros y unidades únicas)
+    const rubros = new Set();
+    const unidades = new Set();
+    (data.items || []).forEach(function(it) {
+        const s = it.sugerencias || {};
+        if (s.rubro_sugerido) rubros.add(s.rubro_sugerido);
+        if (s.unidad_sugerida) unidades.add(s.unidad_sugerida);
+        if (it.original && it.original.unidad) unidades.add(it.original.unidad);
+    });
+    _iaPopularSelect('iaFiltroRubro', 'Todos los rubros', Array.from(rubros).sort());
+    _iaPopularSelect('iaFiltroUnidad', 'Todas las unidades', Array.from(unidades).sort());
+
     const tbody = document.getElementById('iaTbody');
     tbody.innerHTML = '';
     (data.items || []).forEach(function(item) {
-        const orig = item.original || {};
-        const sug = item.sugerencias || {};
-        const cambios = !!item.cambios_detectados;
-        const conf = sug.confianza || 0;
-        const confBadge = conf >= 0.7 ? 'bg-success' : (conf >= 0.4 ? 'bg-warning text-dark' : 'bg-secondary');
-        const tr = document.createElement('tr');
-        if (!cambios) tr.classList.add('table-light');
-        tr.innerHTML = `
-          <td class="text-center">
-            <input type="checkbox" class="form-check-input ia-check" data-item-id="${item.id}"
-                   ${cambios ? 'checked' : ''} ${cambios ? '' : 'disabled'}
-                   onchange="_iaActualizarBoton()">
-          </td>
-          <td>
-            <div><strong>${_iaEsc(orig.descripcion || '')}</strong></div>
-            ${sug.descripcion_normalizada ? `<small class="text-info">→ ${_iaEsc(sug.descripcion_normalizada)}</small>` : ''}
-            <div class="small text-muted">Cant: ${orig.cantidad || 0} · Tipo: ${_iaEsc(orig.tipo || '-')}</div>
-          </td>
-          <td>
-            <div class="small">${orig.etapa_nombre ? '<span class="text-muted">' + _iaEsc(orig.etapa_nombre) + '</span>' : '<span class="text-muted">—</span>'}</div>
-            ${sug.etapa_sugerida ? `<div class="small text-info">→ <strong>${_iaEsc(sug.etapa_sugerida)}</strong></div>` : ''}
-          </td>
-          <td>
-            <div class="small">${orig.unidad ? _iaEsc(orig.unidad) : '<span class="text-muted">—</span>'}</div>
-            ${sug.unidad_sugerida ? `<div class="small text-info">→ <strong>${_iaEsc(sug.unidad_sugerida)}</strong></div>` : ''}
-          </td>
-          <td class="small">
-            ${(sug.materiales_sugeridos || []).slice(0, 4).map(m => `<span class="badge bg-light text-dark border me-1">${_iaEsc(m)}</span>`).join('')}
-            ${sug.observaciones_ia ? `<div class="text-muted mt-1" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>${_iaEsc(sug.observaciones_ia)}</div>` : ''}
-          </td>
-          <td class="text-center">
-            <span class="badge ${confBadge}">${Math.round(conf * 100)}%</span>
-          </td>
-        `;
-        tbody.appendChild(tr);
+        tbody.appendChild(_iaCrearFila(item));
     });
     document.getElementById('iaResultados').classList.remove('d-none');
+    iaAplicarFiltros();
+    _iaActualizarBoton();
+}
+
+function _iaPopularSelect(id, labelDefault, opciones) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = `<option value="">${labelDefault}</option>` +
+        opciones.map(o => `<option value="${_iaEsc(o)}">${_iaEsc(o)}</option>`).join('');
+}
+
+function _iaCrearFila(item) {
+    const orig = item.original || {};
+    const sug = item.sugerencias || {};
+    const conf = sug.confianza || 0;
+    const label = sug.confianza_label || 'sin';
+    const confBadge =
+        label === 'alta'  ? 'bg-success' :
+        label === 'media' ? 'bg-warning text-dark' :
+        label === 'baja'  ? 'bg-secondary' :
+                            'bg-light text-dark border';
+
+    const haySugerencia = (label !== 'sin') && !!item.cambios_detectados;
+    // No preseleccionar < 60% (alta=>preselect, media=>preselect, baja/sin=>NO)
+    const preselect = haySugerencia && (label === 'alta' || label === 'media');
+
+    const tr = document.createElement('tr');
+    tr.dataset.confianzaLabel = label;
+    tr.dataset.rubro = sug.rubro_sugerido || '';
+    tr.dataset.unidad = sug.unidad_sugerida || orig.unidad || '';
+    tr.dataset.searchText = (
+        (orig.descripcion || '') + ' ' +
+        (sug.rubro_sugerido || '') + ' ' +
+        (sug.etapa_sugerida || '') + ' ' +
+        (sug.tarea_sugerida || '')
+    ).toLowerCase();
+    if (!haySugerencia) tr.classList.add('table-light');
+
+    tr.innerHTML = `
+      <td class="text-center align-top pt-2">
+        <input type="checkbox" class="form-check-input ia-check" data-item-id="${item.id}"
+               ${preselect ? 'checked' : ''} ${haySugerencia ? '' : 'disabled'}
+               onchange="_iaActualizarBoton()">
+      </td>
+      <td>
+        <div><strong>${_iaEsc(orig.descripcion || '')}</strong></div>
+        <div class="small text-muted">Cant: ${orig.cantidad || 0} · Tipo: ${_iaEsc(orig.tipo || '-')}</div>
+        ${sug.descripcion_normalizada ? `
+        <div class="mt-1">
+          <label class="form-label small text-info mb-0">Descripción normalizada:</label>
+          <input type="text" class="form-control form-control-sm ia-edit"
+                 data-item-id="${item.id}" data-field="descripcion"
+                 value="${_iaEsc(sug.descripcion_normalizada)}"
+                 oninput="_iaSetEdicion(${item.id}, 'descripcion', this.value)">
+        </div>` : ''}
+        ${sug.tarea_sugerida ? `<div class="small text-info mt-1"><i class="fas fa-tools me-1"></i>${_iaEsc(sug.tarea_sugerida)}</div>` : ''}
+      </td>
+      <td>
+        <div class="small text-muted">${orig.etapa_nombre ? _iaEsc(orig.etapa_nombre) : '—'}</div>
+        ${sug.etapa_sugerida ? `
+        <div class="mt-1">
+          <input type="text" class="form-control form-control-sm ia-edit"
+                 data-item-id="${item.id}" data-field="etapa_nombre"
+                 value="${_iaEsc(sug.etapa_sugerida)}"
+                 oninput="_iaSetEdicion(${item.id}, 'etapa_nombre', this.value)">
+        </div>` : ''}
+        ${sug.rubro_sugerido ? `<div class="small text-muted mt-1">${_iaEsc(sug.rubro_sugerido)}</div>` : ''}
+      </td>
+      <td>
+        <div class="small text-muted">${orig.unidad ? _iaEsc(orig.unidad) : '—'}</div>
+        ${sug.unidad_sugerida ? `
+        <div class="mt-1">
+          <input type="text" class="form-control form-control-sm ia-edit"
+                 data-item-id="${item.id}" data-field="unidad" maxlength="20"
+                 value="${_iaEsc(sug.unidad_sugerida)}"
+                 oninput="_iaSetEdicion(${item.id}, 'unidad', this.value)">
+        </div>` : ''}
+      </td>
+      <td class="small">
+        ${(sug.materiales_sugeridos || []).slice(0, 4).map(m => `<span class="badge bg-light text-dark border me-1 mb-1">${_iaEsc(m)}</span>`).join('')}
+        ${(sug.maquinaria_sugerida || []).slice(0, 3).map(m => `<span class="badge bg-info text-dark me-1 mb-1"><i class="fas fa-cogs me-1"></i>${_iaEsc(m)}</span>`).join('')}
+        ${sug.observaciones_ia ? `<div class="text-muted mt-1" style="font-size:.7rem;"><i class="fas fa-info-circle me-1"></i>${_iaEsc(sug.observaciones_ia)}</div>` : ''}
+        ${sug.criterio_medicion ? `<div class="text-muted mt-1" style="font-size:.7rem;"><i class="fas fa-ruler me-1"></i>${_iaEsc(sug.criterio_medicion)}</div>` : ''}
+      </td>
+      <td class="text-center">
+        <span class="badge ${confBadge}">${Math.round(conf * 100)}%</span>
+        <div class="small text-muted mt-1">${_iaEsc(label)}</div>
+      </td>
+    `;
+    return tr;
+}
+
+function _iaSetEdicion(itemId, field, value) {
+    if (!_iaEdiciones[itemId]) _iaEdiciones[itemId] = {};
+    _iaEdiciones[itemId][field] = value;
+}
+
+function iaAplicarFiltros() {
+    const buscar = (document.getElementById('iaFiltroBuscar').value || '').toLowerCase().trim();
+    const conf = document.getElementById('iaFiltroConfianza').value;
+    const rubro = document.getElementById('iaFiltroRubro').value;
+    const unidad = document.getElementById('iaFiltroUnidad').value;
+
+    document.querySelectorAll('#iaTbody tr').forEach(function(tr) {
+        let visible = true;
+        if (conf && tr.dataset.confianzaLabel !== conf) visible = false;
+        if (rubro && tr.dataset.rubro !== rubro) visible = false;
+        if (unidad && tr.dataset.unidad !== unidad) visible = false;
+        if (buscar && !(tr.dataset.searchText || '').includes(buscar)) visible = false;
+        tr.style.display = visible ? '' : 'none';
+    });
     _iaActualizarBoton();
 }
 
 function _iaActualizarBoton() {
-    const checks = document.querySelectorAll('.ia-check:checked').length;
-    document.getElementById('btnAplicarIA').disabled = checks === 0;
-    document.getElementById('btnAplicarIA').innerHTML =
-        `<i class="fas fa-save me-1"></i>Aplicar a ${checks} ítem${checks === 1 ? '' : 's'}`;
+    const checks = Array.from(document.querySelectorAll('.ia-check:checked'))
+                        .filter(cb => cb.closest('tr').style.display !== 'none').length;
+    const btn = document.getElementById('btnAplicarIA');
+    btn.disabled = checks === 0;
+    btn.innerHTML = `<i class="fas fa-save me-1"></i>Aplicar a ${checks} ítem${checks === 1 ? '' : 's'}`;
 }
 
 function iaToggleAll(checked) {
-    document.querySelectorAll('.ia-check').forEach(function(cb) {
-        if (!cb.disabled) cb.checked = checked;
+    document.querySelectorAll('#iaTbody tr').forEach(function(tr) {
+        if (tr.style.display === 'none') return;
+        const cb = tr.querySelector('.ia-check');
+        if (cb && !cb.disabled) cb.checked = checked;
+    });
+    _iaActualizarBoton();
+}
+
+function iaMarcarPorConfianza(modo) {
+    // modo: 'alta' o 'alta_media'
+    document.querySelectorAll('#iaTbody tr').forEach(function(tr) {
+        if (tr.style.display === 'none') return;
+        const cb = tr.querySelector('.ia-check');
+        if (!cb || cb.disabled) return;
+        const conf = tr.dataset.confianzaLabel;
+        if (modo === 'alta') {
+            cb.checked = (conf === 'alta');
+        } else if (modo === 'alta_media') {
+            cb.checked = (conf === 'alta' || conf === 'media');
+        }
     });
     _iaActualizarBoton();
 }
@@ -2389,6 +2550,7 @@ async function aplicarAnalisisIA() {
     if (!_iaResultadoCache || !_iaPresupuestoId) return;
     const seleccionados = new Set(
         Array.from(document.querySelectorAll('.ia-check:checked'))
+             .filter(cb => cb.closest('tr').style.display !== 'none')
              .map(cb => parseInt(cb.dataset.itemId, 10))
     );
     if (seleccionados.size === 0) return;
@@ -2397,12 +2559,14 @@ async function aplicarAnalisisIA() {
         .filter(it => seleccionados.has(it.id))
         .map(it => {
             const sug = it.sugerencias || {};
+            const ed = _iaEdiciones[it.id] || {};
             return {
                 item_id: it.id,
                 aplicar: true,
-                descripcion: sug.descripcion_normalizada || null,
-                unidad: sug.unidad_sugerida || null,
-                etapa_nombre: sug.etapa_sugerida || null,
+                // Edicion inline tiene prioridad sobre la sugerencia
+                descripcion: (ed.descripcion ?? sug.descripcion_normalizada) || null,
+                unidad: (ed.unidad ?? sug.unidad_sugerida) || null,
+                etapa_nombre: (ed.etapa_nombre ?? sug.etapa_sugerida) || null,
                 analisis: sug,  // blob completo para auditoria
             };
         });
