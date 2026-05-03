@@ -1,0 +1,220 @@
+{# ============================================================
+   Visita guiada del sistema OBYRA
+   Usa Driver.js (MIT, ~5KB) — sin dependencias adicionales.
+   Se incluye en base.html para que esté disponible en cualquier pantalla.
+   Se dispara con window.iniciarVisitaGuiada() o desde el botón del menú.
+   Auto-show la primera vez que el usuario entra después de loguearse
+   (controlado por localStorage).
+   ============================================================ #}
+
+<!-- Driver.js CSS + JS desde CDN -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css"/>
+<script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
+
+<style>
+    /* Override de colores para que matchee el branding OBYRA */
+    .driver-popover.obyra-popover {
+        background: #fff;
+        color: #333;
+        max-width: 380px;
+    }
+    .driver-popover.obyra-popover .driver-popover-title {
+        font-size: 1rem;
+        color: #0d6efd;
+    }
+    .driver-popover.obyra-popover .driver-popover-progress-text {
+        color: #6c757d;
+    }
+    .driver-popover.obyra-popover .driver-popover-next-btn,
+    .driver-popover.obyra-popover .driver-popover-prev-btn {
+        background: #0d6efd;
+        color: #fff;
+        text-shadow: none;
+        border: none;
+        border-radius: 4px;
+    }
+    .driver-popover.obyra-popover .driver-popover-prev-btn {
+        background: #6c757d;
+    }
+    .driver-popover.obyra-popover .driver-popover-close-btn {
+        color: #6c757d;
+    }
+</style>
+
+<script>
+(function() {
+    'use strict';
+
+    const STORAGE_KEY = 'obyra_tour_visto_v1';
+    const ROLE_USUARIO = "{{ current_user.role if current_user.is_authenticated else '' }}";
+    const ES_SUPERADMIN = {{ 'true' if current_user.is_authenticated and current_user.is_super_admin else 'false' }};
+
+    /* ============================================================
+       Pasos de la visita — solo se incluyen si el elemento existe
+       en el DOM, así funciona en cualquier pantalla sin romperse.
+       ============================================================ */
+    function buildSteps() {
+        const steps = [];
+
+        steps.push({
+            popover: {
+                title: '👋 Bienvenida a OBYRA',
+                description: '<p>Te paso por las pantallas principales en 1 minuto. Podés cerrar el tour en cualquier momento con la X o la tecla <kbd>Esc</kbd>.</p><p class="text-muted small mb-0">Si querés repetirlo después, lo encontrás en el menú de tu nombre arriba a la derecha.</p>'
+            }
+        });
+
+        const anclas = [
+            {
+                el: '.navbar-brand',
+                title: '🏠 Inicio',
+                description: 'Desde el logo siempre volvés al dashboard principal.'
+            },
+            {
+                el: '#navbarPresupuestos',
+                title: '📋 Presupuestos',
+                description: 'Cargá pliegos en Excel, calculá con IA o cargá manualmente. Cada presupuesto se puede convertir en obra cuando se aprueba.'
+            },
+            {
+                el: '#navbarObras',
+                title: '🏗️ Obras',
+                description: 'Listado de obras activas, cierre de obras, certificaciones y avances. Acá vas a ver el costo real, etapas y tareas.'
+            },
+            {
+                el: '#navbarInventario',
+                title: '📦 Inventario',
+                description: 'Stock por obra y depósito, requerimientos de compra, órdenes de compra y remitos. Conecta con proveedores.'
+            },
+            {
+                el: '#navbarEquipos',
+                title: '🚜 Equipos y Maquinaria',
+                description: 'Gestión de máquinas y equipos. Soporta modalidad <strong>compra</strong> y <strong>alquiler</strong> (con proveedor + fechas de vencimiento).'
+            },
+            {
+                el: '#navbarMarketplaces',
+                title: '🛒 Marketplaces y Proveedores',
+                description: 'Directorio OBYRA con proveedores curados + tus proveedores propios. Sirve para pedir cotizaciones a varios al mismo tiempo.'
+            },
+            {
+                el: '#navbarReportes',
+                title: '📊 Reportes',
+                description: 'Reportes financieros, de obras, costos e inventario. Útiles para auditoría y análisis.'
+            },
+            {
+                el: '#navbarNotificaciones',
+                title: '🔔 Notificaciones',
+                description: 'Acá llegan los avisos de stock bajo, alquileres por vencer, requerimientos pendientes, etc.'
+            },
+            {
+                el: '#navbarUsuario',
+                title: '👤 Tu cuenta',
+                description: 'Perfil, configuración de tu empresa, facturación y acceso a la visita guiada cuando quieras repetirla.'
+            }
+        ];
+
+        anclas.forEach(function(a) {
+            const elem = document.querySelector(a.el);
+            if (elem && elem.offsetParent !== null) {  // visible
+                steps.push({
+                    element: a.el,
+                    popover: {
+                        title: a.title,
+                        description: a.description,
+                        side: 'bottom',
+                        align: 'start'
+                    }
+                });
+            }
+        });
+
+        // Steps específicos de pantalla actual (si está en presupuesto detalle)
+        const btnAnalizarIA = document.querySelector('button[onclick^="abrirAnalisisIA"]');
+        if (btnAnalizarIA) {
+            steps.push({
+                element: 'button[onclick^="abrirAnalisisIA"]',
+                popover: {
+                    title: '🪄 Analizar con IA',
+                    description: 'Si el presupuesto vino de un Excel, este botón lo analiza con la base técnica y te sugiere rubros, etapas, unidades y materiales.',
+                    side: 'bottom'
+                }
+            });
+        }
+
+        const btnEjecutivo = document.querySelector('a[href*="ejecutivo"]');
+        if (btnEjecutivo) {
+            steps.push({
+                element: 'a[href*="ejecutivo"]',
+                popover: {
+                    title: '🧮 Armar Ejecutivo (APU)',
+                    description: 'Desde acá descomponés cada ítem del pliego en sus recursos (materiales, mano de obra, equipos). El cliente no ve este desglose interno.',
+                    side: 'bottom'
+                }
+            });
+        }
+
+        steps.push({
+            popover: {
+                title: '✅ ¡Listo!',
+                description: '<p>Eso es lo principal. Si te perdés en alguna pantalla, podés volver a abrir esta visita desde el menú de tu nombre.</p><p class="mb-0">Ante cualquier duda, también tenés el <a href="/manual" target="_blank">Manual</a> en el navbar.</p>'
+            }
+        });
+
+        return steps;
+    }
+
+    /* ============================================================
+       API pública: window.iniciarVisitaGuiada()
+       ============================================================ */
+    window.iniciarVisitaGuiada = function(forzar) {
+        if (typeof window.driver === 'undefined' || !window.driver.js) {
+            console.warn('Driver.js no cargado todavía');
+            return;
+        }
+        const steps = buildSteps();
+        if (steps.length <= 2) {
+            // Solo bienvenida + final, sin elementos visibles
+            console.info('Visita guiada: pocos elementos disponibles en esta pantalla');
+        }
+
+        const driverObj = window.driver.js.driver({
+            showProgress: true,
+            allowClose: true,
+            popoverClass: 'obyra-popover',
+            nextBtnText: 'Siguiente →',
+            prevBtnText: '← Anterior',
+            doneBtnText: 'Cerrar',
+            progressText: {% raw %}'Paso {{current}} de {{total}}'{% endraw %},
+            steps: steps,
+            onDestroyStarted: function() {
+                // Marcar como vista al cerrar
+                try { localStorage.setItem(STORAGE_KEY, '1'); } catch (e) {}
+                driverObj.destroy();
+            }
+        });
+
+        driverObj.drive();
+    };
+
+    /* ============================================================
+       Auto-iniciar la primera vez que el usuario logueado abre el
+       sistema en este dispositivo. Solo en la pantalla principal
+       (index/dashboard) para no aparecer encima de un formulario.
+       ============================================================ */
+    document.addEventListener('DOMContentLoaded', function() {
+        if (!ROLE_USUARIO) return;  // sin user logueado
+        try {
+            if (localStorage.getItem(STORAGE_KEY) === '1') return;
+        } catch (e) {
+            return;  // si localStorage está bloqueado, no hacer nada
+        }
+        const path = window.location.pathname || '/';
+        const enRaiz = path === '/' || path === '/dashboard' || path.startsWith('/index');
+        if (!enRaiz) return;
+        // Esperar a que Driver.js cargue desde CDN
+        setTimeout(function() {
+            if (typeof window.driver !== 'undefined' && window.driver.js) {
+                window.iniciarVisitaGuiada(false);
+            }
+        }, 800);
+    });
+})();
+</script>
