@@ -190,6 +190,9 @@ from models.utils import (
 # Audit log
 from models.audit import AuditLog, registrar_audit
 
+# Documentos legales y consentimientos
+from models.legal import LegalDocument, UserConsent, documentos_pendientes_para_usuario, TIPOS_DOCUMENTO
+
 # Cierre formal de obra y acta de entrega
 from models.cierre_obra import CierreObra, ActaEntrega
 

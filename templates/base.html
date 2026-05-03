@@ -738,6 +738,7 @@
     <!-- Visita guiada (Driver.js) — solo si el user esta logueado -->
     {% if current_user.is_authenticated %}
         {% include '_visita_guiada.html' %}
+        {% include '_modal_legal_pendiente.html' %}
     {% endif %}
 
     <!-- Lazy loading + a11y: aplica loading="lazy" a imagenes y aria-label a botones icon-only -->

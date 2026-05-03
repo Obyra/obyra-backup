@@ -1794,6 +1794,97 @@ def run_runtime_migrations(db, app):
     print("[OK] Migracion runtime: columnas analisis IA en items_presupuesto")
 
     # =====================================================
+    # 2026-05-03: Capa legal Fase A - LegalDocument + UserConsent
+    # `db.create_all()` (Railway) crea las tablas via modelo, pero hacemos
+    # el SQL explicito para entornos sin create_all. Idempotente.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='legal_documents') THEN
+                CREATE TABLE legal_documents (
+                    id SERIAL PRIMARY KEY,
+                    tipo_documento VARCHAR(40) NOT NULL,
+                    version VARCHAR(40) NOT NULL,
+                    titulo VARCHAR(200) NOT NULL,
+                    contenido_html TEXT,
+                    fecha_vigencia DATE NOT NULL DEFAULT CURRENT_DATE,
+                    requiere_reaceptacion BOOLEAN NOT NULL DEFAULT FALSE,
+                    activo BOOLEAN NOT NULL DEFAULT TRUE,
+                    notas TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_legal_doc_tipo_version UNIQUE (tipo_documento, version)
+                );
+                CREATE INDEX ix_legal_doc_tipo_activo ON legal_documents(tipo_documento, activo);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] legal_documents: {e}")
+
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='user_consents') THEN
+                CREATE TABLE user_consents (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                    organizacion_id INTEGER REFERENCES organizaciones(id) ON DELETE SET NULL,
+                    legal_document_id INTEGER NOT NULL REFERENCES legal_documents(id) ON DELETE RESTRICT,
+                    tipo_documento VARCHAR(40) NOT NULL,
+                    version VARCHAR(40) NOT NULL,
+                    accepted BOOLEAN NOT NULL DEFAULT TRUE,
+                    accepted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    ip_address VARCHAR(45),
+                    user_agent VARCHAR(400),
+                    metodo VARCHAR(40) DEFAULT 'checkbox_registro',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX ix_consent_user_id ON user_consents(user_id);
+                CREATE INDEX ix_consent_org_id ON user_consents(organizacion_id);
+                CREATE INDEX ix_consent_doc_id ON user_consents(legal_document_id);
+                CREATE INDEX ix_consent_tipo ON user_consents(tipo_documento);
+                CREATE INDEX ix_consent_user_doc ON user_consents(user_id, legal_document_id);
+                CREATE INDEX ix_consent_user_tipo ON user_consents(user_id, tipo_documento);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] user_consents: {e}")
+
+    # Seed: si no hay LegalDocument vigentes, crear v1.0.0 para los 3 tipos
+    # canonicos (terminos / privacidad / cookies). Toman el contenido del
+    # template estatico como referencia pero contenido_html se deja NULL
+    # (los endpoints legales caen al template como fallback).
+    try:
+        cnt = db.session.execute(db.text(
+            "SELECT COUNT(*) FROM legal_documents WHERE activo = TRUE"
+        )).scalar() or 0
+        if cnt == 0:
+            db.session.execute(db.text("""
+                INSERT INTO legal_documents
+                    (tipo_documento, version, titulo, fecha_vigencia, requiere_reaceptacion, activo, notas, created_at, updated_at)
+                VALUES
+                    ('terminos',    '1.0.0', 'Términos y Condiciones',     CURRENT_DATE, FALSE, TRUE, 'Version inicial.', NOW(), NOW()),
+                    ('privacidad',  '1.0.0', 'Política de Privacidad',     CURRENT_DATE, FALSE, TRUE, 'Version inicial.', NOW(), NOW()),
+                    ('cookies',     '1.0.0', 'Política de Cookies',        CURRENT_DATE, FALSE, TRUE, 'Version inicial.', NOW(), NOW()),
+                    ('eliminacion_datos', '1.0.0', 'Política de eliminación de datos', CURRENT_DATE, FALSE, TRUE, 'Version inicial.', NOW(), NOW())
+                ON CONFLICT (tipo_documento, version) DO NOTHING;
+            """))
+            db.session.commit()
+            print("[OK] Seed: 4 documentos legales vigentes v1.0.0 (terminos/privacidad/cookies/eliminacion_datos)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] seed legal_documents: {e}")
+
+    print("[OK] Migracion runtime: capa legal (LegalDocument + UserConsent)")
+
+    # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como
     # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).

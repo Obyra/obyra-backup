@@ -179,6 +179,18 @@ def aplicar_analisis_ia(id):
             errores.append({'item_id': item_id, 'error': str(e)})
 
     if aplicados:
+        # Audit: aplicacion de analisis IA
+        try:
+            from models.audit import registrar_audit
+            registrar_audit(
+                accion='aplicar_ia',
+                entidad='presupuesto',
+                entidad_id=presupuesto.id,
+                detalle=f'Aplicacion de sugerencias IA: {aplicados} items modificados',
+            )
+        except Exception:
+            pass
+
         try:
             db.session.commit()
         except Exception as e:

@@ -321,6 +321,18 @@ def login():
 
         if success:
             usuario = payload
+            # Audit: login exitoso
+            try:
+                from models.audit import registrar_audit
+                registrar_audit(
+                    accion='login',
+                    entidad='usuario',
+                    entidad_id=usuario.id,
+                    detalle=f'Login manual exitoso de {usuario.email}',
+                )
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
             membership_redirect = initialize_membership_session(usuario)
             if membership_redirect:
                 return redirect(membership_redirect)
@@ -509,10 +521,15 @@ def register():
         direccion = (request.form.get('direccion') or '').strip()
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
+        acepto_terminos = request.form.get('acepto_terminos') in ('on', '1', 'true', 'True', True)
 
         # Validaciones
         if not all([nombre, apellido, email, password, cuit_input, direccion]):
             flash('Por favor, completa todos los campos obligatorios.', 'danger')
+            return render_template('auth/register.html', google_available=bool(google))
+
+        if not acepto_terminos:
+            flash('Tenés que aceptar los Términos y la Política de Privacidad para crear la cuenta.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
 
         if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
@@ -584,11 +601,50 @@ def register():
             onboarding_status = OnboardingStatus(usuario=nuevo_usuario)
             db.session.add(onboarding_status)
 
+            # Registrar consentimiento legal del usuario para los documentos
+            # vigentes al momento del registro (TOS / Privacidad / Cookies).
+            try:
+                from models.legal import LegalDocument, UserConsent, TIPOS_DOCUMENTO
+                ip_addr = request.remote_addr
+                ua_str = (request.headers.get('User-Agent') or '')[:400]
+                for tipo in TIPOS_DOCUMENTO:
+                    doc = LegalDocument.vigente(tipo)
+                    if not doc:
+                        continue
+                    db.session.add(UserConsent(
+                        user_id=nuevo_usuario.id,
+                        organizacion_id=nueva_organizacion.id,
+                        legal_document_id=doc.id,
+                        tipo_documento=doc.tipo_documento,
+                        version=doc.version,
+                        accepted=True,
+                        accepted_at=datetime.utcnow(),
+                        ip_address=ip_addr,
+                        user_agent=ua_str,
+                        metodo='checkbox_registro',
+                    ))
+            except Exception:
+                # No bloquear el registro por error en consent
+                current_app.logger.exception('No se pudo registrar UserConsent en alta de cuenta')
+
             db.session.commit()
 
             login_user(nuevo_usuario)
             log_login_attempt(email.lower(), True)
             current_app.logger.info(f'Nuevo usuario registrado: {email.lower()} - Organizacion: {nueva_organizacion.id}')
+
+            # Audit: usuario registrado (organizacion creada)
+            try:
+                from models.audit import registrar_audit
+                registrar_audit(
+                    accion='crear',
+                    entidad='usuario',
+                    entidad_id=nuevo_usuario.id,
+                    detalle=f'Registro nuevo usuario {email.lower()} con organizacion {nueva_organizacion.id}',
+                )
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
             # Email de bienvenida (fail-safe, no rompe el registro)
             try:

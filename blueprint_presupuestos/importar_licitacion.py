@@ -393,6 +393,19 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
     iva_pct = Decimal('21')
     presu.iva_porcentaje = iva_pct
     presu.total_con_iva = subtotal + (subtotal * iva_pct / Decimal('100'))
+
+    # Audit: presupuesto importado desde Excel
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion='importar_excel',
+            entidad='presupuesto',
+            entidad_id=presu.id,
+            detalle=f'Presupuesto {numero} importado desde Excel con {len(items)} items',
+        )
+    except Exception:
+        pass
+
     db.session.commit()
     return presu
 

@@ -54,3 +54,87 @@ def registrar_audit(accion, entidad, entidad_id=None, detalle=None,
         # No hacemos commit — se commitea con la transacción del caller
     except Exception:
         pass  # Nunca bloquear la operación principal por un error de audit
+
+
+def audit_action(accion, entidad, descripcion=None):
+    """Decorador que registra automaticamente una accion en AuditLog
+    despues de que el endpoint se ejecuta correctamente.
+
+    Uso:
+        @audit_action('crear', 'presupuesto', descripcion='Presupuesto creado')
+        def crear_presupuesto():
+            ...
+            return jsonify(ok=True, presupuesto_id=p.id)
+
+    El decorador:
+      - Solo registra si el endpoint NO lanza excepcion.
+      - Intenta extraer entidad_id del JSON de respuesta (claves comunes:
+        'id', 'presupuesto_id', '<entidad>_id'). Si no encuentra, queda None.
+      - Si el handler devuelve (response, status_code) y status_code es
+        4xx/5xx, NO registra.
+      - Si falla el registro (BD down, etc.), no rompe la respuesta.
+
+    Reusa registrar_audit() para el guardado real, asi mantiene el mismo
+    contrato (no commitea, lo hace el caller).
+    """
+    from functools import wraps
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            result = fn(*args, **kwargs)
+
+            # Determinar status code y body
+            status_code = 200
+            body = result
+            if isinstance(result, tuple) and len(result) >= 2:
+                body = result[0]
+                try:
+                    status_code = int(result[1])
+                except (TypeError, ValueError):
+                    status_code = 200
+
+            # No auditar errores
+            if status_code >= 400:
+                return result
+
+            # Intentar extraer entidad_id del body si es un JSON Response
+            entidad_id = None
+            try:
+                data = None
+                # body puede ser Response (jsonify), dict, str, etc.
+                if hasattr(body, 'get_json'):
+                    data = body.get_json(silent=True)
+                elif isinstance(body, dict):
+                    data = body
+                if isinstance(data, dict):
+                    candidatos = ['id', f'{entidad}_id', 'item_id', 'obra_id', 'oc_id']
+                    for k in candidatos:
+                        if k in data and data[k]:
+                            entidad_id = data[k]
+                            break
+            except Exception:
+                pass
+
+            # Registrar (no commitea, espera al caller)
+            try:
+                registrar_audit(
+                    accion=accion,
+                    entidad=entidad,
+                    entidad_id=entidad_id,
+                    detalle=descripcion or f'{accion} {entidad}',
+                )
+                # Auto-commit aca porque el endpoint ya devolvio resultado.
+                # Si el caller ya commiteo, este commit no hace nada.
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+            except Exception:
+                pass  # Nunca romper la response por audit
+
+            return result
+
+        return wrapper
+
+    return decorator
