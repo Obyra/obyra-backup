@@ -105,6 +105,13 @@
                             </button>
                             {% endif %}
                             {% endif %}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
+                            <button type="button" class="btn btn-outline-primary"
+                                    onclick="abrirPerfilTecnico({{ presupuesto.id }})"
+                                    title="Datos técnicos de obra que usa la Calculadora IA para distribuir cantidades por piso.">
+                                <i class="fas fa-drafting-compass me-1"></i>Perfil técnico
+                            </button>
+                            {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado', 'aprobado'] %}
                             <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-primary">
                                 <i class="fas fa-calculator me-1"></i>Armar Ejecutivo
@@ -2754,4 +2761,302 @@ function _iaEsc(s) {
                     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 </script>
+
+{# ================================================================
+   Modal: Perfil tecnico del proyecto (Fase 2)
+================================================================ #}
+<div class="modal fade" id="modalPerfilTecnico" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-drafting-compass me-2"></i>Datos técnicos del proyecto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Estos datos ayudan a la Calculadora IA a interpretar el pliego, sugerir distribución
+                    por piso y preparar la futura obra. <strong>Todos los campos son opcionales.</strong>
+                </div>
+
+                <div id="ptpAlertaBox"></div>
+
+                <form id="formPerfilTecnico">
+                    <input type="hidden" name="autogenerar_niveles" value="1">
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tipo de obra</label>
+                            <select class="form-select" name="tipo_obra">
+                                <option value="edificio">Edificio</option>
+                                <option value="vivienda_unifamiliar">Vivienda unifamiliar</option>
+                                <option value="galpon">Galpón</option>
+                                <option value="local_comercial">Local comercial</option>
+                                <option value="remodelacion">Remodelación</option>
+                                <option value="obra_publica">Obra pública</option>
+                                <option value="infraestructura">Infraestructura</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Cant. pisos</label>
+                            <input type="number" class="form-control" name="cantidad_pisos" min="0" max="200" value="0">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Cant. subsuelos</label>
+                            <input type="number" class="form-control" name="cantidad_subsuelos" min="0" max="20" value="0">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" name="tiene_planta_baja" value="1" id="ptpModalPB" checked>
+                                <label class="form-check-label" for="ptpModalPB"><strong>Tiene planta baja</strong></label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" name="tiene_terraza" value="1" id="ptpModalTerraza">
+                                <label class="form-check-label" for="ptpModalTerraza"><strong>Tiene terraza</strong></label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Cant. torres</label>
+                            <input type="number" class="form-control" name="cantidad_torres" min="1" max="50" value="1">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Unidades funcionales</label>
+                            <input type="number" class="form-control" name="cantidad_unidades_funcionales" min="0" max="9999" placeholder="opcional">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Sup. total (m²)</label>
+                            <input type="number" class="form-control" name="superficie_total_m2" min="0" step="0.01" placeholder="opcional">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Sup. por planta (m²)</label>
+                            <input type="number" class="form-control" name="superficie_por_planta_m2" min="0" step="0.01" placeholder="opcional">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Altura piso (m)</label>
+                            <input type="number" class="form-control" name="altura_promedio_piso_m" min="0" step="0.01" placeholder="ej: 2.80">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Espesor losa (cm)</label>
+                            <input type="number" class="form-control" name="espesor_losa_cm" min="0" step="0.1" placeholder="ej: 12">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tipo de estructura</label>
+                            <select class="form-select" name="tipo_estructura">
+                                <option value="no_definida" selected>No definida</option>
+                                <option value="hormigon_armado">Hormigón armado</option>
+                                <option value="metalica">Metálica</option>
+                                <option value="mixta">Mixta</option>
+                                <option value="mamposteria_portante">Mampostería portante</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tipo de fundación</label>
+                            <select class="form-select" name="tipo_fundacion">
+                                <option value="no_definida" selected>No definida</option>
+                                <option value="platea">Platea</option>
+                                <option value="bases_aisladas">Bases aisladas</option>
+                                <option value="bases_corridas">Bases corridas</option>
+                                <option value="pilotes">Pilotes</option>
+                                <option value="pilotines">Pilotines</option>
+                                <option value="zapatas">Zapatas</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Cocheras</label>
+                            <input type="number" class="form-control" name="cantidad_cocheras" min="0" max="9999" placeholder="opcional">
+                        </div>
+                        <div class="col-md-9 mb-3">
+                            <label class="form-label">Sistema constructivo (texto libre)</label>
+                            <input type="text" class="form-control" name="sistema_constructivo" maxlength="200" placeholder="ej: tradicional + steel framing">
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Cantidades del Excel ¿son totales?</label>
+                            <select class="form-select" name="cantidades_excel_son_totales">
+                                <option value="no_se" selected>No sé</option>
+                                <option value="si">Sí — totales de toda la obra</option>
+                                <option value="no">No — son por unidad/piso/sector</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Criterio de distribución</label>
+                            <select class="form-select" name="criterio_distribucion">
+                                <option value="sin_distribuir" selected>Sin distribuir</option>
+                                <option value="por_piso_automatico">Por piso (automático)</option>
+                                <option value="por_piso_manual">Por piso (editable)</option>
+                                <option value="por_sector">Por sector</option>
+                                <option value="por_torre">Por torre</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+
+                <div id="ptpNivelesActuales" class="mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarPerfilTecnico" onclick="guardarPerfilTecnico()">
+                    <i class="fas fa-save me-1"></i>Guardar perfil técnico
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let _ptpPresupuestoId = null;
+
+window.abrirPerfilTecnico = function(presupuestoId) {
+    _ptpPresupuestoId = presupuestoId;
+    const modalEl = document.getElementById('modalPerfilTecnico');
+    const modal = new bootstrap.Modal(modalEl);
+
+    // Reset alertas
+    document.getElementById('ptpAlertaBox').innerHTML = '';
+    document.getElementById('ptpNivelesActuales').innerHTML =
+        '<div class="text-center text-muted small"><i class="fas fa-spinner fa-spin"></i> Cargando perfil...</div>';
+
+    fetch('/presupuestos/' + presupuestoId + '/perfil-tecnico', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) {
+                document.getElementById('ptpAlertaBox').innerHTML =
+                    '<div class="alert alert-danger small">Error: ' + _iaEsc(d.error || 'desconocido') + '</div>';
+                return;
+            }
+            if (d.profile) {
+                _ptpRellenarForm(d.profile);
+                _ptpRenderNiveles(d.profile.niveles || []);
+            } else {
+                document.getElementById('ptpNivelesActuales').innerHTML =
+                    '<div class="alert alert-light border small">Aún no se cargó perfil técnico para este presupuesto.</div>';
+            }
+        })
+        .catch(e => {
+            document.getElementById('ptpAlertaBox').innerHTML =
+                '<div class="alert alert-danger small">Error de red: ' + _iaEsc(e.message) + '</div>';
+        });
+
+    modal.show();
+};
+
+function _ptpRellenarForm(p) {
+    const form = document.getElementById('formPerfilTecnico');
+    const setVal = (n, v) => { const el = form.elements[n]; if (el) el.value = (v == null ? '' : v); };
+    const setChk = (n, v) => { const el = form.elements[n]; if (el && el.type === 'checkbox') el.checked = !!v; };
+
+    setVal('tipo_obra', p.tipo_obra);
+    setVal('cantidad_pisos', p.cantidad_pisos);
+    setVal('cantidad_subsuelos', p.cantidad_subsuelos);
+    setChk('tiene_planta_baja', p.tiene_planta_baja);
+    setChk('tiene_terraza', p.tiene_terraza);
+    setVal('cantidad_torres', p.cantidad_torres);
+    setVal('cantidad_unidades_funcionales', p.cantidad_unidades_funcionales);
+    setVal('superficie_total_m2', p.superficie_total_m2);
+    setVal('superficie_por_planta_m2', p.superficie_por_planta_m2);
+    setVal('altura_promedio_piso_m', p.altura_promedio_piso_m);
+    setVal('espesor_losa_cm', p.espesor_losa_cm);
+    setVal('tipo_estructura', p.tipo_estructura);
+    setVal('tipo_fundacion', p.tipo_fundacion);
+    setVal('cantidad_cocheras', p.cantidad_cocheras);
+    setVal('sistema_constructivo', p.sistema_constructivo);
+    setVal('cantidades_excel_son_totales', p.cantidades_excel_son_totales);
+    setVal('criterio_distribucion', p.criterio_distribucion);
+}
+
+function _ptpRenderNiveles(niveles) {
+    const cont = document.getElementById('ptpNivelesActuales');
+    if (!niveles || !niveles.length) {
+        cont.innerHTML = '<div class="alert alert-light border small">Sin niveles cargados todavía.</div>';
+        return;
+    }
+    let html = '<h6 class="mt-3 mb-2"><i class="fas fa-layer-group me-1"></i>Niveles del proyecto (' + niveles.length + ')</h6>';
+    html += '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">';
+    html += '<thead class="table-light"><tr><th>#</th><th>Nivel</th><th>Tipo</th><th class="text-end">Área m²</th><th class="text-end">Repeticiones</th></tr></thead><tbody>';
+    niveles.forEach(n => {
+        html += '<tr><td>' + (n.orden || '-') + '</td>'
+             +  '<td>' + _iaEsc(n.nombre) + '</td>'
+             +  '<td><span class="badge bg-secondary">' + _iaEsc(n.tipo_nivel) + '</span></td>'
+             +  '<td class="text-end">' + (n.area_m2 || 0).toFixed(2) + '</td>'
+             +  '<td class="text-end">' + (n.repeticiones || 1) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    cont.innerHTML = html;
+}
+
+window.guardarPerfilTecnico = function() {
+    if (!_ptpPresupuestoId) return;
+    const form = document.getElementById('formPerfilTecnico');
+    const fd = new FormData(form);
+    const data = {};
+    fd.forEach((v, k) => { data[k] = v; });
+    // Checkboxes que no se mandan si no estan tildados
+    data.tiene_planta_baja = form.elements['tiene_planta_baja'].checked ? '1' : '0';
+    data.tiene_terraza = form.elements['tiene_terraza'].checked ? '1' : '0';
+
+    const btn = document.getElementById('btnGuardarPerfilTecnico');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    fetch('/presupuestos/' + _ptpPresupuestoId + '/perfil-tecnico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        credentials: 'same-origin',
+        body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar perfil técnico';
+        if (!d.ok) {
+            document.getElementById('ptpAlertaBox').innerHTML =
+                '<div class="alert alert-danger small">' + _iaEsc(d.error || 'Error al guardar') + '</div>';
+            return;
+        }
+        const txt = d.fue_creacion
+            ? 'Perfil técnico guardado.'
+            : 'Perfil técnico actualizado.';
+        const niv = (d.niveles_generados || 0) > 0
+            ? ' Se generaron <strong>' + d.niveles_generados + '</strong> niveles automáticamente.'
+            : '';
+        document.getElementById('ptpAlertaBox').innerHTML =
+            '<div class="alert alert-success small">' + txt + niv + '</div>';
+        if (d.profile) {
+            _ptpRellenarForm(d.profile);
+            _ptpRenderNiveles(d.profile.niveles || []);
+        }
+    })
+    .catch(e => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar perfil técnico';
+        document.getElementById('ptpAlertaBox').innerHTML =
+            '<div class="alert alert-danger small">Error de red: ' + _iaEsc(e.message) + '</div>';
+    });
+};
+</script>
+
 {% endblock %}

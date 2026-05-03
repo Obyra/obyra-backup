@@ -2011,6 +2011,57 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] ia_rule_usage_stat: {e}")
 
     # =====================================================
+    # 2026-05-03: Fase 2 - Perfil tecnico del proyecto.
+    # Tabla: project_technical_profile (1 por presupuesto).
+    # Idempotente: CREATE TABLE IF NOT EXISTS via DO $$ ... END $$.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='project_technical_profile') THEN
+                CREATE TABLE project_technical_profile (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id) ON DELETE CASCADE,
+                    presupuesto_id INTEGER REFERENCES presupuestos(id) ON DELETE CASCADE,
+                    obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL,
+                    tipo_obra VARCHAR(40) NOT NULL DEFAULT 'edificio',
+                    naturaleza_proyecto VARCHAR(40) NOT NULL DEFAULT 'obra_nueva',
+                    tipo_estructura VARCHAR(40) NOT NULL DEFAULT 'no_definida',
+                    tipo_fundacion VARCHAR(40) NOT NULL DEFAULT 'no_definida',
+                    sistema_constructivo VARCHAR(200),
+                    cantidad_pisos INTEGER NOT NULL DEFAULT 0,
+                    cantidad_subsuelos INTEGER NOT NULL DEFAULT 0,
+                    tiene_planta_baja BOOLEAN NOT NULL DEFAULT TRUE,
+                    tiene_terraza BOOLEAN NOT NULL DEFAULT FALSE,
+                    superficie_total_m2 NUMERIC(12, 2),
+                    superficie_por_planta_m2 NUMERIC(12, 2),
+                    altura_promedio_piso_m NUMERIC(6, 2),
+                    espesor_losa_cm NUMERIC(6, 2),
+                    cantidad_torres INTEGER NOT NULL DEFAULT 1,
+                    cantidad_unidades_funcionales INTEGER,
+                    cantidad_cocheras INTEGER,
+                    criterio_distribucion VARCHAR(40) NOT NULL DEFAULT 'sin_distribuir',
+                    cantidades_excel_son_totales VARCHAR(10) NOT NULL DEFAULT 'no_se',
+                    observaciones_tecnicas_json JSONB,
+                    completado_at TIMESTAMP,
+                    completado_por_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_ptp_presupuesto UNIQUE (presupuesto_id)
+                );
+                CREATE INDEX ix_ptp_org ON project_technical_profile(organizacion_id);
+                CREATE INDEX ix_ptp_obra ON project_technical_profile(obra_id);
+                CREATE INDEX ix_ptp_pres ON project_technical_profile(presupuesto_id);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] Migracion runtime: perfil tecnico del proyecto (project_technical_profile)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] project_technical_profile: {e}")
+
+    # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como
     # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).

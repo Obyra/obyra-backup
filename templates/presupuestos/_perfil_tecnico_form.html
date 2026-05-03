@@ -1,0 +1,192 @@
+{# Bloque reutilizable: campos del perfil tecnico de obra.
+
+    Uso 1 - dentro del importador Excel (sin form propio):
+       {% include 'presupuestos/_perfil_tecnico_form.html' %}
+
+    Uso 2 - dentro del modal "Completar perfil tecnico" en detalle:
+       Idem; los inputs se serializan a JSON y se postean a
+       /presupuestos/<id>/perfil-tecnico.
+
+    Todos los campos son OPCIONALES. Si el usuario los deja en blanco, el
+    perfil se crea con defaults (no_definida / 0 / no_se / sin_distribuir).
+#}
+
+<div class="card border-info border-2 mb-3" id="perfilTecnicoBloque">
+    <div class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+        <div>
+            <h6 class="mb-0">
+                <i class="fas fa-drafting-compass me-1 text-info"></i>
+                Datos técnicos para la Calculadora IA
+                <span class="badge bg-secondary">opcional</span>
+            </h6>
+            <small class="text-muted">
+                Estos datos ayudan a la Calculadora IA a distribuir cantidades, generar el
+                Presupuesto Ejecutivo interno y preparar la futura obra por pisos.
+            </small>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                data-bs-target="#perfilTecnicoCollapse" aria-expanded="false" aria-controls="perfilTecnicoCollapse">
+            <i class="fas fa-chevron-down"></i>
+        </button>
+    </div>
+    <div class="collapse" id="perfilTecnicoCollapse">
+        <div class="card-body">
+            <div class="form-check mb-3">
+                <input class="form-check-input perfil-tecnico-incluir" type="checkbox" name="perfil_tecnico_incluir"
+                       value="1" id="perfilTecnicoIncluir">
+                <label class="form-check-label" for="perfilTecnicoIncluir">
+                    <strong>Cargar el perfil técnico ahora</strong>
+                    <br><small class="text-muted">
+                        Si destildás esto, el presupuesto se crea sin perfil técnico (lo podés completar después
+                        desde el detalle).
+                    </small>
+                </label>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Tipo de obra</label>
+                    <select class="form-select" name="ptp_tipo_obra">
+                        <option value="edificio" selected>Edificio</option>
+                        <option value="vivienda_unifamiliar">Vivienda unifamiliar</option>
+                        <option value="galpon">Galpón</option>
+                        <option value="local_comercial">Local comercial</option>
+                        <option value="remodelacion">Remodelación</option>
+                        <option value="obra_publica">Obra pública</option>
+                        <option value="infraestructura">Infraestructura</option>
+                        <option value="otro">Otro</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Cant. pisos</label>
+                    <input type="number" class="form-control" name="ptp_cantidad_pisos" min="0" max="200" value="0">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Cant. subsuelos</label>
+                    <input type="number" class="form-control" name="ptp_cantidad_subsuelos" min="0" max="20" value="0">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" name="ptp_tiene_planta_baja"
+                               value="1" id="ptpPB" checked>
+                        <label class="form-check-label" for="ptpPB"><strong>Tiene planta baja</strong></label>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" name="ptp_tiene_terraza"
+                               value="1" id="ptpTerraza">
+                        <label class="form-check-label" for="ptpTerraza"><strong>Tiene terraza</strong></label>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Cant. torres</label>
+                    <input type="number" class="form-control" name="ptp_cantidad_torres" min="1" max="50" value="1">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Unidades funcionales</label>
+                    <input type="number" class="form-control" name="ptp_cantidad_unidades_funcionales" min="0" max="9999"
+                           placeholder="opcional">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Sup. total (m²)</label>
+                    <input type="number" class="form-control" name="ptp_superficie_total_m2" min="0" step="0.01"
+                           placeholder="opcional">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Sup. por planta (m²)</label>
+                    <input type="number" class="form-control" name="ptp_superficie_por_planta_m2" min="0" step="0.01"
+                           placeholder="opcional">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Altura piso (m)</label>
+                    <input type="number" class="form-control" name="ptp_altura_promedio_piso_m" min="0" step="0.01"
+                           placeholder="ej: 2.80">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Espesor losa (cm)</label>
+                    <input type="number" class="form-control" name="ptp_espesor_losa_cm" min="0" step="0.1"
+                           placeholder="ej: 12">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Tipo de estructura</label>
+                    <select class="form-select" name="ptp_tipo_estructura">
+                        <option value="no_definida" selected>No definida</option>
+                        <option value="hormigon_armado">Hormigón armado</option>
+                        <option value="metalica">Metálica</option>
+                        <option value="mixta">Mixta</option>
+                        <option value="mamposteria_portante">Mampostería portante</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Tipo de fundación</label>
+                    <select class="form-select" name="ptp_tipo_fundacion">
+                        <option value="no_definida" selected>No definida</option>
+                        <option value="platea">Platea</option>
+                        <option value="bases_aisladas">Bases aisladas</option>
+                        <option value="bases_corridas">Bases corridas</option>
+                        <option value="pilotes">Pilotes</option>
+                        <option value="pilotines">Pilotines</option>
+                        <option value="zapatas">Zapatas</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Cocheras</label>
+                    <input type="number" class="form-control" name="ptp_cantidad_cocheras" min="0" max="9999"
+                           placeholder="opcional">
+                </div>
+                <div class="col-md-9 mb-3">
+                    <label class="form-label">Sistema constructivo (texto libre)</label>
+                    <input type="text" class="form-control" name="ptp_sistema_constructivo" maxlength="200"
+                           placeholder="ej: tradicional + steel framing en último piso">
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label fw-bold">Cantidades del Excel ¿son totales?</label>
+                    <select class="form-select" name="ptp_cantidades_excel_son_totales">
+                        <option value="no_se" selected>No sé</option>
+                        <option value="si">Sí — son totales de toda la obra</option>
+                        <option value="no">No — son por unidad/piso/sector</option>
+                    </select>
+                    <small class="text-muted">Importante para que la IA decida si distribuir o no.</small>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label fw-bold">Criterio de distribución</label>
+                    <select class="form-select" name="ptp_criterio_distribucion">
+                        <option value="sin_distribuir" selected>Sin distribuir</option>
+                        <option value="por_piso_automatico">Por piso (automático)</option>
+                        <option value="por_piso_manual">Por piso (editable)</option>
+                        <option value="por_sector">Por sector</option>
+                        <option value="por_torre">Por torre</option>
+                    </select>
+                    <small class="text-muted">
+                        "Por piso" genera automáticamente los niveles del edificio según los pisos cargados.
+                    </small>
+                </div>
+            </div>
+
+            <div class="alert alert-light border small mb-0">
+                <i class="fas fa-info-circle text-info me-1"></i>
+                Si no sabés algunos datos técnicos, dejalos como <strong>"No definida"</strong> o vacíos.
+                Podés completarlos más adelante desde el detalle del presupuesto.
+            </div>
+        </div>
+    </div>
+</div>

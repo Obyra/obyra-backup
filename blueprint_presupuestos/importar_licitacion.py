@@ -323,6 +323,74 @@ def _leer_preview(path, max_rows=30):
     return sheets
 
 
+def _crear_perfil_tecnico_desde_form(presupuesto, form, user_id):
+    """Crea el ProjectTechnicalProfile a partir del form del importador.
+
+    Solo si el usuario tildo el checkbox 'perfil_tecnico_incluir'. Si no,
+    no hace nada (perfil queda vacio y se completa despues desde el detalle).
+
+    Es fail-safe: cualquier error de validacion se loguea y NO rompe la
+    importacion (el presupuesto ya quedo creado).
+    """
+    if (form.get('perfil_tecnico_incluir') or '').strip() not in ('1', 'on', 'true'):
+        return None
+
+    payload = {
+        'tipo_obra': form.get('ptp_tipo_obra'),
+        'naturaleza_proyecto': form.get('naturaleza_proyecto'),  # heredamos del campo principal
+        'tipo_estructura': form.get('ptp_tipo_estructura'),
+        'tipo_fundacion': form.get('ptp_tipo_fundacion'),
+        'sistema_constructivo': form.get('ptp_sistema_constructivo'),
+        'cantidad_pisos': form.get('ptp_cantidad_pisos'),
+        'cantidad_subsuelos': form.get('ptp_cantidad_subsuelos'),
+        'tiene_planta_baja': form.get('ptp_tiene_planta_baja'),
+        'tiene_terraza': form.get('ptp_tiene_terraza'),
+        'superficie_total_m2': form.get('ptp_superficie_total_m2'),
+        'superficie_por_planta_m2': form.get('ptp_superficie_por_planta_m2'),
+        'altura_promedio_piso_m': form.get('ptp_altura_promedio_piso_m'),
+        'espesor_losa_cm': form.get('ptp_espesor_losa_cm'),
+        'cantidad_torres': form.get('ptp_cantidad_torres'),
+        'cantidad_unidades_funcionales': form.get('ptp_cantidad_unidades_funcionales'),
+        'cantidad_cocheras': form.get('ptp_cantidad_cocheras'),
+        'criterio_distribucion': form.get('ptp_criterio_distribucion'),
+        'cantidades_excel_son_totales': form.get('ptp_cantidades_excel_son_totales'),
+    }
+
+    try:
+        from services.perfil_tecnico_service import upsert_perfil_tecnico
+        result = upsert_perfil_tecnico(
+            presupuesto=presupuesto,
+            payload=payload,
+            user_id=user_id,
+            autogenerar_niveles=True,
+        )
+        try:
+            from models.audit import registrar_audit
+            registrar_audit(
+                accion='crear_perfil_tecnico',
+                entidad='presupuesto',
+                entidad_id=presupuesto.id,
+                detalle=(
+                    f'Importacion Excel: tipo={result["profile"].tipo_obra} '
+                    f'pisos={result["profile"].cantidad_pisos} '
+                    f'criterio={result["profile"].criterio_distribucion} '
+                    f'niveles={result["niveles_generados"]}'
+                ),
+            )
+        except Exception:
+            pass
+        db.session.commit()
+        return result
+    except ValueError as ve:
+        current_app.logger.warning(f'Perfil tecnico invalido en importacion: {ve}')
+        db.session.rollback()
+        return None
+    except Exception:
+        current_app.logger.exception('Error guardando perfil tecnico desde importacion')
+        db.session.rollback()
+        return None
+
+
 def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, nombre_obra, items, modo_licitacion=True, ubicacion=None, ubicacion_lat=None, ubicacion_lng=None, ubicacion_normalizada=None, naturaleza_proyecto=None):
     """Helper compartido para crear el presupuesto + items.
 
@@ -561,6 +629,12 @@ def importar_licitacion():
                     naturaleza_proyecto=naturaleza_proyecto,
                 )
                 _persistir_pliego(presu, path, nombre_original=archivo.filename)
+
+                # Perfil tecnico opcional (Fase 2). Fail-safe: no rompe la importacion.
+                perfil_result = _crear_perfil_tecnico_desde_form(
+                    presu, request.form, current_user.id if current_user.is_authenticated else None
+                )
+
                 import os
                 try: os.remove(path)
                 except Exception: pass
@@ -568,6 +642,8 @@ def importar_licitacion():
                     msg = f'Presupuesto {numero} creado con {len(items)} ítems en $0 (modo licitación). Armá el Ejecutivo para desglosar en materiales y pedir cotización.'
                 else:
                     msg = f'Presupuesto {numero} creado con {len(items)} ítems con precios del Excel.'
+                if perfil_result and perfil_result.get('niveles_generados'):
+                    msg += f' Perfil técnico cargado y {perfil_result["niveles_generados"]} niveles generados automáticamente.'
                 flash(msg, 'success')
                 return redirect(url_for('presupuestos.ejecutivo_vista', id=presu.id))
             except Exception as e:

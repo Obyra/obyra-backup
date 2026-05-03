@@ -72,8 +72,17 @@ def analizar_ia(id):
         'tipo': it.tipo,
     } for it in items]
 
+    # Fase 2: pasar contexto tecnico (perfil + niveles) si el presupuesto
+    # tiene perfil cargado. Si no, contexto=None y la IA se comporta como antes.
+    contexto = None
     try:
-        resultado = analizar_items_con_ia(payload)
+        from services.perfil_tecnico_service import construir_contexto_ia
+        contexto = construir_contexto_ia(presupuesto)
+    except Exception:
+        contexto = None
+
+    try:
+        resultado = analizar_items_con_ia(payload, contexto=contexto)
     except Exception as e:
         current_app.logger.exception('Error analizando con IA')
         return jsonify(ok=False, error=f'Error en analisis IA: {type(e).__name__}'), 500

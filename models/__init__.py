@@ -199,6 +199,14 @@ from models.ia_learning import (
     TIPOS_CORRECCION, ESTADOS_CANDIDATA,
 )
 
+# Perfil tecnico del proyecto (Fase 2: asistente de obra)
+from models.project_technical_profile import (
+    ProjectTechnicalProfile,
+    validar_y_normalizar as validar_perfil_tecnico,
+    TIPOS_OBRA, TIPOS_ESTRUCTURA, TIPOS_FUNDACION,
+    CRITERIOS_DISTRIBUCION, CANTIDADES_EXCEL_SON_TOTALES,
+)
+
 # Cierre formal de obra y acta de entrega
 from models.cierre_obra import CierreObra, ActaEntrega
 

@@ -159,8 +159,18 @@ def _confianza_label(score: float) -> str:
     return 'sin'
 
 
-def analizar_items_con_ia(items_payload: List[Dict[str, Any]]) -> Dict[str, Any]:
+def analizar_items_con_ia(items_payload: List[Dict[str, Any]],
+                           contexto: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Analiza items y retorna sugerencias estructuradas.
+
+    Args:
+      items_payload: lista de dicts con descripcion/unidad/cantidad/etapa_nombre/tipo.
+      contexto: opcional. Dict con perfil_tecnico + niveles del proyecto.
+        Si se pasa, se incluye en la respuesta como 'contexto_recibido' para
+        trazabilidad y NO modifica el scoring actual de las reglas (Fase 2:
+        solo enriquecemos la respuesta; ajustes finos de scoring vienen en
+        Fase 4). El llamador puede confiar en que la firma vieja
+        (sin contexto) sigue funcionando 1:1.
 
     Retorna dict con:
       'items': [
@@ -190,6 +200,7 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]]) -> Dict[str, Any]
       'total_items', 'items_con_cambios',
       'breakdown_confianza': {alta, media, baja, sin},
       'fuente': 'base_tecnica_computos_v2',
+      'contexto_recibido': dict | None  # solo si se paso contexto.
     """
     from services.etapa_matcher import matchear_etapa_estandar
 
@@ -328,7 +339,7 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]]) -> Dict[str, Any]
     # Orden alfabetico breakdown_rubro descendente por count
     breakdown_rubro_ordenado = dict(sorted(breakdown_rubro.items(), key=lambda kv: -kv[1]))
 
-    return {
+    out = {
         'items': resultados,
         'total_items': len(resultados),
         'items_con_cambios': items_con_cambios,
@@ -338,3 +349,24 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]]) -> Dict[str, Any]
         'items_preliminares': items_preliminares,
         'fuente': 'base_tecnica_computos_v2',
     }
+
+    # Si llego contexto, lo incluimos en la respuesta para trazabilidad y
+    # para que el frontend pueda mostrar al usuario que la IA "vio" el perfil.
+    # En Fase 2 NO modifica el scoring; ese ajuste se reserva para Fase 4
+    # (distribucion por pisos + heuristicas que dependen del contexto).
+    if contexto:
+        perfil = contexto.get('perfil_tecnico') or {}
+        niveles = contexto.get('niveles') or []
+        out['contexto_recibido'] = {
+            'tiene_perfil_tecnico': bool(perfil),
+            'tipo_obra': perfil.get('tipo_obra'),
+            'tipo_estructura': perfil.get('tipo_estructura'),
+            'tipo_fundacion': perfil.get('tipo_fundacion'),
+            'cantidad_pisos': perfil.get('cantidad_pisos'),
+            'cantidad_subsuelos': perfil.get('cantidad_subsuelos'),
+            'criterio_distribucion': perfil.get('criterio_distribucion'),
+            'cantidades_excel_son_totales': perfil.get('cantidades_excel_son_totales'),
+            'cantidad_niveles': len(niveles),
+        }
+
+    return out
