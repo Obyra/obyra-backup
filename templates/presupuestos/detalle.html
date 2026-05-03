@@ -3044,11 +3044,19 @@ window.guardarPerfilTecnico = function() {
             ? ' Se generaron <strong>' + d.niveles_generados + '</strong> niveles automáticamente.'
             : '';
         document.getElementById('ptpAlertaBox').innerHTML =
-            '<div class="alert alert-success small">' + txt + niv + '</div>';
+            '<div class="alert alert-success small">' + txt + niv + ' Cerrando...</div>';
         if (d.profile) {
             _ptpRellenarForm(d.profile);
             _ptpRenderNiveles(d.profile.niveles || []);
         }
+        // Cerrar el modal automaticamente despues de guardar OK
+        setTimeout(function() {
+            const modalEl = document.getElementById('modalPerfilTecnico');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+        }, 1200);
     })
     .catch(e => {
         btn.disabled = false;
