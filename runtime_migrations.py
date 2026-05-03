@@ -1884,6 +1884,34 @@ def run_runtime_migrations(db, app):
 
     print("[OK] Migracion runtime: capa legal (LegalDocument + UserConsent)")
 
+    # 2026-05-03: publicar v1.1.0 de Terminos y Condiciones.
+    # Cambios: clausulas IA, metricas, archivos, confidencialidad B2B, etc.
+    # requiere_reaceptacion=TRUE -> usuarios actuales ven modal bloqueante.
+    # Idempotente via ON CONFLICT DO NOTHING.
+    try:
+        db.session.execute(db.text("""
+            UPDATE legal_documents
+               SET activo = FALSE,
+                   updated_at = NOW()
+             WHERE tipo_documento = 'terminos'
+               AND version = '1.0.0'
+               AND activo = TRUE;
+        """))
+        db.session.execute(db.text("""
+            INSERT INTO legal_documents
+                (tipo_documento, version, titulo, fecha_vigencia, requiere_reaceptacion, activo, notas, created_at, updated_at)
+            VALUES
+                ('terminos', '1.1.0', 'Términos y Condiciones', CURRENT_DATE, TRUE, TRUE,
+                 'Reescritura: clausulas Calculadora IA, metricas y auditoria, archivos del usuario, confidencialidad B2B, datos agregados, aprendizaje IA, eliminacion/exportacion, pagos flexibles, backups compartidos, jurisdiccion San Martin BA.',
+                 NOW(), NOW())
+            ON CONFLICT (tipo_documento, version) DO NOTHING;
+        """))
+        db.session.commit()
+        print("[OK] Legal: publicada Terminos v1.1.0 (requiere reaceptacion)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] publicar terminos v1.1.0: {e}")
+
     # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como

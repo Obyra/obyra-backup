@@ -603,6 +603,7 @@ def register():
 
             # Registrar consentimiento legal del usuario para los documentos
             # vigentes al momento del registro (TOS / Privacidad / Cookies).
+            consents_creados = []
             try:
                 from models.legal import LegalDocument, UserConsent, TIPOS_DOCUMENTO
                 ip_addr = request.remote_addr
@@ -623,6 +624,7 @@ def register():
                         user_agent=ua_str,
                         metodo='checkbox_registro',
                     ))
+                    consents_creados.append(f'{doc.tipo_documento}:v{doc.version}')
             except Exception:
                 # No bloquear el registro por error en consent
                 current_app.logger.exception('No se pudo registrar UserConsent en alta de cuenta')
@@ -633,7 +635,7 @@ def register():
             log_login_attempt(email.lower(), True)
             current_app.logger.info(f'Nuevo usuario registrado: {email.lower()} - Organizacion: {nueva_organizacion.id}')
 
-            # Audit: usuario registrado (organizacion creada)
+            # Audit: usuario registrado (organizacion creada) + aceptacion legal
             try:
                 from models.audit import registrar_audit
                 registrar_audit(
@@ -642,6 +644,13 @@ def register():
                     entidad_id=nuevo_usuario.id,
                     detalle=f'Registro nuevo usuario {email.lower()} con organizacion {nueva_organizacion.id}',
                 )
+                if consents_creados:
+                    registrar_audit(
+                        accion='aceptar_legal',
+                        entidad='usuario',
+                        entidad_id=nuevo_usuario.id,
+                        detalle=f'Aceptacion legal en registro ({", ".join(consents_creados)})',
+                    )
                 db.session.commit()
             except Exception:
                 db.session.rollback()

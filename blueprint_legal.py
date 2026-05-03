@@ -143,6 +143,7 @@ def legal_aceptar(doc_id=None):
     org_id = get_current_org_id()
 
     aceptados = 0
+    detalles = []
     for did in ids:
         doc = LegalDocument.query.get(did)
         if not doc or not doc.activo:
@@ -163,6 +164,19 @@ def legal_aceptar(doc_id=None):
         )
         db.session.add(consent)
         aceptados += 1
+        detalles.append(f'{doc.tipo_documento}:v{doc.version}')
+
+    if aceptados:
+        try:
+            from models.audit import registrar_audit
+            registrar_audit(
+                accion='aceptar_legal',
+                entidad='usuario',
+                entidad_id=current_user.id,
+                detalle=f'Aceptacion legal via {metodo[:40]} ({", ".join(detalles)})',
+            )
+        except Exception:
+            pass
 
     try:
         db.session.commit()
