@@ -415,6 +415,11 @@
                                 <li><a class="dropdown-item text-danger" href="{{ url_for('superadmin.panel') }}">
                                     <i class="fas fa-crown me-2"></i>Panel Super Admin
                                 </a></li>
+                                {% if has_endpoint('superadmin.calculadora_ia_aprendizaje') %}
+                                <li><a class="dropdown-item" href="{{ url_for('superadmin.calculadora_ia_aprendizaje') }}">
+                                    <i class="fas fa-brain me-2"></i>Aprendizaje Calculadora IA
+                                </a></li>
+                                {% endif %}
                                 {% if has_endpoint('admin_metrics.metrics_view') %}
                                 <li><a class="dropdown-item" href="{{ url_for('admin_metrics.metrics_view') }}">
                                     <i class="fas fa-chart-line me-2"></i>Métricas de Negocio

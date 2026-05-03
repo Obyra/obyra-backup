@@ -425,3 +425,260 @@ def limpiar_marcas_cuadrillas():
     db.session.commit()
     flash(f'Limpieza completada: {cambios} registros actualizados.', 'success')
     return redirect(url_for('superadmin.panel'))
+
+
+# ============================================================
+# Aprendizaje Calculadora IA (Fase B)
+# ============================================================
+
+@superadmin_bp.route('/calculadora-ia/aprendizaje')
+@login_required
+@require_super_admin
+def calculadora_ia_aprendizaje():
+    """Panel global de aprendizaje IA: candidatas, top reglas, items sin sugerencia."""
+    from models.ia_learning import IACorrectionLog, IARuleCandidate, IARuleUsageStat
+    from sqlalchemy import func
+
+    # Resumen general
+    total_correcciones = db.session.query(func.count(IACorrectionLog.id)).scalar() or 0
+    total_candidatas = db.session.query(func.count(IARuleCandidate.id)).scalar() or 0
+    candidatas_pendientes = db.session.query(func.count(IARuleCandidate.id)).filter(
+        IARuleCandidate.estado == 'pendiente'
+    ).scalar() or 0
+    candidatas_aprobadas = db.session.query(func.count(IARuleCandidate.id)).filter(
+        IARuleCandidate.estado == 'aprobada'
+    ).scalar() or 0
+    candidatas_rechazadas = db.session.query(func.count(IARuleCandidate.id)).filter(
+        IARuleCandidate.estado == 'rechazada'
+    ).scalar() or 0
+    total_reglas_usadas = db.session.query(func.count(IARuleUsageStat.id)).scalar() or 0
+
+    resumen = {
+        'total_correcciones': total_correcciones,
+        'total_candidatas': total_candidatas,
+        'candidatas_pendientes': candidatas_pendientes,
+        'candidatas_aprobadas': candidatas_aprobadas,
+        'candidatas_rechazadas': candidatas_rechazadas,
+        'total_reglas_usadas': total_reglas_usadas,
+    }
+
+    return render_template('superadmin/calculadora_ia_aprendizaje.html', resumen=resumen)
+
+
+@superadmin_bp.route('/calculadora-ia/api/candidatas-pendientes')
+@login_required
+@require_super_admin
+def api_ia_candidatas_pendientes():
+    """Lista de candidatas pendientes ordenadas por cantidad_ocurrencias."""
+    from models.ia_learning import IARuleCandidate
+
+    estado = (request.args.get('estado') or 'pendiente').strip()
+    limit = min(int(request.args.get('limit') or 50), 200)
+
+    q = IARuleCandidate.query
+    if estado != 'todos':
+        q = q.filter(IARuleCandidate.estado == estado)
+    items = q.order_by(
+        IARuleCandidate.cantidad_ocurrencias.desc(),
+        IARuleCandidate.updated_at.desc(),
+    ).limit(limit).all()
+    return jsonify(ok=True, items=[c.to_dict() for c in items])
+
+
+@superadmin_bp.route('/calculadora-ia/api/top-reglas')
+@login_required
+@require_super_admin
+def api_ia_top_reglas():
+    """Reglas mas usadas, mas aceptadas, mas editadas."""
+    from models.ia_learning import IARuleUsageStat
+
+    bucket = (request.args.get('bucket') or 'usos').strip()
+    limit = min(int(request.args.get('limit') or 20), 100)
+
+    q = IARuleUsageStat.query
+    if bucket == 'aceptadas':
+        q = q.order_by(IARuleUsageStat.cantidad_aceptadas_sin_edicion.desc())
+    elif bucket == 'editadas':
+        q = q.order_by(IARuleUsageStat.cantidad_editadas.desc())
+    elif bucket == 'rechazadas':
+        q = q.order_by(IARuleUsageStat.cantidad_rechazadas.desc())
+    else:
+        q = q.order_by(IARuleUsageStat.cantidad_usos.desc())
+    items = q.limit(limit).all()
+    return jsonify(ok=True, items=[s.to_dict() for s in items])
+
+
+@superadmin_bp.route('/calculadora-ia/api/items-sin-sugerencia')
+@login_required
+@require_super_admin
+def api_ia_items_sin_sugerencia():
+    """Top descripciones recurrentes que la IA no logra clasificar (regla_id NULL)."""
+    from models.ia_learning import IACorrectionLog
+    from sqlalchemy import func
+
+    limit = min(int(request.args.get('limit') or 30), 100)
+    rows = (
+        db.session.query(
+            IACorrectionLog.descripcion_normalizada,
+            func.count(IACorrectionLog.id).label('ocurrencias'),
+            func.max(IACorrectionLog.descripcion_original).label('ejemplo'),
+        )
+        .filter(IACorrectionLog.regla_tecnica_id.is_(None))
+        .group_by(IACorrectionLog.descripcion_normalizada)
+        .order_by(func.count(IACorrectionLog.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify(
+        ok=True,
+        items=[
+            {'descripcion_normalizada': r[0], 'ocurrencias': r[1], 'ejemplo': r[2]}
+            for r in rows
+        ],
+    )
+
+
+@superadmin_bp.route('/calculadora-ia/api/baja-confianza')
+@login_required
+@require_super_admin
+def api_ia_baja_confianza():
+    """Top descripciones con baja confianza recurrente (< 0.45)."""
+    from models.ia_learning import IACorrectionLog
+    from sqlalchemy import func
+
+    limit = min(int(request.args.get('limit') or 30), 100)
+    rows = (
+        db.session.query(
+            IACorrectionLog.descripcion_normalizada,
+            func.count(IACorrectionLog.id).label('ocurrencias'),
+            func.avg(IACorrectionLog.confianza_original).label('confianza_avg'),
+            func.max(IACorrectionLog.descripcion_original).label('ejemplo'),
+        )
+        .filter(IACorrectionLog.confianza_original.isnot(None))
+        .filter(IACorrectionLog.confianza_original < 0.45)
+        .group_by(IACorrectionLog.descripcion_normalizada)
+        .order_by(func.count(IACorrectionLog.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify(
+        ok=True,
+        items=[
+            {
+                'descripcion_normalizada': r[0],
+                'ocurrencias': r[1],
+                'confianza_avg': float(r[2]) if r[2] is not None else None,
+                'ejemplo': r[3],
+            }
+            for r in rows
+        ],
+    )
+
+
+@superadmin_bp.route('/calculadora-ia/api/correcciones-resumen')
+@login_required
+@require_super_admin
+def api_ia_correcciones_resumen():
+    """Resumen agregado por tipo: rubros mas corregidos, unidades, etc.
+
+    Iteramos en Python sobre los ultimos N logs para portabilidad SQLite/PG
+    (no usamos operadores JSONB-specific). Limite alto para representatividad.
+    """
+    from models.ia_learning import IACorrectionLog
+
+    limit = min(int(request.args.get('limit') or 1000), 5000)
+    logs = (
+        IACorrectionLog.query
+        .order_by(IACorrectionLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    rubros_corregidos = {}
+    unidades_corregidas = {}
+    materiales_agregados = {}
+    maquinaria_agregada = {}
+    total_aceptadas = 0
+    total_editadas = 0
+
+    for log in logs:
+        tipos = log.tipos_correccion or []
+        if 'aceptada_sin_editar' in tipos and not any(t.startswith('editada_') for t in tipos):
+            total_aceptadas += 1
+        if any(t.startswith('editada_') for t in tipos):
+            total_editadas += 1
+        correcc = log.correccion_usuario_json or {}
+        if 'editada_rubro' in tipos:
+            r = (correcc.get('rubro') or '').strip()
+            if r:
+                rubros_corregidos[r] = rubros_corregidos.get(r, 0) + 1
+        if 'editada_unidad' in tipos:
+            u = (correcc.get('unidad') or '').strip()
+            if u:
+                unidades_corregidas[u] = unidades_corregidas.get(u, 0) + 1
+        if 'editada_materiales' in tipos:
+            for m in (correcc.get('materiales') or []):
+                materiales_agregados[str(m)] = materiales_agregados.get(str(m), 0) + 1
+        if 'editada_maquinaria' in tipos:
+            for mq in (correcc.get('maquinaria') or []):
+                maquinaria_agregada[str(mq)] = maquinaria_agregada.get(str(mq), 0) + 1
+
+    def top(d, n=20):
+        return sorted(d.items(), key=lambda kv: kv[1], reverse=True)[:n]
+
+    return jsonify(
+        ok=True,
+        ventana_logs=len(logs),
+        total_aceptadas_sin_editar=total_aceptadas,
+        total_editadas=total_editadas,
+        rubros_corregidos=top(rubros_corregidos),
+        unidades_corregidas=top(unidades_corregidas),
+        materiales_agregados=top(materiales_agregados),
+        maquinaria_agregada=top(maquinaria_agregada),
+    )
+
+
+@superadmin_bp.route('/calculadora-ia/candidata/<int:cand_id>/<accion>', methods=['POST'])
+@login_required
+@require_super_admin
+def accion_candidata_ia(cand_id, accion):
+    """Aprobar o rechazar una candidata. NO inserta como regla activa todavia."""
+    from models.ia_learning import IARuleCandidate
+
+    if accion not in ('aprobar', 'rechazar'):
+        return jsonify(ok=False, error='accion invalida'), 400
+
+    cand = IARuleCandidate.query.get_or_404(cand_id)
+    if cand.estado not in ('pendiente',):
+        return jsonify(ok=False, error=f'candidata ya esta en estado {cand.estado}'), 400
+
+    notas = (request.get_json(silent=True) or {}).get('notas')
+    if accion == 'aprobar':
+        cand.estado = 'aprobada'
+        audit_accion = 'aprobar_candidata_ia'
+    else:
+        cand.estado = 'rechazada'
+        audit_accion = 'rechazar_candidata_ia'
+    cand.aprobada_por_user_id = current_user.id
+    cand.aprobada_at = datetime.utcnow()
+    cand.notas_admin = (notas or '').strip()[:500] or None
+    cand.updated_at = datetime.utcnow()
+
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion=audit_accion,
+            entidad='ia_rule_candidate',
+            entidad_id=cand.id,
+            detalle=f'desc_norm={cand.descripcion_normalizada[:120]} ocurr={cand.cantidad_ocurrencias}',
+        )
+    except Exception:
+        pass
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+    return jsonify(ok=True, candidata=cand.to_dict())

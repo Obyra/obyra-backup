@@ -1913,6 +1913,104 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] publicar terminos v1.1.0: {e}")
 
     # =====================================================
+    # 2026-05-03: Fase B - Aprendizaje IA continuo.
+    # Tablas: ia_correction_log, ia_rule_candidate, ia_rule_usage_stat.
+    # Idempotente: CREATE TABLE IF NOT EXISTS via DO $$ ... END $$.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='ia_correction_log') THEN
+                CREATE TABLE ia_correction_log (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER REFERENCES organizaciones(id) ON DELETE SET NULL,
+                    user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    presupuesto_id INTEGER REFERENCES presupuestos(id) ON DELETE CASCADE,
+                    item_presupuesto_id INTEGER REFERENCES items_presupuesto(id) ON DELETE CASCADE,
+                    descripcion_original VARCHAR(500) NOT NULL,
+                    descripcion_normalizada VARCHAR(500) NOT NULL,
+                    sugerencia_original_json JSONB,
+                    correccion_usuario_json JSONB,
+                    tipos_correccion JSONB,
+                    confianza_original FLOAT,
+                    regla_tecnica_id VARCHAR(80),
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                );
+                CREATE INDEX ix_iacorr_org_created ON ia_correction_log(organizacion_id, created_at);
+                CREATE INDEX ix_iacorr_descnorm ON ia_correction_log(descripcion_normalizada);
+                CREATE INDEX ix_iacorr_regla ON ia_correction_log(regla_tecnica_id);
+                CREATE INDEX ix_iacorr_user ON ia_correction_log(user_id);
+                CREATE INDEX ix_iacorr_presup ON ia_correction_log(presupuesto_id);
+                CREATE INDEX ix_iacorr_item ON ia_correction_log(item_presupuesto_id);
+                CREATE INDEX ix_iacorr_created ON ia_correction_log(created_at);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] ia_correction_log: {e}")
+
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='ia_rule_candidate') THEN
+                CREATE TABLE ia_rule_candidate (
+                    id SERIAL PRIMARY KEY,
+                    descripcion_original VARCHAR(500) NOT NULL,
+                    descripcion_normalizada VARCHAR(500) NOT NULL,
+                    rubro_sugerido VARCHAR(100),
+                    etapa_sugerida VARCHAR(100),
+                    unidad_sugerida VARCHAR(20),
+                    materiales_sugeridos_json JSONB,
+                    maquinaria_sugerida_json JSONB,
+                    cantidad_ocurrencias INTEGER NOT NULL DEFAULT 1,
+                    confianza_promedio FLOAT,
+                    estado VARCHAR(40) NOT NULL DEFAULT 'pendiente',
+                    aprobada_por_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    aprobada_at TIMESTAMP,
+                    notas_admin TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_iarc_descnorm UNIQUE (descripcion_normalizada)
+                );
+                CREATE INDEX ix_iarc_estado_count ON ia_rule_candidate(estado, cantidad_ocurrencias);
+                CREATE INDEX ix_iarc_created ON ia_rule_candidate(created_at);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] ia_rule_candidate: {e}")
+
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='ia_rule_usage_stat') THEN
+                CREATE TABLE ia_rule_usage_stat (
+                    id SERIAL PRIMARY KEY,
+                    regla_tecnica_id VARCHAR(80) NOT NULL,
+                    cantidad_usos INTEGER NOT NULL DEFAULT 0,
+                    cantidad_aceptadas_sin_edicion INTEGER NOT NULL DEFAULT 0,
+                    cantidad_editadas INTEGER NOT NULL DEFAULT 0,
+                    cantidad_rechazadas INTEGER NOT NULL DEFAULT 0,
+                    confianza_promedio FLOAT,
+                    ultima_utilizacion TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_iarus_regla UNIQUE (regla_tecnica_id)
+                );
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] Migracion runtime: aprendizaje IA (correction_log + rule_candidate + rule_usage_stat)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] ia_rule_usage_stat: {e}")
+
+    # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como
     # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).

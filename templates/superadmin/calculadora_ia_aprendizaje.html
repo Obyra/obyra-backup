@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}Aprendizaje Calculadora IA · Super Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-brain me-2 text-primary"></i>Aprendizaje Calculadora IA
+            </h2>
+            <small class="text-muted">Panel global · Fase B · datos agregados sin exposición entre organizaciones</small>
+        </div>
+        <a href="{{ url_for('superadmin.panel') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver al panel
+        </a>
+    </div>
+
+    <!-- Resumen -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-2">
+            <div class="card bg-primary text-white"><div class="card-body text-center">
+                <h3 class="mb-0">{{ resumen.total_correcciones }}</h3>
+                <small>Correcciones registradas</small>
+            </div></div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-info text-white"><div class="card-body text-center">
+                <h3 class="mb-0">{{ resumen.total_candidatas }}</h3>
+                <small>Candidatas totales</small>
+            </div></div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-warning text-dark"><div class="card-body text-center">
+                <h3 class="mb-0">{{ resumen.candidatas_pendientes }}</h3>
+                <small>Pendientes</small>
+            </div></div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-success text-white"><div class="card-body text-center">
+                <h3 class="mb-0">{{ resumen.candidatas_aprobadas }}</h3>
+                <small>Aprobadas</small>
+            </div></div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-secondary text-white"><div class="card-body text-center">
+                <h3 class="mb-0">{{ resumen.candidatas_rechazadas }}</h3>
+                <small>Rechazadas</small>
+            </div></div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-dark text-white"><div class="card-body text-center">
+                <h3 class="mb-0">{{ resumen.total_reglas_usadas }}</h3>
+                <small>Reglas con uso</small>
+            </div></div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs" id="tabsAprendizaje" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-cands" type="button">Candidatas pendientes</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-reglas" type="button">Top reglas</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sin-sug" type="button">Items sin sugerencia</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-baja" type="button">Baja confianza</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-resumen" type="button">Resumen correcciones</button></li>
+    </ul>
+
+    <div class="tab-content border border-top-0 rounded-bottom p-3 bg-white">
+
+        <!-- ========== Candidatas pendientes ========== -->
+        <div class="tab-pane fade show active" id="tab-cands" role="tabpanel">
+            <div class="d-flex justify-content-between mb-2">
+                <h5 class="mb-0">Candidatas a nuevas reglas técnicas</h5>
+                <select id="filtroEstado" class="form-select form-select-sm w-auto">
+                    <option value="pendiente" selected>Pendientes</option>
+                    <option value="aprobada">Aprobadas</option>
+                    <option value="rechazada">Rechazadas</option>
+                    <option value="todos">Todas</option>
+                </select>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead><tr>
+                        <th>Descripción normalizada</th>
+                        <th>Rubro</th>
+                        <th>Etapa</th>
+                        <th>Unidad</th>
+                        <th class="text-end">Ocurr.</th>
+                        <th class="text-end">Conf. avg</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr></thead>
+                    <tbody id="tblCandidatas">
+                        <tr><td colspan="8" class="text-center text-muted">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ========== Top reglas ========== -->
+        <div class="tab-pane fade" id="tab-reglas" role="tabpanel">
+            <div class="d-flex justify-content-between mb-2">
+                <h5 class="mb-0">Reglas técnicas más usadas</h5>
+                <select id="filtroBucket" class="form-select form-select-sm w-auto">
+                    <option value="usos" selected>Más usadas</option>
+                    <option value="aceptadas">Más aceptadas sin editar</option>
+                    <option value="editadas">Más editadas</option>
+                    <option value="rechazadas">Más rechazadas</option>
+                </select>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead><tr>
+                        <th>Regla técnica</th>
+                        <th class="text-end">Usos</th>
+                        <th class="text-end">Aceptadas s/e</th>
+                        <th class="text-end">Editadas</th>
+                        <th class="text-end">Rechazadas</th>
+                        <th class="text-end">Conf. avg</th>
+                        <th>Última utilización</th>
+                    </tr></thead>
+                    <tbody id="tblReglas">
+                        <tr><td colspan="7" class="text-center text-muted">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ========== Items sin sugerencia ========== -->
+        <div class="tab-pane fade" id="tab-sin-sug" role="tabpanel">
+            <h5 class="mb-2">Top descripciones que la IA no clasifica</h5>
+            <p class="text-muted small">Items recurrentes sin <code>regla_id</code> — son los huecos de la base técnica.</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead><tr>
+                        <th>Descripción normalizada</th>
+                        <th>Ejemplo</th>
+                        <th class="text-end">Ocurrencias</th>
+                    </tr></thead>
+                    <tbody id="tblSinSugerencia">
+                        <tr><td colspan="3" class="text-center text-muted">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ========== Baja confianza ========== -->
+        <div class="tab-pane fade" id="tab-baja" role="tabpanel">
+            <h5 class="mb-2">Top descripciones con baja confianza recurrente (&lt; 0.45)</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead><tr>
+                        <th>Descripción normalizada</th>
+                        <th>Ejemplo</th>
+                        <th class="text-end">Ocurrencias</th>
+                        <th class="text-end">Confianza promedio</th>
+                    </tr></thead>
+                    <tbody id="tblBaja">
+                        <tr><td colspan="4" class="text-center text-muted">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ========== Resumen correcciones ========== -->
+        <div class="tab-pane fade" id="tab-resumen" role="tabpanel">
+            <h5 class="mb-2">Resumen de correcciones (últimos 1.000 logs)</h5>
+            <div class="row" id="resumenContenedor">
+                <div class="col-md-6 mb-3">
+                    <h6 class="text-muted">Aceptadas vs Editadas</h6>
+                    <p class="small mb-0">Aceptadas sin editar: <span id="kpiAceptadas" class="fw-bold">-</span></p>
+                    <p class="small mb-0">Editadas: <span id="kpiEditadas" class="fw-bold">-</span></p>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <h6 class="text-muted">Rubros más corregidos</h6>
+                    <ul id="lstRubros" class="list-unstyled small"></ul>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <h6 class="text-muted">Unidades más corregidas</h6>
+                    <ul id="lstUnidades" class="list-unstyled small"></ul>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <h6 class="text-muted">Materiales agregados manualmente</h6>
+                    <ul id="lstMateriales" class="list-unstyled small"></ul>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <h6 class="text-muted">Maquinaria agregada manualmente</h6>
+                    <ul id="lstMaquinaria" class="list-unstyled small"></ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    function escHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    function nf(v, dec) {
+        if (v == null) return '-';
+        return Number(v).toFixed(dec || 2);
+    }
+    function csrf() {
+        const m = document.querySelector('meta[name="csrf-token"]');
+        return m ? m.getAttribute('content') : '';
+    }
+
+    function badgeEstado(estado) {
+        const map = {
+            pendiente: 'bg-warning text-dark',
+            aprobada: 'bg-success',
+            rechazada: 'bg-secondary',
+            convertida_en_regla: 'bg-info',
+        };
+        return '<span class="badge ' + (map[estado] || 'bg-light text-dark') + '">' + escHtml(estado) + '</span>';
+    }
+
+    function cargarCandidatas() {
+        const estado = document.getElementById('filtroEstado').value;
+        const tb = document.getElementById('tblCandidatas');
+        tb.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Cargando...</td></tr>';
+        fetch('/superadmin/calculadora-ia/api/candidatas-pendientes?estado=' + encodeURIComponent(estado))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok) { tb.innerHTML = '<tr><td colspan="8" class="text-danger">Error</td></tr>'; return; }
+                if (!d.items || !d.items.length) { tb.innerHTML = '<tr><td colspan="8" class="text-muted text-center">Sin resultados.</td></tr>'; return; }
+                tb.innerHTML = d.items.map(function(c) {
+                    const acciones = c.estado === 'pendiente'
+                        ? '<button class="btn btn-sm btn-success me-1" onclick="aprobarCand(' + c.id + ')"><i class="fas fa-check"></i></button>' +
+                          '<button class="btn btn-sm btn-outline-secondary" onclick="rechazarCand(' + c.id + ')"><i class="fas fa-times"></i></button>'
+                        : '<small class="text-muted">—</small>';
+                    return '<tr>' +
+                        '<td><div class="text-truncate" style="max-width:340px;" title="' + escHtml(c.descripcion_original) + '">' + escHtml(c.descripcion_normalizada) + '</div></td>' +
+                        '<td>' + escHtml(c.rubro_sugerido || '-') + '</td>' +
+                        '<td>' + escHtml(c.etapa_sugerida || '-') + '</td>' +
+                        '<td>' + escHtml(c.unidad_sugerida || '-') + '</td>' +
+                        '<td class="text-end">' + (c.cantidad_ocurrencias || 0) + '</td>' +
+                        '<td class="text-end">' + (c.confianza_promedio != null ? nf(c.confianza_promedio) : '-') + '</td>' +
+                        '<td>' + badgeEstado(c.estado) + '</td>' +
+                        '<td>' + acciones + '</td>' +
+                    '</tr>';
+                }).join('');
+            })
+            .catch(function() { tb.innerHTML = '<tr><td colspan="8" class="text-danger">Error de red</td></tr>'; });
+    }
+
+    function _accionCand(id, accion) {
+        const url = '/superadmin/calculadora-ia/candidata/' + id + '/' + accion;
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+            credentials: 'same-origin',
+            body: JSON.stringify({ notas: '' })
+        }).then(function(r) { return r.json(); });
+    }
+    window.aprobarCand = function(id) {
+        if (!confirm('Aprobar candidata #' + id + '? Solo cambia el estado a "aprobada", no genera regla técnica activa.')) return;
+        _accionCand(id, 'aprobar').then(function(d) {
+            if (d.ok) { cargarCandidatas(); } else { alert(d.error || 'Error'); }
+        });
+    };
+    window.rechazarCand = function(id) {
+        if (!confirm('Rechazar candidata #' + id + '?')) return;
+        _accionCand(id, 'rechazar').then(function(d) {
+            if (d.ok) { cargarCandidatas(); } else { alert(d.error || 'Error'); }
+        });
+    };
+
+    function cargarReglas() {
+        const bucket = document.getElementById('filtroBucket').value;
+        const tb = document.getElementById('tblReglas');
+        tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Cargando...</td></tr>';
+        fetch('/superadmin/calculadora-ia/api/top-reglas?bucket=' + encodeURIComponent(bucket))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok) { tb.innerHTML = '<tr><td colspan="7" class="text-danger">Error</td></tr>'; return; }
+                if (!d.items.length) { tb.innerHTML = '<tr><td colspan="7" class="text-muted text-center">Sin datos aún.</td></tr>'; return; }
+                tb.innerHTML = d.items.map(function(s) {
+                    return '<tr>' +
+                        '<td><code>' + escHtml(s.regla_tecnica_id) + '</code></td>' +
+                        '<td class="text-end">' + (s.cantidad_usos || 0) + '</td>' +
+                        '<td class="text-end">' + (s.cantidad_aceptadas_sin_edicion || 0) + '</td>' +
+                        '<td class="text-end">' + (s.cantidad_editadas || 0) + '</td>' +
+                        '<td class="text-end">' + (s.cantidad_rechazadas || 0) + '</td>' +
+                        '<td class="text-end">' + (s.confianza_promedio != null ? nf(s.confianza_promedio) : '-') + '</td>' +
+                        '<td><small class="text-muted">' + escHtml(s.ultima_utilizacion || '-') + '</small></td>' +
+                    '</tr>';
+                }).join('');
+            });
+    }
+
+    function cargarSinSugerencia() {
+        const tb = document.getElementById('tblSinSugerencia');
+        tb.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Cargando...</td></tr>';
+        fetch('/superadmin/calculadora-ia/api/items-sin-sugerencia')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok) { tb.innerHTML = '<tr><td colspan="3" class="text-danger">Error</td></tr>'; return; }
+                if (!d.items.length) { tb.innerHTML = '<tr><td colspan="3" class="text-muted text-center">Todo cubierto por la base técnica.</td></tr>'; return; }
+                tb.innerHTML = d.items.map(function(it) {
+                    return '<tr>' +
+                        '<td>' + escHtml(it.descripcion_normalizada) + '</td>' +
+                        '<td><small class="text-muted">' + escHtml(it.ejemplo) + '</small></td>' +
+                        '<td class="text-end fw-bold">' + (it.ocurrencias || 0) + '</td>' +
+                    '</tr>';
+                }).join('');
+            });
+    }
+
+    function cargarBaja() {
+        const tb = document.getElementById('tblBaja');
+        tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Cargando...</td></tr>';
+        fetch('/superadmin/calculadora-ia/api/baja-confianza')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok) { tb.innerHTML = '<tr><td colspan="4" class="text-danger">Error</td></tr>'; return; }
+                if (!d.items.length) { tb.innerHTML = '<tr><td colspan="4" class="text-muted text-center">Sin items con baja confianza repetida.</td></tr>'; return; }
+                tb.innerHTML = d.items.map(function(it) {
+                    return '<tr>' +
+                        '<td>' + escHtml(it.descripcion_normalizada) + '</td>' +
+                        '<td><small class="text-muted">' + escHtml(it.ejemplo) + '</small></td>' +
+                        '<td class="text-end">' + (it.ocurrencias || 0) + '</td>' +
+                        '<td class="text-end">' + (it.confianza_avg != null ? nf(it.confianza_avg) : '-') + '</td>' +
+                    '</tr>';
+                }).join('');
+            });
+    }
+
+    function _renderTop(elId, lista) {
+        const ul = document.getElementById(elId);
+        if (!ul) return;
+        if (!lista || !lista.length) { ul.innerHTML = '<li class="text-muted">Sin datos.</li>'; return; }
+        ul.innerHTML = lista.map(function(kv) {
+            return '<li><span class="badge bg-light text-dark me-1">' + (kv[1] || 0) + '</span>' + escHtml(kv[0]) + '</li>';
+        }).join('');
+    }
+
+    function cargarResumen() {
+        fetch('/superadmin/calculadora-ia/api/correcciones-resumen')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok) return;
+                document.getElementById('kpiAceptadas').textContent = d.total_aceptadas_sin_editar;
+                document.getElementById('kpiEditadas').textContent = d.total_editadas;
+                _renderTop('lstRubros', d.rubros_corregidos);
+                _renderTop('lstUnidades', d.unidades_corregidas);
+                _renderTop('lstMateriales', d.materiales_agregados);
+                _renderTop('lstMaquinaria', d.maquinaria_agregada);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('filtroEstado').addEventListener('change', cargarCandidatas);
+        document.getElementById('filtroBucket').addEventListener('change', cargarReglas);
+
+        cargarCandidatas();
+
+        const tabsToBind = [
+            { btnSel: '[data-bs-target="#tab-reglas"]', loaded: false, fn: cargarReglas },
+            { btnSel: '[data-bs-target="#tab-sin-sug"]', loaded: false, fn: cargarSinSugerencia },
+            { btnSel: '[data-bs-target="#tab-baja"]', loaded: false, fn: cargarBaja },
+            { btnSel: '[data-bs-target="#tab-resumen"]', loaded: false, fn: cargarResumen },
+        ];
+        tabsToBind.forEach(function(t) {
+            const btn = document.querySelector(t.btnSel);
+            if (!btn) return;
+            btn.addEventListener('shown.bs.tab', function() {
+                if (!t.loaded) { t.fn(); t.loaded = true; }
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

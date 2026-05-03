@@ -134,7 +134,19 @@ def aplicar_analisis_ia(id):
     aplicados = 0
     omitidos = 0
     errores = []
+    aprendizaje_logs = 0
+    aprendizaje_candidatas_nuevas = 0
     now = datetime.utcnow()
+
+    # Servicio de aprendizaje IA (Fase B). Se importa una sola vez fuera del
+    # loop. Si la importacion falla, el endpoint sigue funcionando pero sin
+    # aprendizaje (defensa en profundidad).
+    try:
+        from services.ia_learning_service import registrar_aplicacion_ia
+    except Exception:
+        registrar_aplicacion_ia = None
+
+    org_id = get_current_org_id()
 
     for entry in items_payload:
         if not entry.get('aplicar'):
@@ -170,11 +182,25 @@ def aplicar_analisis_ia(id):
             if analisis is not None:
                 item.analisis_ia = analisis
 
-            # 4. Auditoria
+            # 4. Auditoria item-level
             item.revisado_ia = True
             item.fecha_analisis_ia = now
 
             aplicados += 1
+
+            # 5. Aprendizaje IA continuo (fail-safe via savepoint)
+            if registrar_aplicacion_ia is not None:
+                res = registrar_aplicacion_ia(
+                    item=item,
+                    entry=entry,
+                    presupuesto=presupuesto,
+                    user_id=current_user.id if current_user.is_authenticated else None,
+                    organizacion_id=org_id,
+                )
+                if res and not res.get('error'):
+                    aprendizaje_logs += 1
+                    if res.get('es_nueva_candidata'):
+                        aprendizaje_candidatas_nuevas += 1
         except Exception as e:
             errores.append({'item_id': item_id, 'error': str(e)})
 
@@ -205,4 +231,8 @@ def aplicar_analisis_ia(id):
         aplicados=aplicados,
         omitidos=omitidos,
         errores=errores,
+        aprendizaje={
+            'logs_creados': aprendizaje_logs,
+            'candidatas_nuevas': aprendizaje_candidatas_nuevas,
+        },
     )

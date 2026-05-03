@@ -193,6 +193,12 @@ from models.audit import AuditLog, registrar_audit
 # Documentos legales y consentimientos
 from models.legal import LegalDocument, UserConsent, documentos_pendientes_para_usuario, TIPOS_DOCUMENTO
 
+# Aprendizaje IA: log de correcciones, candidatas, stats
+from models.ia_learning import (
+    IACorrectionLog, IARuleCandidate, IARuleUsageStat,
+    TIPOS_CORRECCION, ESTADOS_CANDIDATA,
+)
+
 # Cierre formal de obra y acta de entrega
 from models.cierre_obra import CierreObra, ActaEntrega
 
