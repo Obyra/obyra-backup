@@ -98,7 +98,7 @@ def calcular_avance(
             'revision_tecnica',
             f'{no_reconocidos} ítems necesitan revisión técnica',
             'OBYRA necesita confirmar rubro, etapa, unidad o tipo de recurso antes de usarlos en el presupuesto.',
-            'Revisar ítems pendientes',
+            'Resolver ítems pendientes',
             'revisar_pendientes',
         )
 

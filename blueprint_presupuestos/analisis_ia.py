@@ -1,8 +1,10 @@
 """Análisis IA sobre presupuestos importados desde Excel de licitación.
 
 Endpoints:
-  POST /presupuestos/<id>/analizar-ia          -> devuelve sugerencias (no toca BD)
-  POST /presupuestos/<id>/aplicar-analisis-ia  -> aplica sugerencias seleccionadas
+  POST /presupuestos/<id>/analizar-ia                     -> devuelve sugerencias (no toca BD)
+  POST /presupuestos/<id>/aplicar-analisis-ia             -> aplica seleccionadas (modo experto)
+  POST /presupuestos/<id>/items/<iid>/clasificar          -> clasificacion manual de un pendiente
+  GET  /presupuestos/api/rubros-tecnicos                  -> lista rubros/etapas/unidades para dropdowns
 
 Reusa el servicio determinístico services/analisis_ia_presupuesto.py.
 """
@@ -287,4 +289,178 @@ def aplicar_analisis_ia(id):
             'logs_creados': aprendizaje_logs,
             'candidatas_nuevas': aprendizaje_candidatas_nuevas,
         },
+    )
+
+
+# ============================================================
+# Resolver items pendientes (clasificacion manual basica)
+# ============================================================
+
+UNIDADES_DISPONIBLES = (
+    'm', 'm2', 'm3', 'kg', 'tn', 'l', 'h', 'dia', 'mes', 'jornal',
+    'unidad', 'gl', 'bolsa', 'caja', 'par',
+)
+
+
+@presupuestos_bp.route('/api/rubros-tecnicos', methods=['GET'])
+@login_required
+def api_rubros_tecnicos():
+    """Lista de rubros/etapas/unidades para popular dropdowns en la vista
+    'Resolver items pendientes'. Se construye desde la base tecnica."""
+    try:
+        from services.base_tecnica_computos import REGLAS_TECNICAS
+        rubros = sorted({(r.get('rubro') or '').strip() for r in REGLAS_TECNICAS if r.get('rubro')})
+        etapas = sorted({(r.get('etapa') or '').strip() for r in REGLAS_TECNICAS if r.get('etapa')})
+    except Exception:
+        rubros, etapas = [], []
+    return jsonify(
+        ok=True,
+        rubros=[r for r in rubros if r],
+        etapas=[e for e in etapas if e],
+        unidades=list(UNIDADES_DISPONIBLES),
+    )
+
+
+@presupuestos_bp.route('/<int:id>/items/<int:item_id>/clasificar', methods=['POST'])
+@login_required
+def clasificar_item_pendiente(id, item_id):
+    """Clasificacion manual de un item pendiente.
+
+    Body JSON:
+      {
+        "accion": "confirmar" | "guardar" | "omitir",
+        "descripcion": "..." (opcional),
+        "unidad": "m3" (opcional),
+        "etapa_nombre": "Estructura" (opcional),
+        "rubro": "Estructura" (opcional, se mergea al blob analisis_ia)
+      }
+
+    Para "confirmar": aplica los cambios + marca revisado_ia=True.
+    Para "guardar":  idem (alias).
+    Para "omitir":   no modifica el item; solo registra audit/learning para
+                     trackear que el usuario eligio postergar la decision.
+    """
+    from datetime import datetime
+    from models.budgets import Presupuesto, ItemPresupuesto
+
+    presupuesto = Presupuesto.query.get_or_404(id)
+    if not _verificar_acceso_presupuesto(presupuesto):
+        return jsonify(ok=False, error='No autorizado'), 403
+    if not _puede_gestionar():
+        return jsonify(ok=False, error='Sin permisos'), 403
+    if presupuesto.estado not in ('borrador', 'enviado'):
+        return jsonify(ok=False, error=f'Presupuesto en estado {presupuesto.estado}: no editable.'), 400
+
+    item = ItemPresupuesto.query.filter_by(
+        id=item_id, presupuesto_id=presupuesto.id,
+    ).first()
+    if not item:
+        return jsonify(ok=False, error='Item no encontrado'), 404
+
+    payload = request.get_json(silent=True) or {}
+    accion = (payload.get('accion') or 'guardar').strip().lower()
+    if accion not in ('confirmar', 'guardar', 'omitir'):
+        return jsonify(ok=False, error='accion invalida'), 400
+
+    # Snapshot de la sugerencia que tenia el item (para registrar correccion)
+    analisis_blob = item.analisis_ia or {}
+    sugerencia_original = (
+        analisis_blob.get('sugerencias') if 'sugerencias' in analisis_blob else analisis_blob
+    ) or {}
+
+    cambios = {}
+    if accion != 'omitir':
+        # Aplicar cambios solo si vienen explicitos
+        if payload.get('descripcion'):
+            if not item.descripcion_original:
+                item.descripcion_original = item.descripcion
+            nueva_desc = str(payload['descripcion']).strip()[:300]
+            if nueva_desc and nueva_desc != item.descripcion:
+                item.descripcion = nueva_desc
+                cambios['descripcion'] = nueva_desc
+        if payload.get('unidad'):
+            if not item.unidad_original:
+                item.unidad_original = item.unidad
+            nueva_un = str(payload['unidad']).strip()[:20]
+            if nueva_un and nueva_un != item.unidad:
+                item.unidad = nueva_un
+                cambios['unidad'] = nueva_un
+        if payload.get('etapa_nombre'):
+            nueva_et = str(payload['etapa_nombre']).strip()[:100]
+            if nueva_et and nueva_et != item.etapa_nombre:
+                item.etapa_nombre = nueva_et
+                cambios['etapa_nombre'] = nueva_et
+
+        # Mergear el rubro elegido al blob para trazabilidad
+        rubro_in = (payload.get('rubro') or '').strip()
+        if rubro_in:
+            cambios['rubro'] = rubro_in
+            sug_actualizada = dict(sugerencia_original)
+            sug_actualizada['rubro_sugerido'] = rubro_in[:120]
+            if 'sugerencias' in analisis_blob:
+                analisis_blob = dict(analisis_blob)
+                analisis_blob['sugerencias'] = sug_actualizada
+            else:
+                analisis_blob = sug_actualizada
+            item.analisis_ia = analisis_blob
+
+        item.revisado_ia = True
+        item.fecha_analisis_ia = datetime.utcnow()
+
+    # Aprendizaje IA Fase B (fail-safe)
+    aprendizaje_ok = False
+    try:
+        from services.ia_learning_service import registrar_aplicacion_ia
+        # entry simulado para que el servicio detecte tipos de correccion
+        entry = {
+            'aplicar': True,
+            'descripcion': item.descripcion,
+            'unidad': item.unidad,
+            'etapa_nombre': item.etapa_nombre,
+            'rubro': payload.get('rubro'),
+            'analisis': item.analisis_ia or {},
+        }
+        res = registrar_aplicacion_ia(
+            item=item,
+            entry=entry,
+            presupuesto=presupuesto,
+            user_id=current_user.id if current_user.is_authenticated else None,
+            organizacion_id=presupuesto.organizacion_id,
+        )
+        aprendizaje_ok = bool(res and not res.get('error'))
+    except Exception:
+        current_app.logger.exception('Aprendizaje IA fallo en clasificar_item_pendiente')
+
+    # Audit
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion='revision_tecnica_ia',
+            entidad='item_presupuesto',
+            entidad_id=item.id,
+            detalle=(
+                f'accion={accion} '
+                f'cambios={list(cambios.keys()) if cambios else "ninguno"} '
+                f'aprendizaje={"ok" if aprendizaje_ok else "skip"}'
+            ),
+        )
+    except Exception:
+        pass
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error commiteando clasificar_item_pendiente')
+        return jsonify(ok=False, error=f'Error al guardar: {type(e).__name__}'), 500
+
+    return jsonify(
+        ok=True,
+        item_id=item.id,
+        accion=accion,
+        cambios=list(cambios.keys()),
+        revisado_ia=item.revisado_ia,
+        descripcion=item.descripcion,
+        unidad=item.unidad,
+        etapa_nombre=item.etapa_nombre,
     )

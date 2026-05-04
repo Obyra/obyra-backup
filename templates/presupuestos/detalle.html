@@ -1245,6 +1245,63 @@
                 </div>
 
                 <!-- ======================================================
+                     VISTA RESOLVER PENDIENTES (sub-vista accionable)
+                     Tarjetas simples por item con campos editables minimos.
+                     Default oculta; se abre desde "Resolver items pendientes".
+                     ====================================================== -->
+                <div id="iaVistaPendientes" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h5 class="mb-1"><i class="fas fa-list-check text-warning me-1"></i>Resolver ítems pendientes</h5>
+                            <small class="text-muted">
+                                Completá la clasificación básica de los ítems que OBYRA no pudo resolver automáticamente.
+                            </small>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary" onclick="iaVolverDePendientesAResumen()">
+                                <i class="fas fa-arrow-left me-1"></i>Volver al resumen
+                            </button>
+                            {% if (current_user.rol in ['administrador', 'admin'])
+                                  or (current_user.role in ['admin', 'pm', 'project_manager'])
+                                  or current_user.is_super_admin %}
+                            <button type="button" class="btn btn-outline-primary" onclick="iaIrAExpertoDesdePendientes()">
+                                <i class="fas fa-cog me-1"></i>Ver análisis técnico avanzado
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Filtros simples -->
+                    <div class="d-flex flex-wrap gap-2 mb-3" id="iaFiltrosPendientes">
+                        <button type="button" class="btn btn-sm btn-outline-warning active"
+                                data-filtro="todos" onclick="iaFiltrarPendientes('todos')">
+                            Todos los pendientes (<span id="iaCntFiltroTodos">0</span>)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                data-filtro="no_reconocido" onclick="iaFiltrarPendientes('no_reconocido')">
+                            Sin sugerencia (<span id="iaCntFiltroSinSug">0</span>)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning"
+                                data-filtro="requiere_revision" onclick="iaFiltrarPendientes('requiere_revision')">
+                            Revisar (<span id="iaCntFiltroRevisar">0</span>)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                data-filtro="falta_dato_tecnico" onclick="iaFiltrarPendientes('falta_dato_tecnico')">
+                            Falta dato técnico (<span id="iaCntFiltroDato">0</span>)
+                        </button>
+                    </div>
+
+                    <div id="iaTarjetasPendientes" class="row g-3">
+                        <!-- llenado por JS -->
+                    </div>
+
+                    <div id="iaPendientesVacio" class="alert alert-success border-0 d-none">
+                        <i class="fas fa-check-circle me-1"></i>
+                        Sin ítems pendientes. Podés volver al resumen para generar el presupuesto preliminar.
+                    </div>
+                </div>
+
+                <!-- ======================================================
                      VISTA EXPERTA (toggle Modo experto)
                      Solo admin / PM / superadmin la pueden activar.
                      Conserva intacto el flujo tecnico (auditoria + tabla
@@ -2614,9 +2671,12 @@ function iaToggleModoExperto() {
     const chk = document.getElementById('iaModoExperto');
     _iaModoExpertoActivo = !!(chk && chk.checked) && _iaUsuarioPuedeModoExperto();
 
-    // Toggle vistas principales: simple <-> experta
+    // Toggle vistas principales: simple <-> experta. La sub-vista pendientes
+    // se cierra siempre que se cambia este toggle (es exclusiva, propia).
     const vSimple = document.getElementById('iaVistaSimple');
     const vExperta = document.getElementById('iaVistaExperta');
+    const vPendientes = document.getElementById('iaVistaPendientes');
+    if (vPendientes) vPendientes.classList.add('d-none');
     if (vSimple) vSimple.classList.toggle('d-none', _iaModoExpertoActivo);
     if (vExperta) vExperta.classList.toggle('d-none', !_iaModoExpertoActivo);
 
@@ -2865,22 +2925,8 @@ window.iaAccionPendiente = function(accion) {
         return;
     }
     if (accion === 'revisar_pendientes') {
-        // Activar Modo experto + filtrar por estados pendientes
-        if (!_iaUsuarioPuedeModoExperto()) {
-            alert('Solo administradores y PMs pueden ver el análisis técnico avanzado.');
-            return;
-        }
-        const chk = document.getElementById('iaModoExperto');
-        if (chk) chk.checked = true;
-        iaToggleModoExperto();
-        // Aplicar filtro especial "pendientes"
-        const filtroEst = document.getElementById('iaFiltroEstado');
-        if (filtroEst) {
-            // Buscar opcion '_pendientes_' o caer en 'requiere_revision'
-            const opt = filtroEst.querySelector('option[value="_pendientes_"]');
-            filtroEst.value = opt ? '_pendientes_' : 'requiere_revision';
-            iaAplicarFiltros();
-        }
+        // Sub-vista accionable de Fase 4: tarjetas por item.
+        iaAbrirVistaPendientes();
         return;
     }
     if (accion === 'generar_composicion') {
@@ -3269,6 +3315,303 @@ window.iaGenerarComposicionEjecutiva = async function() {
         btn.innerHTML = html_orig;
     }
 };
+
+// =====================================================================
+// Sub-vista "Resolver items pendientes" (Fase 4 UX)
+// Tarjetas accionables. NO usa la tabla tecnica.
+// =====================================================================
+
+let _iaCatalogoRubros = null;       // {rubros, etapas, unidades} cacheado
+let _iaFiltroPendienteActual = 'todos';
+const _IA_ESTADOS_PENDIENTES = ['requiere_revision', 'no_reconocido', 'falta_dato_tecnico'];
+
+window.iaAbrirVistaPendientes = async function() {
+    if (!_iaResultadoCache) {
+        alert('No hay análisis cargado. Cerrá y reabrí el modal.');
+        return;
+    }
+    // Apagar modo experto si estaba prendido (sub-vista pendientes es exclusiva)
+    const chk = document.getElementById('iaModoExperto');
+    if (chk && chk.checked) {
+        chk.checked = false;
+    }
+    _iaModoExpertoActivo = false;
+    // Ocultar simple + experta, mostrar pendientes
+    document.getElementById('iaVistaSimple').classList.add('d-none');
+    document.getElementById('iaVistaExperta').classList.add('d-none');
+    document.getElementById('iaVistaPendientes').classList.remove('d-none');
+    // Cargar catalogo de rubros si no esta
+    if (!_iaCatalogoRubros) {
+        try {
+            const r = await fetch('/presupuestos/api/rubros-tecnicos');
+            const d = await r.json();
+            _iaCatalogoRubros = (d && d.ok) ? d : { rubros: [], etapas: [], unidades: [] };
+        } catch (e) {
+            _iaCatalogoRubros = { rubros: [], etapas: [], unidades: [] };
+        }
+    }
+    _iaRenderTarjetasPendientes();
+};
+
+window.iaVolverDePendientesAResumen = function() {
+    document.getElementById('iaVistaPendientes').classList.add('d-none');
+    document.getElementById('iaVistaSimple').classList.remove('d-none');
+    document.getElementById('iaVistaExperta').classList.add('d-none');
+    const chk = document.getElementById('iaModoExperto');
+    if (chk) chk.checked = false;
+    // Re-fetch del analisis para actualizar contadores tras las clasificaciones
+    if (_iaPresupuestoId) {
+        abrirAnalisisIA(_iaPresupuestoId);
+    }
+};
+
+window.iaIrAExpertoDesdePendientes = function() {
+    if (!_iaUsuarioPuedeModoExperto()) {
+        alert('Solo administradores y PMs pueden ver el análisis técnico avanzado.');
+        return;
+    }
+    document.getElementById('iaVistaPendientes').classList.add('d-none');
+    const chk = document.getElementById('iaModoExperto');
+    if (chk) chk.checked = true;
+    iaToggleModoExperto();
+};
+
+window.iaFiltrarPendientes = function(filtro) {
+    _iaFiltroPendienteActual = filtro;
+    document.querySelectorAll('#iaFiltrosPendientes button').forEach(b => {
+        b.classList.toggle('active', b.dataset.filtro === filtro);
+    });
+    _iaRenderTarjetasPendientes();
+};
+
+function _iaItemsPendientes() {
+    const data = _iaResultadoCache || {};
+    const eo = data.estados_operativos || {};
+    const estados = eo.estados_por_item || {};
+    const items = data.items || [];
+    return items
+        .map(it => Object.assign({}, it, { _estado: estados[it.id] || 'no_reconocido' }))
+        .filter(it => _IA_ESTADOS_PENDIENTES.includes(it._estado));
+}
+
+function _iaRenderTarjetasPendientes() {
+    const cont = document.getElementById('iaTarjetasPendientes');
+    const vacio = document.getElementById('iaPendientesVacio');
+    const todos = _iaItemsPendientes();
+
+    // Contadores por filtro
+    document.getElementById('iaCntFiltroTodos').textContent = todos.length;
+    document.getElementById('iaCntFiltroSinSug').textContent =
+        todos.filter(i => i._estado === 'no_reconocido').length;
+    document.getElementById('iaCntFiltroRevisar').textContent =
+        todos.filter(i => i._estado === 'requiere_revision').length;
+    document.getElementById('iaCntFiltroDato').textContent =
+        todos.filter(i => i._estado === 'falta_dato_tecnico').length;
+
+    let lista = todos;
+    if (_iaFiltroPendienteActual !== 'todos') {
+        lista = todos.filter(i => i._estado === _iaFiltroPendienteActual);
+    }
+
+    if (!lista.length) {
+        cont.innerHTML = '';
+        vacio.classList.remove('d-none');
+        return;
+    }
+    vacio.classList.add('d-none');
+    cont.innerHTML = lista.map(_iaTarjetaPendienteHtml).join('');
+}
+
+function _iaTarjetaPendienteHtml(item) {
+    const orig = item.original || {};
+    const sug = item.sugerencias || {};
+    const estado = item._estado;
+    const tieneSug = !!(sug.regla_id || sug.rubro_sugerido || sug.etapa_sugerida);
+    const meta = _IA_ESTADO_META[estado] || _IA_ESTADO_META.no_reconocido;
+
+    const rubrosOpts = (_iaCatalogoRubros?.rubros || []).map(r =>
+        `<option value="${_iaEsc(r)}"${(sug.rubro_sugerido === r) ? ' selected' : ''}>${_iaEsc(r)}</option>`
+    ).join('');
+    const etapasOpts = (_iaCatalogoRubros?.etapas || []).map(e =>
+        `<option value="${_iaEsc(e)}"${(orig.etapa_nombre === e || sug.etapa_sugerida === e) ? ' selected' : ''}>${_iaEsc(e)}</option>`
+    ).join('');
+    const unidadesOpts = (_iaCatalogoRubros?.unidades || []).map(u =>
+        `<option value="${_iaEsc(u)}"${(sug.unidad_sugerida === u || orig.unidad === u) ? ' selected' : ''}>${_iaEsc(u)}</option>`
+    ).join('');
+
+    const descNorm = sug.descripcion_normalizada || orig.descripcion || '';
+
+    let bloqueSugerencia = '';
+    if (tieneSug) {
+        bloqueSugerencia = `
+          <div class="alert alert-light border small mb-2 py-2">
+            <strong class="text-info"><i class="fas fa-lightbulb me-1"></i>OBYRA sugiere:</strong>
+            <ul class="mb-0 mt-1">
+              ${sug.rubro_sugerido ? `<li>Rubro: <strong>${_iaEsc(sug.rubro_sugerido)}</strong></li>` : ''}
+              ${sug.etapa_sugerida ? `<li>Etapa: <strong>${_iaEsc(sug.etapa_sugerida)}</strong></li>` : ''}
+              ${sug.unidad_sugerida ? `<li>Unidad: <strong>${_iaEsc(sug.unidad_sugerida)}</strong></li>` : ''}
+              ${sug.tarea_sugerida ? `<li>Tarea: <strong>${_iaEsc(sug.tarea_sugerida)}</strong></li>` : ''}
+            </ul>
+          </div>
+        `;
+    } else {
+        bloqueSugerencia = `
+          <div class="alert alert-warning border-0 small mb-2 py-2">
+            <i class="fas fa-question-circle me-1"></i>
+            OBYRA no encontró una regla automática para este ítem. Clasificalo manualmente.
+          </div>
+        `;
+    }
+
+    const accionesHtml = tieneSug ? `
+        <button type="button" class="btn btn-sm btn-success me-1" onclick="iaConfirmarSugerencia(${item.id})">
+            <i class="fas fa-check me-1"></i>Confirmar sugerencia
+        </button>
+        <button type="button" class="btn btn-sm btn-primary me-1" onclick="iaGuardarClasificacion(${item.id})">
+            <i class="fas fa-save me-1"></i>Guardar cambios
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="iaOmitirItemPendiente(${item.id})">
+            <i class="fas fa-clock me-1"></i>Omitir por ahora
+        </button>
+    ` : `
+        <button type="button" class="btn btn-sm btn-primary me-1" onclick="iaGuardarClasificacion(${item.id})">
+            <i class="fas fa-save me-1"></i>Guardar clasificación
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="iaOmitirItemPendiente(${item.id})">
+            <i class="fas fa-clock me-1"></i>Omitir por ahora
+        </button>
+    `;
+
+    return `
+      <div class="col-12" id="iaTarjetaItem${item.id}">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-start mb-2 gap-2">
+              <div class="flex-grow-1">
+                <div class="fw-semibold">${_iaEsc(orig.descripcion || '(sin descripción)')}</div>
+                <div class="small text-muted">
+                  Cantidad: <strong>${orig.cantidad || 0}</strong> ·
+                  Unidad actual: <strong>${_iaEsc(orig.unidad || '-')}</strong> ·
+                  Etapa actual: ${_iaEsc(orig.etapa_nombre || '-')}
+                </div>
+              </div>
+              <span class="badge ${meta.badge}"><i class="fas ${meta.icon} me-1"></i>${_iaEsc(meta.label)}</span>
+            </div>
+
+            ${bloqueSugerencia}
+
+            <div class="row g-2" data-item-id="${item.id}">
+              <div class="col-md-4">
+                <label class="form-label small mb-1">Rubro / Etapa</label>
+                <select class="form-select form-select-sm ia-clasif-etapa">
+                  <option value="">— Elegir —</option>
+                  ${etapasOpts}
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small mb-1">Unidad</label>
+                <select class="form-select form-select-sm ia-clasif-unidad">
+                  <option value="">—</option>
+                  ${unidadesOpts}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small mb-1">Descripción normalizada</label>
+                <input type="text" class="form-control form-control-sm ia-clasif-desc"
+                       maxlength="300" value="${_iaEsc(descNorm)}">
+              </div>
+            </div>
+            <input type="hidden" class="ia-clasif-rubro" value="${_iaEsc(sug.rubro_sugerido || '')}">
+
+            <div class="mt-2 text-end">
+                ${accionesHtml}
+            </div>
+
+            <div class="ia-clasif-resultado small mt-2" id="iaClasifResult${item.id}"></div>
+          </div>
+        </div>
+      </div>
+    `;
+}
+
+function _iaLeerCamposClasif(itemId) {
+    const root = document.querySelector(`#iaTarjetaItem${itemId} [data-item-id]`);
+    if (!root) return null;
+    return {
+        etapa_nombre: root.querySelector('.ia-clasif-etapa')?.value || '',
+        unidad: root.querySelector('.ia-clasif-unidad')?.value || '',
+        descripcion: root.querySelector('.ia-clasif-desc')?.value || '',
+        rubro: document.querySelector(`#iaTarjetaItem${itemId} .ia-clasif-rubro`)?.value || '',
+    };
+}
+
+async function _iaPostClasificar(itemId, payload) {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const r = await fetch(`/presupuestos/${_iaPresupuestoId}/items/${itemId}/clasificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+    });
+    return r.json();
+}
+
+window.iaConfirmarSugerencia = async function(itemId) {
+    const item = (_iaResultadoCache?.items || []).find(i => i.id === itemId);
+    if (!item) return;
+    const sug = item.sugerencias || {};
+    const payload = {
+        accion: 'confirmar',
+        descripcion: sug.descripcion_normalizada,
+        unidad: sug.unidad_sugerida,
+        etapa_nombre: sug.etapa_sugerida,
+        rubro: sug.rubro_sugerido,
+    };
+    const d = await _iaPostClasificar(itemId, payload);
+    _iaMarcarTarjeta(itemId, d, 'confirmar');
+};
+
+window.iaGuardarClasificacion = async function(itemId) {
+    const datos = _iaLeerCamposClasif(itemId);
+    if (!datos) return;
+    if (!datos.etapa_nombre && !datos.unidad && !datos.descripcion) {
+        alert('Completá al menos un campo antes de guardar.');
+        return;
+    }
+    const d = await _iaPostClasificar(itemId, Object.assign({ accion: 'guardar' }, datos));
+    _iaMarcarTarjeta(itemId, d, 'guardar');
+};
+
+window.iaOmitirItemPendiente = async function(itemId) {
+    const d = await _iaPostClasificar(itemId, { accion: 'omitir' });
+    _iaMarcarTarjeta(itemId, d, 'omitir');
+};
+
+function _iaMarcarTarjeta(itemId, resp, accion) {
+    const card = document.getElementById(`iaTarjetaItem${itemId}`);
+    const result = document.getElementById(`iaClasifResult${itemId}`);
+    if (!card || !result) return;
+    if (!resp || !resp.ok) {
+        result.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>' +
+                           _iaEsc((resp && resp.error) || 'Error al guardar') + '</span>';
+        return;
+    }
+    const msg = accion === 'omitir'
+        ? 'Ítem omitido por ahora. Volverá a aparecer la próxima vez que abras pendientes.'
+        : 'Ítem clasificado. La Calculadora IA registró la corrección.';
+    result.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>' + msg + '</span>';
+    // Animacion: bajar opacidad y luego remover de la lista
+    card.style.transition = 'opacity 0.5s';
+    card.style.opacity = '0.4';
+    setTimeout(() => {
+        card.remove();
+        // Si no quedan tarjetas visibles, mostrar mensaje vacio
+        const cont = document.getElementById('iaTarjetasPendientes');
+        if (cont && !cont.children.length) {
+            document.getElementById('iaPendientesVacio').classList.remove('d-none');
+        }
+    }, 1200);
+}
 
 function _iaMostrarResumenPreliminar(data) {
     const c = data.contadores || {};
