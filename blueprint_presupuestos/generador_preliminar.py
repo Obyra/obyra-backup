@@ -74,10 +74,28 @@ def generar_preliminar(id):
             presupuesto,
             user_id=current_user.id if current_user.is_authenticated else None,
         )
+    except ModuleNotFoundError as e:
+        db.session.rollback()
+        current_app.logger.exception('ModuleNotFoundError en generar_preliminar')
+        # Mensaje claro: que modulo falta. Se muestra a super admin / admin
+        # para diagnostico rapido sin exponer paths internos.
+        msg_admin = f'Falta dependencia Python: {e.name}. Verificar requirements.txt + redeploy.'
+        return jsonify(
+            ok=False,
+            error=msg_admin if (_es_super_admin() or _puede_gestionar()) else
+                  'No se pudo generar el preliminar. Avisale al equipo de OBYRA.',
+            modulo_faltante=getattr(e, 'name', None),
+        ), 500
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error generando preliminar')
-        return jsonify(ok=False, error=f'Error en generacion: {type(e).__name__}'), 500
+        # A super admin / admin le mostramos el tipo + mensaje. Al usuario
+        # comun, solo un texto generico (sin stack trace).
+        if _es_super_admin() or _puede_gestionar():
+            detalle = f'{type(e).__name__}: {str(e)[:300]}'
+        else:
+            detalle = 'No se pudo generar el preliminar. Avisale al equipo de OBYRA.'
+        return jsonify(ok=False, error=detalle), 500
 
     # Sincronizar MaterialCotizable para consolidar recursos para cotizacion
     try:
