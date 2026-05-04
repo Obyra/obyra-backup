@@ -3266,14 +3266,23 @@ function _iaEsc(s) {
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label fw-bold">Criterio de distribución</label>
+                            <label class="form-label fw-bold">
+                                Cómo querés organizar las cantidades del Excel
+                                <i class="fas fa-info-circle text-muted ms-1"
+                                   data-bs-toggle="tooltip" data-bs-placement="top"
+                                   title="Ejemplo: si el Excel trae Losas = 150 m³ y la obra tiene 5 pisos, OBYRA puede distribuir esa cantidad por piso para preparar el Ejecutivo interno. El cliente seguirá viendo el total original del Excel."></i>
+                            </label>
                             <select class="form-select" name="criterio_distribucion">
-                                <option value="sin_distribuir" selected>Sin distribuir</option>
-                                <option value="por_piso_automatico">Por piso (automático)</option>
-                                <option value="por_piso_manual">Por piso (editable)</option>
-                                <option value="por_sector">Por sector</option>
-                                <option value="por_torre">Por torre</option>
+                                <option value="sin_distribuir" selected>No dividir cantidades — usar totales del Excel</option>
+                                <option value="por_piso_automatico">Dividir automáticamente por pisos/niveles</option>
+                                <option value="por_piso_manual">Dividir por pisos/niveles y editar manualmente</option>
+                                <option value="por_sector">Dividir por sectores de obra</option>
+                                <option value="por_torre">Dividir por torres</option>
                             </select>
+                            <small class="text-muted d-block mt-1">
+                                Esto define cómo OBYRA va a repartir internamente las cantidades del pliego para armar
+                                el presupuesto ejecutivo y la futura obra.
+                            </small>
                         </div>
                     </div>
                 </form>
