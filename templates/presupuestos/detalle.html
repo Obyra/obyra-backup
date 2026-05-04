@@ -1121,10 +1121,21 @@
                 <h5 class="modal-title">
                     <i class="fas fa-magic me-2"></i>Generador Preliminar IA
                 </h5>
-                <div class="form-check form-switch text-white ms-auto me-3 small">
+                {# Modo experto: solo admin / PM / superadmin. Los roles operativos
+                   (operario, jefe_obra, compras, tecnico, etc.) NO ven scoring,
+                   confianza ni regla_id porque generan ruido en el flujo comercial. #}
+                {% set _ptp_rol_user = current_user.rol or '' %}
+                {% set _ptp_role_user = current_user.role or '' %}
+                {% if (_ptp_rol_user in ['administrador', 'admin'])
+                      or (_ptp_role_user in ['admin', 'pm', 'project_manager'])
+                      or current_user.is_super_admin %}
+                <div class="form-check form-switch text-white ms-auto me-3 small"
+                     id="iaModoExpertoWrap"
+                     data-modo-experto-permitido="1">
                     <input class="form-check-input" type="checkbox" id="iaModoExperto" onchange="iaToggleModoExperto()">
                     <label class="form-check-label" for="iaModoExperto">Modo experto</label>
                 </div>
+                {% endif %}
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -1226,12 +1237,21 @@
 
                             <!-- KPIs por estado operativo -->
                             <div class="d-flex flex-wrap gap-2 mb-2" id="iaKpisOperativos">
-                                <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i><span id="iaCntListo">0</span> Listos para presupuestar</span>
-                                <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i><span id="iaCntRevision">0</span> Requieren revisión</span>
-                                <span class="badge bg-info text-dark"><i class="fas fa-dollar-sign me-1"></i><span id="iaCntFaltaPrecio">0</span> Falta precio</span>
-                                <span class="badge bg-primary"><i class="fas fa-drafting-compass me-1"></i><span id="iaCntFaltaDato">0</span> Falta dato técnico</span>
-                                <span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i><span id="iaCntNoReconocido">0</span> No reconocidos</span>
-                                <span class="badge bg-dark"><i class="fas fa-ban me-1"></i><span id="iaCntExcluido">0</span> Excluidos</span>
+                                <span class="badge bg-success" title="Items con todos los datos para entrar al presupuesto">
+                                    <i class="fas fa-check-circle me-1"></i><span id="iaCntListo">0</span> Listos para presupuestar</span>
+                                <span class="badge bg-warning text-dark" title="Items con sugerencia parcial: revisar antes de aplicar">
+                                    <i class="fas fa-exclamation-triangle me-1"></i><span id="iaCntRevision">0</span> Requieren revisión</span>
+                                <span class="badge bg-info text-dark"
+                                      data-bs-toggle="tooltip" data-bs-placement="bottom"
+                                      title="La detección automática de precios se activará cuando esté cargada la lista de precios de proveedores (Fase 5). Por ahora este KPI queda reservado.">
+                                    <i class="fas fa-dollar-sign me-1"></i><span id="iaCntFaltaPrecio">0</span> Falta precio
+                                    <i class="fas fa-info-circle ms-1 small"></i></span>
+                                <span class="badge bg-primary" title="Items que necesitan perfil técnico cargado para clasificar bien">
+                                    <i class="fas fa-drafting-compass me-1"></i><span id="iaCntFaltaDato">0</span> Falta dato técnico</span>
+                                <span class="badge bg-secondary" title="Items que la IA no pudo clasificar contra la base técnica">
+                                    <i class="fas fa-question-circle me-1"></i><span id="iaCntNoReconocido">0</span> No reconocidos</span>
+                                <span class="badge bg-dark" title="Items marcados manualmente para excluir del cálculo (futuro)">
+                                    <i class="fas fa-ban me-1"></i><span id="iaCntExcluido">0</span> Excluidos</span>
                             </div>
 
                             <!-- Modo experto: pildoras viejas (alta/media/baja/sin) -->
@@ -2450,16 +2470,44 @@ const _IA_ESTADO_META = {
     excluido:           { label: 'Excluido del cálculo',    badge: 'bg-dark',              icon: 'fa-ban' },
 };
 
+// True si el server renderizo el toggle (rol admin/PM/superadmin).
+// Si el toggle no esta presente, ningun localStorage debe forzar modo experto.
+function _iaUsuarioPuedeModoExperto() {
+    const wrap = document.getElementById('iaModoExpertoWrap');
+    return !!(wrap && wrap.dataset.modoExpertoPermitido === '1');
+}
+
 function iaToggleModoExperto() {
     const chk = document.getElementById('iaModoExperto');
-    _iaModoExpertoActivo = !!(chk && chk.checked);
+    _iaModoExpertoActivo = !!(chk && chk.checked) && _iaUsuarioPuedeModoExperto();
+    // Aplicar a la UI
     const elPil = document.getElementById('iaPildorasExperto');
     if (elPil) elPil.classList.toggle('d-none', !_iaModoExpertoActivo);
     const elFiltro = document.getElementById('iaFiltroConfianzaWrap');
     if (elFiltro) elFiltro.classList.toggle('d-none', !_iaModoExpertoActivo);
-    // Re-renderizar para que las celdas muestren u oculten la confianza
     document.querySelectorAll('.ia-confianza-experta').forEach(el =>
         el.classList.toggle('d-none', !_iaModoExpertoActivo));
+    // Persistir preferencia (solo si el usuario tiene permiso)
+    try {
+        if (_iaUsuarioPuedeModoExperto()) {
+            localStorage.setItem('obyra_ia_modo_experto', _iaModoExpertoActivo ? '1' : '0');
+        }
+    } catch (e) { /* localStorage puede estar deshabilitado */ }
+}
+
+function _iaRestaurarModoExperto() {
+    // Solo aplicar si el usuario tiene el toggle visible (rol autorizado)
+    if (!_iaUsuarioPuedeModoExperto()) {
+        _iaModoExpertoActivo = false;
+        return;
+    }
+    let pref = '0';
+    try {
+        pref = localStorage.getItem('obyra_ia_modo_experto') || '0';
+    } catch (e) { pref = '0'; }
+    const chk = document.getElementById('iaModoExperto');
+    if (chk) chk.checked = (pref === '1');
+    iaToggleModoExperto();
 }
 
 async function abrirAnalisisIA(presupuestoId) {
@@ -2478,6 +2526,8 @@ async function abrirAnalisisIA(presupuestoId) {
     if (estEl) estEl.value = '';
     document.getElementById('iaFiltroRubro').value = '';
     document.getElementById('iaFiltroUnidad').value = '';
+    // Fase 3.5: restaurar preferencia de modo experto si el rol lo permite
+    _iaRestaurarModoExperto();
     modal.show();
 
     try {
@@ -2696,8 +2746,30 @@ function iaToggleAll(checked) {
     _iaActualizarBoton();
 }
 
+// ============================================================
+// IMPORTANTE — Fase 3.5 (Generador Preliminar IA):
+//   La UX visible usa "estados operativos" (Listo, Requiere revisión,
+//   Falta precio, Falta dato técnico, No reconocido, Excluido).
+//   La lógica interna SIGUE usando los labels de confianza
+//   ('alta' / 'media' / 'baja' / 'sin') porque:
+//     1. El aprendizaje IA Fase B (IACorrectionLog, IARuleCandidate)
+//        registra correcciones con tipos basados en confianza.
+//     2. El servicio analizar_items_con_ia() devuelve confianza_label
+//        como su salida primaria; los estados operativos los calcula
+//        encima estado_operativo_service.py.
+//   Si tocás esto, validá que el aprendizaje IA siga registrando
+//   correcciones igual y que los IDs de DOM (iaCntAlta/iaCntMedia/etc.)
+//   no rompan el modo experto.
+// ============================================================
 function iaMarcarPorConfianza(modo) {
-    // modo: 'alta' o 'alta_media'
+    // Botones visibles: "Marcar listos" -> modo='alta'
+    //                   "Listos + revisión" -> modo='alta_media'
+    // Internamente seguimos filtrando por confianza (que es lo que el
+    // backend devuelve). El mapeo confianza->estado coincide:
+    //   alta  -> listo
+    //   media -> requiere_revision
+    //   baja  -> requiere_revision
+    //   sin   -> no_reconocido
     document.querySelectorAll('#iaTbody tr').forEach(function(tr) {
         if (tr.style.display === 'none') return;
         const cb = tr.querySelector('.ia-check');
