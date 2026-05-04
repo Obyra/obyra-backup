@@ -1140,9 +1140,11 @@
                 <h5 class="modal-title">
                     <i class="fas fa-magic me-2"></i>Generador Preliminar IA
                 </h5>
-                {# Modo experto: solo admin / PM / superadmin. Los roles operativos
-                   (operario, jefe_obra, compras, tecnico, etc.) NO ven scoring,
-                   confianza ni regla_id porque generan ruido en el flujo comercial. #}
+                {# Vista tecnica avanzada: solo admin / PM / superadmin. Los roles
+                   operativos (operario, jefe_obra, compras, tecnico, etc.) NO ven
+                   scoring, confianza ni regla_id porque generan ruido en el flujo
+                   comercial. El modal SIEMPRE abre en vista simple — el toggle
+                   se prende manualmente cuando el usuario lo necesite. #}
                 {% set _ptp_rol_user = current_user.rol or '' %}
                 {% set _ptp_role_user = current_user.role or '' %}
                 {% if (_ptp_rol_user in ['administrador', 'admin'])
@@ -1150,9 +1152,13 @@
                       or current_user.is_super_admin %}
                 <div class="form-check form-switch text-white ms-auto me-3 small"
                      id="iaModoExpertoWrap"
-                     data-modo-experto-permitido="1">
+                     data-modo-experto-permitido="1"
+                     data-bs-toggle="tooltip" data-bs-placement="bottom"
+                     title="Solo para revisar reglas, confianza interna y sugerencias técnicas.">
                     <input class="form-check-input" type="checkbox" id="iaModoExperto" onchange="iaToggleModoExperto()">
-                    <label class="form-check-label" for="iaModoExperto">Modo experto</label>
+                    <label class="form-check-label" for="iaModoExperto">
+                        Ver análisis técnico avanzado
+                    </label>
                 </div>
                 {% endif %}
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -2618,12 +2624,11 @@ function iaToggleModoExperto() {
     document.querySelectorAll('.ia-confianza-experta').forEach(el =>
         el.classList.toggle('d-none', !_iaModoExpertoActivo));
 
-    // Persistir preferencia (solo si el usuario tiene permiso)
-    try {
-        if (_iaUsuarioPuedeModoExperto()) {
-            localStorage.setItem('obyra_ia_modo_experto', _iaModoExpertoActivo ? '1' : '0');
-        }
-    } catch (e) { /* localStorage puede estar deshabilitado */ }
+    // NOTA: ya NO persistimos en localStorage. Por diseno, cada apertura
+    // del modal arranca en vista simple. El usuario activa el modo cuando
+    // quiere ver detalles tecnicos en esa sesion. Limpiamos cualquier valor
+    // legacy para no dejar inconsistencias.
+    try { localStorage.removeItem('obyra_ia_modo_experto'); } catch (e) {}
 }
 
 // Helper: navegar al perfil tecnico (modal de detalle.html). Si no esta
@@ -2640,18 +2645,12 @@ function _iaIrAPerfilTecnico() {
     }
 }
 
-function _iaRestaurarModoExperto() {
-    // Solo aplicar si el usuario tiene el toggle visible (rol autorizado)
-    if (!_iaUsuarioPuedeModoExperto()) {
-        _iaModoExpertoActivo = false;
-        return;
-    }
-    let pref = '0';
-    try {
-        pref = localStorage.getItem('obyra_ia_modo_experto') || '0';
-    } catch (e) { pref = '0'; }
+// Fuerza la vista simple al abrir el modal. NO restaura preferencia previa
+// (decision UX: cada apertura arranca limpia).
+function _iaForzarVistaSimple() {
+    _iaModoExpertoActivo = false;
     const chk = document.getElementById('iaModoExperto');
-    if (chk) chk.checked = (pref === '1');
+    if (chk) chk.checked = false;
     iaToggleModoExperto();
 }
 
@@ -2671,8 +2670,9 @@ async function abrirAnalisisIA(presupuestoId) {
     if (estEl) estEl.value = '';
     document.getElementById('iaFiltroRubro').value = '';
     document.getElementById('iaFiltroUnidad').value = '';
-    // Fase 3.5: restaurar preferencia de modo experto si el rol lo permite
-    _iaRestaurarModoExperto();
+    // Fase 3.5: el modal SIEMPRE abre en vista simple. Si el usuario quiere
+    // ver el analisis tecnico avanzado, prende el toggle manualmente.
+    _iaForzarVistaSimple();
     modal.show();
 
     try {
