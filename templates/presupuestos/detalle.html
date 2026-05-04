@@ -1259,8 +1259,9 @@
                             </small>
                         </div>
                         <div class="btn-group btn-group-sm">
-                            <button type="button" class="btn btn-outline-secondary" onclick="iaVolverDePendientesAResumen()">
-                                <i class="fas fa-arrow-left me-1"></i>Volver al resumen
+                            <button type="button" class="btn btn-success" onclick="iaVolverDePendientesAResumen()"
+                                    title="Tus clasificaciones ya quedaron guardadas. Volvé al resumen sin perder nada.">
+                                <i class="fas fa-check me-1"></i>Guardar y volver al resumen
                             </button>
                             {% if (current_user.rol in ['administrador', 'admin'])
                                   or (current_user.role in ['admin', 'pm', 'project_manager'])
@@ -1270,6 +1271,12 @@
                             </button>
                             {% endif %}
                         </div>
+                    </div>
+
+                    <!-- Mensaje persistente post-guardado (se actualiza en cada accion) -->
+                    <div id="iaPendientesMensajePersistente" class="alert alert-success border-0 d-none">
+                        <i class="fas fa-check-circle me-1"></i>
+                        <span id="iaPendientesMensajeTexto"></span>
                     </div>
 
                     <!-- Mini panel: contador en vivo de la sesion -->
@@ -1283,6 +1290,35 @@
                         <div><i class="fas fa-brain text-primary me-1"></i>
                             Nuevos aprendizajes:
                             <strong id="iaCntSesionAprendizajes">0</strong></div>
+                    </div>
+
+                    <!-- Bloque proximos pasos: aparece solo cuando hay 1+ resueltos -->
+                    <div id="iaPendientesProximosPasos" class="card border-success mb-3 d-none">
+                        <div class="card-body py-3">
+                            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                <div>
+                                    <h6 class="text-success mb-1">
+                                        <i class="fas fa-check-circle me-1"></i>
+                                        Ya resolviste <span id="iaPaneleResueltos">0</span> ítems en esta sesión
+                                    </h6>
+                                    <small class="text-muted">
+                                        Las clasificaciones ya están guardadas. Elegí cómo seguir.
+                                    </small>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-warning"
+                                            onclick="document.getElementById('iaPendientesProximosPasos').scrollIntoView({behavior:'smooth', block:'end'});">
+                                        <i class="fas fa-list-check me-1"></i>Seguir resolviendo pendientes
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="iaVolverDePendientesAResumen()">
+                                        <i class="fas fa-arrow-left me-1"></i>Volver al resumen
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-success" onclick="iaGenerarComposicionDesdePendientes()">
+                                        <i class="fas fa-magic me-1"></i>Generar composición ejecutiva
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Filtros simples -->
@@ -1527,8 +1563,8 @@
                     </a>
                     <button type="button" class="btn btn-success" id="btnGenerarPreliminar"
                             onclick="iaGenerarComposicionEjecutiva()"
-                            title="OBYRA va a desglosar cada ítem en materiales, mano de obra y equipos. No se pisan composiciones manuales.">
-                        <i class="fas fa-magic me-1"></i>Generar presupuesto preliminar
+                            title="Crea materiales, mano de obra y equipos estimados a partir de los ítems ya clasificados. No se pisan composiciones manuales.">
+                        <i class="fas fa-magic me-1"></i>Generar composición ejecutiva
                     </button>
                 </div>
 
@@ -2936,8 +2972,48 @@ function _iaRenderVistaSimple(data) {
         }).join('');
     }
 
+    // Aviso post-resolucion: si el usuario acaba de volver desde la sub-vista
+    // de pendientes despues de haber resuelto items, mostrar arriba un mensaje
+    // verde con el delta de pendientes y un prompt de proximos pasos.
+    _iaPintarAvisoPostResolucion();
+
     // Mostrar la vista simple (la experta queda oculta hasta que toggle se active)
     document.getElementById('iaVistaSimple').classList.remove('d-none');
+}
+
+function _iaPintarAvisoPostResolucion() {
+    // Limpia cualquier aviso previo
+    const prev = document.getElementById('iaAvisoPostResolucion');
+    if (prev) prev.remove();
+
+    if (_iaUltimaSesionResueltos <= 0) return;
+
+    const antes = _iaUltimaSesionPendientesAntes;
+    const despues = _iaUltimaSesionPendientesDespues;
+    const html =
+        '<div id="iaAvisoPostResolucion" class="alert alert-success border-0 mb-3">' +
+            '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">' +
+                '<div>' +
+                    '<h6 class="alert-heading mb-1"><i class="fas fa-check-circle me-1"></i>' +
+                    'Se guardaron <strong>' + _iaUltimaSesionResueltos + '</strong> clasificaciones</h6>' +
+                    '<small>Los pendientes de revisión bajaron de <strong>' + antes + '</strong> a ' +
+                    '<strong>' + despues + '</strong>. Podés seguir resolviendo pendientes o ' +
+                    'generar la composición ejecutiva con los ítems clasificados.</small>' +
+                '</div>' +
+                '<button type="button" class="btn-close btn-close-white" ' +
+                'onclick="this.closest(\'#iaAvisoPostResolucion\').remove();"></button>' +
+            '</div>' +
+        '</div>';
+
+    const vSimple = document.getElementById('iaVistaSimple');
+    if (vSimple) {
+        vSimple.insertAdjacentHTML('afterbegin', html);
+    }
+
+    // Limpiar para que la proxima vista no muestre el aviso de nuevo
+    _iaUltimaSesionResueltos = 0;
+    _iaUltimaSesionPendientesAntes = 0;
+    _iaUltimaSesionPendientesDespues = 0;
 }
 
 // Router de acciones de pendientes (Fase 4 UX)
@@ -3352,6 +3428,14 @@ let _iaSesionResueltos = 0;
 let _iaSesionAprendizajes = 0;
 // Set de item_ids resueltos para que el cierre vuelva a contar bien
 const _iaSesionItemsResueltos = new Set();
+// Snapshot de cuantos pendientes habia al entrar a la sub-vista (para
+// mostrar "bajaron de X a Y" al volver al resumen).
+let _iaSesionPendientesAlEntrar = 0;
+// Persistente al volver al resumen: para mostrar aviso "Se guardaron N
+// clasificaciones" en la vista simple. Se limpia cuando el modal cierra.
+let _iaUltimaSesionResueltos = 0;
+let _iaUltimaSesionPendientesAntes = 0;
+let _iaUltimaSesionPendientesDespues = 0;
 
 function _iaActualizarContadoresSesion() {
     const elR = document.getElementById('iaCntSesionResueltos');
@@ -3400,6 +3484,12 @@ window.iaAbrirVistaPendientes = async function() {
     _iaSesionResueltos = 0;
     _iaSesionAprendizajes = 0;
     _iaSesionItemsResueltos.clear();
+    _iaSesionPendientesAlEntrar = _iaItemsPendientes().length;
+    // Limpiar mensaje persistente y bloque proximos pasos al re-abrir
+    const msgEl = document.getElementById('iaPendientesMensajePersistente');
+    if (msgEl) msgEl.classList.add('d-none');
+    const ppEl = document.getElementById('iaPendientesProximosPasos');
+    if (ppEl) ppEl.classList.add('d-none');
     _iaActualizarContadoresSesion();
     // Cargar catalogo de rubros si no esta
     if (!_iaCatalogoRubros) {
@@ -3415,6 +3505,13 @@ window.iaAbrirVistaPendientes = async function() {
 };
 
 window.iaVolverDePendientesAResumen = function() {
+    // Snapshot de la sesion para mostrar aviso verde post-refetch
+    _iaUltimaSesionResueltos = _iaSesionResueltos;
+    _iaUltimaSesionPendientesAntes = _iaSesionPendientesAlEntrar;
+    // Despues de resueltos, los pendientes restantes son los que quedan
+    // sin contar los del Set
+    _iaUltimaSesionPendientesDespues = Math.max(0, _iaSesionPendientesAlEntrar - _iaSesionResueltos);
+
     const elPend = document.getElementById('iaVistaPendientes');
     const elSimple = document.getElementById('iaVistaSimple');
     const elExperta = document.getElementById('iaVistaExperta');
@@ -3424,10 +3521,25 @@ window.iaVolverDePendientesAResumen = function() {
     const chk = document.getElementById('iaModoExperto');
     if (chk) chk.checked = false;
     _iaModoExpertoActivo = false;
-    // Re-fetch del analisis para actualizar contadores tras las clasificaciones
+    // Re-fetch del analisis para actualizar contadores tras las clasificaciones.
+    // Importante: NO reseteamos _iaUltimaSesion* aca; se usan en _iaRenderVistaSimple
+    // para pintar el aviso verde "Se guardaron N clasificaciones" la proxima vez.
     if (_iaPresupuestoId) {
         abrirAnalisisIA(_iaPresupuestoId);
     }
+};
+
+// Action shortcut desde el bloque proximos pasos: volver al resumen
+// y disparar inmediatamente el generador de composicion.
+window.iaGenerarComposicionDesdePendientes = function() {
+    iaVolverDePendientesAResumen();
+    // Esperar a que el resumen se renderee post-refetch + dar tiempo
+    // al usuario para ver el aviso verde antes de el confirm.
+    setTimeout(function() {
+        if (typeof iaGenerarComposicionEjecutiva === 'function') {
+            iaGenerarComposicionEjecutiva();
+        }
+    }, 1000);
 };
 
 window.iaIrAExpertoDesdePendientes = function() {
@@ -3690,6 +3802,24 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
         _iaSesionResueltos += 1;
         _iaSesionAprendizajes += 1;  // backend registra IACorrectionLog en cada caso
         _iaActualizarContadoresSesion();
+
+        // Mensaje persistente arriba de la sub-vista
+        const msgEl = document.getElementById('iaPendientesMensajePersistente');
+        const msgTxt = document.getElementById('iaPendientesMensajeTexto');
+        if (msgEl && msgTxt) {
+            msgTxt.textContent =
+                'Clasificación guardada correctamente. OBYRA usará este dato para el ' +
+                'presupuesto preliminar y para mejorar futuras sugerencias.';
+            msgEl.classList.remove('d-none');
+        }
+
+        // Bloque de proximos pasos: mostrar cuando hay 1+ resueltos
+        const ppEl = document.getElementById('iaPendientesProximosPasos');
+        const ppNum = document.getElementById('iaPaneleResueltos');
+        if (ppEl && ppNum) {
+            ppNum.textContent = _iaSesionResueltos;
+            ppEl.classList.remove('d-none');
+        }
     }
 
     // Animacion: bajar opacidad y luego remover de la lista
