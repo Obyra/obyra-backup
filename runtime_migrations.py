@@ -2062,6 +2062,35 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] project_technical_profile: {e}")
 
     # =====================================================
+    # 2026-05-04: Fase 4 - composicion ejecutiva automatica.
+    # Agregar columnas a items_presupuesto_composicion para trazabilidad
+    # de origen + flag de estimacion + clave del coeficiente del YAML.
+    # Idempotente via ADD COLUMN IF NOT EXISTS (PG 9.6+).
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+            ALTER TABLE items_presupuesto_composicion
+                ADD COLUMN IF NOT EXISTS origen VARCHAR(40) NOT NULL DEFAULT 'manual';
+        """))
+        db.session.execute(db.text("""
+            ALTER TABLE items_presupuesto_composicion
+                ADD COLUMN IF NOT EXISTS es_estimado BOOLEAN NOT NULL DEFAULT FALSE;
+        """))
+        db.session.execute(db.text("""
+            ALTER TABLE items_presupuesto_composicion
+                ADD COLUMN IF NOT EXISTS coeficiente_usado VARCHAR(80);
+        """))
+        db.session.execute(db.text("""
+            CREATE INDEX IF NOT EXISTS ix_ipc_item_origen
+                ON items_presupuesto_composicion (item_presupuesto_id, origen);
+        """))
+        db.session.commit()
+        print("[OK] Migracion runtime: composicion auto (origen + es_estimado + coeficiente_usado)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] composicion auto cols: {e}")
+
+    # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como
     # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).

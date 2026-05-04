@@ -69,6 +69,17 @@ def calcular_avance(
     breakdown = {}
     pendientes = []
 
+    # Helper: agregar pendiente estructurado con texto principal, ayuda y accion.
+    def _add_pendiente(pid, texto, ayuda, boton_label, boton_accion, boton_disabled=False):
+        pendientes.append({
+            'id': pid,
+            'texto': texto,
+            'ayuda': ayuda,
+            'boton_label': boton_label,
+            'boton_accion': boton_accion,        # ID logico para el frontend
+            'boton_disabled': boton_disabled,
+        })
+
     # ---- 1. Items reconocidos tecnicamente ----
     if total_items > 0:
         ratio = items_reconocidos / total_items
@@ -83,37 +94,52 @@ def calcular_avance(
     }
     if total_items and items_reconocidos < total_items:
         no_reconocidos = total_items - items_reconocidos
-        pendientes.append(
-            f'{no_reconocidos} items necesitan clasificacion o revision manual.'
+        _add_pendiente(
+            'revision_tecnica',
+            f'{no_reconocidos} ítems necesitan revisión técnica',
+            'OBYRA necesita confirmar rubro, etapa, unidad o tipo de recurso antes de usarlos en el presupuesto.',
+            'Revisar ítems pendientes',
+            'revisar_pendientes',
         )
 
-    # ---- 2. Composicion ejecutiva generada (Fase 4) ----
+    # ---- 2. Composicion ejecutiva generada ----
     composiciones_count = 0
+    items_con_composicion_count = 0
     if presupuesto is not None:
         try:
-            composiciones_count = sum(
-                int(it.composiciones.count()) for it in (presupuesto.items.all() if hasattr(presupuesto.items, 'all') else presupuesto.items)
-            )
+            for it in (presupuesto.items.all() if hasattr(presupuesto.items, 'all') else presupuesto.items):
+                comp_count = int(it.composiciones.count())
+                composiciones_count += comp_count
+                if comp_count > 0:
+                    items_con_composicion_count += 1
         except Exception:
             composiciones_count = 0
     items_con_composicion = composiciones_count > 0
-    puntos = PESOS['composicion_generada'] if items_con_composicion else 0
+    # Calculo proporcional: ratio items con composicion sobre total
+    if total_items > 0:
+        ratio_comp = items_con_composicion_count / total_items
+        comp_pts = round(PESOS['composicion_generada'] * ratio_comp, 1)
+    else:
+        comp_pts = 0
     breakdown['composicion_generada'] = {
-        'puntos_obtenidos': puntos,
+        'puntos_obtenidos': comp_pts,
         'puntos_max': PESOS['composicion_generada'],
         'descripcion': (
-            f'{composiciones_count} composiciones cargadas'
-            if composiciones_count else 'Sin composicion ejecutiva generada (pendiente Fase 4 / generar a mano)'
+            f'{items_con_composicion_count} de {total_items} items con composicion ejecutiva'
+            if items_con_composicion_count else 'Sin composicion ejecutiva generada'
         ),
     }
-    if not items_con_composicion:
-        pendientes.append(
-            f'{total_items} items todavia no tienen composicion ejecutiva automatica.'
+    if items_con_composicion_count < total_items:
+        sin_comp = total_items - items_con_composicion_count
+        _add_pendiente(
+            'composicion_ejecutiva',
+            f'{sin_comp} ítems todavía no fueron desglosados en materiales, mano de obra y equipos',
+            'La composición ejecutiva convierte cada ítem del Excel en recursos reales para cotizar.',
+            'Generar composición ejecutiva',
+            'generar_composicion',
         )
 
-    # ---- 3. Cantidades / distribucion validas (Fase 4) ----
-    # En Fase 3.5 si hay perfil tecnico con criterio por_piso_*  y niveles,
-    # damos 50% de los puntos. Si solo hay perfil pero sin niveles, 0.
+    # ---- 3. Cantidades / distribucion validas ----
     cantidades_pts = 0
     if perfil_tecnico:
         crit = (perfil_tecnico.get('criterio_distribucion') or '').lower()
@@ -124,43 +150,52 @@ def calcular_avance(
         'puntos_obtenidos': cantidades_pts,
         'puntos_max': PESOS['cantidades_distribuidas'],
         'descripcion': (
-            'Niveles cargados; falta distribuir cantidades por piso (Fase 4)'
+            'Niveles cargados; falta distribuir cantidades por piso'
             if cantidades_pts else 'Sin distribucion por piso configurada'
         ),
     }
     if cantidades_pts < PESOS['cantidades_distribuidas']:
-        pendientes.append(
-            'Falta distribuir cantidades del Excel por piso/sector (se activa en Fase 4).'
+        _add_pendiente(
+            'distribucion_pisos',
+            'Falta distribuir cantidades por pisos o sectores',
+            'OBYRA usará el perfil técnico de la obra para repartir internamente cantidades como losas, columnas, vigas, mampostería e instalaciones.',
+            'Distribuir cantidades',
+            'distribuir_cantidades',
+            boton_disabled=True,  # se habilita en una etapa posterior
         )
 
-    # ---- 4. Precios encontrados (Fase 5) ----
+    # ---- 4. Precios encontrados ----
     breakdown['precios_encontrados'] = {
         'puntos_obtenidos': 0,
         'puntos_max': PESOS['precios_encontrados'],
-        'descripcion': 'Sin lista de precios de proveedores cargada (pendiente Fase 5)',
+        'descripcion': 'Sin lista de precios de proveedores cargada',
     }
-    pendientes.append(
-        'Falta cargar la lista de precios de proveedores (se activa en Fase 5).'
+    _add_pendiente(
+        'precios_proveedores',
+        'Falta cargar precios de proveedores',
+        'Para calcular costos reales, OBYRA necesita una lista de precios actualizada o precios cargados manualmente.',
+        'Cargar lista de precios',
+        'cargar_precios',
+        boton_disabled=True,  # se habilita en la etapa de precios
     )
 
-    # ---- 5. Mano de obra / equipos estimados (Fase 4) ----
+    # ---- 5. Mano de obra / equipos estimados ----
     breakdown['mano_obra_equipos'] = {
         'puntos_obtenidos': 0,
         'puntos_max': PESOS['mano_obra_equipos'],
-        'descripcion': 'Sin estimacion automatica de MO/equipos (pendiente Fase 4)',
+        'descripcion': 'Sin estimacion automatica de MO/equipos',
     }
 
     # ---- 6. Margen / indirectos configurados ----
     breakdown['margen_indirectos'] = {
         'puntos_obtenidos': 0,
         'puntos_max': PESOS['margen_indirectos'],
-        'descripcion': 'Sin margen comercial e indirectos configurados (pendiente Fase 4)',
+        'descripcion': 'Sin margen comercial e indirectos configurados',
     }
 
     # ---- 7. Perfil tecnico cargado / completo ----
     perfil_pts = 0
     if perfil_tecnico:
-        # Evaluar completitud minima razonable
         tiene_minimos = bool(
             perfil_tecnico.get('tipo_obra')
             and (perfil_tecnico.get('cantidad_pisos', 0) or perfil_tecnico.get('tiene_planta_baja'))
@@ -186,9 +221,21 @@ def calcular_avance(
     }
     if perfil_pts < PESOS['perfil_tecnico_completo']:
         if perfil_pts == 0:
-            pendientes.append('Cargar el perfil tecnico de la obra (tipo, pisos, superficie, estructura, fundacion).')
+            _add_pendiente(
+                'perfil_tecnico_vacio',
+                'Cargar el perfil técnico de la obra',
+                'Tipo de obra, pisos, superficie, estructura y fundación. Sin estos datos, OBYRA no puede distribuir cantidades ni armar la futura obra por pisos.',
+                'Completar perfil técnico',
+                'cargar_perfil',
+            )
         else:
-            pendientes.append('Completar tipo de estructura / fundacion en el perfil tecnico.')
+            _add_pendiente(
+                'perfil_tecnico_parcial',
+                'Completar tipo de estructura / fundación en el perfil técnico',
+                'Datos faltantes en el perfil técnico evitan que OBYRA clasifique ítems sensibles (estructura, fundaciones, instalaciones).',
+                'Completar perfil técnico',
+                'cargar_perfil',
+            )
 
     # ---- Total ----
     total_pts = sum(c['puntos_obtenidos'] for c in breakdown.values())

@@ -228,3 +228,4 @@ from blueprint_presupuestos import importar_licitacion  # noqa: E402, F401
 from blueprint_presupuestos import ejecutivo  # noqa: E402, F401
 from blueprint_presupuestos import analisis_ia  # noqa: E402, F401
 from blueprint_presupuestos import perfil_tecnico  # noqa: E402, F401
+from blueprint_presupuestos import generador_preliminar  # noqa: E402, F401

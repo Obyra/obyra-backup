@@ -1,0 +1,377 @@
+# =============================================================================
+# OBYRA — Coeficientes constructivos para Calculadora IA (Fase 4)
+# =============================================================================
+# Editable por dev. Las composiciones generadas a partir de estos coeficientes
+# se marcan como `es_estimado=True` y deben revisarse antes de aprobar el
+# Ejecutivo. Los precios quedan en $0 hasta la etapa de catalogo de precios.
+#
+# Las claves de `reglas` deben coincidir con `id` en
+# services/base_tecnica_computos.py para que el matching IA -> coeficientes
+# sea directo. Si una regla tecnica no tiene entrada aqui, el ejecutivo
+# auto la salta y la reporta como "sin coeficiente cargado".
+#
+# Coeficientes orientativos para construccion tradicional H°A° en Argentina.
+# Tunearlos con la realidad operativa del usuario es parte de Fase 4.5+.
+# =============================================================================
+version: '1.0.0'
+moneda_referencia: 'ARS'
+notas: |
+  Coeficientes orientativos basados en practicas constructivas argentinas
+  habituales para obra nueva con estructura de hormigon armado. Los valores
+  representan promedios; cada obra puede variar segun calidad de pliego,
+  complejidad, sistema constructivo y rendimientos reales del equipo.
+
+reglas:
+
+  # ===========================================================================
+  # Preliminares y obrador
+  # ===========================================================================
+  obrador:
+    descripcion: 'Obrador y preliminares basicos'
+    unidad_item: gl
+    notas: 'Aplica una vez por obra. Los coeficientes son por unidad de gl.'
+    recursos:
+      - clave: madera_obrador
+        tipo: material
+        nombre: 'Madera para obrador (tablones)'
+        unidad: m2
+        coeficiente: 30
+        notas: 'Para vestuarios, deposito, cerco perimetral.'
+      - clave: alambre_obrador
+        tipo: material
+        nombre: 'Alambre N°14'
+        unidad: kg
+        coeficiente: 15
+      - clave: lonas_polietileno
+        tipo: material
+        nombre: 'Polietileno 200 micrones'
+        unidad: m2
+        coeficiente: 20
+      - clave: cartel_obra
+        tipo: material
+        nombre: 'Cartel de obra reglamentario'
+        unidad: u
+        coeficiente: 1
+      - clave: mo_obrador
+        tipo: mano_obra
+        nombre: 'Ayudante (montaje obrador)'
+        unidad: jornal
+        coeficiente: 8
+
+  # ===========================================================================
+  # Estructura de hormigon armado
+  # ===========================================================================
+  losa_hormigon:
+    descripcion: 'Losa de hormigon armado'
+    unidad_item: m3
+    recursos:
+      - clave: hormigon_h21
+        tipo: material
+        nombre: 'Hormigon H21 elaborado'
+        unidad: m3
+        coeficiente: 1.05
+        notas: 'Incluye 5% por desperdicio.'
+      - clave: hierro_8mm
+        tipo: material
+        nombre: 'Hierro construccion 8mm'
+        unidad: kg
+        coeficiente: 110
+        notas: 'Promedio para losa 12cm con luz 4-5m.'
+      - clave: encofrado_madera
+        tipo: material
+        nombre: 'Madera para encofrado'
+        unidad: m2
+        coeficiente: 4.5
+      - clave: mo_oficial_losa
+        tipo: mano_obra
+        nombre: 'Oficial hormigon'
+        unidad: jornal
+        coeficiente: 4.0
+      - clave: mo_ayudante_losa
+        tipo: mano_obra
+        nombre: 'Ayudante hormigon'
+        unidad: jornal
+        coeficiente: 6.0
+      - clave: vibrador_losa
+        tipo: equipo
+        nombre: 'Vibrador de inmersion'
+        unidad: dia
+        coeficiente: 0.3
+      - clave: mixer_losa
+        tipo: equipo
+        nombre: 'Mixer / hormigonera'
+        unidad: dia
+        coeficiente: 0.2
+
+  viga_hormigon:
+    descripcion: 'Viga de hormigon armado'
+    unidad_item: m3
+    recursos:
+      - clave: hormigon_h21_viga
+        tipo: material
+        nombre: 'Hormigon H21 elaborado'
+        unidad: m3
+        coeficiente: 1.05
+      - clave: hierro_12mm_viga
+        tipo: material
+        nombre: 'Hierro construccion 12mm (longitudinal)'
+        unidad: kg
+        coeficiente: 120
+      - clave: estribos_6mm_viga
+        tipo: material
+        nombre: 'Hierro 6mm para estribos'
+        unidad: kg
+        coeficiente: 30
+      - clave: encofrado_viga
+        tipo: material
+        nombre: 'Madera para encofrado'
+        unidad: m2
+        coeficiente: 7
+      - clave: mo_oficial_viga
+        tipo: mano_obra
+        nombre: 'Oficial hormigon'
+        unidad: jornal
+        coeficiente: 5
+      - clave: mo_ayudante_viga
+        tipo: mano_obra
+        nombre: 'Ayudante hormigon'
+        unidad: jornal
+        coeficiente: 7
+      - clave: vibrador_viga
+        tipo: equipo
+        nombre: 'Vibrador de inmersion'
+        unidad: dia
+        coeficiente: 0.4
+
+  columna_hormigon:
+    descripcion: 'Columna de hormigon armado'
+    unidad_item: m3
+    recursos:
+      - clave: hormigon_h21_col
+        tipo: material
+        nombre: 'Hormigon H21 elaborado'
+        unidad: m3
+        coeficiente: 1.05
+      - clave: hierro_12mm_col
+        tipo: material
+        nombre: 'Hierro construccion 12-16mm'
+        unidad: kg
+        coeficiente: 130
+      - clave: estribos_6mm_col
+        tipo: material
+        nombre: 'Hierro 6mm para estribos'
+        unidad: kg
+        coeficiente: 35
+      - clave: encofrado_col
+        tipo: material
+        nombre: 'Madera para encofrado'
+        unidad: m2
+        coeficiente: 9
+      - clave: mo_oficial_col
+        tipo: mano_obra
+        nombre: 'Oficial hormigon'
+        unidad: jornal
+        coeficiente: 6
+      - clave: mo_ayudante_col
+        tipo: mano_obra
+        nombre: 'Ayudante hormigon'
+        unidad: jornal
+        coeficiente: 8
+      - clave: vibrador_col
+        tipo: equipo
+        nombre: 'Vibrador de inmersion'
+        unidad: dia
+        coeficiente: 0.5
+
+  # ===========================================================================
+  # Fundaciones
+  # ===========================================================================
+  platea_fundacion:
+    descripcion: 'Platea de fundacion'
+    unidad_item: m3
+    recursos:
+      - clave: hormigon_h21_platea
+        tipo: material
+        nombre: 'Hormigon H21 elaborado'
+        unidad: m3
+        coeficiente: 1.05
+      - clave: malla_platea
+        tipo: material
+        nombre: 'Malla soldada Q188'
+        unidad: kg
+        coeficiente: 65
+        notas: 'Doble malla en platea de espesor 20cm.'
+      - clave: encofrado_platea
+        tipo: material
+        nombre: 'Madera encofrado perimetral'
+        unidad: m2
+        coeficiente: 1.2
+      - clave: mo_oficial_platea
+        tipo: mano_obra
+        nombre: 'Oficial hormigon'
+        unidad: jornal
+        coeficiente: 3.5
+      - clave: mo_ayudante_platea
+        tipo: mano_obra
+        nombre: 'Ayudante hormigon'
+        unidad: jornal
+        coeficiente: 5
+      - clave: mixer_platea
+        tipo: equipo
+        nombre: 'Mixer / hormigonera'
+        unidad: dia
+        coeficiente: 0.3
+
+  zapata_corrida:
+    descripcion: 'Zapata corrida / base aislada'
+    unidad_item: m3
+    recursos:
+      - clave: hormigon_h17_zapata
+        tipo: material
+        nombre: 'Hormigon H17 elaborado'
+        unidad: m3
+        coeficiente: 1.05
+      - clave: hierro_zapata
+        tipo: material
+        nombre: 'Hierro construccion 8-12mm'
+        unidad: kg
+        coeficiente: 75
+      - clave: mo_oficial_zapata
+        tipo: mano_obra
+        nombre: 'Oficial hormigon'
+        unidad: jornal
+        coeficiente: 4
+      - clave: mo_ayudante_zapata
+        tipo: mano_obra
+        nombre: 'Ayudante hormigon'
+        unidad: jornal
+        coeficiente: 6
+
+  # ===========================================================================
+  # Mamposteria
+  # ===========================================================================
+  mamposteria_ladrillo_hueco_12:
+    descripcion: 'Mamposteria ladrillo hueco 12 cm'
+    unidad_item: m2
+    recursos:
+      - clave: ladrillo_hueco_12
+        tipo: material
+        nombre: 'Ladrillo hueco 12x18x33'
+        unidad: u
+        coeficiente: 12.5
+      - clave: mortero_mh12
+        tipo: material
+        nombre: 'Mortero asentamiento 1:1/4:4'
+        unidad: m3
+        coeficiente: 0.022
+      - clave: mo_oficial_mh12
+        tipo: mano_obra
+        nombre: 'Oficial albañil'
+        unidad: jornal
+        coeficiente: 0.35
+      - clave: mo_ayudante_mh12
+        tipo: mano_obra
+        nombre: 'Ayudante albañil'
+        unidad: jornal
+        coeficiente: 0.35
+
+  mamposteria_ladrillo_hueco_18:
+    descripcion: 'Mamposteria ladrillo hueco 18 cm'
+    unidad_item: m2
+    recursos:
+      - clave: ladrillo_hueco_18
+        tipo: material
+        nombre: 'Ladrillo hueco 18x18x33'
+        unidad: u
+        coeficiente: 12.5
+      - clave: mortero_mh18
+        tipo: material
+        nombre: 'Mortero asentamiento 1:1/4:4'
+        unidad: m3
+        coeficiente: 0.030
+      - clave: mo_oficial_mh18
+        tipo: mano_obra
+        nombre: 'Oficial albañil'
+        unidad: jornal
+        coeficiente: 0.40
+      - clave: mo_ayudante_mh18
+        tipo: mano_obra
+        nombre: 'Ayudante albañil'
+        unidad: jornal
+        coeficiente: 0.40
+
+  # ===========================================================================
+  # Revoques
+  # ===========================================================================
+  revoque_grueso:
+    descripcion: 'Revoque grueso'
+    unidad_item: m2
+    recursos:
+      - clave: mortero_revoque_grueso
+        tipo: material
+        nombre: 'Mortero CPV 1:3 (cemento + arena)'
+        unidad: m3
+        coeficiente: 0.020
+      - clave: mo_oficial_revoque
+        tipo: mano_obra
+        nombre: 'Oficial revoquero'
+        unidad: jornal
+        coeficiente: 0.20
+      - clave: mo_ayudante_revoque
+        tipo: mano_obra
+        nombre: 'Ayudante revoquero'
+        unidad: jornal
+        coeficiente: 0.20
+
+  # ===========================================================================
+  # Contrapisos
+  # ===========================================================================
+  contrapiso:
+    descripcion: 'Contrapiso de hormigon pobre'
+    unidad_item: m2
+    recursos:
+      - clave: hormigon_pobre_contrapiso
+        tipo: material
+        nombre: 'Hormigon pobre H8 (cemento + cascote)'
+        unidad: m3
+        coeficiente: 0.10
+        notas: 'Espesor 10cm tipico.'
+      - clave: mo_oficial_contrapiso
+        tipo: mano_obra
+        nombre: 'Oficial albañil'
+        unidad: jornal
+        coeficiente: 0.15
+      - clave: mo_ayudante_contrapiso
+        tipo: mano_obra
+        nombre: 'Ayudante albañil'
+        unidad: jornal
+        coeficiente: 0.20
+
+  # ===========================================================================
+  # Pintura
+  # ===========================================================================
+  pintura_latex_interior:
+    descripcion: 'Pintura latex interior'
+    unidad_item: m2
+    recursos:
+      - clave: latex_interior
+        tipo: material
+        nombre: 'Pintura latex interior'
+        unidad: l
+        coeficiente: 0.30
+        notas: '0.15 L/m2 x 2 manos.'
+      - clave: fijador_latex
+        tipo: material
+        nombre: 'Fijador al agua'
+        unidad: l
+        coeficiente: 0.10
+      - clave: mo_oficial_pintura
+        tipo: mano_obra
+        nombre: 'Oficial pintor'
+        unidad: jornal
+        coeficiente: 0.05
+      - clave: mo_ayudante_pintura
+        tipo: mano_obra
+        nombre: 'Ayudante pintor'
+        unidad: jornal
+        coeficiente: 0.05

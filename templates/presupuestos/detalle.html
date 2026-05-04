@@ -1372,11 +1372,12 @@
                                 <div class="col-md-3">
                                     <select id="iaFiltroEstado" class="form-select form-select-sm" onchange="iaAplicarFiltros()">
                                         <option value="">Todos los estados</option>
-                                        <option value="listo">Listos para presupuestar</option>
-                                        <option value="requiere_revision">Requieren revisión</option>
-                                        <option value="falta_precio">Falta precio</option>
-                                        <option value="falta_dato_tecnico">Falta dato técnico</option>
-                                        <option value="no_reconocido">No reconocidos</option>
+                                        <option value="_pendientes_">Pendientes (revisar / clasificar / no reconocidos)</option>
+                                        <option value="listo">Procesados</option>
+                                        <option value="requiere_revision">Revisar</option>
+                                        <option value="falta_precio">Cargar precio</option>
+                                        <option value="falta_dato_tecnico">Completar dato técnico</option>
+                                        <option value="no_reconocido">Clasificar</option>
                                         <option value="excluido">Excluidos</option>
                                     </select>
                                 </div>
@@ -1439,8 +1440,9 @@
                        title="Cargar o completar el perfil técnico de la obra">
                         <i class="fas fa-drafting-compass me-1"></i>Completar perfil técnico
                     </a>
-                    <button type="button" class="btn btn-success" disabled
-                            title="Disponible cuando se active la composición ejecutiva automática (Fase 4).">
+                    <button type="button" class="btn btn-success" id="btnGenerarPreliminar"
+                            onclick="iaGenerarComposicionEjecutiva()"
+                            title="OBYRA va a desglosar cada ítem en materiales, mano de obra y equipos. No se pisan composiciones manuales.">
                         <i class="fas fa-magic me-1"></i>Generar presupuesto preliminar
                     </button>
                 </div>
@@ -2790,20 +2792,76 @@ function _iaRenderVistaSimple(data) {
     document.getElementById('iaSimpleProcesados').textContent = procesados;
     document.getElementById('iaSimplePendientes').textContent = pendientes;
 
-    // Lista de pendientes
+    // Lista de pendientes (Fase 4 UX: dict estructurado con boton de accion)
     const ul = document.getElementById('iaPendientesLista');
     const lista = av.pendientes || [];
     if (!lista.length) {
         ul.innerHTML = '<li class="list-group-item small text-success"><i class="fas fa-check-circle me-1"></i>Sin pendientes detectados.</li>';
     } else {
-        ul.innerHTML = lista.map(function(t) {
-            return '<li class="list-group-item small"><i class="fas fa-circle text-warning me-2 small"></i>' + _iaEsc(t) + '</li>';
+        ul.innerHTML = lista.map(function(p) {
+            // Compat: si llegara un string viejo, lo convertimos
+            if (typeof p === 'string') {
+                return '<li class="list-group-item small"><i class="fas fa-circle text-warning me-2 small"></i>' + _iaEsc(p) + '</li>';
+            }
+            const accion = p.boton_accion || '';
+            const disabled = !!p.boton_disabled;
+            const tooltip = disabled ? 'Disponible próximamente.' : '';
+            return (
+                '<li class="list-group-item">' +
+                  '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">' +
+                    '<div class="flex-grow-1">' +
+                      '<div class="fw-semibold"><i class="fas fa-circle text-warning me-2 small"></i>' + _iaEsc(p.texto || '') + '</div>' +
+                      (p.ayuda ? '<div class="small text-muted ms-4 mt-1">' + _iaEsc(p.ayuda) + '</div>' : '') +
+                    '</div>' +
+                    (p.boton_label ?
+                      ('<button type="button" class="btn btn-sm btn-outline-primary" ' +
+                       (disabled ? 'disabled title="' + _iaEsc(tooltip) + '"' : 'onclick="iaAccionPendiente(\'' + _iaEsc(accion) + '\')"') +
+                       '>' + _iaEsc(p.boton_label) + '</button>')
+                      : '') +
+                  '</div>' +
+                '</li>'
+            );
         }).join('');
     }
 
     // Mostrar la vista simple (la experta queda oculta hasta que toggle se active)
     document.getElementById('iaVistaSimple').classList.remove('d-none');
 }
+
+// Router de acciones de pendientes (Fase 4 UX)
+window.iaAccionPendiente = function(accion) {
+    if (accion === 'cargar_perfil') {
+        _iaIrAPerfilTecnico();
+        return;
+    }
+    if (accion === 'revisar_pendientes') {
+        // Activar Modo experto + filtrar por estados pendientes
+        if (!_iaUsuarioPuedeModoExperto()) {
+            alert('Solo administradores y PMs pueden ver el análisis técnico avanzado.');
+            return;
+        }
+        const chk = document.getElementById('iaModoExperto');
+        if (chk) chk.checked = true;
+        iaToggleModoExperto();
+        // Aplicar filtro especial "pendientes"
+        const filtroEst = document.getElementById('iaFiltroEstado');
+        if (filtroEst) {
+            // Buscar opcion '_pendientes_' o caer en 'requiere_revision'
+            const opt = filtroEst.querySelector('option[value="_pendientes_"]');
+            filtroEst.value = opt ? '_pendientes_' : 'requiere_revision';
+            iaAplicarFiltros();
+        }
+        return;
+    }
+    if (accion === 'generar_composicion') {
+        iaGenerarComposicionEjecutiva();
+        return;
+    }
+    if (accion === 'distribuir_cantidades' || accion === 'cargar_precios') {
+        // Disabled. No-op.
+        return;
+    }
+};
 
 function _iaPopularSelect(id, labelDefault, opciones) {
     const sel = document.getElementById(id);
@@ -2917,9 +2975,16 @@ function iaAplicarFiltros() {
     const rubro = document.getElementById('iaFiltroRubro').value;
     const unidad = document.getElementById('iaFiltroUnidad').value;
 
+    // Estados que el filtro especial "_pendientes_" cubre simultaneamente
+    const ESTADOS_PENDIENTES = ['requiere_revision', 'no_reconocido', 'falta_dato_tecnico'];
+
     document.querySelectorAll('#iaTbody tr').forEach(function(tr) {
         let visible = true;
-        if (estado && tr.dataset.estadoOperativo !== estado) visible = false;
+        if (estado === '_pendientes_') {
+            if (!ESTADOS_PENDIENTES.includes(tr.dataset.estadoOperativo)) visible = false;
+        } else if (estado && tr.dataset.estadoOperativo !== estado) {
+            visible = false;
+        }
         if (conf && tr.dataset.confianzaLabel !== conf) visible = false;
         if (rubro && tr.dataset.rubro !== rubro) visible = false;
         if (unidad && tr.dataset.unidad !== unidad) visible = false;
@@ -3125,6 +3190,99 @@ function _iaEsc(s) {
     if (s == null) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// =====================================================================
+// Fase 4: Generador de composicion ejecutiva automatica.
+// Llama al endpoint POST /presupuestos/<id>/generar-preliminar y muestra
+// el resumen con contadores + items saltados + advertencias.
+// El boton es idempotente: el backend no duplica composiciones.
+// =====================================================================
+window.iaGenerarComposicionEjecutiva = async function() {
+    if (!_iaPresupuestoId) return;
+    const btn = document.getElementById('btnGenerarPreliminar');
+    if (!btn) return;
+    if (!confirm(
+        'OBYRA va a desglosar los ítems del pliego en materiales, mano de obra y equipos.\n\n' +
+        'Las composiciones cargadas a mano se respetan; los ítems sin regla técnica o sin coeficiente '+
+        'quedan reportados como pendientes.\n\nPrecios quedan en $0 hasta la siguiente etapa. ¿Continuar?'
+    )) return;
+
+    btn.disabled = true;
+    const html_orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
+
+    try {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const r = await fetch(`/presupuestos/${_iaPresupuestoId}/generar-preliminar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+        });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+            alert((data && data.error) || 'No se pudo generar el preliminar.');
+            return;
+        }
+        _iaMostrarResumenPreliminar(data);
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = html_orig;
+    }
+};
+
+function _iaMostrarResumenPreliminar(data) {
+    const c = data.contadores || {};
+    const adv = data.advertencias || [];
+    const sal = data.saltados || [];
+    const trunc = data.saltados_truncado || 0;
+
+    // Construir mensaje resumen como HTML para inyectar en una alerta dentro
+    // de la vista simple. No usamos modal anidado para no perderse en flow.
+    let html = '<div class="alert alert-success border-0">';
+    html += '<h6 class="alert-heading mb-2"><i class="fas fa-check-circle me-1"></i>Composición ejecutiva generada</h6>';
+    html += '<ul class="small mb-2">';
+    html += `<li><strong>${c.items_creados || 0}</strong> ítems con composición nueva</li>`;
+    html += `<li><strong>${c.composiciones_creadas || 0}</strong> recursos creados (materiales / MO / equipos)</li>`;
+    if (c.items_ya_generado) html += `<li>${c.items_ya_generado} ítems ya tenían composición auto (sin cambios)</li>`;
+    if (c.items_respetado_manual) html += `<li>${c.items_respetado_manual} ítems con composición manual respetados</li>`;
+    if (c.items_sin_regla) html += `<li>${c.items_sin_regla} ítems sin regla técnica detectada</li>`;
+    if (c.items_sin_coeficiente) html += `<li>${c.items_sin_coeficiente} ítems con regla pero sin coeficiente cargado</li>`;
+    html += '</ul>';
+
+    if (adv.length) {
+        html += '<div class="small mt-2"><strong>Advertencias:</strong><ul class="mb-2">';
+        adv.forEach(a => { html += '<li>' + _iaEsc(a) + '</li>'; });
+        html += '</ul></div>';
+    }
+    if (sal.length) {
+        html += '<details class="small mt-2"><summary>Ver ítems saltados (' + sal.length + (trunc ? ' de ' + (sal.length + trunc) : '') + ')</summary>';
+        html += '<ul class="mb-0 mt-1">';
+        sal.forEach(s => {
+            html += '<li><strong>#' + s.item_id + ':</strong> ' + _iaEsc(s.descripcion) +
+                    ' <span class="text-muted">— ' + _iaEsc(s.razon) + '</span></li>';
+        });
+        if (trunc) html += '<li class="text-muted">y ' + trunc + ' más...</li>';
+        html += '</ul></details>';
+    }
+    html += '<div class="small text-muted mt-2"><em>Los precios quedan en $0 hasta la etapa de catálogo de precios.</em></div>';
+    html += '</div>';
+
+    // Inyectar en la vista simple, antes de la card de avance
+    const vSimple = document.getElementById('iaVistaSimple');
+    if (vSimple) {
+        // Borrar resumen previo si existe
+        const prev = document.getElementById('iaResumenPreliminar');
+        if (prev) prev.remove();
+        const wrap = document.createElement('div');
+        wrap.id = 'iaResumenPreliminar';
+        wrap.innerHTML = html;
+        vSimple.insertBefore(wrap, vSimple.firstChild);
+        // Scrollear arriba para que el usuario lo vea
+        wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 </script>
 

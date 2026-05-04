@@ -873,6 +873,14 @@ class ItemPresupuestoComposicion(db.Model):
         nullable=True,
     )
     notas = db.Column(db.Text, nullable=True)
+    # Fase 4: trazabilidad de la generacion automatica.
+    # origen: 'manual' (cargado a mano) | 'calculadora_ia' (auto desde YAML)
+    #         | 'importado' (futuro). El endpoint generar-preliminar respeta
+    #         las composiciones con origen != 'calculadora_ia'.
+    origen = db.Column(db.String(40), nullable=False, default='manual', server_default='manual')
+    es_estimado = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    # Clave del recurso en el YAML de coeficientes, ej: "losa_hormigon.hormigon_h21".
+    coeficiente_usado = db.Column(db.String(80), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -884,6 +892,7 @@ class ItemPresupuestoComposicion(db.Model):
 
     __table_args__ = (
         db.Index('ix_ipc_item_presupuesto', 'item_presupuesto_id'),
+        db.Index('ix_ipc_item_origen', 'item_presupuesto_id', 'origen'),
     )
 
     def __repr__(self):
