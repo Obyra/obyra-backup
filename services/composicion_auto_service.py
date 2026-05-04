@@ -81,12 +81,33 @@ def generar_para_item(item, *, regla_id: Optional[str]) -> Dict[str, Any]:
 
     Returns dict con:
       'estado': 'creado' | 'sin_regla' | 'sin_coeficiente' |
-                'ya_generado' | 'respetado_manual' | 'cantidad_invalida'
+                'ya_generado' | 'respetado_manual' | 'cantidad_invalida' |
+                'global_no_desglosa' | 'servicio_no_desglosa' | 'excluido'
       'composiciones_creadas': int
       'recursos_filtrados_chicos': int  (cantidad < 0.001)
     """
     from models.budgets import ItemPresupuestoComposicion
     from services.coeficientes_loader import get_recursos, tiene_coeficientes
+
+    # Respeto al tipo_tratamiento elegido por el usuario:
+    # 'global'    -> el item entra al ejecutivo como linea global, no se desglosa.
+    # 'servicio'  -> se cotizara como servicio, no se desglosa con coeficientes.
+    # 'excluir'   -> queda fuera del preliminar.
+    # 'desglosar' -> flujo normal con coeficientes YAML.
+    blob = getattr(item, 'analisis_ia', None) or {}
+    tt = ''
+    if isinstance(blob, dict):
+        tt = (blob.get('tipo_tratamiento') or '').lower()
+        if not tt:
+            sug_tt = blob.get('sugerencias') if 'sugerencias' in blob else None
+            if isinstance(sug_tt, dict):
+                tt = (sug_tt.get('tipo_tratamiento') or '').lower()
+    if tt == 'excluir':
+        return {'estado': 'excluido', 'composiciones_creadas': 0}
+    if tt == 'global':
+        return {'estado': 'global_no_desglosa', 'composiciones_creadas': 0}
+    if tt == 'servicio':
+        return {'estado': 'servicio_no_desglosa', 'composiciones_creadas': 0}
 
     if not regla_id:
         return {'estado': 'sin_regla', 'composiciones_creadas': 0}
@@ -174,6 +195,9 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
         'items_sin_regla': 0,
         'items_sin_coeficiente': 0,
         'items_cantidad_invalida': 0,
+        'items_globales': 0,
+        'items_servicio': 0,
+        'items_excluidos': 0,
         'recursos_filtrados_chicos': 0,
     }
     saltados: List[Dict[str, Any]] = []
@@ -230,6 +254,12 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
                     'descripcion': (it.descripcion or '')[:120],
                     'razon': 'Cantidad del ítem es 0 o negativa.',
                 })
+        elif estado == 'global_no_desglosa':
+            contadores['items_globales'] += 1
+        elif estado == 'servicio_no_desglosa':
+            contadores['items_servicio'] += 1
+        elif estado == 'excluido':
+            contadores['items_excluidos'] += 1
 
     # Advertencias contextuales
     if contadores['items_sin_regla'] > 0:

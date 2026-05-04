@@ -301,6 +301,11 @@ UNIDADES_DISPONIBLES = (
     'unidad', 'gl', 'bolsa', 'caja', 'par',
 )
 
+# Tipos de tratamiento operativo de un item del pliego (Fase 4 UX).
+# Permiten que el usuario decida que hacer con items globales/generales que
+# no tienen sentido desglosar en composicion ejecutiva.
+TIPOS_TRATAMIENTO = ('desglosar', 'global', 'servicio', 'excluir')
+
 
 @presupuestos_bp.route('/api/rubros-tecnicos', methods=['GET'])
 @login_required
@@ -362,6 +367,13 @@ def clasificar_item_pendiente(id, item_id):
     if accion not in ('confirmar', 'guardar', 'omitir'):
         return jsonify(ok=False, error='accion invalida'), 400
 
+    # Tipo de tratamiento operativo (opcional): permite que el usuario marque
+    # un item como global/gasto general/servicio/excluir, evitando que el
+    # generador de composicion ejecutiva intente desglosarlo.
+    tipo_tratamiento = (payload.get('tipo_tratamiento') or '').strip().lower()
+    if tipo_tratamiento and tipo_tratamiento not in TIPOS_TRATAMIENTO:
+        return jsonify(ok=False, error=f'tipo_tratamiento invalido: {tipo_tratamiento}'), 400
+
     # Snapshot de la sugerencia que tenia el item (para registrar correccion)
     analisis_blob = item.analisis_ia or {}
     sugerencia_original = (
@@ -420,12 +432,19 @@ def clasificar_item_pendiente(id, item_id):
             analisis_blob['estado_revision'] = estado_revision
             analisis_blob['resuelto_por_usuario'] = True
             analisis_blob['resuelto_at'] = datetime.utcnow().isoformat()
+            if tipo_tratamiento:
+                analisis_blob['tipo_tratamiento'] = tipo_tratamiento
         else:
             sug_actualizada['estado_revision'] = estado_revision
             sug_actualizada['resuelto_por_usuario'] = True
             sug_actualizada['resuelto_at'] = datetime.utcnow().isoformat()
+            if tipo_tratamiento:
+                sug_actualizada['tipo_tratamiento'] = tipo_tratamiento
             analisis_blob = sug_actualizada
         item.analisis_ia = analisis_blob
+
+        if tipo_tratamiento:
+            cambios['tipo_tratamiento'] = tipo_tratamiento
 
         item.revisado_ia = True
         item.fecha_analisis_ia = datetime.utcnow()
@@ -481,8 +500,15 @@ def clasificar_item_pendiente(id, item_id):
     blob_final = item.analisis_ia or {}
     sug_final = blob_final.get('sugerencias') if 'sugerencias' in blob_final else blob_final
     estado_revision_aplicado = None
-    if accion != 'omitir' and isinstance(sug_final or blob_final, dict):
-        estado_revision_aplicado = (sug_final or blob_final).get('estado_revision')
+    tipo_tratamiento_aplicado = None
+    if accion != 'omitir':
+        if isinstance(blob_final, dict):
+            estado_revision_aplicado = blob_final.get('estado_revision') or (
+                sug_final.get('estado_revision') if isinstance(sug_final, dict) else None
+            )
+            tipo_tratamiento_aplicado = blob_final.get('tipo_tratamiento') or (
+                sug_final.get('tipo_tratamiento') if isinstance(sug_final, dict) else None
+            )
 
     return jsonify(
         ok=True,
@@ -494,4 +520,5 @@ def clasificar_item_pendiente(id, item_id):
         unidad=item.unidad,
         etapa_nombre=item.etapa_nombre,
         estado_revision=estado_revision_aplicado,
+        tipo_tratamiento=tipo_tratamiento_aplicado,
     )

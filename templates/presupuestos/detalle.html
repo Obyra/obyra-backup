@@ -3487,9 +3487,9 @@ window.iaAbrirVistaPendientes = async function() {
     _iaSesionPendientesAlEntrar = _iaItemsPendientes().length;
     // Limpiar mensaje persistente y bloque proximos pasos al re-abrir
     const msgEl = document.getElementById('iaPendientesMensajePersistente');
-    if (msgEl) msgEl.classList.add('d-none');
+    if (msgEl) { msgEl.classList.add('d-none'); msgEl.style.display = 'none'; }
     const ppEl = document.getElementById('iaPendientesProximosPasos');
-    if (ppEl) ppEl.classList.add('d-none');
+    if (ppEl) { ppEl.classList.add('d-none'); ppEl.style.display = 'none'; }
     _iaActualizarContadoresSesion();
     // Cargar catalogo de rubros si no esta
     if (!_iaCatalogoRubros) {
@@ -3606,12 +3606,37 @@ function _iaRenderTarjetasPendientes() {
     _iaActualizarContadoresSesion();
 }
 
+// Heuristica: detecta items globales/generales del pliego. Si la descripcion
+// matchea palabras tipo "equipos herramientas", "ayuda gremios", "seguridad",
+// etc. → sugerimos por defecto tipo_tratamiento='global'.
+function _iaInferirTipoTratamiento(descripcion) {
+    const t = (descripcion || '').toLowerCase();
+    const patrones_global = [
+        'equipos y herramientas', 'equipos herramientas', 'consumibles',
+        'ayuda de gremios', 'ayudas de gremios', 'gastos generales',
+        'seguridad e higiene', 'seguridad y salud', 'higiene',
+        'limpieza durante obra', 'limpieza periodica',
+        'tramitaciones', 'tramites', 'documentacion', 'permisos',
+        'movilizacion', 'desmovilizacion',
+        'señalizacion', 'señaletica', 'cartel de obra',
+        'obrador', 'cerco de obra', 'cerco perimetral',
+        'imprevistos', 'gastos administrativos', 'imprevistos generales',
+    ];
+    for (const p of patrones_global) {
+        if (t.includes(p)) return 'global';
+    }
+    return 'desglosar';
+}
+
 function _iaTarjetaPendienteHtml(item) {
     const orig = item.original || {};
     const sug = item.sugerencias || {};
     const estado = item._estado;
     const tieneSug = !!(sug.regla_id || sug.rubro_sugerido || sug.etapa_sugerida);
     const meta = _IA_ESTADO_META[estado] || _IA_ESTADO_META.no_reconocido;
+    // Tipo de tratamiento previo (si ya esta guardado) o sugerido por heuristica
+    const ttPrevio = (sug.tipo_tratamiento || (item.analisis_ia || {}).tipo_tratamiento || '').toLowerCase();
+    const ttDefault = ttPrevio || _iaInferirTipoTratamiento(orig.descripcion);
 
     const rubrosOpts = (_iaCatalogoRubros?.rubros || []).map(r =>
         `<option value="${_iaEsc(r)}"${(sug.rubro_sugerido === r) ? ' selected' : ''}>${_iaEsc(r)}</option>`
@@ -3686,6 +3711,19 @@ function _iaTarjetaPendienteHtml(item) {
 
             <div class="row g-2" data-item-id="${item.id}">
               <div class="col-md-4">
+                <label class="form-label small mb-1">
+                    Tipo de tratamiento
+                    <i class="fas fa-info-circle text-muted ms-1"
+                       title="Cómo OBYRA debe procesar este ítem. 'Ítem global' = no se desglosa en materiales, queda como gasto general editable."></i>
+                </label>
+                <select class="form-select form-select-sm ia-clasif-tt">
+                  <option value="desglosar"${ttDefault === 'desglosar' ? ' selected' : ''}>Desglosar en composición ejecutiva</option>
+                  <option value="global"${ttDefault === 'global' ? ' selected' : ''}>Ítem global / gasto general</option>
+                  <option value="servicio"${ttDefault === 'servicio' ? ' selected' : ''}>Solo cotizar como servicio</option>
+                  <option value="excluir"${ttDefault === 'excluir' ? ' selected' : ''}>Excluir del preliminar por ahora</option>
+                </select>
+              </div>
+              <div class="col-md-4">
                 <label class="form-label small mb-1">Rubro / Etapa</label>
                 <select class="form-select form-select-sm ia-clasif-etapa">
                   <option value="">— Elegir —</option>
@@ -3699,13 +3737,21 @@ function _iaTarjetaPendienteHtml(item) {
                   ${unidadesOpts}
                 </select>
               </div>
-              <div class="col-md-6">
+              <div class="col-md-12">
                 <label class="form-label small mb-1">Descripción normalizada</label>
                 <input type="text" class="form-control form-control-sm ia-clasif-desc"
                        maxlength="300" value="${_iaEsc(descNorm)}">
               </div>
             </div>
             <input type="hidden" class="ia-clasif-rubro" value="${_iaEsc(sug.rubro_sugerido || '')}">
+
+            ${ttDefault !== 'desglosar' ? (
+              '<div class="alert alert-light border small mt-2 mb-0 py-2"><i class="fas fa-info-circle text-info me-1"></i>' +
+              (ttDefault === 'global' ? 'Este ítem se cargará al Ejecutivo como línea global editable. No se desglosará en materiales/MO/equipos.' :
+               ttDefault === 'servicio' ? 'Este ítem se enviará a cotización como servicio. No se desglosará con coeficientes.' :
+               'Este ítem quedará excluido del preliminar. Podés recuperarlo después.') +
+              '</div>'
+            ) : ''}
 
             <div class="mt-2 text-end">
                 ${accionesHtml}
@@ -3726,6 +3772,7 @@ function _iaLeerCamposClasif(itemId) {
         unidad: root.querySelector('.ia-clasif-unidad')?.value || '',
         descripcion: root.querySelector('.ia-clasif-desc')?.value || '',
         rubro: document.querySelector(`#iaTarjetaItem${itemId} .ia-clasif-rubro`)?.value || '',
+        tipo_tratamiento: root.querySelector('.ia-clasif-tt')?.value || '',
     };
 }
 
@@ -3744,12 +3791,15 @@ window.iaConfirmarSugerencia = async function(itemId) {
     const item = (_iaResultadoCache?.items || []).find(i => i.id === itemId);
     if (!item) return;
     const sug = item.sugerencias || {};
+    // Leer tipo_tratamiento del dropdown (puede haberse cambiado al heuristic default)
+    const tt = document.querySelector(`#iaTarjetaItem${itemId} .ia-clasif-tt`)?.value || '';
     const payload = {
         accion: 'confirmar',
         descripcion: sug.descripcion_normalizada,
         unidad: sug.unidad_sugerida,
         etapa_nombre: sug.etapa_sugerida,
         rubro: sug.rubro_sugerido,
+        tipo_tratamiento: tt,
     };
     const d = await _iaPostClasificar(itemId, payload);
     _iaMarcarTarjeta(itemId, d, 'confirmar');
@@ -3786,11 +3836,18 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
     if (accion === 'omitir') {
         msg = 'Ítem omitido por ahora. Volverá a aparecer la próxima vez que abras pendientes.';
     } else {
-        const estadoRev = resp.estado_revision;
-        if (estadoRev === 'sugerencia_confirmada') {
-            msg = 'Sugerencia confirmada. Se usará para el presupuesto preliminar.';
+        const tt = (resp.tipo_tratamiento || 'desglosar').toLowerCase();
+        if (tt === 'global') {
+            msg = 'Marcado como ítem global / gasto general. Se cargará al Ejecutivo como línea editable.';
+        } else if (tt === 'servicio') {
+            msg = 'Marcado como servicio. Se cotizará a proveedor sin desglose en materiales.';
+        } else if (tt === 'excluir') {
+            msg = 'Excluido del preliminar. Podés recuperarlo más adelante.';
         } else {
-            msg = 'Ítem clasificado correctamente. Se usará para el presupuesto preliminar.';
+            const estadoRev = resp.estado_revision;
+            msg = (estadoRev === 'sugerencia_confirmada')
+                ? 'Sugerencia confirmada. Se usará para el presupuesto preliminar.'
+                : 'Ítem clasificado correctamente. Se usará para el presupuesto preliminar.';
         }
     }
     result.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>' + msg + '</span>';
@@ -3803,7 +3860,8 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
         _iaSesionAprendizajes += 1;  // backend registra IACorrectionLog en cada caso
         _iaActualizarContadoresSesion();
 
-        // Mensaje persistente arriba de la sub-vista
+        // Mensaje persistente arriba de la sub-vista (clase + style.display
+        // para resistir cualquier override CSS / cache del browser)
         const msgEl = document.getElementById('iaPendientesMensajePersistente');
         const msgTxt = document.getElementById('iaPendientesMensajeTexto');
         if (msgEl && msgTxt) {
@@ -3811,6 +3869,7 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
                 'Clasificación guardada correctamente. OBYRA usará este dato para el ' +
                 'presupuesto preliminar y para mejorar futuras sugerencias.';
             msgEl.classList.remove('d-none');
+            msgEl.style.display = 'block';
         }
 
         // Bloque de proximos pasos: mostrar cuando hay 1+ resueltos
@@ -3819,6 +3878,10 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
         if (ppEl && ppNum) {
             ppNum.textContent = _iaSesionResueltos;
             ppEl.classList.remove('d-none');
+            ppEl.style.display = 'block';
+            console.log('[OBYRA] Bloque Proximos Pasos visible. Resueltos:', _iaSesionResueltos);
+        } else {
+            console.warn('[OBYRA] iaPendientesProximosPasos no encontrado en DOM. Cache viejo?');
         }
     }
 

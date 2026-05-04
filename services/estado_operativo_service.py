@@ -185,6 +185,19 @@ def clasificar_item(
     if item is not None and getattr(item, 'excluido_de_preliminar', False):
         return 'excluido'
 
+    # 1b. EXCLUIDO via tipo_tratamiento: el usuario marco el item como
+    #     "excluir del preliminar" desde la sub-vista pendientes.
+    if item is not None:
+        blob_tt = getattr(item, 'analisis_ia', None) or {}
+        if isinstance(blob_tt, dict):
+            tt = (blob_tt.get('tipo_tratamiento') or '').lower()
+            if not tt:
+                sug_tt = blob_tt.get('sugerencias') if 'sugerencias' in blob_tt else None
+                if isinstance(sug_tt, dict):
+                    tt = (sug_tt.get('tipo_tratamiento') or '').lower()
+            if tt == 'excluir':
+                return 'excluido'
+
     # 2. RESUELTO POR USUARIO (Fase 4 UX): si el usuario ya clasifico/confirmo
     #    desde "Resolver items pendientes", el item NO debe volver a aparecer
     #    como pendiente aunque la confianza original fuese baja o sin regla.
@@ -198,6 +211,9 @@ def clasificar_item(
             resuelto = bool(sug_blob.get('resuelto_por_usuario'))
             if resuelto or estado_rev in ('clasificado_manual', 'sugerencia_confirmada'):
                 return 'listo'
+        # Tambien: si el blob (no anidado) tiene resuelto_por_usuario directo
+        if isinstance(blob, dict) and bool(blob.get('resuelto_por_usuario')):
+            return 'listo'
 
     # 3. NO RECONOCIDO: la IA no pudo asignar regla
     label = (sug.get('confianza_label') or '').lower()
