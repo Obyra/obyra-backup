@@ -36,8 +36,19 @@ ESTADOS_OPERATIVOS = (
     'excluido',
 )
 
-# Etiquetas visibles para el usuario final
+# Etiquetas visibles para el usuario final (vista comercial / "Presupuesto preliminar IA").
+# Estas son las etiquetas SIMPLES que ve el usuario normal en la vista principal.
 ESTADO_LABELS = {
+    'listo': 'Procesado',
+    'requiere_revision': 'Revisar',
+    'falta_precio': 'Cargar precio',
+    'falta_dato_tecnico': 'Completar dato tecnico',
+    'no_reconocido': 'Clasificar',
+    'excluido': 'Excluido',
+}
+
+# Etiquetas largas / completas para modo experto y tooltips.
+ESTADO_LABELS_LARGOS = {
     'listo': 'Listo para presupuestar',
     'requiere_revision': 'Requiere revision',
     'falta_precio': 'Falta precio',
@@ -279,10 +290,11 @@ def calcular_resumen(
 
 
 def metadatos_estado(estado: str) -> Dict[str, str]:
-    """Devuelve {label, badge_class, icon} para el estado dado."""
+    """Devuelve {label, label_largo, badge_class, icon} para el estado dado."""
     return {
         'estado': estado,
         'label': ESTADO_LABELS.get(estado, estado),
+        'label_largo': ESTADO_LABELS_LARGOS.get(estado, estado),
         'badge_class': ESTADO_BADGE_CLASS.get(estado, 'bg-secondary'),
         'icon': ESTADO_ICON.get(estado, 'fa-circle'),
     }

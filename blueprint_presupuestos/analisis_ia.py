@@ -91,11 +91,12 @@ def analizar_ia(id):
     # Preliminar IA. La logica interna de confianza no se toca; solo se
     # mapea a estados de negocio para la UX. Si el servicio no existe o falla,
     # se omite y la respuesta sigue funcionando (compat).
+    perfil_dict = (contexto or {}).get('perfil_tecnico') if contexto else None
+    items_reconocidos = 0
     try:
         from services.estado_operativo_service import (
             calcular_resumen, metadatos_todos_estados,
         )
-        perfil_dict = (contexto or {}).get('perfil_tecnico') if contexto else None
         resumen = calcular_resumen(
             items_resultado=resultado.get('items', []),
             perfil_tecnico=perfil_dict,
@@ -107,8 +108,27 @@ def analizar_ia(id):
             'porcentaje_listos': resumen['porcentaje_listos'],
             'estados_por_item': resumen['estados_por_item'],
         }
+        # Contar items reconocidos = todos menos no_reconocidos
+        items_reconocidos = (resumen['total'] - (resumen['kpis'].get('no_reconocido') or 0))
     except Exception:
         current_app.logger.exception('No se pudo calcular estados operativos')
+
+    # Fase 3.5: avance del Presupuesto Preliminar hacia el 90%.
+    # Calcula los componentes posibles HOY. Los componentes de Fases 4/5
+    # (composicion, precios, MO/equipos, margen) quedan en 0 hasta que se
+    # activen. Esta es la metrica que ve el usuario en la vista simple.
+    try:
+        from services.avance_presupuesto_service import calcular_avance
+        avance = calcular_avance(
+            total_items=len(items),
+            items_reconocidos=items_reconocidos,
+            perfil_tecnico=perfil_dict,
+            estados_kpis=(resultado.get('estados_operativos') or {}).get('kpis'),
+            presupuesto=presupuesto,
+        )
+        resultado['avance_preliminar'] = avance
+    except Exception:
+        current_app.logger.exception('No se pudo calcular avance preliminar')
 
     resultado['ok'] = True
     return jsonify(resultado)

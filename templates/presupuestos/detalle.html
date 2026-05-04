@@ -1114,6 +1114,25 @@
 {% endif %}
 
 <!-- Modal: Analizar con IA (solo presupuestos con pliego Excel) -->
+<style>
+/* Fase 3.5: contraste forzado para que ningun theme custom rompa la lectura.
+   Los badges del Generador Preliminar usan colores HEX fijos. */
+#modalAnalizarIA .ia-kpi { color: #ffffff !important; padding: 0.45em 0.7em; font-weight: 500; }
+#modalAnalizarIA .ia-kpi i { color: #ffffff !important; }
+#modalAnalizarIA .ia-kpi-listo        { background-color: #198754 !important; }  /* verde */
+#modalAnalizarIA .ia-kpi-revision     { background-color: #ffc107 !important; color: #212529 !important; }
+#modalAnalizarIA .ia-kpi-revision i   { color: #212529 !important; }
+#modalAnalizarIA .ia-kpi-precio       { background-color: #6f42c1 !important; }  /* purpura */
+#modalAnalizarIA .ia-kpi-dato         { background-color: #0d6efd !important; }  /* azul brillante */
+#modalAnalizarIA .ia-kpi-noreconocido { background-color: #6c757d !important; }  /* gris */
+#modalAnalizarIA .ia-kpi-excluido     { background-color: #212529 !important; }  /* casi negro */
+/* Chips de materiales y maquinaria: fondo claro con borde de color */
+#modalAnalizarIA .ia-chip-material  { background-color: #f8f9fa; color: #212529; border: 1px solid #dee2e6; }
+#modalAnalizarIA .ia-chip-maquinaria { background-color: #e7f1ff; color: #084298; border: 1px solid #b6d4fe; }
+#modalAnalizarIA .ia-chip-maquinaria i { color: #084298 !important; }
+/* Total importados (header de avance simple) */
+#modalAnalizarIA #iaTotalItems { background-color: #e7f1ff !important; color: #084298 !important; border: 1px solid #b6d4fe; }
+</style>
 <div class="modal fade" id="modalAnalizarIA" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
@@ -1139,10 +1158,14 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted small mb-3">
-                    Clasificamos cada ítem importado en <strong>estados operativos</strong> para que sepas qué
-                    falta para llegar al presupuesto preliminar. <strong>No se modifica nada</strong> hasta que
-                    apretes <strong>"Aplicar seleccionadas"</strong>.
+                <p class="text-muted small mb-3" id="iaIntroSimple">
+                    OBYRA está preparando un <strong>presupuesto preliminar</strong> a partir del pliego importado.
+                    Para acercarlo al 90%, necesita combinar análisis técnico, composición ejecutiva y precios actualizados.
+                </p>
+                <p class="text-muted small mb-3 d-none" id="iaIntroExperto">
+                    Vista técnica avanzada — clasificación por confianza interna, materiales sugeridos, auditoría del análisis
+                    y aplicación selectiva de sugerencias. <strong>No se modifica nada</strong> hasta que apretes
+                    <strong>"Aplicar seleccionadas"</strong>.
                 </p>
 
                 <div id="iaLoading" class="text-center py-5">
@@ -1151,6 +1174,77 @@
                 </div>
 
                 <div id="iaError" class="alert alert-danger d-none"></div>
+
+                <!-- ======================================================
+                     VISTA SIMPLE (default para todos los roles)
+                     Orientada a negocio: avance %, pendientes, acciones.
+                     ====================================================== -->
+                <div id="iaVistaSimple" class="d-none">
+                    <!-- Card grande de avance -->
+                    <div class="card border-0 shadow-sm mb-3">
+                        <div class="card-body bg-light">
+                            <div class="row align-items-center">
+                                <div class="col-md-4 text-center border-end">
+                                    <div class="text-muted small text-uppercase mb-1">Avance del presupuesto</div>
+                                    <div class="display-3 fw-bold text-success" id="iaAvancePct">0%</div>
+                                    <div class="small text-muted" id="iaAvanceTexto">
+                                        Faltan datos para llegar al 90%.
+                                    </div>
+                                </div>
+                                <div class="col-md-8">
+                                    <div class="row text-center g-2">
+                                        <div class="col-4">
+                                            <div class="border rounded p-2 bg-white">
+                                                <div class="h3 mb-0 text-dark" id="iaSimpleImportados">0</div>
+                                                <div class="text-muted small">Ítems importados</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="border rounded p-2 bg-white">
+                                                <div class="h3 mb-0 text-success" id="iaSimpleProcesados">0</div>
+                                                <div class="text-muted small">Procesados</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="border rounded p-2 bg-white">
+                                                <div class="h3 mb-0 text-warning" id="iaSimplePendientes">0</div>
+                                                <div class="text-muted small">Pendientes</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lista de pendientes para llegar al 90% -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-list-check text-warning me-1"></i>
+                                Pendientes para llegar al 90%
+                            </h6>
+                        </div>
+                        <ul class="list-group list-group-flush" id="iaPendientesLista">
+                            <li class="list-group-item text-muted small">Calculando...</li>
+                        </ul>
+                    </div>
+
+                    <div class="alert alert-info border-0 small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        OBYRA va a crear una propuesta interna editable. Nada se envía al cliente hasta que confirmes.
+                        <br>
+                        <em>La generación automática de composición y la búsqueda de precios se activan en las próximas fases del producto (4 y 5).</em>
+                    </div>
+                </div>
+
+                <!-- ======================================================
+                     VISTA EXPERTA (toggle Modo experto)
+                     Solo admin / PM / superadmin la pueden activar.
+                     Conserva intacto el flujo tecnico (auditoria + tabla
+                     + filtros + Aplicar seleccionadas).
+                     ====================================================== -->
+                <div id="iaVistaExperta" class="d-none"><!-- inicia oculta; toggle la abre -->
 
                 <div id="iaResultados" class="d-none">
                     <!-- AUDITORIA del analisis: panel plegable -->
@@ -1235,22 +1329,22 @@
                                 </div>
                             </div>
 
-                            <!-- KPIs por estado operativo -->
+                            <!-- KPIs por estado operativo (modo experto) -->
                             <div class="d-flex flex-wrap gap-2 mb-2" id="iaKpisOperativos">
-                                <span class="badge bg-success" title="Items con todos los datos para entrar al presupuesto">
-                                    <i class="fas fa-check-circle me-1"></i><span id="iaCntListo">0</span> Listos para presupuestar</span>
-                                <span class="badge bg-warning text-dark" title="Items con sugerencia parcial: revisar antes de aplicar">
-                                    <i class="fas fa-exclamation-triangle me-1"></i><span id="iaCntRevision">0</span> Requieren revisión</span>
-                                <span class="badge bg-info text-dark"
+                                <span class="badge ia-kpi ia-kpi-listo" title="Items con todos los datos para entrar al presupuesto">
+                                    <i class="fas fa-check-circle me-1"></i><span id="iaCntListo">0</span> Procesados</span>
+                                <span class="badge ia-kpi ia-kpi-revision" title="Items con sugerencia parcial: revisar antes de aplicar">
+                                    <i class="fas fa-exclamation-triangle me-1"></i><span id="iaCntRevision">0</span> Revisar</span>
+                                <span class="badge ia-kpi ia-kpi-precio"
                                       data-bs-toggle="tooltip" data-bs-placement="bottom"
-                                      title="La detección automática de precios se activará cuando esté cargada la lista de precios de proveedores (Fase 5). Por ahora este KPI queda reservado.">
-                                    <i class="fas fa-dollar-sign me-1"></i><span id="iaCntFaltaPrecio">0</span> Falta precio
+                                      title="La detección automática de precios se activará cuando cargues la lista de precios de proveedores (Fase 5). Por ahora este KPI queda reservado.">
+                                    <i class="fas fa-dollar-sign me-1"></i><span id="iaCntFaltaPrecio">0</span> Cargar precio
                                     <i class="fas fa-info-circle ms-1 small"></i></span>
-                                <span class="badge bg-primary" title="Items que necesitan perfil técnico cargado para clasificar bien">
-                                    <i class="fas fa-drafting-compass me-1"></i><span id="iaCntFaltaDato">0</span> Falta dato técnico</span>
-                                <span class="badge bg-secondary" title="Items que la IA no pudo clasificar contra la base técnica">
-                                    <i class="fas fa-question-circle me-1"></i><span id="iaCntNoReconocido">0</span> No reconocidos</span>
-                                <span class="badge bg-dark" title="Items marcados manualmente para excluir del cálculo (futuro)">
+                                <span class="badge ia-kpi ia-kpi-dato" title="Items que necesitan perfil técnico cargado para clasificar bien">
+                                    <i class="fas fa-drafting-compass me-1"></i><span id="iaCntFaltaDato">0</span> Completar dato técnico</span>
+                                <span class="badge ia-kpi ia-kpi-noreconocido" title="Items que la IA no pudo clasificar contra la base técnica">
+                                    <i class="fas fa-question-circle me-1"></i><span id="iaCntNoReconocido">0</span> Clasificar</span>
+                                <span class="badge ia-kpi ia-kpi-excluido" title="Items marcados manualmente para excluir del cálculo (futuro)">
                                     <i class="fas fa-ban me-1"></i><span id="iaCntExcluido">0</span> Excluidos</span>
                             </div>
 
@@ -1327,10 +1421,26 @@
                         </table>
                     </div>
                 </div>
+                </div><!-- /iaVistaExperta -->
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer flex-wrap gap-2">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                <button type="button" class="btn btn-primary" id="btnAplicarIA" onclick="aplicarAnalisisIA()" disabled>
+
+                <!-- Vista simple: acciones de negocio -->
+                <div id="iaFooterSimple" class="d-flex gap-2 ms-auto flex-wrap">
+                    <a href="#" class="btn btn-outline-primary" id="btnPerfilDesdeIA"
+                       onclick="event.preventDefault(); _iaIrAPerfilTecnico();"
+                       title="Cargar o completar el perfil técnico de la obra">
+                        <i class="fas fa-drafting-compass me-1"></i>Completar perfil técnico
+                    </a>
+                    <button type="button" class="btn btn-success" disabled
+                            title="Disponible cuando se active la composición ejecutiva automática (Fase 4).">
+                        <i class="fas fa-magic me-1"></i>Generar presupuesto preliminar
+                    </button>
+                </div>
+
+                <!-- Vista experta: aplicar sugerencias seleccionadas -->
+                <button type="button" class="btn btn-primary d-none" id="btnAplicarIA" onclick="aplicarAnalisisIA()" disabled>
                     <i class="fas fa-save me-1"></i>Aplicar seleccionadas
                 </button>
             </div>
@@ -2460,14 +2570,15 @@ let _iaEdiciones = {};  // { item_id: { descripcion, unidad, etapa_nombre } }
 let _iaEstadosPorItem = {};  // { item_id: 'listo' | 'requiere_revision' | ... }
 let _iaModoExpertoActivo = false;
 
-// Catalogo visible de estados operativos (mismo orden que en el badge)
+// Catalogo visible de estados operativos. Usa clases custom ia-kpi-*
+// definidas en el <style> del modal para garantizar contraste consistente.
 const _IA_ESTADO_META = {
-    listo:              { label: 'Listo para presupuestar', badge: 'bg-success',           icon: 'fa-check-circle' },
-    requiere_revision:  { label: 'Requiere revisión',       badge: 'bg-warning text-dark', icon: 'fa-exclamation-triangle' },
-    falta_precio:       { label: 'Falta precio',            badge: 'bg-info text-dark',    icon: 'fa-dollar-sign' },
-    falta_dato_tecnico: { label: 'Falta dato técnico',      badge: 'bg-primary',           icon: 'fa-drafting-compass' },
-    no_reconocido:      { label: 'No reconocido',           badge: 'bg-secondary',         icon: 'fa-question-circle' },
-    excluido:           { label: 'Excluido del cálculo',    badge: 'bg-dark',              icon: 'fa-ban' },
+    listo:              { label: 'Procesado',              badge: 'ia-kpi ia-kpi-listo',         icon: 'fa-check-circle' },
+    requiere_revision:  { label: 'Revisar',                badge: 'ia-kpi ia-kpi-revision',      icon: 'fa-exclamation-triangle' },
+    falta_precio:       { label: 'Cargar precio',          badge: 'ia-kpi ia-kpi-precio',        icon: 'fa-dollar-sign' },
+    falta_dato_tecnico: { label: 'Completar dato técnico', badge: 'ia-kpi ia-kpi-dato',          icon: 'fa-drafting-compass' },
+    no_reconocido:      { label: 'Clasificar',             badge: 'ia-kpi ia-kpi-noreconocido',  icon: 'fa-question-circle' },
+    excluido:           { label: 'Excluido',               badge: 'ia-kpi ia-kpi-excluido',      icon: 'fa-ban' },
 };
 
 // True si el server renderizo el toggle (rol admin/PM/superadmin).
@@ -2480,19 +2591,53 @@ function _iaUsuarioPuedeModoExperto() {
 function iaToggleModoExperto() {
     const chk = document.getElementById('iaModoExperto');
     _iaModoExpertoActivo = !!(chk && chk.checked) && _iaUsuarioPuedeModoExperto();
-    // Aplicar a la UI
+
+    // Toggle vistas principales: simple <-> experta
+    const vSimple = document.getElementById('iaVistaSimple');
+    const vExperta = document.getElementById('iaVistaExperta');
+    if (vSimple) vSimple.classList.toggle('d-none', _iaModoExpertoActivo);
+    if (vExperta) vExperta.classList.toggle('d-none', !_iaModoExpertoActivo);
+
+    // Intros y descripciones
+    const introSimple = document.getElementById('iaIntroSimple');
+    const introExperto = document.getElementById('iaIntroExperto');
+    if (introSimple) introSimple.classList.toggle('d-none', _iaModoExpertoActivo);
+    if (introExperto) introExperto.classList.toggle('d-none', !_iaModoExpertoActivo);
+
+    // Footer: vista simple muestra acciones de negocio; experta muestra Aplicar
+    const footerSimple = document.getElementById('iaFooterSimple');
+    const btnAplicar = document.getElementById('btnAplicarIA');
+    if (footerSimple) footerSimple.classList.toggle('d-none', _iaModoExpertoActivo);
+    if (btnAplicar) btnAplicar.classList.toggle('d-none', !_iaModoExpertoActivo);
+
+    // Detalles dentro de la vista experta (pildoras y filtro de confianza)
     const elPil = document.getElementById('iaPildorasExperto');
     if (elPil) elPil.classList.toggle('d-none', !_iaModoExpertoActivo);
     const elFiltro = document.getElementById('iaFiltroConfianzaWrap');
     if (elFiltro) elFiltro.classList.toggle('d-none', !_iaModoExpertoActivo);
     document.querySelectorAll('.ia-confianza-experta').forEach(el =>
         el.classList.toggle('d-none', !_iaModoExpertoActivo));
+
     // Persistir preferencia (solo si el usuario tiene permiso)
     try {
         if (_iaUsuarioPuedeModoExperto()) {
             localStorage.setItem('obyra_ia_modo_experto', _iaModoExpertoActivo ? '1' : '0');
         }
     } catch (e) { /* localStorage puede estar deshabilitado */ }
+}
+
+// Helper: navegar al perfil tecnico (modal de detalle.html). Si no esta
+// disponible, abre el detalle del presupuesto.
+function _iaIrAPerfilTecnico() {
+    if (typeof window.abrirPerfilTecnico === 'function' && _iaPresupuestoId) {
+        // Cerrar modal IA primero para evitar dos modales superpuestos
+        const modalEl = document.getElementById('modalAnalizarIA');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+            const inst = bootstrap.Modal.getInstance(modalEl);
+            if (inst) inst.hide();
+        }
+        setTimeout(() => window.abrirPerfilTecnico(_iaPresupuestoId), 350);
+    }
 }
 
 function _iaRestaurarModoExperto() {
@@ -2603,6 +2748,61 @@ function _iaRenderResultados(data) {
     document.getElementById('iaResultados').classList.remove('d-none');
     iaAplicarFiltros();
     _iaActualizarBoton();
+
+    // Fase 3.5: render de la vista simple (negocio)
+    _iaRenderVistaSimple(data);
+    // Aplicar el toggle correcto (vista simple por default; experta solo si esta tildado)
+    iaToggleModoExperto();
+}
+
+function _iaRenderVistaSimple(data) {
+    // Avance %
+    const av = data.avance_preliminar || {};
+    const pct = (av.porcentaje_avance != null) ? av.porcentaje_avance : 0;
+    document.getElementById('iaAvancePct').textContent = pct + '%';
+
+    // Color del numero segun avance
+    const elPct = document.getElementById('iaAvancePct');
+    elPct.classList.remove('text-success', 'text-warning', 'text-danger');
+    if (pct >= 80) elPct.classList.add('text-success');
+    else if (pct >= 50) elPct.classList.add('text-warning');
+    else elPct.classList.add('text-danger');
+
+    // Texto de avance
+    const elTexto = document.getElementById('iaAvanceTexto');
+    if (pct >= 90) {
+        elTexto.textContent = 'Listo para presentar al cliente.';
+    } else if (pct >= 70) {
+        elTexto.textContent = 'Cerca del objetivo. Revisá los pendientes.';
+    } else if (pct >= 40) {
+        elTexto.textContent = 'Faltan precios y datos para llegar al 90%.';
+    } else {
+        elTexto.textContent = 'Recién empezando. Cargá perfil técnico y precios para avanzar.';
+    }
+
+    // KPIs simples: importados / procesados / pendientes
+    const eo = data.estados_operativos || {};
+    const k = eo.kpis || {};
+    const total = data.total_items || 0;
+    const procesados = (k.listo || 0);
+    const pendientes = total - procesados;
+    document.getElementById('iaSimpleImportados').textContent = total;
+    document.getElementById('iaSimpleProcesados').textContent = procesados;
+    document.getElementById('iaSimplePendientes').textContent = pendientes;
+
+    // Lista de pendientes
+    const ul = document.getElementById('iaPendientesLista');
+    const lista = av.pendientes || [];
+    if (!lista.length) {
+        ul.innerHTML = '<li class="list-group-item small text-success"><i class="fas fa-check-circle me-1"></i>Sin pendientes detectados.</li>';
+    } else {
+        ul.innerHTML = lista.map(function(t) {
+            return '<li class="list-group-item small"><i class="fas fa-circle text-warning me-2 small"></i>' + _iaEsc(t) + '</li>';
+        }).join('');
+    }
+
+    // Mostrar la vista simple (la experta queda oculta hasta que toggle se active)
+    document.getElementById('iaVistaSimple').classList.remove('d-none');
 }
 
 function _iaPopularSelect(id, labelDefault, opciones) {
@@ -2685,8 +2885,8 @@ function _iaCrearFila(item) {
         </div>` : ''}
       </td>
       <td class="small">
-        ${(sug.materiales_sugeridos || []).slice(0, 4).map(m => `<span class="badge bg-light text-dark border me-1 mb-1">${_iaEsc(m)}</span>`).join('')}
-        ${(sug.maquinaria_sugerida || []).slice(0, 3).map(m => `<span class="badge bg-info text-dark me-1 mb-1"><i class="fas fa-cogs me-1"></i>${_iaEsc(m)}</span>`).join('')}
+        ${(sug.materiales_sugeridos || []).slice(0, 4).map(m => `<span class="badge ia-chip-material me-1 mb-1">${_iaEsc(m)}</span>`).join('')}
+        ${(sug.maquinaria_sugerida || []).slice(0, 3).map(m => `<span class="badge ia-chip-maquinaria me-1 mb-1"><i class="fas fa-cogs me-1"></i>${_iaEsc(m)}</span>`).join('')}
         ${sug.observaciones_ia ? `<div class="text-muted mt-1" style="font-size:.7rem;"><i class="fas fa-info-circle me-1"></i>${_iaEsc(sug.observaciones_ia)}</div>` : ''}
         ${sug.criterio_medicion ? `<div class="text-muted mt-1" style="font-size:.7rem;"><i class="fas fa-ruler me-1"></i>${_iaEsc(sug.criterio_medicion)}</div>` : ''}
       </td>
