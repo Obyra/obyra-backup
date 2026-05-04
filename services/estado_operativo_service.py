@@ -172,8 +172,9 @@ def clasificar_item(
         regla_id, etc.).
       perfil_tecnico: dict del ProjectTechnicalProfile (a partir de to_dict()).
         Si es None, se asume que no hay perfil cargado.
-      item: opcional, instancia ItemPresupuesto. Hoy solo se mira el flag
-        de exclusion manual si existe.
+      item: opcional, instancia ItemPresupuesto. Hoy se mira el flag
+        de exclusion manual y el blob analisis_ia.estado_revision para
+        detectar items que el usuario ya resolvio manualmente.
 
     Returns:
       string con el estado canonico (uno de ESTADOS_OPERATIVOS).
@@ -184,13 +185,27 @@ def clasificar_item(
     if item is not None and getattr(item, 'excluido_de_preliminar', False):
         return 'excluido'
 
-    # 2. NO RECONOCIDO: la IA no pudo asignar regla
+    # 2. RESUELTO POR USUARIO (Fase 4 UX): si el usuario ya clasifico/confirmo
+    #    desde "Resolver items pendientes", el item NO debe volver a aparecer
+    #    como pendiente aunque la confianza original fuese baja o sin regla.
+    #    Marca canonica en analisis_ia: estado_revision in ('clasificado_manual',
+    #    'sugerencia_confirmada') o resuelto_por_usuario=True.
+    if item is not None and getattr(item, 'revisado_ia', False):
+        blob = getattr(item, 'analisis_ia', None) or {}
+        sug_blob = blob.get('sugerencias') if isinstance(blob, dict) and 'sugerencias' in blob else blob
+        if isinstance(sug_blob, dict):
+            estado_rev = (sug_blob.get('estado_revision') or '').lower()
+            resuelto = bool(sug_blob.get('resuelto_por_usuario'))
+            if resuelto or estado_rev in ('clasificado_manual', 'sugerencia_confirmada'):
+                return 'listo'
+
+    # 3. NO RECONOCIDO: la IA no pudo asignar regla
     label = (sug.get('confianza_label') or '').lower()
     regla_id = sug.get('regla_id')
     if not regla_id or label == 'sin' or label == '':
         return 'no_reconocido'
 
-    # 3. FALTA DATO TECNICO: la regla pertenece a un rubro que necesita
+    # 4. FALTA DATO TECNICO: la regla pertenece a un rubro que necesita
     #    perfil tecnico para clasificar bien, y el perfil dice no_definida
     #    o no esta cargado. Matching case-insensitive + sin acentos.
     rubro_norm = _normalizar_rubro(sug.get('rubro_sugerido') or '')
@@ -219,16 +234,15 @@ def clasificar_item(
         if not (cant_pisos or cant_subs or tiene_pb):
             return 'falta_dato_tecnico'
 
-    # 4. FALTA PRECIO: se evalua en Fase 5 con catalogo de precios.
-    #    En Fase 3.5 dejamos pasar — la composicion ejecutiva todavia no
-    #    se genera automaticamente, asi que no podemos saber si "falta precio"
-    #    sin tener que asumir. Mejor no marcar falsos positivos.
+    # 5. FALTA PRECIO: se evalua en la etapa de catalogo de precios.
+    #    Hoy dejamos pasar — la composicion ejecutiva todavia no se genera
+    #    automaticamente con precios reales, asi que no marcar falsos positivos.
 
-    # 5. REQUIERE REVISION: confianza media o baja
+    # 6. REQUIERE REVISION: confianza media o baja
     if label in ('media', 'baja'):
         return 'requiere_revision'
 
-    # 6. LISTO: confianza alta + nada faltante
+    # 7. LISTO: confianza alta + nada faltante
     if label == 'alta':
         return 'listo'
 

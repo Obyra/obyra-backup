@@ -1272,6 +1272,19 @@
                         </div>
                     </div>
 
+                    <!-- Mini panel: contador en vivo de la sesion -->
+                    <div class="alert alert-light border mb-3 py-2 small d-flex flex-wrap gap-3 align-items-center">
+                        <div><i class="fas fa-check-circle text-success me-1"></i>
+                            Resueltos en esta sesión:
+                            <strong id="iaCntSesionResueltos">0</strong></div>
+                        <div><i class="fas fa-clock text-warning me-1"></i>
+                            Pendientes restantes:
+                            <strong id="iaCntSesionRestantes">0</strong></div>
+                        <div><i class="fas fa-brain text-primary me-1"></i>
+                            Nuevos aprendizajes:
+                            <strong id="iaCntSesionAprendizajes">0</strong></div>
+                    </div>
+
                     <!-- Filtros simples -->
                     <div class="d-flex flex-wrap gap-2 mb-3" id="iaFiltrosPendientes">
                         <button type="button" class="btn btn-sm btn-outline-warning active"
@@ -3334,6 +3347,25 @@ let _iaCatalogoRubros = null;       // {rubros, etapas, unidades} cacheado
 let _iaFiltroPendienteActual = 'todos';
 const _IA_ESTADOS_PENDIENTES = ['requiere_revision', 'no_reconocido', 'falta_dato_tecnico'];
 
+// Contadores de sesion para feedback en vivo (Fase 4 UX)
+let _iaSesionResueltos = 0;
+let _iaSesionAprendizajes = 0;
+// Set de item_ids resueltos para que el cierre vuelva a contar bien
+const _iaSesionItemsResueltos = new Set();
+
+function _iaActualizarContadoresSesion() {
+    const elR = document.getElementById('iaCntSesionResueltos');
+    const elA = document.getElementById('iaCntSesionAprendizajes');
+    const elP = document.getElementById('iaCntSesionRestantes');
+    if (elR) elR.textContent = _iaSesionResueltos;
+    if (elA) elA.textContent = _iaSesionAprendizajes;
+    if (elP) {
+        const todos = _iaItemsPendientes();
+        const restantes = todos.filter(i => !_iaSesionItemsResueltos.has(i.id)).length;
+        elP.textContent = restantes;
+    }
+}
+
 window.iaAbrirVistaPendientes = async function() {
     console.log('[OBYRA Generador Preliminar] iaAbrirVistaPendientes() v2025.05.04');
     if (!_iaResultadoCache) {
@@ -3364,6 +3396,11 @@ window.iaAbrirVistaPendientes = async function() {
     if (elExperta) { elExperta.classList.add('d-none'); elExperta.style.display = 'none'; }
     elPend.classList.remove('d-none');
     elPend.style.display = 'block';
+    // Reset de contadores de sesion al abrir la sub-vista
+    _iaSesionResueltos = 0;
+    _iaSesionAprendizajes = 0;
+    _iaSesionItemsResueltos.clear();
+    _iaActualizarContadoresSesion();
     // Cargar catalogo de rubros si no esta
     if (!_iaCatalogoRubros) {
         try {
@@ -3420,7 +3457,11 @@ function _iaItemsPendientes() {
     const items = data.items || [];
     return items
         .map(it => Object.assign({}, it, { _estado: estados[it.id] || 'no_reconocido' }))
-        .filter(it => _IA_ESTADOS_PENDIENTES.includes(it._estado));
+        // Excluimos items que el usuario ya resolvio en esta sesion
+        // (asi el contador "restantes" baja en vivo aunque el cache no este
+        // refetcheado todavia).
+        .filter(it => _IA_ESTADOS_PENDIENTES.includes(it._estado)
+                      && !_iaSesionItemsResueltos.has(it.id));
 }
 
 function _iaRenderTarjetasPendientes() {
@@ -3445,10 +3486,12 @@ function _iaRenderTarjetasPendientes() {
     if (!lista.length) {
         cont.innerHTML = '';
         vacio.classList.remove('d-none');
+        _iaActualizarContadoresSesion();
         return;
     }
     vacio.classList.add('d-none');
     cont.innerHTML = lista.map(_iaTarjetaPendienteHtml).join('');
+    _iaActualizarContadoresSesion();
 }
 
 function _iaTarjetaPendienteHtml(item) {
@@ -3625,10 +3668,30 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
                            _iaEsc((resp && resp.error) || 'Error al guardar') + '</span>';
         return;
     }
-    const msg = accion === 'omitir'
-        ? 'Ítem omitido por ahora. Volverá a aparecer la próxima vez que abras pendientes.'
-        : 'Ítem clasificado. La Calculadora IA registró la corrección.';
+
+    // Mensaje claro segun el resultado real del backend
+    let msg;
+    if (accion === 'omitir') {
+        msg = 'Ítem omitido por ahora. Volverá a aparecer la próxima vez que abras pendientes.';
+    } else {
+        const estadoRev = resp.estado_revision;
+        if (estadoRev === 'sugerencia_confirmada') {
+            msg = 'Sugerencia confirmada. Se usará para el presupuesto preliminar.';
+        } else {
+            msg = 'Ítem clasificado correctamente. Se usará para el presupuesto preliminar.';
+        }
+    }
     result.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>' + msg + '</span>';
+
+    // Actualizar contadores de sesion. "omitir" no cuenta como resuelto
+    // (el item sigue como pendiente, solo postergado).
+    if (accion !== 'omitir' && !_iaSesionItemsResueltos.has(itemId)) {
+        _iaSesionItemsResueltos.add(itemId);
+        _iaSesionResueltos += 1;
+        _iaSesionAprendizajes += 1;  // backend registra IACorrectionLog en cada caso
+        _iaActualizarContadoresSesion();
+    }
+
     // Animacion: bajar opacidad y luego remover de la lista
     card.style.transition = 'opacity 0.5s';
     card.style.opacity = '0.4';
@@ -3639,6 +3702,7 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
         if (cont && !cont.children.length) {
             document.getElementById('iaPendientesVacio').classList.remove('d-none');
         }
+        _iaActualizarContadoresSesion();
     }, 1200);
 }
 

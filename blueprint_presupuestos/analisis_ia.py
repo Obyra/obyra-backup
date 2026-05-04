@@ -391,18 +391,41 @@ def clasificar_item_pendiente(id, item_id):
                 item.etapa_nombre = nueva_et
                 cambios['etapa_nombre'] = nueva_et
 
-        # Mergear el rubro elegido al blob para trazabilidad
+        # Mergear el rubro elegido + marca de resolucion al blob para
+        # trazabilidad y para que el servicio de estados operativos
+        # pueda detectar "resuelto por usuario" aunque la confianza
+        # original fuese baja o nula.
         rubro_in = (payload.get('rubro') or '').strip()
+        analisis_blob = dict(analisis_blob)  # mutable copy
+        if 'sugerencias' in analisis_blob:
+            sug_actualizada = dict(sugerencia_original)
+        else:
+            sug_actualizada = analisis_blob
+
         if rubro_in:
             cambios['rubro'] = rubro_in
-            sug_actualizada = dict(sugerencia_original)
             sug_actualizada['rubro_sugerido'] = rubro_in[:120]
-            if 'sugerencias' in analisis_blob:
-                analisis_blob = dict(analisis_blob)
-                analisis_blob['sugerencias'] = sug_actualizada
-            else:
-                analisis_blob = sug_actualizada
-            item.analisis_ia = analisis_blob
+
+        # Marca canonica que el servicio de estados operativos
+        # usa para devolver "listo" aunque la confianza_label sea sin/baja.
+        # 'sugerencia_confirmada' = el usuario confirmo lo sugerido tal cual.
+        # 'clasificado_manual'    = el usuario edito al menos un campo.
+        if accion == 'confirmar' and not cambios:
+            estado_revision = 'sugerencia_confirmada'
+        else:
+            estado_revision = 'clasificado_manual'
+
+        if 'sugerencias' in analisis_blob:
+            analisis_blob['sugerencias'] = sug_actualizada
+            analisis_blob['estado_revision'] = estado_revision
+            analisis_blob['resuelto_por_usuario'] = True
+            analisis_blob['resuelto_at'] = datetime.utcnow().isoformat()
+        else:
+            sug_actualizada['estado_revision'] = estado_revision
+            sug_actualizada['resuelto_por_usuario'] = True
+            sug_actualizada['resuelto_at'] = datetime.utcnow().isoformat()
+            analisis_blob = sug_actualizada
+        item.analisis_ia = analisis_blob
 
         item.revisado_ia = True
         item.fecha_analisis_ia = datetime.utcnow()
@@ -454,6 +477,13 @@ def clasificar_item_pendiente(id, item_id):
         current_app.logger.exception('Error commiteando clasificar_item_pendiente')
         return jsonify(ok=False, error=f'Error al guardar: {type(e).__name__}'), 500
 
+    # Recuperar marca de resolucion aplicada (para feedback en el frontend)
+    blob_final = item.analisis_ia or {}
+    sug_final = blob_final.get('sugerencias') if 'sugerencias' in blob_final else blob_final
+    estado_revision_aplicado = None
+    if accion != 'omitir' and isinstance(sug_final or blob_final, dict):
+        estado_revision_aplicado = (sug_final or blob_final).get('estado_revision')
+
     return jsonify(
         ok=True,
         item_id=item.id,
@@ -463,4 +493,5 @@ def clasificar_item_pendiente(id, item_id):
         descripcion=item.descripcion,
         unidad=item.unidad,
         etapa_nombre=item.etapa_nombre,
+        estado_revision=estado_revision_aplicado,
     )
