@@ -1119,16 +1119,19 @@
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-magic me-2"></i>Análisis IA del presupuesto
+                    <i class="fas fa-magic me-2"></i>Generador Preliminar IA
                 </h5>
+                <div class="form-check form-switch text-white ms-auto me-3 small">
+                    <input class="form-check-input" type="checkbox" id="iaModoExperto" onchange="iaToggleModoExperto()">
+                    <label class="form-check-label" for="iaModoExperto">Modo experto</label>
+                </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-3">
-                    La IA analiza cada ítem importado contra una base técnica de cómputos y propone normalizaciones
-                    (rubro, etapa, unidad, descripción) + sugerencias de materiales y maquinaria.
-                    <strong>No se modifica nada</strong> hasta que apretes <strong>"Aplicar seleccionadas"</strong>.
-                    Los datos originales del Excel se conservan.
+                    Clasificamos cada ítem importado en <strong>estados operativos</strong> para que sepas qué
+                    falta para llegar al presupuesto preliminar. <strong>No se modifica nada</strong> hasta que
+                    apretes <strong>"Aplicar seleccionadas"</strong>.
                 </p>
 
                 <div id="iaLoading" class="text-center py-5">
@@ -1197,40 +1200,64 @@
                         </div>
                     </div>
 
-                    <!-- Resumen + filtros -->
+                    <!-- Resumen operativo (Fase 3.5) -->
                     <div class="card border-info mb-3">
-                        <div class="card-body py-2">
-                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                <div class="small">
-                                    <span class="badge bg-info text-dark me-1" id="iaTotalItems">0</span> ítems ·
-                                    <span class="badge bg-success me-1"><span id="iaCntAlta">0</span> alta</span>
-                                    <span class="badge bg-warning text-dark me-1"><span id="iaCntMedia">0</span> media</span>
-                                    <span class="badge bg-secondary me-1"><span id="iaCntBaja">0</span> baja</span>
-                                    <span class="badge bg-light text-dark border me-1"><span id="iaCntSin">0</span> sin sugerencia</span>
+                        <div class="card-body py-3">
+                            <!-- Avance + total -->
+                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                <div>
+                                    <span class="text-muted small">Total importados:</span>
+                                    <span class="badge bg-info text-dark fs-6" id="iaTotalItems">0</span>
+                                    <span class="text-muted small ms-3">Listos para presupuestar:</span>
+                                    <span class="fw-bold text-success" id="iaPctListos">0%</span>
                                 </div>
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <button class="btn btn-outline-success" type="button" onclick="iaMarcarPorConfianza('alta')" title="Marcar solo alta confianza">
-                                        <i class="fas fa-star me-1"></i>Solo alta
+                                    <button class="btn btn-outline-success" type="button" onclick="iaMarcarPorConfianza('alta')" title="Marcar items listos para presupuestar">
+                                        <i class="fas fa-check-circle me-1"></i>Marcar listos
                                     </button>
-                                    <button class="btn btn-outline-warning" type="button" onclick="iaMarcarPorConfianza('alta_media')" title="Marcar alta + media">
-                                        <i class="fas fa-stars me-1"></i>Alta + media
+                                    <button class="btn btn-outline-warning" type="button" onclick="iaMarcarPorConfianza('alta_media')" title="Marcar listos + los que requieren revisión">
+                                        <i class="fas fa-clipboard-check me-1"></i>Listos + revisión
                                     </button>
                                     <button class="btn btn-outline-secondary" type="button" onclick="iaToggleAll(false)">
                                         <i class="far fa-square me-1"></i>Desmarcar todas
                                     </button>
                                 </div>
                             </div>
+
+                            <!-- KPIs por estado operativo -->
+                            <div class="d-flex flex-wrap gap-2 mb-2" id="iaKpisOperativos">
+                                <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i><span id="iaCntListo">0</span> Listos para presupuestar</span>
+                                <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i><span id="iaCntRevision">0</span> Requieren revisión</span>
+                                <span class="badge bg-info text-dark"><i class="fas fa-dollar-sign me-1"></i><span id="iaCntFaltaPrecio">0</span> Falta precio</span>
+                                <span class="badge bg-primary"><i class="fas fa-drafting-compass me-1"></i><span id="iaCntFaltaDato">0</span> Falta dato técnico</span>
+                                <span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i><span id="iaCntNoReconocido">0</span> No reconocidos</span>
+                                <span class="badge bg-dark"><i class="fas fa-ban me-1"></i><span id="iaCntExcluido">0</span> Excluidos</span>
+                            </div>
+
+                            <!-- Modo experto: pildoras viejas (alta/media/baja/sin) -->
+                            <div id="iaPildorasExperto" class="d-none">
+                                <div class="small text-muted mt-2">
+                                    <i class="fas fa-cog me-1"></i><em>Modo experto — confianza interna IA:</em>
+                                    <span class="badge bg-success ms-2 me-1"><span id="iaCntAlta">0</span> alta</span>
+                                    <span class="badge bg-warning text-dark me-1"><span id="iaCntMedia">0</span> media</span>
+                                    <span class="badge bg-secondary me-1"><span id="iaCntBaja">0</span> baja</span>
+                                    <span class="badge bg-light text-dark border"><span id="iaCntSin">0</span> sin</span>
+                                </div>
+                            </div>
+
                             <div class="row g-2 mt-2">
                                 <div class="col-md-4">
                                     <input type="text" id="iaFiltroBuscar" class="form-control form-control-sm" placeholder="Buscar texto en descripción, rubro, etapa..." oninput="iaAplicarFiltros()">
                                 </div>
                                 <div class="col-md-3">
-                                    <select id="iaFiltroConfianza" class="form-select form-select-sm" onchange="iaAplicarFiltros()">
-                                        <option value="">Todas las confianzas</option>
-                                        <option value="alta">Alta</option>
-                                        <option value="media">Media</option>
-                                        <option value="baja">Baja</option>
-                                        <option value="sin">Sin sugerencia</option>
+                                    <select id="iaFiltroEstado" class="form-select form-select-sm" onchange="iaAplicarFiltros()">
+                                        <option value="">Todos los estados</option>
+                                        <option value="listo">Listos para presupuestar</option>
+                                        <option value="requiere_revision">Requieren revisión</option>
+                                        <option value="falta_precio">Falta precio</option>
+                                        <option value="falta_dato_tecnico">Falta dato técnico</option>
+                                        <option value="no_reconocido">No reconocidos</option>
+                                        <option value="excluido">Excluidos</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
@@ -1244,12 +1271,24 @@
                                     </select>
                                 </div>
                             </div>
+
+                            <!-- Filtro viejo de confianza, oculto pero conservado para modo experto -->
+                            <div id="iaFiltroConfianzaWrap" class="d-none mt-2">
+                                <select id="iaFiltroConfianza" class="form-select form-select-sm" onchange="iaAplicarFiltros()">
+                                    <option value="">Todas las confianzas</option>
+                                    <option value="alta">Alta</option>
+                                    <option value="media">Media</option>
+                                    <option value="baja">Baja</option>
+                                    <option value="sin">Sin sugerencia</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="alert alert-warning small mb-2 py-2">
-                        <i class="fas fa-info-circle me-1"></i>
-                        Los ítems con confianza <strong>menor a 60%</strong> NO se preseleccionan. Marcalos a mano si querés aplicarlos.
+                    <div class="alert alert-light border small mb-2 py-2">
+                        <i class="fas fa-info-circle text-info me-1"></i>
+                        Los ítems marcados como <strong>"Listos"</strong> y <strong>"Requieren revisión"</strong>
+                        se preseleccionan automáticamente. Los demás los marcás a mano cuando completes lo que falta.
                     </div>
 
                     <div class="table-responsive">
@@ -1261,7 +1300,7 @@
                                     <th style="min-width:180px;">Rubro / Etapa</th>
                                     <th style="min-width:90px;">Unidad</th>
                                     <th style="min-width:200px;">Materiales sugeridos</th>
-                                    <th class="text-center" style="width:90px;">Confianza</th>
+                                    <th class="text-center" style="min-width:160px;">Estado</th>
                                 </tr>
                             </thead>
                             <tbody id="iaTbody"></tbody>
@@ -2398,6 +2437,30 @@ document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(el) {
 let _iaPresupuestoId = null;
 let _iaResultadoCache = null;
 let _iaEdiciones = {};  // { item_id: { descripcion, unidad, etapa_nombre } }
+let _iaEstadosPorItem = {};  // { item_id: 'listo' | 'requiere_revision' | ... }
+let _iaModoExpertoActivo = false;
+
+// Catalogo visible de estados operativos (mismo orden que en el badge)
+const _IA_ESTADO_META = {
+    listo:              { label: 'Listo para presupuestar', badge: 'bg-success',           icon: 'fa-check-circle' },
+    requiere_revision:  { label: 'Requiere revisión',       badge: 'bg-warning text-dark', icon: 'fa-exclamation-triangle' },
+    falta_precio:       { label: 'Falta precio',            badge: 'bg-info text-dark',    icon: 'fa-dollar-sign' },
+    falta_dato_tecnico: { label: 'Falta dato técnico',      badge: 'bg-primary',           icon: 'fa-drafting-compass' },
+    no_reconocido:      { label: 'No reconocido',           badge: 'bg-secondary',         icon: 'fa-question-circle' },
+    excluido:           { label: 'Excluido del cálculo',    badge: 'bg-dark',              icon: 'fa-ban' },
+};
+
+function iaToggleModoExperto() {
+    const chk = document.getElementById('iaModoExperto');
+    _iaModoExpertoActivo = !!(chk && chk.checked);
+    const elPil = document.getElementById('iaPildorasExperto');
+    if (elPil) elPil.classList.toggle('d-none', !_iaModoExpertoActivo);
+    const elFiltro = document.getElementById('iaFiltroConfianzaWrap');
+    if (elFiltro) elFiltro.classList.toggle('d-none', !_iaModoExpertoActivo);
+    // Re-renderizar para que las celdas muestren u oculten la confianza
+    document.querySelectorAll('.ia-confianza-experta').forEach(el =>
+        el.classList.toggle('d-none', !_iaModoExpertoActivo));
+}
 
 async function abrirAnalisisIA(presupuestoId) {
     _iaPresupuestoId = presupuestoId;
@@ -2409,7 +2472,10 @@ async function abrirAnalisisIA(presupuestoId) {
     document.getElementById('iaError').classList.add('d-none');
     document.getElementById('btnAplicarIA').disabled = true;
     document.getElementById('iaFiltroBuscar').value = '';
-    document.getElementById('iaFiltroConfianza').value = '';
+    const cfEl = document.getElementById('iaFiltroConfianza');
+    if (cfEl) cfEl.value = '';
+    const estEl = document.getElementById('iaFiltroEstado');
+    if (estEl) estEl.value = '';
     document.getElementById('iaFiltroRubro').value = '';
     document.getElementById('iaFiltroUnidad').value = '';
     modal.show();
@@ -2445,6 +2511,20 @@ function _iaRenderResultados(data) {
     document.getElementById('iaCntMedia').textContent = breakdown.media || 0;
     document.getElementById('iaCntBaja').textContent = breakdown.baja || 0;
     document.getElementById('iaCntSin').textContent = breakdown.sin || 0;
+
+    // Fase 3.5: KPIs por estado operativo + porcentaje listos
+    const eo = data.estados_operativos || {};
+    const kpis = eo.kpis || {};
+    document.getElementById('iaCntListo').textContent = kpis.listo || 0;
+    document.getElementById('iaCntRevision').textContent = kpis.requiere_revision || 0;
+    document.getElementById('iaCntFaltaPrecio').textContent = kpis.falta_precio || 0;
+    document.getElementById('iaCntFaltaDato').textContent = kpis.falta_dato_tecnico || 0;
+    document.getElementById('iaCntNoReconocido').textContent = kpis.no_reconocido || 0;
+    document.getElementById('iaCntExcluido').textContent = kpis.excluido || 0;
+    const pct = (eo.porcentaje_listos != null) ? eo.porcentaje_listos : 0;
+    document.getElementById('iaPctListos').textContent = pct + '%';
+    // Guardar mapping item_id -> estado para los renders y filtros
+    _iaEstadosPorItem = eo.estados_por_item || {};
 
     // Auditoria: distribucion por rubro como barras horizontales simples
     _iaRenderBreakdownRubro(data.breakdown_rubro || {}, data.total_items || 1);
@@ -2497,8 +2577,13 @@ function _iaCrearFila(item) {
     // No preseleccionar < 60% (alta=>preselect, media=>preselect, baja/sin=>NO)
     const preselect = haySugerencia && (label === 'alta' || label === 'media');
 
+    // Fase 3.5: estado operativo del item (Generador Preliminar IA)
+    const estadoOp = _iaEstadosPorItem[item.id] || 'no_reconocido';
+    const meta = _IA_ESTADO_META[estadoOp] || _IA_ESTADO_META.no_reconocido;
+
     const tr = document.createElement('tr');
     tr.dataset.confianzaLabel = label;
+    tr.dataset.estadoOperativo = estadoOp;
     tr.dataset.rubro = sug.rubro_sugerido || '';
     tr.dataset.unidad = sug.unidad_sugerida || orig.unidad || '';
     tr.dataset.searchText = (
@@ -2556,8 +2641,13 @@ function _iaCrearFila(item) {
         ${sug.criterio_medicion ? `<div class="text-muted mt-1" style="font-size:.7rem;"><i class="fas fa-ruler me-1"></i>${_iaEsc(sug.criterio_medicion)}</div>` : ''}
       </td>
       <td class="text-center">
-        <span class="badge ${confBadge}">${Math.round(conf * 100)}%</span>
-        <div class="small text-muted mt-1">${_iaEsc(label)}</div>
+        <span class="badge ${meta.badge}" title="${_iaEsc(meta.label)}">
+          <i class="fas ${meta.icon} me-1"></i>${_iaEsc(meta.label)}
+        </span>
+        <div class="small text-muted mt-1 ia-confianza-experta ${_iaModoExpertoActivo ? '' : 'd-none'}">
+          <span class="badge ${confBadge}">${Math.round(conf * 100)}%</span>
+          <span>${_iaEsc(label)}</span>
+        </div>
       </td>
     `;
     return tr;
@@ -2570,12 +2660,16 @@ function _iaSetEdicion(itemId, field, value) {
 
 function iaAplicarFiltros() {
     const buscar = (document.getElementById('iaFiltroBuscar').value || '').toLowerCase().trim();
-    const conf = document.getElementById('iaFiltroConfianza').value;
+    const confEl = document.getElementById('iaFiltroConfianza');
+    const conf = confEl ? confEl.value : '';
+    const estadoEl = document.getElementById('iaFiltroEstado');
+    const estado = estadoEl ? estadoEl.value : '';
     const rubro = document.getElementById('iaFiltroRubro').value;
     const unidad = document.getElementById('iaFiltroUnidad').value;
 
     document.querySelectorAll('#iaTbody tr').forEach(function(tr) {
         let visible = true;
+        if (estado && tr.dataset.estadoOperativo !== estado) visible = false;
         if (conf && tr.dataset.confianzaLabel !== conf) visible = false;
         if (rubro && tr.dataset.rubro !== rubro) visible = false;
         if (unidad && tr.dataset.unidad !== unidad) visible = false;

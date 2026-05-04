@@ -87,6 +87,29 @@ def analizar_ia(id):
         current_app.logger.exception('Error analizando con IA')
         return jsonify(ok=False, error=f'Error en analisis IA: {type(e).__name__}'), 500
 
+    # Fase 3.5: enriquecer respuesta con estados operativos del Generador
+    # Preliminar IA. La logica interna de confianza no se toca; solo se
+    # mapea a estados de negocio para la UX. Si el servicio no existe o falla,
+    # se omite y la respuesta sigue funcionando (compat).
+    try:
+        from services.estado_operativo_service import (
+            calcular_resumen, metadatos_todos_estados,
+        )
+        perfil_dict = (contexto or {}).get('perfil_tecnico') if contexto else None
+        resumen = calcular_resumen(
+            items_resultado=resultado.get('items', []),
+            perfil_tecnico=perfil_dict,
+            items_db=items,
+        )
+        resultado['estados_operativos'] = {
+            'catalogo': metadatos_todos_estados(),
+            'kpis': resumen['kpis'],
+            'porcentaje_listos': resumen['porcentaje_listos'],
+            'estados_por_item': resumen['estados_por_item'],
+        }
+    except Exception:
+        current_app.logger.exception('No se pudo calcular estados operativos')
+
     resultado['ok'] = True
     return jsonify(resultado)
 
