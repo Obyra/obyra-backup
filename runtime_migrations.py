@@ -2091,6 +2091,25 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] composicion auto cols: {e}")
 
     # =====================================================
+    # 2026-05-04: Edicion manual de niveles del presupuesto.
+    # Agrega excluido_del_calculo + observaciones a niveles_presupuesto.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+            ALTER TABLE niveles_presupuesto
+                ADD COLUMN IF NOT EXISTS excluido_del_calculo BOOLEAN NOT NULL DEFAULT FALSE;
+        """))
+        db.session.execute(db.text("""
+            ALTER TABLE niveles_presupuesto
+                ADD COLUMN IF NOT EXISTS observaciones VARCHAR(300);
+        """))
+        db.session.commit()
+        print("[OK] Migracion runtime: niveles_presupuesto (excluido_del_calculo + observaciones)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] niveles_presupuesto cols: {e}")
+
+    # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como
     # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).

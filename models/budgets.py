@@ -487,6 +487,10 @@ class NivelPresupuesto(db.Model):
     hormigon_m3 = db.Column(db.Numeric(10, 2), nullable=True, default=0)  # m³ de hormigón para este nivel
     albanileria_m2 = db.Column(db.Numeric(10, 2), nullable=True, default=0)  # m² de albañilería para este nivel
     atributos = db.Column(db.JSON, default=dict)  # napa, cocheras, altura_libre, espesor_losa, complejidad
+    # Si True, el nivel queda en BD pero no entra en distribuciones ni
+    # calculos. Util para pisos que no aplican a ciertos rubros.
+    excluido_del_calculo = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    observaciones = db.Column(db.String(300), nullable=True)
 
     presupuesto = db.relationship('Presupuesto', back_populates='niveles')
 
@@ -499,6 +503,7 @@ class NivelPresupuesto(db.Model):
         return float(self.area_m2 or 0) * (self.repeticiones or 1)
 
     def to_dict(self):
+        atrs = self.atributos or {}
         return {
             'id': self.id,
             'tipo_nivel': self.tipo_nivel,
@@ -510,7 +515,10 @@ class NivelPresupuesto(db.Model):
             'sistema_constructivo': self.sistema_constructivo,
             'hormigon_m3': float(self.hormigon_m3 or 0),
             'albanileria_m2': float(self.albanileria_m2 or 0),
-            'atributos': self.atributos or {},
+            'atributos': atrs,
+            'altura_m': atrs.get('altura_libre'),
+            'excluido_del_calculo': bool(self.excluido_del_calculo),
+            'observaciones': self.observaciones,
         }
 
     def __repr__(self):
