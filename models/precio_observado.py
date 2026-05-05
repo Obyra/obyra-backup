@@ -34,6 +34,10 @@ class PrecioObservado(db.Model):
         db.Index('ix_precio_obs_fecha', 'fecha_observado'),
         db.Index('ix_precio_obs_archivo', 'origen_archivo_id'),
         db.Index('ix_precio_obs_origen_tipo', 'origen_tipo'),
+        # Etapa 2 base IA
+        db.Index('ix_precio_obs_zona', 'organizacion_id', 'zona'),
+        db.Index('ix_precio_obs_modalidad', 'organizacion_id', 'modalidad'),
+        db.Index('ix_precio_obs_import_batch', 'import_batch_id'),
     )
 
     id = db.Column(db.BigInteger, primary_key=True)
@@ -84,6 +88,14 @@ class PrecioObservado(db.Model):
 
     notas = db.Column(db.Text, nullable=True)
 
+    # Etapa 2 base IA: zona, modalidad, codigo proveedor, import batch
+    zona = db.Column(db.String(40), nullable=True)
+    modalidad = db.Column(db.String(30), nullable=True)
+    codigo_proveedor = db.Column(db.String(60), nullable=True)
+    import_batch_id = db.Column(db.BigInteger,
+                                db.ForeignKey('import_batch.id', ondelete='SET NULL'),
+                                nullable=True)
+
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     # Relaciones (sin backrefs para no cascadear con tablas grandes)
@@ -117,4 +129,9 @@ class PrecioObservado(db.Model):
             'fecha_observado': self.fecha_observado.isoformat() if self.fecha_observado else None,
             'valido': self.valido,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            # Etapa 2 base IA
+            'zona': self.zona,
+            'modalidad': self.modalidad,
+            'codigo_proveedor': self.codigo_proveedor,
+            'import_batch_id': self.import_batch_id,
         }

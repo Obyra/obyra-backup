@@ -222,6 +222,9 @@ from models.presupuesto_archivo import PresupuestoArchivo
 # Etapa 1 base inteligente de precios: observaciones append-only
 from models.precio_observado import PrecioObservado
 
+# Etapa 2 base IA: batches de import unificado
+from models.import_batch import ImportBatch
+
 
 def seed_default_role_permissions():
     """Seed permisos por defecto para roles"""

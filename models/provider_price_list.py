@@ -32,17 +32,28 @@ def normalizar_descripcion_precio(texto):
 
 
 class ProviderPriceList(db.Model):
-    """Catalogo vigente de precios por proveedor."""
+    """Catalogo vigente de precios por proveedor.
+
+    Etapa 2 base IA: el UNIQUE de unicidad ahora incluye zona y modalidad,
+    via index expression-based con COALESCE (definido en la migracion
+    202605050002). No se declara aqui como UniqueConstraint porque
+    SQLAlchemy no soporta COALESCE en constraints declarativos — se
+    crea solo via DDL en Alembic. Mantener en sincronia.
+    """
     __tablename__ = 'provider_price_list'
     __table_args__ = (
-        db.UniqueConstraint(
-            'organizacion_id', 'proveedor_id', 'descripcion_normalizada', 'unidad',
-            name='uq_ppl_org_prov_desc_un',
-        ),
+        # NOTA: el UNIQUE viejo (org, proveedor, desc_norm, unidad) fue
+        # reemplazado por uq_ppl_org_prov_desc_un_zona_modalidad en migration
+        # 202605050002 — indice expression-based, no declarable aca.
         db.Index('ix_ppl_org_descnorm', 'organizacion_id', 'descripcion_normalizada'),
         db.Index('ix_ppl_org_proveedor', 'organizacion_id', 'proveedor_id'),
         db.Index('ix_ppl_org_invitem', 'organizacion_id', 'item_inventario_id'),
         db.Index('ix_ppl_vigencia', 'vigencia_hasta'),
+        db.Index('ix_ppl_org_zona', 'organizacion_id', 'zona'),
+        db.Index('ix_ppl_org_modalidad', 'organizacion_id', 'modalidad'),
+        db.Index('ix_ppl_codigo_proveedor',
+                 'organizacion_id', 'proveedor_id', 'codigo_proveedor'),
+        db.Index('ix_ppl_import_batch', 'import_batch_id'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -62,6 +73,15 @@ class ProviderPriceList(db.Model):
     fuente = db.Column(db.String(30), nullable=False, default='manual', server_default='manual')
     notas = db.Column(db.Text, nullable=True)
     batch_id = db.Column(db.String(40), nullable=True)
+
+    # Etapa 2 base IA: zona, modalidad, codigo proveedor, import batch
+    zona = db.Column(db.String(40), nullable=True)
+    modalidad = db.Column(db.String(30), nullable=True)
+    codigo_proveedor = db.Column(db.String(60), nullable=True)
+    import_batch_id = db.Column(db.BigInteger,
+                                db.ForeignKey('import_batch.id', ondelete='SET NULL'),
+                                nullable=True)
+
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'),
                                    nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -96,4 +116,9 @@ class ProviderPriceList(db.Model):
             'vigente': self.esta_vigente(),
             'fuente': self.fuente,
             'item_inventario_id': self.item_inventario_id,
+            # Etapa 2 base IA
+            'zona': self.zona,
+            'modalidad': self.modalidad,
+            'codigo_proveedor': self.codigo_proveedor,
+            'import_batch_id': self.import_batch_id,
         }
