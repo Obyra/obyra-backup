@@ -254,9 +254,27 @@ def _parsear_xlsx(file_stream):
                 'total': cantidad_d * precio_d,
                 'etapa_nombre': etapa_actual,
                 'codigo': codigo,
+                # Fase 6.A: trazabilidad de origen para multi-archivo
+                'hoja_origen': sname,
+                'fila_origen': row_i,
+                'columna_descripcion_origen': _col_letter(idx.get('desc')) if idx.get('desc') is not None else None,
             })
 
     return items_total if items_total else None
+
+
+def _col_letter(idx):
+    """Convierte indice 0-based a letra Excel: 0->'A', 1->'B', ..., 25->'Z', 26->'AA'."""
+    if idx is None:
+        return None
+    s = ''
+    n = idx
+    while n >= 0:
+        s = chr(ord('A') + (n % 26)) + s
+        n = n // 26 - 1
+        if n < 0:
+            break
+    return s
 
 
 def _guardar_archivo_temp(file_storage):
@@ -517,8 +535,12 @@ def importar_licitacion():
                                numero_sugerido=numero_sug,
                                google_maps_key=_os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
-    # POST
-    archivo = request.files.get('archivo_excel')
+    # POST — Fase 6.A: aceptamos N archivos. El primero (legacy) sigue
+    # llamandose 'archivo_excel'. getlist() devuelve la lista completa.
+    archivos_excel = request.files.getlist('archivo_excel')
+    # Filtrar vacios (input multiple puede mandar entries vacias)
+    archivos_excel = [f for f in archivos_excel if f and f.filename]
+    archivo = archivos_excel[0] if archivos_excel else None  # compat con codigo viejo
     nombre_obra = (request.form.get('nombre_obra') or '').strip()
     cliente_id = request.form.get('cliente_id', type=int)
     numero = (request.form.get('numero') or '').strip()
@@ -530,13 +552,15 @@ def importar_licitacion():
     ubicacion_normalizada = (request.form.get('ubicacion_normalizada') or '').strip() or None
     naturaleza_proyecto = (request.form.get('naturaleza_proyecto') or 'obra_nueva').strip()
 
-    if not archivo or not archivo.filename:
-        flash('Subí un archivo Excel', 'danger')
+    if not archivos_excel:
+        flash('Subí al menos un archivo Excel', 'danger')
         return redirect(url_for('presupuestos.importar_licitacion'))
 
-    if not archivo.filename.lower().endswith(('.xlsx', '.xls')):
-        flash('El archivo debe ser .xlsx o .xls', 'danger')
-        return redirect(url_for('presupuestos.importar_licitacion'))
+    # Validar formato de cada archivo
+    for f in archivos_excel:
+        if not f.filename.lower().endswith(('.xlsx', '.xls')):
+            flash(f'El archivo "{f.filename}" no es .xlsx ni .xls', 'danger')
+            return redirect(url_for('presupuestos.importar_licitacion'))
 
     if not nombre_obra:
         flash('Ingresá un nombre de obra', 'danger')
@@ -599,75 +623,148 @@ def importar_licitacion():
             flash('Cliente inválido', 'danger')
             return redirect(url_for('presupuestos.importar_licitacion'))
 
-    # Guardar archivo en /tmp para procesamiento (auto o manual)
+    # Si el usuario tildó "revisar antes de importar", saltar al mapeo manual.
+    # El mapeo manual no soporta multi-archivo; si hay varios, avisamos.
+    revisar_antes = request.form.get('revisar_antes') == '1'
+    if revisar_antes and len(archivos_excel) > 1:
+        flash(
+            'El "Revisar antes de importar" solo funciona con 1 archivo. '
+            'Subí los demás después desde "Agregar archivo de licitación" en el detalle.',
+            'warning',
+        )
+        archivos_excel = archivos_excel[:1]
+        archivo = archivos_excel[0]
+
+    if revisar_antes:
+        # Flujo legacy: 1 solo archivo, mapeo manual
+        try:
+            token, path = _guardar_archivo_temp(archivo)
+        except Exception as e:
+            flash(f'Error al guardar archivo: {str(e)[:200]}', 'danger')
+            return redirect(url_for('presupuestos.importar_licitacion'))
+        return redirect(url_for(
+            'presupuestos.importar_licitacion_mapear',
+            token=token,
+            nombre_obra=nombre_obra,
+            cliente_id=cliente_id or '',
+            numero=numero,
+            vigencia_dias=vigencia_dias,
+            modo_licitacion='1' if modo_licitacion else '0',
+            ubicacion=ubicacion or '',
+            ubicacion_lat=ubicacion_lat or '',
+            ubicacion_lng=ubicacion_lng or '',
+            ubicacion_normalizada=ubicacion_normalizada or '',
+            naturaleza_proyecto=naturaleza_proyecto or 'obra_nueva',
+        ))
+
+    # Auto-detect multi-archivo (Fase 6.A): crear presupuesto vacio,
+    # importar los N archivos, consolidar items.
     try:
-        token, path = _guardar_archivo_temp(archivo)
+        presu = _crear_presupuesto_desde_items(
+            org_id, cliente_id, numero, vigencia_dias, nombre_obra, items=[],
+            modo_licitacion=modo_licitacion, ubicacion=ubicacion,
+            ubicacion_lat=ubicacion_lat, ubicacion_lng=ubicacion_lng,
+            ubicacion_normalizada=ubicacion_normalizada,
+            naturaleza_proyecto=naturaleza_proyecto,
+        )
     except Exception as e:
-        flash(f'Error al guardar archivo: {str(e)[:200]}', 'danger')
+        db.session.rollback()
+        current_app.logger.exception('Error creando presupuesto vacio')
+        flash(f'Error al crear presupuesto: {str(e)[:200]}', 'danger')
         return redirect(url_for('presupuestos.importar_licitacion'))
 
-    # Si el usuario tildó "revisar antes de importar", saltar al mapeo manual
-    revisar_antes = request.form.get('revisar_antes') == '1'
+    # Importar todos los archivos
+    try:
+        from services.import_pliego_service import importar_pliego_multi
+        resumen = importar_pliego_multi(
+            presupuesto=presu,
+            archivos_files=archivos_excel,
+            user_id=current_user.id if current_user.is_authenticated else None,
+            modo_licitacion=modo_licitacion,
+        )
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error en import_pliego_multi')
+        flash('Error inesperado al procesar los archivos.', 'danger')
+        return redirect(url_for('presupuestos.importar_licitacion'))
 
-    if not revisar_antes:
-        # Intentar auto-detect
+    # Si TODOS los archivos fallaron, rollback total y eliminar el presupuesto
+    if resumen['total_archivos_ok'] == 0:
         try:
-            with open(path, 'rb') as f:
-                items = _parsear_xlsx(f)
-        except Exception as e:
-            current_app.logger.exception("Error parseando Excel de licitacion")
-            items = None
+            from models.budgets import Presupuesto
+            Presupuesto.query.filter_by(id=presu.id).delete()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        # Construir mensaje de errores
+        errores = '; '.join(
+            f'{a["filename"]}: {a.get("error_message") or "error"}'
+            for a in resumen['archivos']
+        )[:500]
+        flash(f'Ningún archivo se pudo importar. Errores: {errores}', 'danger')
+        return redirect(url_for('presupuestos.importar_licitacion'))
 
-        if items:
-            # Auto-detect funcionó: crear presupuesto directamente
-            try:
-                presu = _crear_presupuesto_desde_items(
-                    org_id, cliente_id, numero, vigencia_dias, nombre_obra, items,
-                    modo_licitacion=modo_licitacion, ubicacion=ubicacion,
-                    ubicacion_lat=ubicacion_lat, ubicacion_lng=ubicacion_lng,
-                    ubicacion_normalizada=ubicacion_normalizada,
-                    naturaleza_proyecto=naturaleza_proyecto,
-                )
-                _persistir_pliego(presu, path, nombre_original=archivo.filename)
+    # Recalcular subtotal del presupuesto (los items se crearon dentro del servicio)
+    try:
+        presu.calcular_totales()
+    except Exception:
+        pass
 
-                # Perfil tecnico opcional (Fase 2). Fail-safe: no rompe la importacion.
-                perfil_result = _crear_perfil_tecnico_desde_form(
-                    presu, request.form, current_user.id if current_user.is_authenticated else None
-                )
+    # Compat legacy: archivo_pliego_path apunta al primer archivo importado OK
+    primer_ok = next(
+        (a for a in resumen['archivos'] if a['estado'] == 'importado'), None
+    )
+    if primer_ok and not presu.archivo_pliego_path:
+        from models.presupuesto_archivo import PresupuestoArchivo
+        pa = PresupuestoArchivo.query.get(primer_ok['archivo_id'])
+        if pa:
+            presu.archivo_pliego_path = pa.file_path
+            presu.archivo_pliego_nombre = pa.filename_original
 
-                import os
-                try: os.remove(path)
-                except Exception: pass
-                if modo_licitacion:
-                    msg = f'Presupuesto {numero} creado con {len(items)} ítems en $0 (modo licitación). Armá el Ejecutivo para desglosar en materiales y pedir cotización.'
-                else:
-                    msg = f'Presupuesto {numero} creado con {len(items)} ítems con precios del Excel.'
-                if perfil_result and perfil_result.get('niveles_generados'):
-                    msg += f' Perfil técnico cargado y {perfil_result["niveles_generados"]} niveles generados automáticamente.'
-                flash(msg, 'success')
-                return redirect(url_for('presupuestos.ejecutivo_vista', id=presu.id))
-            except Exception as e:
-                db.session.rollback()
-                current_app.logger.exception("Error creando presupuesto desde Excel")
-                flash(f'Error al crear presupuesto: {str(e)[:200]}', 'danger')
-                return redirect(url_for('presupuestos.importar_licitacion'))
+    # Perfil tecnico (Fase 2). Fail-safe.
+    perfil_result = _crear_perfil_tecnico_desde_form(
+        presu, request.form, current_user.id if current_user.is_authenticated else None
+    )
 
-    # Auto-detect falló o usuario quiere revisar: pasar a mapeo manual
-    # Guardar parametros del form en query string
-    return redirect(url_for(
-        'presupuestos.importar_licitacion_mapear',
-        token=token,
-        nombre_obra=nombre_obra,
-        cliente_id=cliente_id or '',
-        numero=numero,
-        vigencia_dias=vigencia_dias,
-        modo_licitacion='1' if modo_licitacion else '0',
-        ubicacion=ubicacion or '',
-        ubicacion_lat=ubicacion_lat or '',
-        ubicacion_lng=ubicacion_lng or '',
-        ubicacion_normalizada=ubicacion_normalizada or '',
-        naturaleza_proyecto=naturaleza_proyecto or 'obra_nueva',
-    ))
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error commit final importacion')
+
+    # Mensaje de resumen al usuario
+    msg_partes = []
+    n_ok = resumen['total_archivos_ok']
+    n_err = resumen['total_archivos_error']
+    n_dup = resumen['duplicados_skipped']
+    n_items = resumen['total_items_importados']
+    if n_ok == 1 and n_err == 0 and n_dup == 0:
+        msg = f'Presupuesto {numero} creado con {n_items} ítems'
+        if modo_licitacion:
+            msg += ' en $0 (modo licitación). Armá el Ejecutivo para desglosar en materiales.'
+        else:
+            msg += ' con precios del Excel.'
+        msg_partes.append(msg)
+    else:
+        msg_partes.append(
+            f'Presupuesto {numero} creado: {n_ok} archivo(s) importado(s), '
+            f'{n_items} ítems consolidados.'
+        )
+        if n_err:
+            errores_breve = '; '.join(
+                f'{a["filename"]}' for a in resumen['archivos']
+                if a['estado'] in ('error', 'rechazado')
+            )[:300]
+            msg_partes.append(f'{n_err} con error: {errores_breve}.')
+        if n_dup:
+            msg_partes.append(f'{n_dup} duplicados ignorados.')
+    if perfil_result and perfil_result.get('niveles_generados'):
+        msg_partes.append(
+            f'Perfil técnico cargado y {perfil_result["niveles_generados"]} '
+            'niveles generados.'
+        )
+    flash(' '.join(msg_partes), 'success' if n_err == 0 else 'warning')
+    return redirect(url_for('presupuestos.ejecutivo_vista', id=presu.id))
 
 
 @presupuestos_bp.route('/importar-licitacion/mapear/<token>', methods=['GET', 'POST'])
@@ -796,3 +893,132 @@ def importar_licitacion_mapear(token):
                            cliente_id=cliente_id,
                            numero=numero,
                            vigencia_dias=vigencia_dias)
+
+
+# ============================================================
+# Fase 6.A: endpoints multi-archivo
+# ============================================================
+
+@presupuestos_bp.route('/<int:id>/archivos', methods=['GET'])
+@login_required
+def listar_archivos_presupuesto(id):
+    """JSON con archivos del presupuesto. Para refrescar el panel sin reload."""
+    org_id = get_current_org_id()
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    if not _puede_ver_presupuesto(presupuesto):
+        return jsonify(ok=False, error='No autorizado'), 403
+
+    from services.import_pliego_service import listar_archivos
+    archivos = listar_archivos(presupuesto.id)
+    return jsonify(ok=True, archivos=[a.to_dict() for a in archivos])
+
+
+@presupuestos_bp.route('/<int:id>/archivos', methods=['POST'])
+@login_required
+def agregar_archivo_presupuesto(id):
+    """Agrega 1 o varios archivos a un presupuesto existente.
+
+    Solo permitido si el presupuesto esta en borrador o enviado.
+    """
+    if not current_user.puede_gestionar():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    if presupuesto.estado not in ('borrador', 'enviado'):
+        return jsonify(ok=False, error=(
+            f'No se pueden agregar archivos a un presupuesto en estado {presupuesto.estado}.'
+        )), 400
+
+    archivos_excel = request.files.getlist('archivo_excel')
+    archivos_excel = [f for f in archivos_excel if f and f.filename]
+    if not archivos_excel:
+        return jsonify(ok=False, error='Subi al menos un archivo.'), 400
+    for f in archivos_excel:
+        if not f.filename.lower().endswith(('.xlsx', '.xls')):
+            return jsonify(ok=False, error=f'Formato no soportado en "{f.filename}"'), 400
+
+    try:
+        from services.import_pliego_service import importar_pliego_multi
+        resumen = importar_pliego_multi(
+            presupuesto=presupuesto,
+            archivos_files=archivos_excel,
+            user_id=current_user.id if current_user.is_authenticated else None,
+            modo_licitacion=True,  # respetamos default; cambio futuro: leer del presupuesto
+        )
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error agregando archivos')
+        return jsonify(ok=False, error='Error inesperado al procesar archivos.'), 500
+
+    # Recalcular subtotales
+    try:
+        presupuesto.calcular_totales()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return jsonify(ok=True, **resumen)
+
+
+@presupuestos_bp.route('/<int:pid>/archivos/<int:aid>/descargar', methods=['GET'])
+@login_required
+def descargar_archivo_pa(pid, aid):
+    """Descarga protegida de un archivo del presupuesto.
+
+    Valida acceso (org match o super admin). Crea audit log.
+    """
+    import os as _os
+    from flask import send_file, abort
+
+    presupuesto = Presupuesto.query.get_or_404(pid)
+    if not _puede_ver_presupuesto(presupuesto):
+        abort(403)
+
+    org_id = get_current_org_id()
+    es_super = bool(getattr(current_user, 'is_super_admin', False))
+
+    try:
+        from services.import_pliego_service import descargar_archivo_path
+        archivo, path_abs = descargar_archivo_path(
+            aid, organizacion_id_caller=org_id, es_super_admin=es_super,
+        )
+    except PermissionError:
+        abort(403)
+    except FileNotFoundError:
+        abort(404)
+
+    # Validar match presupuesto/archivo
+    if archivo.presupuesto_id != pid:
+        abort(404)
+
+    # Audit
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion='archivo_descargado',
+            entidad='presupuesto_archivo',
+            entidad_id=archivo.id,
+            detalle=f'pres={pid} file="{archivo.filename_original}"',
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return send_file(
+        path_abs,
+        as_attachment=True,
+        download_name=archivo.filename_original,
+        mimetype=archivo.mime_type or 'application/octet-stream',
+    )
+
+
+def _puede_ver_presupuesto(presupuesto):
+    """Helper: org match o super admin."""
+    if not current_user.is_authenticated:
+        return False
+    if getattr(current_user, 'is_super_admin', False):
+        return True
+    org_id = get_current_org_id()
+    return presupuesto.organizacion_id == org_id

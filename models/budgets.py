@@ -352,6 +352,16 @@ class ItemPresupuesto(db.Model):
     revisado_ia = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     fecha_analisis_ia = db.Column(db.DateTime, nullable=True)
 
+    # Fase 6.A: trazabilidad de archivo de origen para licitaciones multi-archivo.
+    # archivo_origen_id permite saber de cuál Excel vino cada item cuando el
+    # usuario carga varios pliegos en un mismo presupuesto.
+    archivo_origen_id = db.Column(db.Integer,
+                                  db.ForeignKey('presupuesto_archivo.id', ondelete='SET NULL'),
+                                  nullable=True, index=True)
+    hoja_origen = db.Column(db.String(120), nullable=True)
+    fila_origen = db.Column(db.Integer, nullable=True)
+    columna_descripcion_origen = db.Column(db.String(20), nullable=True)
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')

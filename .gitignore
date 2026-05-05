@@ -40,7 +40,15 @@ instance/
 # Uploads locales (NO ignoramos imágenes del repo, solo las subidas en runtime)
 uploads/
 media/
-storage/
+# storage/: ignoramos el CONTENIDO pero mantenemos la estructura + README + .gitkeep
+# para que la carpeta exista en el repo (las descargas pasan por endpoint protegido).
+storage/*
+!storage/README.md
+!storage/uploads/
+storage/uploads/*
+!storage/uploads/presupuestos/
+storage/uploads/presupuestos/*
+!storage/uploads/presupuestos/.gitkeep
 
 # =========================
 # Construcción frontend

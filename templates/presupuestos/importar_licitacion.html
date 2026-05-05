@@ -77,9 +77,13 @@
                         {% include 'presupuestos/_ubicacion_widget.html' %}
 
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
-                            <input type="file" class="form-control" name="archivo_excel" accept=".xlsx,.xls" required>
-                            <small class="text-muted">Formato aceptado: .xlsx o .xls</small>
+                            <label class="form-label fw-bold">Archivos Excel <span class="text-danger">*</span></label>
+                            <input type="file" class="form-control" name="archivo_excel" accept=".xlsx,.xls" multiple required>
+                            <small class="text-muted">
+                                Podés seleccionar <strong>una o varias planillas</strong> si la licitación viene
+                                dividida por rubros. OBYRA consolidará los ítems en un único presupuesto.
+                                Aceptamos .xlsx y .xls. Máximo 10 MB por archivo, 50 MB en total.
+                            </small>
                         </div>
 
                         <div class="alert alert-light border small">

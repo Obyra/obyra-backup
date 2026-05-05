@@ -1,0 +1,228 @@
+{# Panel "Archivos de licitacion" del detalle del presupuesto (Fase 6.A).
+
+   Muestra la lista de archivos subidos al presupuesto, con accion de
+   descargar y agregar nuevos archivos cuando el presupuesto esta en
+   borrador/enviado. Reimportar/eliminar quedan para Fase 6.B.
+
+   Variables esperadas en el contexto:
+     presupuesto: instancia Presupuesto.
+     puede_gestionar: bool (si el rol permite agregar archivos).
+#}
+<div class="card border-0 shadow-sm mb-3" id="paArchivosPanel">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0">
+            <i class="fas fa-folder-open text-primary me-1"></i>
+            Archivos de licitación
+            <span class="badge bg-secondary" id="paCount">0</span>
+        </h6>
+        {% if puede_gestionar and presupuesto.estado in ['borrador', 'enviado'] %}
+        <button type="button" class="btn btn-sm btn-outline-primary"
+                data-bs-toggle="modal" data-bs-target="#modalAgregarArchivo">
+            <i class="fas fa-plus me-1"></i>Agregar archivo de licitación
+        </button>
+        {% endif %}
+    </div>
+    <ul class="list-group list-group-flush" id="paArchivosLista">
+        <li class="list-group-item small text-muted">Cargando archivos...</li>
+    </ul>
+</div>
+
+{% if puede_gestionar and presupuesto.estado in ['borrador', 'enviado'] %}
+<!-- Modal: Agregar archivo de licitacion -->
+<div class="modal fade" id="modalAgregarArchivo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-excel me-2"></i>Agregar archivo de licitación
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">
+                    Podés sumar otra planilla del pliego al mismo presupuesto. OBYRA
+                    consolidará los nuevos ítems con los existentes.
+                </p>
+                <p class="small">
+                    Aceptamos <strong>.xlsx</strong> y <strong>.xls</strong>. Máximo
+                    <strong>10 MB por archivo</strong> y <strong>50 MB por presupuesto</strong>.
+                </p>
+                <form id="formAgregarArchivo" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Archivos Excel <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control" name="archivo_excel"
+                               accept=".xlsx,.xls" multiple required>
+                        <small class="text-muted">Podés seleccionar varios archivos a la vez.</small>
+                    </div>
+                </form>
+                <div id="paAgregarResultado"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btnAgregarArchivo" onclick="paAgregarArchivos()">
+                    <i class="fas fa-upload me-1"></i>Subir e importar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+const _PA_PRESUPUESTO_ID = {{ presupuesto.id }};
+const _PA_PUEDE_DESCARGAR = true;
+
+function _paEsc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function _paFmtBytes(n) {
+    if (!n) return '0 KB';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(2) + ' MB';
+}
+function _paFmtFecha(s) {
+    if (!s) return '';
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleString('es-AR');
+}
+function _paBadgeEstado(estado) {
+    const map = {
+        importado: 'bg-success',
+        pendiente: 'bg-warning text-dark',
+        error: 'bg-danger',
+        ignorado: 'bg-secondary',
+        rechazado: 'bg-danger',
+    };
+    return '<span class="badge ' + (map[estado] || 'bg-secondary') + '">' + _paEsc(estado) + '</span>';
+}
+
+async function paCargarArchivos() {
+    const lista = document.getElementById('paArchivosLista');
+    lista.innerHTML = '<li class="list-group-item small text-muted">Cargando archivos...</li>';
+    try {
+        const r = await fetch('/presupuestos/' + _PA_PRESUPUESTO_ID + '/archivos', {
+            credentials: 'same-origin',
+        });
+        const d = await r.json();
+        if (!d || !d.ok) {
+            lista.innerHTML = '<li class="list-group-item small text-danger">Error: ' +
+                _paEsc((d && d.error) || 'desconocido') + '</li>';
+            return;
+        }
+        const archivos = d.archivos || [];
+        document.getElementById('paCount').textContent = archivos.length;
+        if (!archivos.length) {
+            lista.innerHTML =
+                '<li class="list-group-item small text-muted text-center">' +
+                'Sin archivos cargados todavía.</li>';
+            return;
+        }
+        lista.innerHTML = archivos.map(a => {
+            const dlBtn = '<a href="/presupuestos/' + _PA_PRESUPUESTO_ID + '/archivos/' + a.id + '/descargar" ' +
+                          'class="btn btn-sm btn-outline-primary" title="Descargar archivo original">' +
+                          '<i class="fas fa-download"></i></a>';
+            const tooltipOrigen = (a.error_message
+                ? 'Error: ' + _paEsc(a.error_message)
+                : a.cantidad_hojas_detectadas
+                  ? a.cantidad_hojas_detectadas + ' hoja(s) detectada(s)'
+                  : '');
+            return (
+                '<li class="list-group-item">' +
+                  '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">' +
+                    '<div class="flex-grow-1">' +
+                      '<div class="fw-semibold">' +
+                        '<i class="fas fa-file-excel text-success me-1"></i>' +
+                        _paEsc(a.filename_original) +
+                        ' ' + _paBadgeEstado(a.estado_importacion) +
+                      '</div>' +
+                      '<div class="small text-muted">' +
+                        a.cantidad_items_importados + ' ítems importados · ' +
+                        _paFmtBytes(a.size_bytes) + ' · ' +
+                        _paFmtFecha(a.uploaded_at) +
+                        (a.uploaded_by_nombre ? ' · por ' + _paEsc(a.uploaded_by_nombre) : '') +
+                      '</div>' +
+                      (tooltipOrigen ?
+                        '<div class="small text-muted fst-italic">' + tooltipOrigen + '</div>' : '') +
+                      (a.error_message ?
+                        '<div class="small text-danger mt-1"><i class="fas fa-exclamation-circle me-1"></i>' +
+                        _paEsc(a.error_message) + '</div>' : '') +
+                    '</div>' +
+                    '<div class="d-flex gap-1">' + dlBtn + '</div>' +
+                  '</div>' +
+                '</li>'
+            );
+        }).join('');
+    } catch (e) {
+        lista.innerHTML = '<li class="list-group-item small text-danger">Error de red: ' +
+            _paEsc(e.message) + '</li>';
+    }
+}
+
+window.paAgregarArchivos = async function() {
+    const form = document.getElementById('formAgregarArchivo');
+    const fd = new FormData(form);
+    const btn = document.getElementById('btnAgregarArchivo');
+    const cont = document.getElementById('paAgregarResultado');
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Subiendo...';
+    cont.innerHTML = '';
+
+    try {
+        const r = await fetch('/presupuestos/' + _PA_PRESUPUESTO_ID + '/archivos', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+            body: fd,
+        });
+        const d = await r.json();
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-upload me-1"></i>Subir e importar';
+        if (!d.ok) {
+            cont.innerHTML = '<div class="alert alert-danger small">' +
+                _paEsc(d.error || 'Error al subir') + '</div>';
+            return;
+        }
+        let html = '<div class="alert alert-success small">' +
+            '<strong>OK:</strong> ' + d.total_archivos_ok + ' archivo(s) importado(s), ' +
+            d.total_items_importados + ' ítems consolidados.';
+        if (d.total_archivos_error) {
+            html += ' · ' + d.total_archivos_error + ' con error.';
+        }
+        if (d.duplicados_skipped) {
+            html += ' · ' + d.duplicados_skipped + ' duplicado(s) ignorado(s).';
+        }
+        html += '</div>';
+        if ((d.archivos || []).length) {
+            html += '<ul class="small mb-2">';
+            (d.archivos || []).forEach(a => {
+                html += '<li>' + _paEsc(a.filename) + ' — ' + _paBadgeEstado(a.estado);
+                if (a.estado === 'importado') {
+                    html += ' (' + a.items_importados + ' ítems)';
+                }
+                if (a.error_message) {
+                    html += ' — ' + _paEsc(a.error_message);
+                }
+                html += '</li>';
+            });
+            html += '</ul>';
+        }
+        html += '<button class="btn btn-sm btn-primary mt-2" onclick="location.reload()">Recargar página</button>';
+        cont.innerHTML = html;
+        paCargarArchivos();
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-upload me-1"></i>Subir e importar';
+        cont.innerHTML = '<div class="alert alert-danger small">Error de red: ' + _paEsc(e.message) + '</div>';
+    }
+};
+
+document.addEventListener('DOMContentLoaded', paCargarArchivos);
+</script>

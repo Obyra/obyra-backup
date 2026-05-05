@@ -2243,6 +2243,116 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] niveles_presupuesto cols: {e}")
 
     # =====================================================
+    # 2026-05-05: Fase 6.A - Multiples archivos por presupuesto.
+    #   * Tabla presupuesto_archivo.
+    #   * Columnas archivo_origen_id / hoja_origen / fila_origen /
+    #     columna_descripcion_origen en items_presupuesto.
+    #   * Backfill: para presupuestos con archivo_pliego_path != NULL
+    #     que no tengan ya una fila en presupuesto_archivo, se crea una
+    #     una sola vez (idempotente). Items viejos quedan con
+    #     archivo_origen_id = NULL.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='presupuesto_archivo') THEN
+                CREATE TABLE presupuesto_archivo (
+                    id SERIAL PRIMARY KEY,
+                    presupuesto_id INTEGER NOT NULL REFERENCES presupuestos(id) ON DELETE CASCADE,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id) ON DELETE CASCADE,
+                    uploaded_by_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    filename_original VARCHAR(255) NOT NULL,
+                    filename_storage VARCHAR(255) NOT NULL,
+                    file_path VARCHAR(500) NOT NULL,
+                    mime_type VARCHAR(80),
+                    size_bytes BIGINT,
+                    checksum_sha256 VARCHAR(64),
+                    tipo_archivo VARCHAR(30) NOT NULL DEFAULT 'pliego_excel',
+                    estado_importacion VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+                    cantidad_hojas_detectadas INTEGER DEFAULT 0,
+                    cantidad_items_detectados INTEGER DEFAULT 0,
+                    cantidad_items_importados INTEGER DEFAULT 0,
+                    error_message TEXT,
+                    metadata_json JSONB,
+                    uploaded_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    imported_at TIMESTAMP,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_pa_pres_checksum UNIQUE (presupuesto_id, checksum_sha256)
+                );
+                CREATE INDEX ix_pa_presupuesto ON presupuesto_archivo(presupuesto_id);
+                CREATE INDEX ix_pa_org         ON presupuesto_archivo(organizacion_id);
+                CREATE INDEX ix_pa_estado      ON presupuesto_archivo(estado_importacion);
+                CREATE INDEX ix_pa_uploaded    ON presupuesto_archivo(uploaded_at);
+                CREATE INDEX ix_pa_checksum    ON presupuesto_archivo(checksum_sha256);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] presupuesto_archivo: {e}")
+
+    try:
+        for col, ddl in [
+            ('archivo_origen_id',           'INTEGER REFERENCES presupuesto_archivo(id) ON DELETE SET NULL'),
+            ('hoja_origen',                 'VARCHAR(120)'),
+            ('fila_origen',                 'INTEGER'),
+            ('columna_descripcion_origen',  'VARCHAR(20)'),
+        ]:
+            db.session.execute(db.text(
+                f"ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+        db.session.execute(db.text("""
+            CREATE INDEX IF NOT EXISTS ix_ip_archivo_origen
+                ON items_presupuesto(archivo_origen_id);
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] items_presupuesto archivo_origen cols: {e}")
+
+    # Backfill: para presupuestos viejos con archivo_pliego_path que no tienen
+    # fila en presupuesto_archivo, crear una unica fila representativa.
+    try:
+        result = db.session.execute(db.text("""
+            INSERT INTO presupuesto_archivo (
+                presupuesto_id, organizacion_id, filename_original, filename_storage,
+                file_path, tipo_archivo, estado_importacion,
+                cantidad_items_importados, metadata_json, uploaded_at, imported_at
+            )
+            SELECT
+                p.id,
+                p.organizacion_id,
+                COALESCE(p.archivo_pliego_nombre, 'pliego.xlsx'),
+                COALESCE(SUBSTRING(p.archivo_pliego_path FROM '[^/\\\\]+$'), 'pliego.xlsx'),
+                p.archivo_pliego_path,
+                'pliego_excel',
+                'importado',
+                (SELECT COUNT(*) FROM items_presupuesto WHERE presupuesto_id = p.id),
+                '{"backfill": true, "razon": "archivo_pliego_path legacy"}'::jsonb,
+                COALESCE(p.fecha_creacion, NOW()),
+                COALESCE(p.fecha_creacion, NOW())
+            FROM presupuestos p
+            WHERE p.archivo_pliego_path IS NOT NULL
+              AND p.archivo_pliego_path != ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM presupuesto_archivo pa WHERE pa.presupuesto_id = p.id
+              );
+        """))
+        db.session.commit()
+        rowcount = getattr(result, 'rowcount', 0) or 0
+        if rowcount > 0:
+            print(f"[OK] Migracion runtime: presupuesto_archivo + columnas origen "
+                  f"(backfill: {rowcount} presupuestos legacy migrados)")
+        else:
+            print("[OK] Migracion runtime: presupuesto_archivo + columnas origen (sin backfill pendiente)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] backfill presupuesto_archivo: {e}")
+
+    # =====================================================
     # 2026-04-30: Drop UNIQUE legacy en presupuestos.numero
     # El modelo define UniqueConstraint(organizacion_id, numero) como
     # uq_presupuesto_org_numero (correcto: cada tenant numera independiente).

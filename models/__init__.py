@@ -216,6 +216,9 @@ from models.mano_obra_costo_referencia import (
     ManoObraCostoReferencia, CATEGORIAS_BASE, categoria_canonica_para,
 )
 
+# Fase 6.A: archivos de licitacion (multiples Excel por presupuesto)
+from models.presupuesto_archivo import PresupuestoArchivo
+
 
 def seed_default_role_permissions():
     """Seed permisos por defecto para roles"""

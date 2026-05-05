@@ -90,20 +90,28 @@
                             <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}" class="btn btn-info">
                                 <i class="fas fa-envelope me-1"></i>Correo
                             </a>
-                            {% if presupuesto.archivo_pliego_path %}
+                            {% set _primer_archivo_pa = presupuesto.archivos.filter_by(deleted_at=None).first() if presupuesto.archivos else None %}
+                            {% if _primer_archivo_pa %}
+                            <a href="{{ url_for('presupuestos.descargar_archivo_pa', pid=presupuesto.id, aid=_primer_archivo_pa.id) }}"
+                               class="btn btn-outline-secondary"
+                               title="Descargar pliego original. Si hay varios, podés ver todos en el panel 'Archivos de licitación'.">
+                                <i class="fas fa-file-excel me-1"></i>Pliego
+                            </a>
+                            {% elif presupuesto.archivo_pliego_path %}
+                            {# Fallback legacy (archivo en static/ pre-Fase 6.A) #}
                             <a href="{{ url_for('static', filename=presupuesto.archivo_pliego_path) }}"
                                class="btn btn-outline-secondary"
                                download="{{ presupuesto.archivo_pliego_nombre or 'pliego.xlsx' }}"
                                title="Descargar Excel original del pliego importado">
                                 <i class="fas fa-file-excel me-1"></i>Pliego
                             </a>
-                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
+                            {% endif %}
+                            {% if (_primer_archivo_pa or presupuesto.archivo_pliego_path) and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
                             <button type="button" class="btn btn-outline-info"
                                     onclick="abrirAnalisisIA({{ presupuesto.id }})"
                                     title="Analizá los ítems con la Calculadora IA: clasifica rubros, normaliza unidades y sugiere materiales.">
                                 <i class="fas fa-magic me-1"></i>Analizar con IA
                             </button>
-                            {% endif %}
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
                             <button type="button" class="btn btn-outline-primary"
@@ -555,6 +563,18 @@
         </div>
     </div>
     
+    <!-- Fase 6.A: Panel de archivos de licitacion -->
+    {% set _puede_gestionar_archivos = current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+    {% if _puede_gestionar_archivos or presupuesto.archivos.first() %}
+    <div class="row mb-3">
+        <div class="col-12">
+            {% with puede_gestionar=_puede_gestionar_archivos %}
+                {% include 'presupuestos/_archivos_panel.html' %}
+            {% endwith %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Materiales -->
     {% if materiales or current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
     <div class="row mb-4">
