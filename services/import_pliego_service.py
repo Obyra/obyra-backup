@@ -269,13 +269,29 @@ def importar_pliego_multi(
                 )
             except Exception:
                 path_intentado = STORAGE_UPLOADS
+            # Diagnostico de filesystem: existe? mode? owner? proceso uid/gid?
+            fs_diag = ''
+            try:
+                if os.path.exists(STORAGE_BASE):
+                    st = os.stat(STORAGE_BASE)
+                    proc_uid = os.geteuid() if hasattr(os, 'geteuid') else 'n/a'
+                    proc_gid = os.getegid() if hasattr(os, 'getegid') else 'n/a'
+                    fs_diag = (
+                        f' [base existe mode={oct(st.st_mode & 0o777)} '
+                        f'owner={st.st_uid}:{st.st_gid} '
+                        f'proc_euid={proc_uid}:{proc_gid}]'
+                    )
+                else:
+                    fs_diag = f' [base {STORAGE_BASE} NO EXISTE — Volume no montado]'
+            except Exception as diag_e:
+                fs_diag = f' [diag failed: {type(diag_e).__name__}]'
             resumen['archivos'].append({
                 'filename': fs.filename,
                 'estado': 'error',
                 'items_importados': 0,
                 'error_message': (
                     f'No se pudo guardar el archivo: {type(e).__name__} '
-                    f'en "{path_intentado}" (STORAGE_BASE={STORAGE_BASE}).'
+                    f'en "{path_intentado}" (STORAGE_BASE={STORAGE_BASE}).{fs_diag}'
                 ),
                 'size_bytes': size,
                 'duplicado': False,
