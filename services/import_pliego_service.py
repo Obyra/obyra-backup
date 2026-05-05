@@ -259,11 +259,24 @@ def importar_pliego_multi(
             path_abs, filename_storage = _persistir_archivo_disco(fs, presupuesto.id, checksum)
         except Exception as e:
             current_app.logger.exception('Error persistiendo archivo')
+            # Computar el path que se intento usar — clave para diagnosticar
+            # perms en Railway Volume / STORAGE_BASE mal seteado.
+            try:
+                short = checksum[:16]
+                ext = '.xlsx' if fs.filename.lower().endswith('.xlsx') else '.xls'
+                path_intentado = os.path.join(
+                    STORAGE_UPLOADS, str(presupuesto.id), f'{short}{ext}'
+                )
+            except Exception:
+                path_intentado = STORAGE_UPLOADS
             resumen['archivos'].append({
                 'filename': fs.filename,
                 'estado': 'error',
                 'items_importados': 0,
-                'error_message': f'No se pudo guardar el archivo: {type(e).__name__}',
+                'error_message': (
+                    f'No se pudo guardar el archivo: {type(e).__name__} '
+                    f'en "{path_intentado}" (STORAGE_BASE={STORAGE_BASE}).'
+                ),
                 'size_bytes': size,
                 'duplicado': False,
             })
