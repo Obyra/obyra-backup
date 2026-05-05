@@ -52,6 +52,11 @@ class Organizacion(db.Model):
     descuento_meses = db.Column(db.Integer, default=0)  # Duración del descuento en meses
     descuento_inicio = db.Column(db.DateTime)  # Fecha desde que aplica el descuento
 
+    # Fase 5.A: margen comercial default por organizacion (override en Presupuesto).
+    # Valor en porcentaje sobre costo. Usado para calcular precio sugerido al cliente.
+    margen_comercial_default = db.Column(db.Numeric(5, 2), nullable=False,
+                                         default=25.00, server_default='25.00')
+
     # Relaciones
     usuarios = db.relationship(
         'Usuario',

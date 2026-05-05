@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+
+{% block title %}Costo Empresa Mano de Obra · Super Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-hard-hat text-warning me-2"></i>Costo empresa de mano de obra
+            </h2>
+            <small class="text-muted">
+                Referencia de costo empresa por hora/jornal/mes incluyendo cargas, aportes, comida, EPP, SAC, vacaciones, fondo desempleo, UOCRA e IERIC.
+            </small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('superadmin.panel') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver al panel
+            </a>
+            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalImportarGedif">
+                <i class="fas fa-file-excel me-1"></i>Importar planilla Gedif
+            </button>
+        </div>
+    </div>
+
+    <div class="alert alert-warning border-0 small">
+        <i class="fas fa-info-circle me-1"></i>
+        <strong>Costo estimativo de empresa por hora.</strong> Incluye cargas y adicionales según la referencia cargada.
+        No reemplaza la liquidación laboral oficial. Validar periódicamente con el convenio vigente y el contador.
+    </div>
+
+    <div id="iaMOAlertas"></div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Categoría</th>
+                            <th>Zona</th>
+                            <th>Período</th>
+                            <th class="text-end">Hora convenio</th>
+                            <th class="text-end">Costo empresa hora</th>
+                            <th class="text-end">Jornal 8h</th>
+                            <th class="text-end">Mes 176h</th>
+                            <th>Confianza</th>
+                            <th>Estado</th>
+                            <th>Org</th>
+                            <th>Fuente</th>
+                            <th class="text-center" style="width:140px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for f in filas %}
+                        <tr id="moRow{{ f.id }}" class="{% if not f.activo %}table-secondary text-muted{% endif %}">
+                            <td>
+                                <strong>{{ f.descripcion or f.categoria }}</strong>
+                                <div class="small text-muted">{{ f.categoria }}</div>
+                            </td>
+                            <td>{{ f.zona }}</td>
+                            <td>{{ f.periodo }}</td>
+                            <td class="text-end">${{ '%.2f'|format(f.valor_hora_convenio or 0) }}</td>
+                            <td class="text-end fw-bold text-primary">${{ '%.2f'|format(f.costo_empresa_hora or 0) }}</td>
+                            <td class="text-end">${{ '%.2f'|format(f.costo_empresa_jornal_8h or 0) }}</td>
+                            <td class="text-end">${{ '%.2f'|format(f.costo_empresa_mes_176h or 0) }}</td>
+                            <td>
+                                {% if f.confianza == 'alta' %}
+                                    <span class="badge bg-success">Alta</span>
+                                {% elif f.confianza == 'media' %}
+                                    <span class="badge bg-warning text-dark">Media</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ f.confianza }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if f.activo %}
+                                    <span class="badge bg-success-subtle text-success-emphasis border border-success">Vigente</span>
+                                {% else %}
+                                    <span class="badge bg-light text-muted border">Histórico</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if f.organizacion_id %}
+                                    <small>Org #{{ f.organizacion_id }}</small>
+                                {% else %}
+                                    <span class="badge bg-info text-dark">Global</span>
+                                {% endif %}
+                            </td>
+                            <td><small class="text-muted">{{ f.fuente }}</small></td>
+                            <td class="text-center">
+                                {% if f.confianza != 'alta' and f.activo %}
+                                <button type="button" class="btn btn-sm btn-outline-success me-1"
+                                        onclick="moAprobar({{ f.id }})" title="Aprobar y subir confianza a alta">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                        onclick="moVerDetalle({{ f.id }})" title="Ver detalle / editar">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Sin referencias cargadas. Importá una planilla Gedif para empezar.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ================================================================
+   Modal: Importar planilla Gedif
+================================================================ #}
+<div class="modal fade" id="modalImportarGedif" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-excel me-2"></i>Importar planilla Gedif
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">
+                    Subí el Excel "Costo mano obra-XXXXX.xlsx" con las hojas
+                    <strong>"Costos por Categoría"</strong> y <strong>"Supuestos"</strong>.
+                </p>
+                <p class="small">
+                    Las filas se cargan como referencias <strong>globales</strong> (visibles a todos los tenants).
+                    Las versiones anteriores de la misma (categoría, zona) se desactivan automáticamente
+                    pero se conservan como histórico.
+                </p>
+                <form id="formImportarGedif" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control" name="archivo" accept=".xlsx" required>
+                    </div>
+                </form>
+                <div id="moImportResultado"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-success" id="btnImportarGedif" onclick="moImportarGedif()">
+                    <i class="fas fa-upload me-1"></i>Importar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ================================================================
+   Modal: Detalle / editar fila
+================================================================ #}
+<div class="modal fade" id="modalDetalleMO" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i>Editar costo empresa
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="moDetalleBody">
+                <p class="text-muted small">Cargando...</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarMO" onclick="moGuardarDetalle()">
+                    <i class="fas fa-save me-1"></i>Guardar y recalcular
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let _moEnEdicion = null;
+
+function _moEsc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function _moCsrf() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') : '';
+}
+
+function moAprobar(id) {
+    if (!confirm('Aprobar esta referencia y subir confianza a "alta"?')) return;
+    fetch('/superadmin/mano-obra/' + id + '/aprobar', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': _moCsrf() },
+        credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) { alert(d.error || 'Error al aprobar'); return; }
+        location.reload();
+    });
+}
+
+function moImportarGedif() {
+    const form = document.getElementById('formImportarGedif');
+    const fd = new FormData(form);
+    const btn = document.getElementById('btnImportarGedif');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importando...';
+    document.getElementById('moImportResultado').innerHTML = '';
+
+    fetch('/superadmin/mano-obra/importar-gedif', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': _moCsrf() },
+        credentials: 'same-origin',
+        body: fd,
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+        const cont = document.getElementById('moImportResultado');
+        if (!d.ok) {
+            cont.innerHTML = '<div class="alert alert-danger small">' + _moEsc(d.error || 'Error al importar') + '</div>';
+            return;
+        }
+        let html = '<div class="alert alert-success small">';
+        html += '<strong>Importación exitosa.</strong> Período: ' + _moEsc(d.periodo) + ' · Zona: ' + _moEsc(d.zona) + '<br>';
+        html += 'Creadas: <strong>' + d.creadas + '</strong> · Actualizadas: <strong>' + d.actualizadas + '</strong> · Desactivadas (versiones anteriores): <strong>' + d.desactivadas + '</strong>';
+        html += '</div>';
+        if ((d.advertencias_calculo || []).length) {
+            html += '<div class="alert alert-warning small"><strong>Advertencias de cálculo:</strong><ul class="mb-0">';
+            d.advertencias_calculo.forEach(a => { html += '<li>' + _moEsc(a) + '</li>'; });
+            html += '</ul></div>';
+        }
+        if ((d.advertencias_parser || []).length) {
+            html += '<div class="alert alert-info small"><strong>Notas:</strong><ul class="mb-0">';
+            d.advertencias_parser.forEach(a => { html += '<li>' + _moEsc(a) + '</li>'; });
+            html += '</ul></div>';
+        }
+        html += '<button class="btn btn-sm btn-primary mt-2" onclick="location.reload()">Recargar tabla</button>';
+        cont.innerHTML = html;
+    })
+    .catch(e => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+        document.getElementById('moImportResultado').innerHTML =
+            '<div class="alert alert-danger small">Error de red: ' + _moEsc(e.message) + '</div>';
+    });
+}
+
+function moVerDetalle(id) {
+    fetch('/superadmin/mano-obra/api/lista')
+    .then(r => r.json())
+    .then(d => {
+        const fila = (d.filas || []).find(f => f.id === id);
+        if (!fila) return;
+        _moEnEdicion = fila;
+        const body = document.getElementById('moDetalleBody');
+        body.innerHTML = _moRenderDetalle(fila);
+        new bootstrap.Modal(document.getElementById('modalDetalleMO')).show();
+    });
+}
+
+function _moRenderDetalle(f) {
+    const inp = (label, key, val, attrs='') =>
+        '<div class="col-md-3 mb-2"><label class="form-label small mb-1">' + _moEsc(label) + '</label>' +
+        '<input type="number" step="0.01" class="form-control form-control-sm" name="' + key + '" value="' + (val || 0) + '" ' + attrs + '></div>';
+    const txt = (label, key, val) =>
+        '<div class="col-md-3 mb-2"><label class="form-label small mb-1">' + _moEsc(label) + '</label>' +
+        '<input type="text" class="form-control form-control-sm" name="' + key + '" value="' + _moEsc(val || '') + '"></div>';
+
+    return (
+        '<form id="formMODetalle">' +
+        '<h6 class="text-muted">Identidad</h6>' +
+        '<div class="row">' +
+            txt('Descripción', 'descripcion', f.descripcion) +
+            txt('Zona', 'zona', f.zona) +
+            txt('Período (YYYY-MM)', 'periodo', f.periodo) +
+            inp('Horas mensuales', 'horas_mensuales', f.horas_mensuales) +
+        '</div>' +
+        '<h6 class="text-muted mt-3">Base y adicionales</h6>' +
+        '<div class="row">' +
+            inp('Valor hora convenio', 'valor_hora_convenio', f.valor_hora_convenio) +
+            inp('Presentismo %', 'presentismo_pct', f.presentismo_pct) +
+            inp('HH 50 %', 'hh_50_pct', f.hh_50_pct) +
+            inp('HH 100 %', 'hh_100_pct', f.hh_100_pct) +
+            inp('Adicional fijo $/h', 'adicional_fijo_hora', f.adicional_fijo_hora) +
+        '</div>' +
+        '<h6 class="text-muted mt-3">Cargas y aportes (% sobre bruto)</h6>' +
+        '<div class="row">' +
+            inp('F931 %', 'f931_pct', f.f931_pct) +
+            inp('Fondo desempleo %', 'fondo_desempleo_pct', f.fondo_desempleo_pct) +
+            inp('UOCRA %', 'uocra_pct', f.uocra_pct) +
+            inp('IERIC %', 'ieric_pct', f.ieric_pct) +
+            inp('SAC %', 'sac_pct', f.sac_pct) +
+            inp('Vacaciones %', 'vacaciones_pct', f.vacaciones_pct) +
+        '</div>' +
+        '<h6 class="text-muted mt-3">Adicionales fijos mensuales ($)</h6>' +
+        '<div class="row">' +
+            inp('Comida mes', 'comida_monto_mes', f.comida_monto_mes) +
+            inp('EPP mes', 'epp_monto_mes', f.epp_monto_mes) +
+            inp('Bono anual', 'bono_anual_monto', f.bono_anual_monto) +
+        '</div>' +
+        '<div class="row mt-3">' +
+            '<div class="col-12"><label class="form-label small">Observaciones</label>' +
+            '<textarea class="form-control form-control-sm" name="observaciones" rows="2">' +
+                _moEsc(f.observaciones || '') + '</textarea></div>' +
+        '</div>' +
+        '<div class="alert alert-light border small mt-3">' +
+            '<strong>Calculados (recalculan al guardar):</strong><br>' +
+            'Bruto/hora: $' + (f.bruto_estimado_hora || 0).toFixed(2) +
+            ' · Costo empresa hora: <strong>$' + (f.costo_empresa_hora || 0).toFixed(2) + '</strong>' +
+            ' · Jornal 8h: $' + (f.costo_empresa_jornal_8h || 0).toFixed(2) +
+            ' · Mes ' + f.horas_mensuales + 'h: $' + (f.costo_empresa_mes_176h || 0).toFixed(2) +
+        '</div>' +
+        '</form>'
+    );
+}
+
+function moGuardarDetalle() {
+    if (!_moEnEdicion) return;
+    const form = document.getElementById('formMODetalle');
+    const fd = new FormData(form);
+    const data = {};
+    fd.forEach((v, k) => { data[k] = v; });
+
+    fetch('/superadmin/mano-obra/' + _moEnEdicion.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _moCsrf() },
+        credentials: 'same-origin',
+        body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) { alert(d.error || 'Error al guardar'); return; }
+        const modalEl = document.getElementById('modalDetalleMO');
+        const inst = bootstrap.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+        location.reload();
+    });
+}
+</script>
+{% endblock %}

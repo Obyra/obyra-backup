@@ -210,6 +210,12 @@ from models.project_technical_profile import (
 # Cierre formal de obra y acta de entrega
 from models.cierre_obra import CierreObra, ActaEntrega
 
+# Fase 5.A: catalogo de precios de proveedores + costo empresa de mano de obra
+from models.provider_price_list import ProviderPriceList, normalizar_descripcion_precio
+from models.mano_obra_costo_referencia import (
+    ManoObraCostoReferencia, CATEGORIAS_BASE, categoria_canonica_para,
+)
+
 
 def seed_default_role_permissions():
     """Seed permisos por defecto para roles"""

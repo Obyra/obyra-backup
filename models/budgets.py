@@ -140,6 +140,13 @@ class Presupuesto(db.Model):
     indice_cac_valor = db.Column(db.Numeric(12, 2))
     indice_cac_fecha = db.Column(db.Date)
 
+    # Fase 5.A: margen comercial override (gana sobre el de la organizacion).
+    # Si NULL, se usa Organizacion.margen_comercial_default.
+    margen_comercial_override = db.Column(db.Numeric(5, 2), nullable=True)
+    # Snapshot de precios al confirmar como obra (Fase 5.C). Si esta seteado,
+    # estimar-precios queda bloqueado para preservar el congelado comercial.
+    precios_snapshot_at = db.Column(db.DateTime, nullable=True)
+
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')
     organizacion = db.relationship('Organizacion', overlaps="presupuestos")
@@ -889,6 +896,27 @@ class ItemPresupuestoComposicion(db.Model):
     es_estimado = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     # Clave del recurso en el YAML de coeficientes, ej: "losa_hormigon.hormigon_h21".
     coeficiente_usado = db.Column(db.String(80), nullable=True)
+
+    # Fase 5.A: trazabilidad de estimacion automatica de precios.
+    # precio_fuente: 'provider_price_list' | 'historial_proveedor' |
+    #   'referencia_constructora' | 'mano_obra_costo_referencia' |
+    #   'manual' (override del usuario) | 'cotizacion' | 'sin_precio'
+    precio_fuente = db.Column(db.String(30), nullable=True)
+    # Si el precio salio de un proveedor identificado, lo guardamos.
+    precio_proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id', ondelete='SET NULL'),
+                                    nullable=True)
+    # Estado de actualizacion: 'actualizado' (<30d) | 'estimado' (30-180d)
+    #   | 'vencido' (>180d) | 'sin_precio' | 'manual' | 'requiere_tc'
+    precio_estado = db.Column(db.String(20), nullable=False,
+                              default='sin_precio', server_default='sin_precio')
+    precio_actualizado_at = db.Column(db.DateTime, nullable=True)
+
+    # Auditoria de moneda (cuando precio original viene en USD u otra)
+    precio_original = db.Column(db.Numeric(15, 2), nullable=True)
+    precio_moneda_original = db.Column(db.String(3), nullable=True)
+    precio_tipo_cambio_usado = db.Column(db.Numeric(18, 6), nullable=True)
+    precio_tipo_cambio_fecha = db.Column(db.Date, nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

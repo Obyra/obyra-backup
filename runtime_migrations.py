@@ -2091,6 +2091,139 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] composicion auto cols: {e}")
 
     # =====================================================
+    # 2026-05-05: Fase 5.A - Estimacion automatica de precios.
+    #   * Tabla provider_price_list (catalogo de proveedores).
+    #   * Tabla mano_obra_costo_referencia (costo empresa MO - Gedif).
+    #   * Columnas en organizaciones / presupuestos / items_presupuesto_composicion.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='provider_price_list') THEN
+                CREATE TABLE provider_price_list (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id) ON DELETE CASCADE,
+                    proveedor_id INTEGER REFERENCES proveedores_oc(id) ON DELETE SET NULL,
+                    descripcion VARCHAR(300) NOT NULL,
+                    descripcion_normalizada VARCHAR(300) NOT NULL,
+                    unidad VARCHAR(20) NOT NULL,
+                    item_inventario_id INTEGER REFERENCES items_inventario(id) ON DELETE SET NULL,
+                    precio_unitario NUMERIC(15,2) NOT NULL,
+                    moneda VARCHAR(3) NOT NULL DEFAULT 'ARS',
+                    fecha_actualizacion DATE NOT NULL DEFAULT CURRENT_DATE,
+                    vigencia_hasta DATE,
+                    fuente VARCHAR(30) NOT NULL DEFAULT 'manual',
+                    notas TEXT,
+                    batch_id VARCHAR(40),
+                    created_by_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_ppl_org_prov_desc_un UNIQUE (organizacion_id, proveedor_id, descripcion_normalizada, unidad)
+                );
+                CREATE INDEX ix_ppl_org_descnorm  ON provider_price_list(organizacion_id, descripcion_normalizada);
+                CREATE INDEX ix_ppl_org_proveedor ON provider_price_list(organizacion_id, proveedor_id);
+                CREATE INDEX ix_ppl_org_invitem   ON provider_price_list(organizacion_id, item_inventario_id);
+                CREATE INDEX ix_ppl_vigencia      ON provider_price_list(vigencia_hasta);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] provider_price_list: {e}")
+
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='mano_obra_costo_referencia') THEN
+                CREATE TABLE mano_obra_costo_referencia (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER REFERENCES organizaciones(id) ON DELETE CASCADE,
+                    categoria VARCHAR(60) NOT NULL,
+                    descripcion VARCHAR(120),
+                    zona VARCHAR(40) NOT NULL DEFAULT 'CABA',
+                    periodo VARCHAR(7) NOT NULL,
+                    fecha_vigencia_desde DATE NOT NULL DEFAULT CURRENT_DATE,
+                    fecha_vigencia_hasta DATE,
+                    valor_hora_convenio NUMERIC(12,2) NOT NULL,
+                    valor_jornal_convenio NUMERIC(12,2),
+                    horas_mensuales INTEGER NOT NULL DEFAULT 176,
+                    presentismo_pct NUMERIC(5,2) NOT NULL DEFAULT 20,
+                    hh_50_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+                    hh_100_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+                    adicional_fijo_hora NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    bruto_estimado_hora NUMERIC(12,2),
+                    neto_estimado_hora NUMERIC(12,2),
+                    f931_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+                    fondo_desempleo_pct NUMERIC(5,2) NOT NULL DEFAULT 12,
+                    uocra_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+                    ieric_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+                    sac_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+                    vacaciones_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+                    comida_monto_mes NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    epp_monto_mes NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    bono_anual_monto NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    costo_empresa_hora NUMERIC(12,2),
+                    costo_empresa_jornal_8h NUMERIC(12,2),
+                    costo_empresa_mes_176h NUMERIC(12,2),
+                    fuente VARCHAR(40) NOT NULL DEFAULT 'planilla_constructora_gedif',
+                    confianza VARCHAR(20) NOT NULL DEFAULT 'media',
+                    observaciones TEXT,
+                    parametros_supuestos_json JSONB,
+                    valores_excel_originales_json JSONB,
+                    aprobado_por_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    aprobado_at TIMESTAMP,
+                    activo BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_by_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_mocr_org_cat_zona_periodo UNIQUE (organizacion_id, categoria, zona, periodo)
+                );
+                CREATE INDEX ix_mocr_org_cat_zona ON mano_obra_costo_referencia(organizacion_id, categoria, zona);
+                CREATE INDEX ix_mocr_vigencia ON mano_obra_costo_referencia(fecha_vigencia_desde, fecha_vigencia_hasta);
+                CREATE INDEX ix_mocr_activo ON mano_obra_costo_referencia(activo);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] mano_obra_costo_referencia: {e}")
+
+    try:
+        db.session.execute(db.text("""
+            ALTER TABLE organizaciones
+                ADD COLUMN IF NOT EXISTS margen_comercial_default NUMERIC(5,2) NOT NULL DEFAULT 25.00;
+        """))
+        db.session.execute(db.text("""
+            ALTER TABLE presupuestos
+                ADD COLUMN IF NOT EXISTS margen_comercial_override NUMERIC(5,2);
+        """))
+        db.session.execute(db.text("""
+            ALTER TABLE presupuestos
+                ADD COLUMN IF NOT EXISTS precios_snapshot_at TIMESTAMP;
+        """))
+        # Columnas de precio en composiciones
+        for col, ddl in [
+            ('precio_fuente',            'VARCHAR(30)'),
+            ('precio_proveedor_id',      'INTEGER REFERENCES proveedores_oc(id) ON DELETE SET NULL'),
+            ('precio_estado',            "VARCHAR(20) NOT NULL DEFAULT 'sin_precio'"),
+            ('precio_actualizado_at',    'TIMESTAMP'),
+            ('precio_original',          'NUMERIC(15,2)'),
+            ('precio_moneda_original',   'VARCHAR(3)'),
+            ('precio_tipo_cambio_usado', 'NUMERIC(18,6)'),
+            ('precio_tipo_cambio_fecha', 'DATE'),
+        ]:
+            db.session.execute(db.text(
+                f"ALTER TABLE items_presupuesto_composicion ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+        db.session.commit()
+        print("[OK] Migracion runtime: Fase 5.A precios (provider_price_list + mano_obra + columnas)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Fase 5.A columnas: {e}")
+
+    # =====================================================
     # 2026-05-04: Edicion manual de niveles del presupuesto.
     # Agrega excluido_del_calculo + observaciones a niveles_presupuesto.
     # =====================================================

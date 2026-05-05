@@ -1224,6 +1224,54 @@
                         </div>
                     </div>
 
+                    <!-- Bloque Costo estimado (Fase 5.A) -->
+                    <div id="iaBloquePrecios" class="card border-0 shadow-sm mb-3 d-none">
+                        <div class="card-body bg-light">
+                            <div class="row align-items-center">
+                                <div class="col-md-5 text-center border-end">
+                                    <div class="text-muted small text-uppercase mb-1">Costo estimado</div>
+                                    <div class="display-5 fw-bold text-dark" id="iaPreciosCosto">$0</div>
+                                    <div class="small text-muted">
+                                        Precio sugerido al cliente:
+                                        <strong class="text-success" id="iaPreciosSugerido">$0</strong>
+                                        <span class="badge bg-light text-dark border ms-1" id="iaPreciosMargen">margen 25%</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-7">
+                                    <div class="row text-center g-2">
+                                        <div class="col-6 col-md-3">
+                                            <div class="border rounded p-2 bg-white">
+                                                <div class="h4 mb-0 text-success" id="iaPreciosActualizados">0</div>
+                                                <div class="text-muted small">Actualizados</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <div class="border rounded p-2 bg-white">
+                                                <div class="h4 mb-0 text-warning" id="iaPreciosEstimados">0</div>
+                                                <div class="text-muted small">Estimados</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <div class="border rounded p-2 bg-white">
+                                                <div class="h4 mb-0 text-danger" id="iaPreciosVencidos">0</div>
+                                                <div class="text-muted small">Vencidos</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <div class="border rounded p-2 bg-white">
+                                                <div class="h4 mb-0 text-secondary" id="iaPreciosSin">0</div>
+                                                <div class="text-muted small">Sin precio</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-center mt-2 small text-muted" id="iaPreciosCobertura">
+                                        Cobertura de precios: 0%
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Lista de pendientes para llegar al 90% -->
                     <div class="card mb-3">
                         <div class="card-header bg-white">
@@ -1565,6 +1613,11 @@
                             onclick="iaGenerarComposicionEjecutiva()"
                             title="Crea materiales, mano de obra y equipos estimados a partir de los ítems ya clasificados. No se pisan composiciones manuales.">
                         <i class="fas fa-magic me-1"></i>Generar composición ejecutiva
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btnEstimarPrecios"
+                            onclick="iaEstimarPrecios()"
+                            title="OBYRA busca precios en lista de proveedores, historial de OC y referencias. Para mano de obra usa costo empresa Gedif.">
+                        <i class="fas fa-dollar-sign me-1"></i>Estimar precios automáticamente
                     </button>
                 </div>
 
@@ -3897,6 +3950,65 @@ function _iaMarcarTarjeta(itemId, resp, accion) {
         }
         _iaActualizarContadoresSesion();
     }, 1200);
+}
+
+// =====================================================================
+// Fase 5.A: Estimacion automatica de precios
+// =====================================================================
+window.iaEstimarPrecios = async function() {
+    if (!_iaPresupuestoId) return;
+    const btn = document.getElementById('btnEstimarPrecios');
+    if (!btn) return;
+    if (!confirm(
+        'OBYRA va a buscar precios en lista de proveedores, historial de OC, referencias y ' +
+        'costo empresa Gedif para mano de obra.\n\n' +
+        'Los precios cargados manualmente se respetan.\n\n¿Continuar?'
+    )) return;
+
+    btn.disabled = true;
+    const html_orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Estimando...';
+
+    try {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const r = await fetch(`/presupuestos/${_iaPresupuestoId}/estimar-precios`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+        });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+            alert((data && data.error) || 'No se pudieron estimar los precios.');
+            return;
+        }
+        _iaRenderBloquePrecios(data);
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = html_orig;
+    }
+};
+
+function _iaRenderBloquePrecios(data) {
+    const bloque = document.getElementById('iaBloquePrecios');
+    if (!bloque) return;
+    bloque.classList.remove('d-none');
+
+    const fmt = (v) => '$' + (v || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+    document.getElementById('iaPreciosCosto').textContent = fmt(data.total_costo);
+    document.getElementById('iaPreciosSugerido').textContent = fmt(data.precio_sugerido_cliente);
+    document.getElementById('iaPreciosMargen').textContent = 'margen ' + (data.margen_aplicado || 25) + '%';
+    document.getElementById('iaPreciosActualizados').textContent = data.actualizados || 0;
+    document.getElementById('iaPreciosEstimados').textContent = data.estimados || 0;
+    document.getElementById('iaPreciosVencidos').textContent = data.vencidos || 0;
+    document.getElementById('iaPreciosSin').textContent = (data.sin_precio || 0) + (data.requiere_tc || 0);
+    document.getElementById('iaPreciosCobertura').textContent =
+        'Cobertura de precios: ' + (data.cobertura_pct || 0) + '%' +
+        (data.requiere_tc ? ' · ' + data.requiere_tc + ' requieren tipo de cambio' : '') +
+        (data.manual ? ' · ' + data.manual + ' precios manuales respetados' : '');
+
+    bloque.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function _iaMostrarResumenPreliminar(data) {

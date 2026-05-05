@@ -5,7 +5,7 @@ Permite a los superadministradores ver datos de todas las organizaciones.
 """
 
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from flask_login import login_required, current_user
 from functools import wraps
 
@@ -682,3 +682,175 @@ def accion_candidata_ia(cand_id, accion):
         return jsonify(ok=False, error=str(e)), 500
 
     return jsonify(ok=True, candidata=cand.to_dict())
+
+
+# ============================================================
+# Mano de Obra: costo empresa de referencia (Fase 5.A - Gedif)
+# ============================================================
+
+@superadmin_bp.route('/mano-obra')
+@login_required
+@require_super_admin
+def mano_obra_panel():
+    """Panel CRUD de costos de mano de obra."""
+    from models.mano_obra_costo_referencia import ManoObraCostoReferencia
+
+    filas = (ManoObraCostoReferencia.query
+             .order_by(ManoObraCostoReferencia.activo.desc(),
+                       ManoObraCostoReferencia.periodo.desc(),
+                       ManoObraCostoReferencia.zona,
+                       ManoObraCostoReferencia.categoria)
+             .limit(200).all())
+    return render_template('superadmin/mano_obra.html', filas=filas)
+
+
+@superadmin_bp.route('/mano-obra/api/lista')
+@login_required
+@require_super_admin
+def mano_obra_api_lista():
+    """JSON con todas las filas (para refrescar tabla sin reload)."""
+    from models.mano_obra_costo_referencia import ManoObraCostoReferencia
+
+    filas = (ManoObraCostoReferencia.query
+             .order_by(ManoObraCostoReferencia.activo.desc(),
+                       ManoObraCostoReferencia.periodo.desc())
+             .all())
+    return jsonify(ok=True, filas=[f.to_dict() for f in filas])
+
+
+@superadmin_bp.route('/mano-obra/<int:mo_id>', methods=['PATCH'])
+@login_required
+@require_super_admin
+def mano_obra_actualizar(mo_id):
+    """Edicion manual de campos de una referencia. Recalcula al guardar."""
+    from models.mano_obra_costo_referencia import ManoObraCostoReferencia
+
+    fila = ManoObraCostoReferencia.query.get_or_404(mo_id)
+    payload = request.get_json(silent=True) or {}
+
+    # Campos editables
+    editables = (
+        'descripcion', 'zona', 'periodo', 'horas_mensuales',
+        'valor_hora_convenio', 'presentismo_pct', 'hh_50_pct', 'hh_100_pct',
+        'adicional_fijo_hora', 'f931_pct', 'fondo_desempleo_pct', 'uocra_pct',
+        'ieric_pct', 'sac_pct', 'vacaciones_pct',
+        'comida_monto_mes', 'epp_monto_mes', 'bono_anual_monto',
+        'observaciones', 'activo', 'confianza',
+    )
+    for k in editables:
+        if k in payload:
+            setattr(fila, k, payload[k])
+
+    fila.recalcular()
+    fila.updated_at = datetime.utcnow()
+
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion='editar_mano_obra_referencia',
+            entidad='mano_obra_costo_referencia',
+            entidad_id=fila.id,
+            detalle=f'{fila.categoria}@{fila.zona} {fila.periodo}',
+        )
+    except Exception:
+        pass
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+    return jsonify(ok=True, fila=fila.to_dict())
+
+
+@superadmin_bp.route('/mano-obra/<int:mo_id>/aprobar', methods=['POST'])
+@login_required
+@require_super_admin
+def mano_obra_aprobar(mo_id):
+    """Marca confianza='alta' + aprobado_por + aprobado_at."""
+    from models.mano_obra_costo_referencia import ManoObraCostoReferencia
+
+    fila = ManoObraCostoReferencia.query.get_or_404(mo_id)
+    fila.confianza = 'alta'
+    fila.aprobado_por_user_id = current_user.id
+    fila.aprobado_at = datetime.utcnow()
+
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion='aprobar_mano_obra_referencia',
+            entidad='mano_obra_costo_referencia',
+            entidad_id=fila.id,
+            detalle=f'{fila.categoria}@{fila.zona} {fila.periodo} -> confianza=alta',
+        )
+    except Exception:
+        pass
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+    return jsonify(ok=True, fila=fila.to_dict())
+
+
+@superadmin_bp.route('/mano-obra/importar-gedif', methods=['POST'])
+@login_required
+@require_super_admin
+def mano_obra_importar_gedif():
+    """Importa la planilla Gedif. Las filas quedan globales (organizacion_id=NULL)."""
+    from services.importador_mano_obra_gedif import parsear_planilla, importar_filas
+
+    archivo = request.files.get('archivo')
+    if not archivo:
+        return jsonify(ok=False, error='Subi un archivo Excel.'), 400
+    if not archivo.filename.lower().endswith(('.xlsx', '.xls')):
+        return jsonify(ok=False, error='Formato no soportado. Usar .xlsx.'), 400
+
+    # Las planillas de Gedif son curadas globalmente por OBYRA (organizacion_id=NULL)
+    parsed = parsear_planilla(archivo, organizacion_id=None, zona_default='CABA')
+
+    if parsed.get('errores'):
+        return jsonify(ok=False, error='; '.join(parsed['errores'])), 400
+
+    if not parsed.get('filas'):
+        return jsonify(ok=False, error='El archivo no contiene filas válidas.'), 400
+
+    try:
+        result = importar_filas(parsed, user_id=current_user.id)
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error importando Gedif')
+        return jsonify(ok=False, error=f'{type(e).__name__}: {str(e)[:200]}'), 500
+
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion='importar_mano_obra_gedif',
+            entidad='mano_obra_costo_referencia',
+            entidad_id=None,
+            detalle=(
+                f'periodo={parsed.get("periodo")} zona={parsed.get("zona")} '
+                f'creadas={result["creadas"]} actualizadas={result["actualizadas"]} '
+                f'desactivadas={result["desactivadas"]}'
+            ),
+        )
+    except Exception:
+        pass
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=f'Error al guardar: {type(e).__name__}'), 500
+
+    return jsonify(
+        ok=True,
+        periodo=parsed.get('periodo'),
+        zona=parsed.get('zona'),
+        creadas=result['creadas'],
+        actualizadas=result['actualizadas'],
+        desactivadas=result['desactivadas'],
+        advertencias_calculo=result['advertencias_calculo'],
+        advertencias_parser=parsed.get('advertencias', []),
+    )
