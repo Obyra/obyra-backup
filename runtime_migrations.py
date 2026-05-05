@@ -2315,12 +2315,17 @@ def run_runtime_migrations(db, app):
 
     # Backfill: para presupuestos viejos con archivo_pliego_path que no tienen
     # fila en presupuesto_archivo, crear una unica fila representativa.
+    # NOTA: el modelo define created_at/updated_at NOT NULL con default a nivel
+    # Python (datetime.utcnow). Como este INSERT es SQL crudo, ese default no
+    # se aplica y PG rechaza con NotNullViolation. Por eso seteamos ambos
+    # explicitamente con COALESCE(p.fecha_creacion, NOW()).
     try:
         result = db.session.execute(db.text("""
             INSERT INTO presupuesto_archivo (
                 presupuesto_id, organizacion_id, filename_original, filename_storage,
                 file_path, tipo_archivo, estado_importacion,
-                cantidad_items_importados, metadata_json, uploaded_at, imported_at
+                cantidad_items_importados, metadata_json, uploaded_at, imported_at,
+                created_at, updated_at
             )
             SELECT
                 p.id,
@@ -2332,6 +2337,8 @@ def run_runtime_migrations(db, app):
                 'importado',
                 (SELECT COUNT(*) FROM items_presupuesto WHERE presupuesto_id = p.id),
                 '{"backfill": true, "razon": "archivo_pliego_path legacy"}'::jsonb,
+                COALESCE(p.fecha_creacion, NOW()),
+                COALESCE(p.fecha_creacion, NOW()),
                 COALESCE(p.fecha_creacion, NOW()),
                 COALESCE(p.fecha_creacion, NOW())
             FROM presupuestos p
