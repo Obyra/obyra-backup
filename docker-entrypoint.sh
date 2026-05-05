@@ -129,6 +129,19 @@ else
 fi
 
 # ============================================
+# 3c. Pre-drop chown — captura side effects de migrations
+# ============================================
+# `flask db upgrade` corre como root e importa app.py, que al inicializar
+# el logger crea /app/logs/app.log con dueño root. Si dropearamos sin
+# chown, gunicorn (obyra) no podria abrir el log y el worker fallaria al
+# boot con PermissionError. Chown recursivo asegura que TODO lo escribible
+# durante el entrypoint quede obyra:obyra antes del drop.
+if [ "$(id -u)" = "0" ]; then
+    chown -R obyra:obyra /app/instance /app/storage /app/reports /app/logs 2>/dev/null || true
+    echo "✓ chown /app/{instance,storage,reports,logs} -> obyra:obyra"
+fi
+
+# ============================================
 # 4. Execute the command passed to the script
 # ============================================
 echo "==========================================="
