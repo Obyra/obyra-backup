@@ -688,10 +688,13 @@ def importar_licitacion():
         flash('Error inesperado al procesar los archivos.', 'danger')
         return redirect(url_for('presupuestos.importar_licitacion'))
 
-    # Si TODOS los archivos fallaron, rollback total y eliminar el presupuesto
+    # Si TODOS los archivos fallaron, rollback total y eliminar el presupuesto.
+    # Importante: NO hacer "from models.budgets import Presupuesto" aca dentro,
+    # porque eso convierte Presupuesto en variable local en TODA la funcion y
+    # rompe la rama del GET (UnboundLocalError). Presupuesto ya esta importado
+    # al top del archivo via "from models import Presupuesto, ...".
     if resumen['total_archivos_ok'] == 0:
         try:
-            from models.budgets import Presupuesto
             Presupuesto.query.filter_by(id=presu.id).delete()
             db.session.commit()
         except Exception:
@@ -969,8 +972,10 @@ def descargar_archivo_pa(pid, aid):
 
     Valida acceso (org match o super admin). Crea audit log.
     """
-    import os as _os
-    from flask import send_file, abort
+    # IMPORTANTE: abort ya esta importado al top del archivo (linea 14-15).
+    # NO hacer "from flask import abort" aca dentro: convertiria abort en
+    # variable local en toda la funcion y rompe los usos previos al import.
+    from flask import send_file
 
     presupuesto = Presupuesto.query.get_or_404(pid)
     if not _puede_ver_presupuesto(presupuesto):
