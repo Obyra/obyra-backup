@@ -61,6 +61,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfreetype6 \
     libpng16-16t64 \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -81,8 +82,11 @@ RUN mkdir -p /app/instance /app/storage /app/reports /app/logs && \
 COPY --chown=obyra:obyra docker-entrypoint.sh /docker-entrypoint.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
-# Switch to non-root user
-USER obyra
+# NOTA: el container arranca como root para poder chown el volumen montado
+# por Railway (mounts root:root 755). El entrypoint hace chown de
+# $STORAGE_BASE a obyra:obyra y luego dropea privs con `gosu obyra` antes
+# de ejecutar gunicorn. No mantenemos `USER obyra` aca a proposito.
+# USER obyra  -- removido: ver docker-entrypoint.sh
 
 # Environment variables
 ENV FLASK_APP=app.py \

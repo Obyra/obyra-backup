@@ -102,6 +102,33 @@ mkdir -p /app/instance /app/storage /app/reports /app/logs
 echo "✓ Directories created"
 
 # ============================================
+# 3b. Storage base setup (Railway Volume / local)
+# ============================================
+# STORAGE_BASE puede ser:
+#   - /data           (Railway Volume montado como root:root)
+#   - storage         (default local, relativo)
+#   - /app/storage    (default si esta corriendo en contenedor sin var)
+# Como root, aseguramos directorios y owner=obyra:obyra para que la app
+# (que corre como obyra) pueda escribir. Si no somos root, skipeamos.
+STORAGE_BASE_EFECTIVO="${STORAGE_BASE:-/app/storage}"
+echo "==========================================="
+echo "Storage base setup: ${STORAGE_BASE_EFECTIVO}"
+echo "==========================================="
+
+mkdir -p "${STORAGE_BASE_EFECTIVO}/uploads/presupuestos" 2>/dev/null || true
+
+if [ "$(id -u)" = "0" ]; then
+    if chown -R obyra:obyra "${STORAGE_BASE_EFECTIVO}" 2>/dev/null; then
+        echo "✓ chown -R obyra:obyra ${STORAGE_BASE_EFECTIVO}"
+    else
+        echo "WARNING: no se pudo chown ${STORAGE_BASE_EFECTIVO} (mount read-only?)"
+    fi
+    chmod -R u+rwX,g+rwX "${STORAGE_BASE_EFECTIVO}" 2>/dev/null || true
+else
+    echo "(no root: skipping chown — ya correrá como uid $(id -u))"
+fi
+
+# ============================================
 # 4. Execute the command passed to the script
 # ============================================
 echo "==========================================="
@@ -110,4 +137,12 @@ echo "==========================================="
 echo "Command: $@"
 echo "==========================================="
 
-exec "$@"
+# Si arrancamos como root, dropeamos privs a obyra (el Dockerfile dejo
+# el user creado pero NO hace USER obyra para que este chown funcione).
+# Si ya somos no-root, exec directo.
+if [ "$(id -u)" = "0" ]; then
+    echo "Dropping privileges: gosu obyra exec ..."
+    exec gosu obyra "$@"
+else
+    exec "$@"
+fi
