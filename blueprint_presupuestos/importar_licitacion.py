@@ -206,6 +206,38 @@ def _es_numero_validos(val):
         return False
 
 
+def _parece_nota_o_referencia(desc):
+    """True si la descripcion parece una nota/aclaracion o referencia de
+    sector — NO un rubro real. Heuristica conservadora basada en patrones
+    observados en planillas reales (JMG y similares).
+
+    Casos cubiertos:
+      - "S/ 7P", "S/ 1ºSS", "S/ 1P A S/6P": referencia a piso/sector.
+      - "POR LO DICHO, NO SE REPITEN ITEMS EN LA PRESENTE PLANILLA": nota.
+      - Oraciones largas con coma: los rubros reales no usan coma.
+    """
+    if not desc:
+        return False
+    d = desc.strip()
+    d_up = d.upper()
+    # Sector/piso: "S/ 7P", "S/1ºSS", "S/1P A S/6P"
+    if d_up.startswith('S/'):
+        return True
+    # Frases tipicas de nota
+    notas = (
+        'POR LO DICHO', 'PRESENTE PLANILLA', 'NO SE REPIT',
+        'VER OBSERVACI', 'VER NOTA', 'SEGUN DETALLE',
+    )
+    if any(n in d_up for n in notas):
+        return True
+    if d_up.startswith('NOTA:') or d_up.startswith('ACLARACION'):
+        return True
+    # Oraciones con coma + varias palabras: los rubros reales no usan coma
+    if ',' in d and len(d.split()) > 5:
+        return True
+    return False
+
+
 def _parsear_xlsx(file_stream):
     """Lee el xlsx (todas las hojas) y retorna lista de items con etapa detectada.
 
@@ -284,7 +316,8 @@ def _parsear_xlsx(file_stream):
             ])
 
             es_rubro = False
-            if not tiene_cantidad and not es_total:
+            if (not tiene_cantidad and not es_total
+                    and not _parece_nota_o_referencia(desc)):
                 # Caso 1: codigo de un solo nivel (ej: "1", "2", "3")
                 if codigo and patron_codigo.match(codigo) and '.' not in codigo:
                     es_rubro = True
