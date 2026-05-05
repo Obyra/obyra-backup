@@ -1194,6 +1194,62 @@ def descargar_archivo_pa(pid, aid):
     )
 
 
+@presupuestos_bp.route('/precios-observados/stats', methods=['GET'])
+@login_required
+def precios_observados_stats():
+    """Etapa 1 base IA — JSON read-only con resumen de observaciones de precio
+    capturadas durante imports. Sirve para validar que el hook esta funcionando.
+
+    Solo admin/pm. Scoped al organizacion_id del usuario.
+    """
+    if current_user.role not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    from models.precio_observado import PrecioObservado
+    org_id = get_current_org_id()
+
+    base_q = PrecioObservado.query.filter_by(organizacion_id=org_id)
+
+    total = base_q.count()
+
+    por_origen = {}
+    for row in (db.session.query(PrecioObservado.origen_tipo, db.func.count(PrecioObservado.id))
+                .filter_by(organizacion_id=org_id)
+                .group_by(PrecioObservado.origen_tipo).all()):
+        por_origen[row[0]] = row[1]
+
+    por_tipo = {}
+    for row in (db.session.query(PrecioObservado.tipo_recurso, db.func.count(PrecioObservado.id))
+                .filter_by(organizacion_id=org_id)
+                .group_by(PrecioObservado.tipo_recurso).all()):
+        por_tipo[row[0]] = row[1]
+
+    por_archivo = []
+    for row in (db.session.query(
+                    PrecioObservado.origen_archivo_id,
+                    db.func.count(PrecioObservado.id))
+                .filter_by(organizacion_id=org_id)
+                .filter(PrecioObservado.origen_archivo_id.isnot(None))
+                .group_by(PrecioObservado.origen_archivo_id)
+                .order_by(db.func.count(PrecioObservado.id).desc())
+                .limit(20).all()):
+        por_archivo.append({'archivo_id': row[0], 'observaciones': row[1]})
+
+    ultimas = (base_q
+               .order_by(PrecioObservado.created_at.desc())
+               .limit(10)
+               .all())
+
+    return jsonify(
+        ok=True,
+        total=total,
+        por_origen_tipo=por_origen,
+        por_tipo_recurso=por_tipo,
+        top_archivos=por_archivo,
+        ultimas_10=[o.to_dict() for o in ultimas],
+    )
+
+
 def _puede_ver_presupuesto(presupuesto):
     """Helper: org match o super admin."""
     if not current_user.is_authenticated:

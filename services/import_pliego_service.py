@@ -109,12 +109,18 @@ def _persistir_archivo_disco(file_storage, presupuesto_id, checksum):
 
 
 def _crear_items_con_origen(presupuesto, items_parseados, archivo_pa, modo_licitacion):
-    """Crea ItemPresupuesto a partir de parser + archivo origen. Retorna count."""
+    """Crea ItemPresupuesto a partir de parser + archivo origen.
+
+    Retorna (creados, subtotal, pares) donde `pares` es lista de tuplas
+    (ItemPresupuesto, dict_item_parseado). Los pares se usan despues para
+    capturar precio_observado (Etapa 1 base IA) sin reparsear.
+    """
     from models.budgets import ItemPresupuesto
     from services.etapa_matcher import matchear_etapa_para_item
 
     creados = 0
     subtotal = Decimal('0')
+    pares = []
     for it in items_parseados:
         etapa_excel = it.get('etapa_nombre')
         etapa_estandar = matchear_etapa_para_item(it['descripcion'], etapa_excel)
@@ -143,7 +149,70 @@ def _crear_items_con_origen(presupuesto, items_parseados, archivo_pa, modo_licit
         db.session.add(ip)
         creados += 1
         subtotal += total_item
-    return creados, subtotal
+        pares.append((ip, it))
+    return creados, subtotal, pares
+
+
+def _capturar_precios_observados(pares, archivo_pa, presupuesto):
+    """Etapa 1 — base inteligente de precios.
+
+    Por cada (ItemPresupuesto, dict_parser) cuyo dict tenga `precio_unitario` > 0,
+    crea un PrecioObservado(origen_tipo='excel_pliego', tipo_recurso='item_completo').
+
+    El parser actual extrae UN solo precio por fila (la primera columna que
+    matchea heuristica de precio unitario). Por eso el tipo_recurso default es
+    'item_completo'. Etapas siguientes podran extender el parser para emitir
+    observaciones separadas de mano_obra y material.
+
+    NO altera el flujo de importacion: si esto falla, los items ya estan
+    creados y commiteables. La excepcion se loggea y se sigue.
+
+    Retorna cantidad de observaciones creadas.
+    """
+    from models.precio_observado import PrecioObservado
+    from models.provider_price_list import normalizar_descripcion_precio
+
+    if not pares or archivo_pa is None or archivo_pa.id is None:
+        return 0
+
+    fecha_obs = (archivo_pa.uploaded_at.date()
+                 if archivo_pa.uploaded_at else datetime.utcnow().date())
+    creadas = 0
+    for ip, it in pares:
+        precio_parser = it.get('precio_unitario') or Decimal('0')
+        try:
+            precio_dec = Decimal(str(precio_parser))
+        except Exception:
+            continue
+        if precio_dec <= 0:
+            continue
+        # ip.id solo esta disponible si el caller hizo flush antes
+        if ip.id is None:
+            continue
+        try:
+            obs = PrecioObservado(
+                organizacion_id=presupuesto.organizacion_id,
+                origen_tipo='excel_pliego',
+                origen_archivo_id=archivo_pa.id,
+                origen_presupuesto_id=presupuesto.id,
+                origen_item_presupuesto_id=ip.id,
+                descripcion=it['descripcion'],
+                descripcion_normalizada=normalizar_descripcion_precio(it['descripcion']),
+                unidad=ip.unidad or 'un',
+                rubro_nombre=(ip.etapa_nombre or '')[:100] or None,
+                tipo_recurso='item_completo',
+                precio_unitario=precio_dec,
+                moneda='ARS',
+                fecha_observado=fecha_obs,
+                valido=True,
+            )
+            db.session.add(obs)
+            creadas += 1
+        except Exception:
+            current_app.logger.exception(
+                f'Error creando PrecioObservado para item {ip.id}'
+            )
+    return creadas
 
 
 def importar_pliego_multi(
@@ -409,10 +478,23 @@ def importar_pliego_multi(
             continue
 
         # 7. Crear items con origen
+        obs_creadas = 0  # reset por iteracion (evita carry-over si paso 7 falla)
         try:
-            cantidad_creados, subtotal = _crear_items_con_origen(
+            cantidad_creados, subtotal, pares_creados = _crear_items_con_origen(
                 presupuesto, items_parseados, archivo_pa, modo_licitacion,
             )
+            # Flush para obtener ip.id antes de capturar PrecioObservado
+            db.session.flush()
+            # 7b. Etapa 1 — capturar precios observados (best-effort, no
+            # bloquea importacion si falla).
+            try:
+                obs_creadas = _capturar_precios_observados(
+                    pares_creados, archivo_pa, presupuesto,
+                )
+            except Exception:
+                current_app.logger.exception(
+                    'Error capturando precios observados (no bloquea import)'
+                )
         except Exception as e:
             db.session.rollback()
             archivo_pa.estado_importacion = 'error'
@@ -442,6 +524,7 @@ def importar_pliego_multi(
             'parser': 'auto_xlsx',
             'modo_licitacion': modo_licitacion,
             'subtotal_archivo': float(subtotal),
+            'precios_observados_capturados': obs_creadas,
         }
 
         try:

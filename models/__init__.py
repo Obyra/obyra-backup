@@ -219,6 +219,9 @@ from models.mano_obra_costo_referencia import (
 # Fase 6.A: archivos de licitacion (multiples Excel por presupuesto)
 from models.presupuesto_archivo import PresupuestoArchivo
 
+# Etapa 1 base inteligente de precios: observaciones append-only
+from models.precio_observado import PrecioObservado
+
 
 def seed_default_role_permissions():
     """Seed permisos por defecto para roles"""
