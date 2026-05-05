@@ -101,4 +101,6 @@ class PresupuestoArchivo(db.Model):
             'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None,
             'imported_at': self.imported_at.isoformat() if self.imported_at else None,
             'is_deleted': self.is_deleted,
+            # Diagnostico del parser cuando estado_importacion == 'error'
+            'diagnostico': (self.metadata_json or {}).get('diagnostico') if self.metadata_json else None,
         }

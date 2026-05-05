@@ -90,6 +90,55 @@ function _paFmtFecha(s) {
     if (isNaN(d.getTime())) return s;
     return d.toLocaleString('es-AR');
 }
+function _paRenderDiag(diag) {
+    if (!diag) return '';
+    let html = '<div class="fw-bold mb-1">Diagnóstico de importación</div>';
+    if (diag.error_lectura) {
+        return html + '<div class="text-danger">Error al abrir archivo: ' + _paEsc(diag.error_lectura) + '</div>';
+    }
+    (diag.hojas || []).forEach(h => {
+        html += '<div class="mb-2 border-start border-3 ps-2">';
+        html += '<div><strong>Hoja:</strong> ' + _paEsc(h.nombre) +
+                ' <span class="text-muted">(' + _paEsc(h.dimensiones || '') + ')</span></div>';
+        html += '<div class="text-muted">' + _paEsc(h.motivo || '') + '</div>';
+        if (h.header_fila_detectada) {
+            html += '<div class="mt-1"><strong>Header en fila:</strong> ' + h.header_fila_detectada + '</div>';
+        }
+        if (h.columnas_detectadas) {
+            const c = h.columnas_detectadas;
+            html += '<div><strong>Columnas detectadas:</strong> ' +
+                    'desc=' + (c.desc || '—') + ', unidad=' + (c.unidad || '—') +
+                    ', cantidad=' + (c.cantidad || '—') + ', precio=' + (c.precio || '—') + '</div>';
+        }
+        if (h.primeras_filas_no_vacias && h.primeras_filas_no_vacias.length) {
+            html += '<details class="mt-1"><summary class="small">Primeras filas (preview)</summary>' +
+                    '<table class="table table-sm table-bordered mt-1 mb-0" style="font-size:0.75rem">';
+            h.primeras_filas_no_vacias.forEach(r => {
+                html += '<tr><td class="text-muted">f' + r.fila + '</td>';
+                r.celdas.forEach(c => { html += '<td>' + _paEsc(c) + '</td>'; });
+                html += '</tr>';
+            });
+            html += '</table></details>';
+        }
+        html += '</div>';
+    });
+    if (diag.columnas_esperadas) {
+        html += '<div class="text-muted small mt-1">Columnas esperadas: ' +
+                _paEsc((diag.columnas_esperadas || []).join(', ')) + '</div>';
+    }
+    return html;
+}
+
+window.paMostrarDiagnostico = function(archivoId) {
+    const el = document.getElementById('paDiag' + archivoId);
+    if (!el) return;
+    if (el.classList.contains('show')) {
+        el.classList.remove('show');
+    } else {
+        el.classList.add('show');
+    }
+};
+
 function _paBadgeEstado(estado) {
     const map = {
         importado: 'bg-success',
@@ -150,10 +199,18 @@ async function paCargarArchivos() {
                         '<div class="small text-muted fst-italic">' + tooltipOrigen + '</div>' : '') +
                       (a.error_message ?
                         '<div class="small text-danger mt-1"><i class="fas fa-exclamation-circle me-1"></i>' +
-                        _paEsc(a.error_message) + '</div>' : '') +
+                        _paEsc(a.error_message) +
+                        (a.diagnostico ?
+                          ' <button type="button" class="btn btn-link btn-sm p-0 ms-1" ' +
+                          'onclick="paMostrarDiagnostico(' + a.id + ')">Ver diagnóstico</button>' : '') +
+                        '</div>' : '') +
                     '</div>' +
                     '<div class="d-flex gap-1">' + dlBtn + '</div>' +
                   '</div>' +
+                  (a.diagnostico ?
+                    '<div class="collapse mt-2" id="paDiag' + a.id + '">' +
+                      '<div class="card card-body bg-light small">' + _paRenderDiag(a.diagnostico) + '</div>' +
+                    '</div>' : '') +
                 '</li>'
             );
         }).join('');

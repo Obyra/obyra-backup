@@ -28,7 +28,10 @@ from extensions import db
 MAX_BYTES_POR_ARCHIVO = 10 * 1024 * 1024     # 10 MB
 MAX_BYTES_POR_PRESUPUESTO = 50 * 1024 * 1024  # 50 MB
 
-STORAGE_BASE = 'storage'
+# STORAGE_BASE permite montar Railway Volume en /data:
+#   variable de entorno STORAGE_BASE=/data en producción.
+# Default 'storage' mantiene comportamiento local para desarrollo.
+STORAGE_BASE = os.environ.get('STORAGE_BASE', 'storage')
 STORAGE_UPLOADS = os.path.join(STORAGE_BASE, 'uploads', 'presupuestos')
 
 
@@ -336,9 +339,20 @@ def importar_pliego_multi(
             archivo_pa.estado_importacion = 'error'
             archivo_pa.error_message = parse_error or 'Sin items detectados.'
             archivo_pa.cantidad_hojas_detectadas = hojas_count
+
+            # Diagnostico util (Fase 6.A): hojas, columnas, preview de filas.
+            diagnostico = None
+            try:
+                from blueprint_presupuestos.importar_licitacion import _diagnosticar_xlsx
+                with open(path_abs, 'rb') as fdiag:
+                    diagnostico = _diagnosticar_xlsx(fdiag)
+            except Exception:
+                current_app.logger.exception('Error generando diagnostico de parser')
+
             archivo_pa.metadata_json = {
                 'parser': 'auto_xlsx',
                 'fallo_en': 'parse',
+                'diagnostico': diagnostico,
             }
             try:
                 registrar_audit(

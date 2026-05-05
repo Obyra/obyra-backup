@@ -36,56 +36,130 @@ def _parse_decimal(val, default=0):
         return Decimal(str(default))
 
 
-def _detectar_columnas(headers):
-    """Busca indices de columnas en el header (case insensitive, soporta acentos y abreviaturas).
+def _norm_header(t):
+    """Normaliza un valor de header: sin acentos, lower, trimmed."""
+    if t is None:
+        return ''
+    import unicodedata
+    return unicodedata.normalize('NFKD', str(t)).encode('ascii', 'ignore').decode().lower().strip()
 
-    Retorna dict con idx_desc, idx_unidad, idx_cantidad, idx_precio (None si no encuentra).
+
+def _match_desc(h_norm):
+    """True si el texto normalizado parece columna de descripcion.
+    NO incluye 'item' standalone — esa suele ser la columna de codigo/numero.
     """
+    if not h_norm:
+        return False
+    if h_norm in ('descripcion', 'descripcion item', 'descripcion del item',
+                  'detalle', 'articulo', 'concepto', 'tarea', 'rubro/tarea'):
+        return True
+    if h_norm.startswith('descrip') or 'descripcion' in h_norm:
+        return True
+    if 'concepto' in h_norm or 'detalle' in h_norm:
+        return True
+    return False
+
+
+def _match_unidad(h_norm):
+    if not h_norm:
+        return False
+    if h_norm in ('un', 'und', 'unid', 'unidad', 'um', 'medida', 'u/m', 'unid.', 'un.'):
+        return True
+    if h_norm.startswith('unidad'):
+        return True
+    # Fusionado: ej "MAT + M.O UNIDAD" en JMG. Aceptar si contiene 'unidad' como
+    # palabra y NO es columna de precio unitario.
+    if 'unidad' in h_norm and 'unitario' not in h_norm and 'precio' not in h_norm:
+        return True
+    return False
+
+
+def _match_cantidad(h_norm):
+    if not h_norm:
+        return False
+    if h_norm in ('cant', 'cantidad', 'cdad', 'q', 'cant.', 'cantidades'):
+        return True
+    if h_norm.startswith('cant'):
+        return True
+    return False
+
+
+def _match_precio(h_norm):
+    """Match para columna de precio unitario.
+    Prioriza 'unitario' o 'P. Unit'. Acepta 'TOTAL' como sub-header de 'PRECIO UNITARIO ITEM'
+    en plantillas tipo JMG (donde PRECIO UNITARIO ITEM tiene MO/MAT/TOTAL como sub-headers).
+    """
+    if not h_norm:
+        return False
+    if 'total' in h_norm and 'unitario' not in h_norm and 'precio unitario' not in h_norm:
+        # 'precio total item' -> NO es precio unitario
+        return False
+    if h_norm in ('precio unitario', 'precio unit', 'p. unit', 'p.unit', 'pu',
+                  'precio/un', 'precio unit.', 'pu.', 'precio',
+                  'precio unitario item', 'precio unitario item total',
+                  'precio unitario total'):
+        return True
+    if h_norm.startswith('$/un') or h_norm.startswith('$ un') or h_norm == '$/un':
+        return True
+    if 'precio unitario' in h_norm:
+        return True
+    if '/un' in h_norm and 'total' not in h_norm:
+        return True
+    return False
+
+
+def _detectar_columnas(headers):
+    """Busca indices de columnas en el header. Retorna dict desc/unidad/cantidad/precio."""
     idx = {'desc': None, 'unidad': None, 'cantidad': None, 'precio': None}
+    norms = [_norm_header(h) for h in headers]
 
-    def _norm(t):
-        if t is None:
-            return ''
-        # Quitar acentos
-        import unicodedata
-        s = unicodedata.normalize('NFKD', str(t)).encode('ascii', 'ignore').decode().lower().strip()
-        return s
-
-    for i, h in enumerate(headers):
-        if h is None:
+    for i, hn in enumerate(norms):
+        if not hn:
             continue
-        h_norm = _norm(h)
-
-        # Descripcion: matches exactos o con keywords, evita match con "descripcion" si ya tiene
-        if idx['desc'] is None:
-            if h_norm in ('descripcion', 'descripcion item', 'detalle', 'item', 'articulo', 'concepto') \
-               or 'descripcion' in h_norm or h_norm.startswith('descrip') \
-               or h_norm == 'detalle' or 'concepto' in h_norm:
-                idx['desc'] = i
-                continue
-
-        # Unidad: "Un", "Unid", "Unidad", "UM", "Medida"
-        if idx['unidad'] is None:
-            if h_norm in ('un', 'und', 'unid', 'unidad', 'um', 'medida', 'u/m', 'unid.', 'un.'):
-                idx['unidad'] = i
-                continue
-
-        # Cantidad: "Cant", "Cantidad", "Cdad", "Q"
-        if idx['cantidad'] is None:
-            if h_norm in ('cant', 'cantidad', 'cdad', 'q', 'cant.') or h_norm.startswith('cant'):
-                idx['cantidad'] = i
-                continue
-
-        # Precio unitario: "Precio Unit", "P. Unit", "$/un", "Precio/un", etc.
-        # Importante: priorizar "$/un" o "precio/un" (precio unitario) sobre "$/total"
-        if idx['precio'] is None:
-            if h_norm in ('precio unitario', 'precio unit', 'p. unit', 'p.unit', 'pu',
-                         'precio/un', 'precio unit.', 'pu.', 'precio') \
-               or h_norm.startswith('$/un') or h_norm.startswith('$ un') \
-               or h_norm == '$/un' or '/un' in h_norm and 'total' not in h_norm:
-                idx['precio'] = i
-                continue
+        if idx['desc'] is None and _match_desc(hn):
+            idx['desc'] = i
+        if idx['unidad'] is None and _match_unidad(hn):
+            idx['unidad'] = i
+        if idx['cantidad'] is None and _match_cantidad(hn):
+            idx['cantidad'] = i
+        if idx['precio'] is None and _match_precio(hn):
+            idx['precio'] = i
     return idx
+
+
+def _construir_header_combinado(rows, header_idx):
+    """Soporta plantillas con header en 2 filas (ej: JMG).
+    Devuelve (headers_efectivos, data_start_offset).
+
+    Si la fila header_idx por si sola permite detectar desc+cantidad, devuelve esa fila
+    y data_start = header_idx+1. Si falta cantidad/unidad y existe header_idx+1, fusiona
+    ambas filas (texto N+1 reemplaza None de N o se concatena), re-detecta y, si mejora,
+    devuelve la fusionada con data_start = header_idx+2.
+    """
+    h1 = list(rows[header_idx]) if header_idx < len(rows) else []
+    idx1 = _detectar_columnas(h1)
+    if idx1['desc'] is not None and idx1['cantidad'] is not None:
+        return h1, header_idx + 1, idx1
+
+    if header_idx + 1 >= len(rows):
+        return h1, header_idx + 1, idx1
+    h2 = list(rows[header_idx + 1])
+    n = max(len(h1), len(h2))
+    merged = []
+    for i in range(n):
+        v1 = h1[i] if i < len(h1) else None
+        v2 = h2[i] if i < len(h2) else None
+        if v1 is not None and v2 is not None and str(v1).strip() and str(v2).strip():
+            merged.append(f'{v1} {v2}')
+        elif v2 is not None and str(v2).strip():
+            merged.append(v2)
+        else:
+            merged.append(v1)
+    idx2 = _detectar_columnas(merged)
+    # Aceptar la fusion solo si gana cantidad (lo que el header de 1 fila no tenia)
+    if idx2['cantidad'] is not None and idx2['desc'] is not None:
+        return merged, header_idx + 2, idx2
+    return h1, header_idx + 1, idx1
 
 
 def _buscar_fila_header(rows, max_search=50):
@@ -154,14 +228,12 @@ def _parsear_xlsx(file_stream):
         if header_idx is None:
             continue
 
-        headers = list(rows[header_idx])
-        idx = _detectar_columnas(headers)
+        headers, start_data, idx = _construir_header_combinado(rows, header_idx)
 
         if idx['desc'] is None or idx['cantidad'] is None:
             continue
 
-        # Saltar sub-header tipico ("$/un", "$/total")
-        start_data = header_idx + 1
+        # Saltar sub-header tipico solo si la fila siguiente parece extra ("$/un", "$/total")
         if start_data < len(rows):
             sub = rows[start_data]
             sub_txt = ' '.join(str(c).lower() for c in sub if c is not None)
@@ -176,7 +248,8 @@ def _parsear_xlsx(file_stream):
             if h is None:
                 continue
             h_low = str(h).lower().strip()
-            if h_low in ('rubro', 'codigo', 'cod', 'cod.', 'item', 'no', 'nro', 'n°', '#'):
+            if h_low in ('rubro', 'codigo', 'cod', 'cod.', 'item', 'no', 'nro', 'n°', '#',
+                         ' item', 'item ', 'codigo item', 'numero', 'item no'):
                 idx_rubro = i
                 break
 
@@ -261,6 +334,75 @@ def _parsear_xlsx(file_stream):
             })
 
     return items_total if items_total else None
+
+
+def _diagnosticar_xlsx(file_stream):
+    """Inspecciona el archivo y devuelve un diagnostico util cuando el parser
+    no logra detectar items. Retorna dict serializable a JSON.
+    """
+    import openpyxl
+    diag = {'hojas': [], 'columnas_esperadas': ['descripcion', 'unidad', 'cantidad', 'precio_unitario']}
+    try:
+        wb = openpyxl.load_workbook(file_stream, data_only=True, read_only=True)
+    except Exception as e:
+        diag['error_lectura'] = f'{type(e).__name__}: {str(e)[:200]}'
+        return diag
+
+    for sname in wb.sheetnames:
+        try:
+            ws = wb[sname]
+            rows = list(ws.iter_rows(values_only=True))
+        except Exception as e:
+            diag['hojas'].append({'nombre': sname, 'error': f'{type(e).__name__}: {e}'})
+            continue
+
+        no_vacias_preview = []
+        for i, r in enumerate(rows):
+            if not r or all(c is None or str(c).strip() == '' for c in r):
+                continue
+            preview_cells = [(str(c)[:60] if c is not None else '') for c in r[:14]]
+            no_vacias_preview.append({'fila': i + 1, 'celdas': preview_cells})
+            if len(no_vacias_preview) >= 10:
+                break
+
+        # Intentar detectar header y columnas
+        header_idx, score = _buscar_fila_header(rows)
+        cols_detectadas = None
+        header_efectivo = None
+        if header_idx is not None:
+            headers_eff, _start, idx_eff = _construir_header_combinado(rows, header_idx)
+            header_efectivo = [(str(h)[:50] if h is not None else None) for h in headers_eff]
+            cols_detectadas = {
+                'desc': _col_letter(idx_eff.get('desc')),
+                'unidad': _col_letter(idx_eff.get('unidad')),
+                'cantidad': _col_letter(idx_eff.get('cantidad')),
+                'precio': _col_letter(idx_eff.get('precio')),
+            }
+
+        # Motivo del fallo
+        if header_idx is None:
+            motivo = 'No se encontró fila de encabezado con keywords (descripcion/cantidad/unidad/precio).'
+        elif cols_detectadas and cols_detectadas.get('desc') is None:
+            motivo = 'No se identificó la columna de descripción.'
+        elif cols_detectadas and cols_detectadas.get('cantidad') is None:
+            motivo = 'No se identificó la columna de cantidad.'
+        else:
+            motivo = 'No se encontraron filas con cantidad numérica > 0.'
+
+        diag['hojas'].append({
+            'nombre': sname,
+            'dimensiones': f'{ws.max_row}x{ws.max_column}',
+            'header_fila_detectada': (header_idx + 1) if header_idx is not None else None,
+            'header_efectivo': header_efectivo,
+            'columnas_detectadas': cols_detectadas,
+            'primeras_filas_no_vacias': no_vacias_preview,
+            'motivo': motivo,
+        })
+    try:
+        wb.close()
+    except Exception:
+        pass
+    return diag
 
 
 def _col_letter(idx):
