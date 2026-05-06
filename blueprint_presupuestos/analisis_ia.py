@@ -525,6 +525,119 @@ def clasificar_item_pendiente(id, item_id):
 
 
 # ============================================================================
+# UX revisión por lotes 2026-05-06 — Acciones masivas sobre items pendientes.
+# ============================================================================
+
+@presupuestos_bp.route('/<int:id>/aplicar-analisis-ia/bulk', methods=['POST'])
+@login_required
+def aplicar_analisis_ia_bulk(id: int):
+    """Aplica acción (confirmar / omitir / clasificar) a varios items en un solo request.
+
+    Body JSON:
+      items: [item_id_1, item_id_2, ...]
+      accion: 'confirmar' | 'omitir'                     (default 'confirmar')
+      tipo_tratamiento: 'global'|'servicio'|'desglosar'|'excluir'  (opcional)
+      rubro: string                                       (opcional)
+
+    Para 'confirmar': si los items ya tienen sugerencia IA, los marca como
+    resueltos (sugerencia_confirmada). Si además se pasa tipo_tratamiento o
+    rubro, los aplica.
+
+    No modifica descripción/unidad/cantidad — solo metadata de clasificación.
+    Ideal para el botón "Confirmar grupo" del modal de pendientes.
+    """
+    from models.budgets import Presupuesto, ItemPresupuesto
+
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organizacion activa'), 400
+    presupuesto = Presupuesto.query.filter_by(
+        id=id, organizacion_id=org_id
+    ).first()
+    if not presupuesto:
+        return jsonify(ok=False, error='Presupuesto no encontrado'), 404
+    if not _puede_gestionar():
+        return jsonify(ok=False, error='Sin permisos'), 403
+    if presupuesto.estado not in ('borrador', 'enviado'):
+        return jsonify(ok=False,
+                       error=f'Presupuesto en estado {presupuesto.estado}: no editable.'), 400
+
+    payload = request.get_json(silent=True) or {}
+    item_ids = payload.get('items') or []
+    if not isinstance(item_ids, list) or not item_ids:
+        return jsonify(ok=False, error='Pasá una lista de item_ids'), 400
+
+    accion = (payload.get('accion') or 'confirmar').strip().lower()
+    if accion not in ('confirmar', 'omitir'):
+        return jsonify(ok=False, error=f'accion invalida: {accion}'), 400
+
+    tt = (payload.get('tipo_tratamiento') or '').strip().lower()
+    rubro = (payload.get('rubro') or '').strip()[:120]
+    if tt and tt not in TIPOS_TRATAMIENTO:
+        return jsonify(ok=False, error=f'tipo_tratamiento invalido: {tt}'), 400
+
+    items = (ItemPresupuesto.query
+             .filter(ItemPresupuesto.presupuesto_id == presupuesto.id,
+                     ItemPresupuesto.id.in_(item_ids))
+             .all())
+
+    aplicados = 0
+    saltados = 0
+    for it in items:
+        try:
+            blob = dict(it.analisis_ia) if isinstance(it.analisis_ia, dict) else {}
+            if accion == 'omitir':
+                blob['estado_revision'] = 'omitido'
+                blob['resuelto_por_usuario'] = True
+                blob['resuelto_at'] = datetime.utcnow().isoformat()
+                it.analisis_ia = blob
+                it.revisado_ia = True
+                aplicados += 1
+                continue
+
+            # accion == 'confirmar'
+            if tt:
+                blob['tipo_tratamiento'] = tt
+                blob['tipo_tratamiento_origen'] = 'bulk_confirmar'
+                sug = blob.get('sugerencias') or {}
+                if isinstance(sug, dict):
+                    sug['tipo_tratamiento'] = tt
+                    blob['sugerencias'] = sug
+            if rubro:
+                sug = blob.get('sugerencias') or {}
+                if isinstance(sug, dict):
+                    sug['rubro_sugerido'] = rubro
+                    blob['sugerencias'] = sug
+                it.etapa_nombre = rubro[:100]
+
+            blob['estado_revision'] = 'sugerencia_confirmada' if not (tt or rubro) else 'clasificado_manual'
+            blob['resuelto_por_usuario'] = True
+            blob['resuelto_at'] = datetime.utcnow().isoformat()
+            it.analisis_ia = blob
+            it.revisado_ia = True
+            aplicados += 1
+        except Exception:
+            current_app.logger.exception(f'Error en bulk para item {it.id}')
+            saltados += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error commiteando aplicar_analisis_ia_bulk')
+        return jsonify(ok=False, error=f'Error al guardar: {type(e).__name__}'), 500
+
+    return jsonify(
+        ok=True,
+        aplicados=aplicados,
+        saltados=saltados,
+        accion=accion,
+        tipo_tratamiento=tt or None,
+        rubro=rubro or None,
+    )
+
+
+# ============================================================================
 # MVP autoclasificación 2026-05-06 — Aplicar clasificación a similares.
 # ============================================================================
 

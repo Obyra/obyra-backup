@@ -3498,6 +3498,9 @@ function _iaRenderResultados(data) {
     iaAplicarFiltros();
     _iaActualizarBoton();
 
+    // UX revisión por lotes (2026-05-06): panel de grupos arriba de la vista simple.
+    try { _iaRenderPanelGrupos(data); } catch (e) { console.error('panel grupos:', e); }
+
     // Fase 3.5: render de la vista simple (negocio)
     _iaRenderVistaSimple(data);
     // Aplicar el toggle correcto (vista simple por default; experta solo si esta tildado)
@@ -4557,6 +4560,273 @@ function _iaRenderBloquePrecios(data) {
     bloque.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// ============================================================================
+// UX revisión por lotes (2026-05-06) — agrupa items pendientes y permite
+// confirmar/omitir grupos enteros sin revisar uno por uno.
+// ============================================================================
+
+function _iaAgruparPendientes(items) {
+    /* Agrupa items por (regla_id sugerida + tipo_tratamiento + unidad).
+       Items sin sugerencia van a un grupo "Sin sugerencia". */
+    const grupos = new Map();
+    items.forEach(it => {
+        const sug = it.sugerencia || it.sugerencias || {};
+        const reglaId = sug.regla_id || it.regla_id || null;
+        const tt = it.tipo_tratamiento_sugerido || sug.tipo_tratamiento || null;
+        const rubro = sug.rubro_sugerido || it.rubro_sugerido || it.etapa_nombre || '';
+        const unidad = (it.unidad || '').toLowerCase();
+        // Resuelto si revisado_ia o estado_revision presente
+        const resuelto = !!it.revisado_ia || !!(it.estado_revision);
+        const key = reglaId
+            ? `r:${reglaId}|u:${unidad}`
+            : (tt
+                ? `t:${tt}|u:${unidad}`
+                : `sin_sugerencia|u:${unidad}`);
+        if (!grupos.has(key)) {
+            grupos.set(key, {
+                key, regla_id: reglaId, tipo_tratamiento: tt,
+                rubro: rubro, unidad: unidad,
+                titulo: '', items: [], pendientes: 0, resueltos: 0,
+            });
+        }
+        const g = grupos.get(key);
+        g.items.push(it);
+        if (resuelto) g.resueltos += 1; else g.pendientes += 1;
+    });
+
+    // Generar título de cada grupo
+    grupos.forEach(g => {
+        const partes = [];
+        if (g.regla_id) {
+            const nombre_regla = g.regla_id.replaceAll('_', ' ');
+            partes.push(nombre_regla);
+        } else if (g.tipo_tratamiento) {
+            partes.push('Tratamiento: ' + g.tipo_tratamiento);
+        } else {
+            partes.push('Sin sugerencia');
+        }
+        if (g.rubro) partes.push(g.rubro);
+        if (g.unidad) partes.push('[' + g.unidad + ']');
+        g.titulo = partes.join(' · ');
+    });
+
+    // Ordenar: primero los que tienen pendientes (más pendientes primero), después los resueltos
+    return Array.from(grupos.values()).sort((a, b) => {
+        if (b.pendientes !== a.pendientes) return b.pendientes - a.pendientes;
+        return b.items.length - a.items.length;
+    });
+}
+
+window._iaPanelGruposEstado = { soloPendientes: true, gruposExpandidos: new Set() };
+
+function _iaRenderPanelGrupos(data) {
+    const items = data.items || [];
+    if (!items.length) return;
+    const grupos = _iaAgruparPendientes(items);
+    const totalPendientes = grupos.reduce((acc, g) => acc + g.pendientes, 0);
+    const totalResueltos = grupos.reduce((acc, g) => acc + g.resueltos, 0);
+    const total = items.length;
+    const cobertura = total > 0 ? Math.round(100 * totalResueltos / total) : 0;
+
+    const vSimple = document.getElementById('iaVistaSimple');
+    if (!vSimple) return;
+    // Borrar panel previo
+    const prev = document.getElementById('iaPanelGrupos');
+    if (prev) prev.remove();
+
+    const wrap = document.createElement('div');
+    wrap.id = 'iaPanelGrupos';
+    wrap.className = 'card border-primary shadow-sm mb-3';
+
+    const soloPendientes = window._iaPanelGruposEstado.soloPendientes;
+    const gruposVisibles = soloPendientes
+        ? grupos.filter(g => g.pendientes > 0)
+        : grupos;
+
+    let html = '';
+    // Header con resumen y acción global
+    html += '<div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap gap-2">';
+    html += '<div>';
+    html += '<h6 class="mb-0"><i class="fas fa-layer-group me-1"></i>Revisión por grupos</h6>';
+    html += '<div class="small">' + total + ' ítems · <strong>' + totalPendientes + ' pendientes</strong> · ' +
+            totalResueltos + ' resueltos · cobertura ' + cobertura + '%</div>';
+    html += '</div>';
+    html += '<div class="d-flex gap-2 align-items-center">';
+    html += '<div class="form-check form-switch m-0 text-white">' +
+            '<input class="form-check-input" type="checkbox" id="iaToggleSoloPendientes" ' +
+            (soloPendientes ? 'checked' : '') + '>' +
+            '<label class="form-check-label small text-white" for="iaToggleSoloPendientes">' +
+            'Solo pendientes</label></div>';
+    if (totalPendientes > 0) {
+        html += '<button type="button" class="btn btn-light btn-sm" onclick="_iaConfirmarTodasSugerencias()" ' +
+                'title="Confirma todas las sugerencias automaticas que la IA propuso para los pendientes con sugerencia.">' +
+                '<i class="fas fa-check-double me-1"></i>Confirmar todas las sugerencias' +
+                '</button>';
+    }
+    html += '</div></div>';
+
+    // Body con grupos
+    html += '<div class="card-body p-2" id="iaPanelGruposBody">';
+    if (gruposVisibles.length === 0) {
+        html += '<div class="alert alert-success small mb-0">' +
+                '<i class="fas fa-check me-1"></i>No hay pendientes. Todos los ítems están resueltos.</div>';
+    } else {
+        gruposVisibles.forEach((g, idx) => {
+            const gid = 'iaGrupo_' + idx;
+            const expanded = window._iaPanelGruposEstado.gruposExpandidos.has(g.key);
+            const colorClass = g.pendientes > 0 ? 'border-warning' : 'border-success';
+            html += '<div class="border rounded ' + colorClass + ' mb-2" data-grupo-key="' + _iaEsc(g.key) + '">';
+            // Header del grupo
+            html += '<div class="d-flex justify-content-between align-items-center p-2 ' +
+                    (g.pendientes > 0 ? 'bg-warning bg-opacity-10' : 'bg-success bg-opacity-10') +
+                    '" role="button" onclick="_iaToggleGrupo(\'' + g.key + '\')">';
+            html += '<div class="flex-grow-1">';
+            html += '<i class="fas fa-' + (expanded ? 'chevron-down' : 'chevron-right') + ' me-2"></i>';
+            html += '<strong>' + _iaEsc(g.titulo) + '</strong>';
+            html += ' <span class="badge bg-secondary">' + g.items.length + ' ítem' + (g.items.length === 1 ? '' : 's') + '</span>';
+            if (g.pendientes > 0) {
+                html += ' <span class="badge bg-warning text-dark">' + g.pendientes + ' pendiente' + (g.pendientes === 1 ? '' : 's') + '</span>';
+            }
+            if (g.resueltos > 0) {
+                html += ' <span class="badge bg-success">' + g.resueltos + ' resuelto' + (g.resueltos === 1 ? '' : 's') + '</span>';
+            }
+            html += '</div>';
+            // Botones de acción del grupo
+            if (g.pendientes > 0) {
+                html += '<div class="d-flex gap-1" onclick="event.stopPropagation()">';
+                html += '<button type="button" class="btn btn-success btn-sm" ' +
+                        'onclick="_iaConfirmarGrupo(\'' + _iaEsc(g.key) + '\')" ' +
+                        'title="Confirma la sugerencia IA para todos los ítems pendientes de este grupo">' +
+                        '<i class="fas fa-check me-1"></i>Confirmar grupo</button>';
+                html += '<button type="button" class="btn btn-outline-secondary btn-sm" ' +
+                        'onclick="_iaOmitirGrupo(\'' + _iaEsc(g.key) + '\')" ' +
+                        'title="Marcar este grupo como omitido (no entra en el ejecutivo)">' +
+                        '<i class="fas fa-times me-1"></i>Omitir</button>';
+                html += '</div>';
+            }
+            html += '</div>'; // header
+
+            // Body del grupo (lista de items)
+            html += '<div class="' + (expanded ? '' : 'd-none') + '" id="' + gid + '_body">';
+            html += '<ul class="list-group list-group-flush small">';
+            g.items.slice(0, 50).forEach(it => {
+                const tipoBadge = it.revisado_ia
+                    ? '<span class="badge bg-success ms-1">resuelto</span>'
+                    : '<span class="badge bg-warning text-dark ms-1">pendiente</span>';
+                html += '<li class="list-group-item py-1 px-3">' +
+                        '<span class="text-muted">#' + it.id + '</span> ' +
+                        _iaEsc((it.descripcion || '').substring(0, 100)) +
+                        ' <span class="text-muted">(' + _iaEsc(it.unidad || '') + ', ' + _iaEsc(String(it.cantidad || 0)) + ')</span>' +
+                        tipoBadge +
+                        '</li>';
+            });
+            if (g.items.length > 50) {
+                html += '<li class="list-group-item py-1 px-3 text-muted">... y ' + (g.items.length - 50) + ' más</li>';
+            }
+            html += '</ul></div>'; // body
+            html += '</div>'; // grupo
+        });
+    }
+    html += '</div>'; // card-body
+    wrap.innerHTML = html;
+    vSimple.insertBefore(wrap, vSimple.firstChild);
+
+    // Wire toggle "Solo pendientes"
+    const toggle = document.getElementById('iaToggleSoloPendientes');
+    if (toggle) {
+        toggle.addEventListener('change', function() {
+            window._iaPanelGruposEstado.soloPendientes = toggle.checked;
+            _iaRenderPanelGrupos(_iaResultadoCache || {items: []});
+        });
+    }
+}
+
+window._iaToggleGrupo = function(key) {
+    const set = window._iaPanelGruposEstado.gruposExpandidos;
+    if (set.has(key)) set.delete(key); else set.add(key);
+    _iaRenderPanelGrupos(_iaResultadoCache || {items: []});
+};
+
+async function _iaBulkApply(item_ids, params, mensaje_exito) {
+    if (!_iaPresupuestoId || !item_ids.length) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    try {
+        const r = await fetch(`/presupuestos/${_iaPresupuestoId}/aplicar-analisis-ia/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+            body: JSON.stringify(Object.assign({items: item_ids}, params || {})),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert(d.error || 'Error al aplicar acción');
+            return;
+        }
+        alert(mensaje_exito || ('Aplicado a ' + d.aplicados + ' ítems.'));
+        // Re-fetch del análisis para refrescar el panel
+        if (typeof abrirAnalisisIA === 'function' && _iaPresupuestoId) {
+            abrirAnalisisIA(_iaPresupuestoId);
+        }
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    }
+}
+
+window._iaConfirmarGrupo = function(key) {
+    const cache = _iaResultadoCache;
+    if (!cache) return;
+    const grupos = _iaAgruparPendientes(cache.items || []);
+    const g = grupos.find(x => x.key === key);
+    if (!g) return;
+    const ids = g.items.filter(it => !it.revisado_ia).map(it => it.id);
+    if (!ids.length) { alert('No hay pendientes en este grupo.'); return; }
+    if (!confirm('Confirmar las sugerencias IA para ' + ids.length + ' ítem(s) de este grupo?')) return;
+
+    const params = { accion: 'confirmar' };
+    // Si el grupo tiene tipo_tratamiento, aplicarlo
+    if (g.tipo_tratamiento) {
+        params.tipo_tratamiento = g.tipo_tratamiento;
+    }
+    if (g.rubro) {
+        params.rubro = g.rubro;
+    }
+    _iaBulkApply(ids, params, 'Grupo confirmado: ' + ids.length + ' ítem(s).');
+};
+
+window._iaOmitirGrupo = function(key) {
+    const cache = _iaResultadoCache;
+    if (!cache) return;
+    const grupos = _iaAgruparPendientes(cache.items || []);
+    const g = grupos.find(x => x.key === key);
+    if (!g) return;
+    const ids = g.items.filter(it => !it.revisado_ia).map(it => it.id);
+    if (!ids.length) return;
+    if (!confirm('Omitir ' + ids.length + ' ítem(s) de este grupo? No entrarán en la composición ejecutiva.')) return;
+    _iaBulkApply(ids, { accion: 'omitir' }, 'Grupo omitido: ' + ids.length + ' ítem(s).');
+};
+
+window._iaConfirmarTodasSugerencias = function() {
+    const cache = _iaResultadoCache;
+    if (!cache) return;
+    // Solo items con sugerencia (regla_id o tipo_tratamiento) que no estén resueltos
+    const ids = (cache.items || [])
+        .filter(it => {
+            if (it.revisado_ia) return false;
+            const sug = it.sugerencia || it.sugerencias || {};
+            return !!(sug.regla_id || it.regla_id ||
+                      it.tipo_tratamiento_sugerido || sug.tipo_tratamiento);
+        })
+        .map(it => it.id);
+    if (!ids.length) {
+        alert('No hay sugerencias automáticas pendientes para confirmar.');
+        return;
+    }
+    if (!confirm('Confirmar las sugerencias IA para ' + ids.length + ' ítem(s) pendientes con sugerencia?')) return;
+    _iaBulkApply(ids, { accion: 'confirmar' },
+                 'Sugerencias confirmadas: ' + ids.length + ' ítem(s).');
+};
+
+// Función original que ya existía:
 function _iaMostrarResumenPreliminar(data) {
     const c = data.contadores || {};
     const adv = data.advertencias || [];
