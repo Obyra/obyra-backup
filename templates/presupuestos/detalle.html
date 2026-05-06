@@ -3373,29 +3373,34 @@ window.camGenerarComposicionRapido = async function(btnEl) {
             return;
         }
 
-        // Resumen final
+        // Resumen final con métricas claras (KPI principal: ítems listos para cotizar).
         const c = d3.contadores || {};
-        const cobertura = d3.cobertura_pct || 0;
-        const pendientes_total = n_dudosos + n_sin;
-        let msg = '✓ Composición ejecutiva generada\n\n';
-        if (aplicados > 0) {
-            msg += aplicados + ' sugerencias auto-aplicadas.\n';
+        const total = d3.items_total || 0;
+        const resueltos = d3.items_resueltos || 0;
+        const cobertura = d3.cobertura_clasificacion_pct || d3.cobertura_pct || 0;
+        const descompuestos = d3.items_descompuestos || c.items_creados || 0;
+        const globales = d3.items_globales_total || 0;
+        const servicios = d3.items_servicios_total || 0;
+        const clasificados_sin_coef = d3.items_clasificados_sin_coef || 0;
+        const pendientes = d3.pendientes_reales || 0;
+
+        let msg = '✓ OBYRA resolvió ' + resueltos + ' de ' + total + ' ítems (' + cobertura + '%)\n\n';
+        msg += '  · ' + descompuestos + ' con desglose técnico (materiales / MO / equipos)\n';
+        if (globales > 0) {
+            msg += '  · ' + globales + ' como gasto global (personal, obrador, limpieza, seguros)\n';
         }
-        msg += '\nResultado:\n';
-        msg += '  · ' + (c.items_creados || 0) + ' ítems descompuestos en materiales/MO/equipos\n';
-        if (c.items_globales_auto || c.items_globales) {
-            msg += '  · ' + ((c.items_globales || 0) + (c.items_globales_auto || 0)) + ' globales (personal, obrador, limpieza, seguros)\n';
+        if (servicios > 0) {
+            msg += '  · ' + servicios + ' como servicios (firma, gestoría, trámites)\n';
         }
-        if (c.items_servicio_auto || c.items_servicio) {
-            msg += '  · ' + ((c.items_servicio || 0) + (c.items_servicio_auto || 0)) + ' servicios (firma, gestoría, trámites)\n';
+        if (clasificados_sin_coef > 0) {
+            msg += '  · ' + clasificados_sin_coef + ' clasificados como ítem completo (cotizables sin desglose)\n';
         }
-        msg += '  · Cobertura final: ' + cobertura + '%\n';
-        if (pendientes_total > 0) {
-            msg += '\n⚠ Quedan ' + pendientes_total + ' ítems para revisar manualmente.\n';
-            msg += '   (Podés tocar "Revisar análisis IA" después).';
-        } else {
-            msg += '\n¡Listo para cotizar con la Calculadora IA!';
+        msg += '\n';
+        if (pendientes > 0) {
+            msg += '⚠ Quedan ' + pendientes + ' ítems sin clasificar.\n';
+            msg += '   Podés tocar "Revisar análisis IA" para verlos uno por uno.\n\n';
         }
+        msg += '¡Listo para cotizar con la Calculadora IA!';
         alert(msg);
         location.reload();
     } catch (e) {
@@ -5223,10 +5228,16 @@ function _iaMostrarResumenPreliminar(data) {
     const adv = data.advertencias || [];
     const sal = data.saltados || [];
     const trunc = data.saltados_truncado || 0;
-    // MVP autoclasificación: cobertura visible.
-    const cobertura = data.cobertura_pct || 0;
+    // MVP autoclasificación v2: 3 métricas separadas. Headline usa la
+    // cobertura de clasificación (más alta y más vendible).
+    const cobertura = data.cobertura_clasificacion_pct || data.cobertura_pct || 0;
+    const cob_composicion = data.cobertura_composicion_pct || 0;
     const itemsTotal = data.items_total || 0;
     const itemsResueltos = data.items_resueltos || 0;
+    const itemsListosCotizar = data.items_listos_cotizar || 0;
+    const itemsGlobalesTot = data.items_globales_total || 0;
+    const itemsServiciosTot = data.items_servicios_total || 0;
+    const itemsClasifSinCoef = data.items_clasificados_sin_coef || 0;
     const pendientesReales = data.pendientes_reales || 0;
 
     // Headline grande con la cobertura: este es el numero que vende la demo.
@@ -5240,18 +5251,23 @@ function _iaMostrarResumenPreliminar(data) {
     }
     html += '</h5>';
 
-    // Detalle compacto
+    // Detalle: KPIs principales primero, luego desglose.
+    html += '<div class="small mb-2">';
+    html += '<div><strong>' + itemsListosCotizar + '/' + itemsTotal + '</strong> ítems listos para cotizar';
+    if (cob_composicion > 0) {
+        html += ' (' + (c.items_creados || 0) + ' con desglose técnico, ' + cob_composicion + '%)';
+    }
+    html += '</div></div>';
+
     html += '<ul class="small mb-2">';
     if (c.items_creados) html += `<li><strong>${c.items_creados}</strong> ítems descompuestos en materiales/MO/equipos (${c.composiciones_creadas || 0} recursos creados)</li>`;
-    if (c.items_globales_auto) html += `<li><strong>${c.items_globales_auto}</strong> ítems clasificados como <em>gasto global</em> automáticamente (vigilancia, llavero, obrador, limpieza, seguros)</li>`;
-    if (c.items_servicio_auto) html += `<li><strong>${c.items_servicio_auto}</strong> ítems clasificados como <em>servicio profesional</em> automáticamente (firma, dirección técnica, gestoría, trámites)</li>`;
-    if (c.items_globales) html += `<li>${c.items_globales} ítems globales (clasificados manualmente antes)</li>`;
-    if (c.items_servicio) html += `<li>${c.items_servicio} ítems servicio (clasificados manualmente antes)</li>`;
+    if (itemsGlobalesTot) html += `<li><strong>${itemsGlobalesTot}</strong> ítems como <em>gasto global</em> (vigilancia, llavero, obrador, limpieza, seguros)</li>`;
+    if (itemsServiciosTot) html += `<li><strong>${itemsServiciosTot}</strong> ítems como <em>servicio profesional</em> (firma, dirección técnica, gestoría, trámites)</li>`;
+    if (itemsClasifSinCoef) html += `<li><strong>${itemsClasifSinCoef}</strong> ítems clasificados como <em>ítem completo</em> (cotizables sin desglose fino)</li>`;
     if (c.items_excluidos) html += `<li>${c.items_excluidos} ítems excluidos del ejecutivo</li>`;
     if (c.items_ya_generado) html += `<li>${c.items_ya_generado} ítems ya tenían composición auto (sin cambios)</li>`;
     if (c.items_respetado_manual) html += `<li>${c.items_respetado_manual} ítems con composición manual respetados</li>`;
     if (c.items_sin_regla) html += `<li class="text-warning"><strong>${c.items_sin_regla}</strong> ítems sin regla técnica — requieren revisión manual</li>`;
-    if (c.items_sin_coeficiente) html += `<li class="text-warning"><strong>${c.items_sin_coeficiente}</strong> ítems con regla pero sin coeficiente cargado</li>`;
     html += '</ul>';
 
     if (adv.length) {

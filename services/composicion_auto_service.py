@@ -167,6 +167,53 @@ def _composiciones_existentes(item) -> Dict[str, int]:
     return out
 
 
+def _crear_composicion_item_completo(item, *, tipo: str, motivo: str) -> bool:
+    """Crea una composición que representa el ítem entero, sin desglose.
+
+    Útil cuando el ítem se trata como global/servicio/sin coeficiente: queda
+    UNA fila en ItemPresupuestoComposicion con la cantidad y unidad del
+    ítem, lista para que la Calculadora IA estime su precio o se mande a
+    proveedores como recurso completo. Sin esto, el ítem queda con 0
+    composiciones y el estimador no lo puede tocar.
+
+    Idempotente: si ya existe una composición auto_ia para este item, no
+    crea nada y devuelve False.
+    """
+    from models.budgets import ItemPresupuestoComposicion
+    existentes = _composiciones_existentes(item)
+    if existentes.get('calculadora_ia', 0) > 0:
+        return False
+    otras = sum(v for k, v in existentes.items() if k != 'calculadora_ia')
+    if otras > 0:
+        # Composiciones manuales presentes — no las pisamos
+        return False
+    cantidad = _decimal(item.cantidad)
+    if cantidad <= 0:
+        return False
+    tipo_norm = _normalizar_tipo(tipo or 'material')
+    descripcion = (getattr(item, 'descripcion', '') or '')[:300]
+    unidad = (getattr(item, 'unidad', '') or 'gl')[:20]
+    notas = (
+        f'Ítem completo (sin desglose técnico). Motivo: {motivo}. '
+        f'Estimable como recurso global o cotizable a proveedor.'
+    )[:1000]
+    comp = ItemPresupuestoComposicion(
+        item_presupuesto_id=item.id,
+        tipo=tipo_norm,
+        descripcion=descripcion,
+        unidad=unidad,
+        cantidad=cantidad,
+        precio_unitario=Decimal('0'),
+        total=Decimal('0'),
+        notas=notas,
+        origen='calculadora_ia',
+        es_estimado=True,
+        coeficiente_usado=f'item_completo:{motivo}'[:80],
+    )
+    db.session.add(comp)
+    return True
+
+
 def generar_para_item(item, *, regla_id: Optional[str]) -> Dict[str, Any]:
     """Genera composiciones para UN item. Idempotente.
 
@@ -196,9 +243,17 @@ def generar_para_item(item, *, regla_id: Optional[str]) -> Dict[str, Any]:
     if tt == 'excluir':
         return {'estado': 'excluido', 'composiciones_creadas': 0}
     if tt == 'global':
-        return {'estado': 'global_no_desglosa', 'composiciones_creadas': 0}
+        creada = _crear_composicion_item_completo(item, tipo='material', motivo='global')
+        return {
+            'estado': 'global_no_desglosa',
+            'composiciones_creadas': 1 if creada else 0,
+        }
     if tt == 'servicio':
-        return {'estado': 'servicio_no_desglosa', 'composiciones_creadas': 0}
+        creada = _crear_composicion_item_completo(item, tipo='equipo', motivo='servicio')
+        return {
+            'estado': 'servicio_no_desglosa',
+            'composiciones_creadas': 1 if creada else 0,
+        }
 
     # MVP autoclasificación: si la regla técnica matcheada por IA tiene
     # tipo_tratamiento definido (ej: personal_admin, servicio_tecnico, etc.),
@@ -223,7 +278,17 @@ def generar_para_item(item, *, regla_id: Optional[str]) -> Dict[str, Any]:
                 'global': 'global_auto', 'servicio': 'servicio_auto',
                 'excluir': 'excluido',
             }
-            return {'estado': estado_map[tt_regla], 'composiciones_creadas': 0}
+            comps_creadas = 0
+            if tt_regla == 'global':
+                if _crear_composicion_item_completo(item, tipo='material',
+                                                    motivo='global_auto'):
+                    comps_creadas = 1
+            elif tt_regla == 'servicio':
+                if _crear_composicion_item_completo(item, tipo='equipo',
+                                                    motivo='servicio_auto'):
+                    comps_creadas = 1
+            return {'estado': estado_map[tt_regla],
+                    'composiciones_creadas': comps_creadas}
 
     # Si NO hay regla_id (o el matcher IA no detectó nada), intentar el
     # matcher catch-all directamente acá. Cubre items que el usuario nunca
@@ -250,14 +315,32 @@ def generar_para_item(item, *, regla_id: Optional[str]) -> Dict[str, Any]:
                 'global': 'global_auto', 'servicio': 'servicio_auto',
                 'excluir': 'excluido',
             }
+            comps = 0
+            if tt_match == 'global':
+                if _crear_composicion_item_completo(item, tipo='material',
+                                                    motivo='global_catchall'):
+                    comps = 1
+            elif tt_match == 'servicio':
+                if _crear_composicion_item_completo(item, tipo='equipo',
+                                                    motivo='servicio_catchall'):
+                    comps = 1
             return {
                 'estado': estado_map.get(tt_match, 'sin_regla'),
-                'composiciones_creadas': 0,
+                'composiciones_creadas': comps,
             }
         return {'estado': 'sin_regla', 'composiciones_creadas': 0}
 
     if not tiene_coeficientes(regla_id):
-        return {'estado': 'sin_coeficiente', 'composiciones_creadas': 0}
+        # MVP demo: aunque no tengamos coeficientes YAML para esta regla,
+        # si el item ya quedó clasificado (regla_id presente), creamos UNA
+        # composición item_completo para que la IA y proveedores puedan
+        # avanzar. Sino el item queda invisible para el resto del sistema.
+        creada = _crear_composicion_item_completo(item, tipo='material',
+                                                  motivo=f'sin_coef_{regla_id}'[:50])
+        return {
+            'estado': 'sin_coeficiente_clasificado',
+            'composiciones_creadas': 1 if creada else 0,
+        }
 
     # Idempotencia + respeto a composiciones manuales
     existentes = _composiciones_existentes(item)
@@ -338,6 +421,8 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
         'items_respetado_manual': 0,
         'items_sin_regla': 0,
         'items_sin_coeficiente': 0,
+        'items_clasificados_sin_coef': 0,  # MVP demo: tienen regla pero el YAML no tiene coef.
+                                            # Quedan como item_completo, listos para cotizar.
         'items_cantidad_invalida': 0,
         'items_globales': 0,
         'items_servicio': 0,
@@ -383,6 +468,10 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
                     'descripcion': (it.descripcion or '')[:120],
                     'razon': f'Sin coeficiente cargado para esta regla técnica ({regla_id}).',
                 })
+        elif estado == 'sin_coeficiente_clasificado':
+            # MVP demo: sin coeficiente YAML pero clasificado y con composición
+            # item_completo. Cuenta como resuelto para cobertura.
+            contadores['items_clasificados_sin_coef'] += 1
         elif estado == 'ya_generado':
             contadores['items_ya_generado'] += 1
         elif estado == 'respetado_manual':
@@ -429,25 +518,42 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
             'composiciones manuales. Borralas antes si querés regenerar.'
         )
 
-    # Cobertura: items "resueltos" / total. Resueltos = creados + globales/
-    # servicios (manuales o auto) + ya generados + excluidos. Pendientes
-    # reales = sin_regla + sin_coeficiente.
+    # Cobertura: tres métricas separadas para mejor lectura del demo.
+    # 1) Cobertura de clasificación: items con clasificación clara
+    #    (cualquier estado resuelto, incluyendo globales/servicios y items
+    #    clasificados sin coef YAML que quedaron como item_completo).
+    # 2) Cobertura de composición técnica: solo items que se descompusieron
+    #    en materiales/MO/equipos (`items_creados`).
+    # 3) Items listos para cotizar: cualquier item con composición
+    #    (descompuesto, global, servicio, item_completo) — la IA puede
+    #    estimar precio sobre todos ellos.
     total = contadores['items_procesados']
-    resueltos = (
-        contadores['items_creados']
-        + contadores['items_globales']
-        + contadores['items_servicio']
-        + contadores['items_globales_auto']
-        + contadores['items_servicio_auto']
+    globales_total = contadores['items_globales'] + contadores['items_globales_auto']
+    servicios_total = contadores['items_servicio'] + contadores['items_servicio_auto']
+    descompuestos = contadores['items_creados']
+    clasificados_sin_coef = contadores['items_clasificados_sin_coef']
+    # Items con AL MENOS UNA composición (estimable por IA / proveedor).
+    items_listos_cotizar = (
+        descompuestos
+        + globales_total
+        + servicios_total
+        + clasificados_sin_coef
+    )
+    # Items resueltos a nivel clasificación (incluye respetados y excluidos).
+    items_resueltos = (
+        items_listos_cotizar
         + contadores['items_ya_generado']
         + contadores['items_excluidos']
         + contadores['items_respetado_manual']
     )
     pendientes_reales = (
         contadores['items_sin_regla']
-        + contadores['items_sin_coeficiente']
+        + contadores['items_sin_coeficiente']  # legacy: items con sin coef sin item_completo creado
+        + contadores['items_cantidad_invalida']
     )
-    cobertura_pct = round(100.0 * resueltos / total, 1) if total > 0 else 0.0
+    cobertura_clasificacion_pct = round(100.0 * items_resueltos / total, 1) if total > 0 else 0.0
+    cobertura_composicion_pct = round(100.0 * descompuestos / total, 1) if total > 0 else 0.0
+    cobertura_listos_cotizar_pct = round(100.0 * items_listos_cotizar / total, 1) if total > 0 else 0.0
 
     return {
         'contadores': contadores,
@@ -461,9 +567,17 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
         ),
         'advertencias': advertencias,
         'yaml_version': yaml_metadatos().get('version'),
-        # MVP autoclasificación: resumen de cobertura para mostrar al usuario.
-        'cobertura_pct': cobertura_pct,
+        # Cobertura: 3 métricas separadas
+        'cobertura_pct': cobertura_clasificacion_pct,                  # principal del banner (compat)
+        'cobertura_clasificacion_pct': cobertura_clasificacion_pct,    # nuevo
+        'cobertura_composicion_pct': cobertura_composicion_pct,         # nuevo
+        'cobertura_listos_cotizar_pct': cobertura_listos_cotizar_pct,   # nuevo (KPI demo)
         'items_total': total,
-        'items_resueltos': resueltos,
+        'items_resueltos': items_resueltos,
+        'items_listos_cotizar': items_listos_cotizar,
+        'items_descompuestos': descompuestos,
+        'items_globales_total': globales_total,
+        'items_servicios_total': servicios_total,
+        'items_clasificados_sin_coef': clasificados_sin_coef,
         'pendientes_reales': pendientes_reales,
     }
