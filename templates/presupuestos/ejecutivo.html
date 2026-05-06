@@ -25,19 +25,46 @@
          title="Abre en pestaña nueva el PDF tal como lo verá el cliente (sin composiciones internas)">
         <i class="fas fa-eye me-1"></i>Vista cliente
       </a>
-      {% if presupuesto.estado in ['borrador', 'enviado'] and not presupuesto.ejecutivo_aprobado %}
-      <button type="button" class="btn btn-primary"
-              id="btnEjecCotizarIA"
-              onclick="ejecCotizarIA()"
-              title="Estimar precios automáticamente con la Calculadora IA para todas las composiciones de este presupuesto.">
-        <i class="fas fa-dollar-sign me-1"></i>Cotizar con Calculadora IA
-      </button>
+      {# === Generar composición (visible cuando NO hay APU todavía) === #}
+      {% if not ux_tiene_composicion and presupuesto.estado in ['borrador', 'enviado'] %}
+      <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}#bloqueCotizarCamino"
+         class="btn btn-warning"
+         title="Volvé al detalle del presupuesto para generar la composición ejecutiva (APU). Sin APU, la IA no tiene sobre qué estimar.">
+        <i class="fas fa-magic me-1"></i>Generar composición ahora
+      </a>
       {% endif %}
+
+      {# === Re-estimar IA: deshabilitado de verdad cuando no hay APU === #}
+      {% if presupuesto.estado in ['borrador', 'enviado'] and not presupuesto.ejecutivo_aprobado %}
+        {% if ux_puede_estimar %}
+        <button type="button" class="btn btn-primary"
+                id="btnEjecCotizarIA"
+                onclick="ejecCotizarIA()"
+                title="Usa la misma Calculadora IA, pero desde la vista interna del APU. Re-estima costos de materiales, mano de obra y equipos.">
+          <i class="fas fa-dollar-sign me-1"></i>Re-estimar costos internos con IA
+        </button>
+        {% else %}
+        <button type="button" class="btn btn-primary" disabled
+                id="btnEjecCotizarIA"
+                title="Primero generá la composición ejecutiva (APU). La IA necesita los recursos descompuestos para estimar.">
+          <i class="fas fa-lock me-1"></i>Primero generá composición ejecutiva
+        </button>
+        {% endif %}
+      {% endif %}
+
+      {# === Pedir precios a proveedores: idem, requiere APU === #}
+      {% if ux_tiene_composicion %}
       <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
          class="btn btn-outline-success"
          title="Asignar proveedores reales a cada material y enviar solicitudes de cotización por WhatsApp.">
         <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
       </a>
+      {% else %}
+      <button type="button" class="btn btn-outline-success" disabled
+              title="Primero generá la composición ejecutiva (APU). Sin recursos descompuestos no hay materiales sobre los que pedir cotización.">
+        <i class="fas fa-lock me-1"></i>Pedir precios a proveedores
+      </button>
+      {% endif %}
       {% if presupuesto.ejecutivo_aprobado %}
       <button class="btn btn-outline-warning" onclick="revertirEjecutivo({{ presupuesto.id }})"
               {% if presupuesto.confirmado_como_obra %}disabled title="El presupuesto ya es obra"{% endif %}>
@@ -61,20 +88,35 @@
     </div>
   </div>
 
-  {# UX simplificada (2026-05-06): banner orientativo con los 2 caminos disponibles. #}
+  {# UX simplificada (2026-05-06): banner orientativo contextual.
+     Si no hay APU, el primer paso es generarlo. Si ya hay, mostrar las 2 opciones. #}
   {% if presupuesto.estado in ['borrador', 'enviado'] and not presupuesto.ejecutivo_aprobado %}
-  <div class="alert alert-primary d-flex align-items-start mb-3" role="status">
-    <i class="fas fa-route fa-lg me-2 mt-1"></i>
-    <div class="flex-grow-1 small">
-      <strong>Ya estás en la vista interna del APU.</strong>
-      Ahora podés:
-      <ul class="mb-0 mt-1">
-        <li><strong>Cotizar con Calculadora IA</strong> — estimación rápida usando lista de proveedores, historial de OC y precios de mercado OBYRA. Botón arriba a la derecha.</li>
-        <li><strong>Pedir precios a proveedores</strong> — asignar proveedores reales por material y enviar solicitudes por WhatsApp. Botón verde arriba.</li>
-      </ul>
-      <span class="text-muted">Los dos caminos se pueden combinar: estimás IA primero como referencia, después pedís a proveedores y comparás.</span>
+    {% if not ux_tiene_composicion %}
+    <div class="alert alert-warning d-flex align-items-start mb-3" role="status">
+      <i class="fas fa-exclamation-triangle fa-lg me-2 mt-1"></i>
+      <div class="flex-grow-1 small">
+        <strong>Falta generar la composición ejecutiva (APU).</strong>
+        Sin APU, la IA no tiene sobre qué estimar y los proveedores no tienen materiales que cotizar.
+        <br>
+        <strong>Próximo paso:</strong> volvé al detalle del presupuesto y usá <em>"Generar composición ejecutiva"</em>
+        desde el modal "Analizar con IA" (o el botón naranja del card de bifurcación).
+        Después volvé acá para re-estimar costos.
+      </div>
     </div>
-  </div>
+    {% else %}
+    <div class="alert alert-primary d-flex align-items-start mb-3" role="status">
+      <i class="fas fa-route fa-lg me-2 mt-1"></i>
+      <div class="flex-grow-1 small">
+        <strong>Ya estás en la vista interna del APU.</strong>
+        Es la misma Calculadora IA que en el detalle, pero acá la usás para revisar costos internos
+        (materiales, mano de obra, equipos) y el margen contra lo que vendés.
+        <ul class="mb-0 mt-1">
+          <li><strong>Re-estimar costos internos con IA</strong> — recalcula los costos de las composiciones. Botón azul arriba.</li>
+          <li><strong>Pedir precios a proveedores</strong> — asignar proveedores reales por material. Botón verde arriba.</li>
+        </ul>
+      </div>
+    </div>
+    {% endif %}
   {% endif %}
 
   {% if presupuesto.ejecutivo_aprobado %}

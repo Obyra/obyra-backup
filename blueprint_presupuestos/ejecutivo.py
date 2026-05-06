@@ -406,6 +406,17 @@ def ejecutivo_vista(id):
                 {'id': prov_id, 'razon_social': razon}
             )
 
+    # UX simplificada: flag para gating de botones "Cotizar IA" y "Pedir
+    # proveedores". Si no hay composiciones todavia, esos botones no deben
+    # estar habilitados — no tienen nada que estimar / sobre que pedir.
+    ux_tiene_composicion = len(comp_ids) > 0
+    ux_puede_estimar = (
+        ux_tiene_composicion
+        and presupuesto.estado in ('borrador', 'enviado')
+        and not getattr(presupuesto, 'ejecutivo_aprobado', False)
+        and not getattr(presupuesto, 'precios_snapshot_at', None)
+    )
+
     return render_template(
         'presupuestos/ejecutivo.html',
         presupuesto=presupuesto,
@@ -421,6 +432,8 @@ def ejecutivo_vista(id):
         nombres_etapas_pliego=nombres_etapas_pliego,
         proveedores_disponibles=proveedores_disponibles,
         proveedores_por_comp=proveedores_por_comp,
+        ux_tiene_composicion=ux_tiene_composicion,
+        ux_puede_estimar=ux_puede_estimar,
     )
 
 
