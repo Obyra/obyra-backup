@@ -25,8 +25,18 @@
          title="Abre en pestaña nueva el PDF tal como lo verá el cliente (sin composiciones internas)">
         <i class="fas fa-eye me-1"></i>Vista cliente
       </a>
-      <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}" class="btn btn-outline-primary">
-        <i class="fas fa-dolly-flatbed me-1"></i>Recursos a cotizar
+      {% if presupuesto.estado in ['borrador', 'enviado'] and not presupuesto.ejecutivo_aprobado %}
+      <button type="button" class="btn btn-primary"
+              id="btnEjecCotizarIA"
+              onclick="ejecCotizarIA()"
+              title="Estimar precios automáticamente con la Calculadora IA para todas las composiciones de este presupuesto.">
+        <i class="fas fa-dollar-sign me-1"></i>Cotizar con Calculadora IA
+      </button>
+      {% endif %}
+      <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
+         class="btn btn-outline-success"
+         title="Asignar proveedores reales a cada material y enviar solicitudes de cotización por WhatsApp.">
+        <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
       </a>
       {% if presupuesto.ejecutivo_aprobado %}
       <button class="btn btn-outline-warning" onclick="revertirEjecutivo({{ presupuesto.id }})"
@@ -50,6 +60,22 @@
       Para ver lo que verá el cliente, usá el botón <strong>"Vista cliente"</strong> arriba.
     </div>
   </div>
+
+  {# UX simplificada (2026-05-06): banner orientativo con los 2 caminos disponibles. #}
+  {% if presupuesto.estado in ['borrador', 'enviado'] and not presupuesto.ejecutivo_aprobado %}
+  <div class="alert alert-primary d-flex align-items-start mb-3" role="status">
+    <i class="fas fa-route fa-lg me-2 mt-1"></i>
+    <div class="flex-grow-1 small">
+      <strong>Ya estás en la vista interna del APU.</strong>
+      Ahora podés:
+      <ul class="mb-0 mt-1">
+        <li><strong>Cotizar con Calculadora IA</strong> — estimación rápida usando lista de proveedores, historial de OC y precios de mercado OBYRA. Botón arriba a la derecha.</li>
+        <li><strong>Pedir precios a proveedores</strong> — asignar proveedores reales por material y enviar solicitudes por WhatsApp. Botón verde arriba.</li>
+      </ul>
+      <span class="text-muted">Los dos caminos se pueden combinar: estimás IA primero como referencia, después pedís a proveedores y comparás.</span>
+    </div>
+  </div>
+  {% endif %}
 
   {% if presupuesto.ejecutivo_aprobado %}
   <div class="alert alert-success d-flex align-items-start">
@@ -844,7 +870,7 @@
             <small class="text-muted d-block" id="compSubtotalPreview"></small>
           </div>
 
-          <!-- Selector de proveedores: visible para material/equipo/otro. El precio se completa cuando elegis ganador en 'Recursos a cotizar'. -->
+          <!-- Selector de proveedores: visible para material/equipo/otro. El precio se completa cuando elegis ganador en 'Pedir precios a proveedores'. -->
           <div class="mb-3 d-none" id="wrapperProveedores">
             <label class="form-label">
               <i class="fab fa-whatsapp text-success me-1"></i>Proveedores a pedir cotización
@@ -874,7 +900,7 @@
               Buscá por nombre, CUIT o categoría. Las opciones marcadas con
               <span class="badge bg-success">OBYRA</span> son del directorio curado;
               <span class="badge bg-light text-dark border">Mío</span> son los que cargaste vos.
-              El precio se completa cuando elegís el ganador en <strong>Recursos a cotizar</strong>.
+              El precio se completa cuando elegís el ganador en <strong>Pedir precios a proveedores</strong>.
             </small>
           </div>
 
@@ -904,6 +930,84 @@ const MODAL_COMP = new bootstrap.Modal(document.getElementById('modalComposicion
 function _formatMoney(v) {
   return '$' + Math.round(v || 0).toLocaleString('es-AR');
 }
+
+// ============================================================================
+// UX simplificada (2026-05-06) — Cotizar con Calculadora IA desde Ejecutivo.
+// Reusa el endpoint existente POST /presupuestos/<id>/estimar-precios.
+// ============================================================================
+window.ejecCotizarIA = async function() {
+    if (!confirm(
+        'OBYRA va a estimar precios para todas las composiciones del presupuesto ' +
+        '(materiales, mano de obra, equipos) usando lista de proveedores, ' +
+        'historial de OC y precios de mercado OBYRA.\n\n' +
+        'Los precios cargados manualmente y los ítems con lock se respetan.\n\n' +
+        '¿Continuar?'
+    )) return;
+
+    const btn = document.getElementById('btnEjecCotizarIA');
+    if (!btn) return;
+    btn.disabled = true;
+    const htmlOrig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Estimando...';
+
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    try {
+        const r = await fetch('/presupuestos/{{ presupuesto.id }}/estimar-precios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+        });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+            const errorMsg = (data && data.error) || 'No se pudieron estimar los precios.';
+            // Errores frecuentes traducidos al usuario
+            if (errorMsg.includes('snapshot')) {
+                alert('Los precios de este presupuesto están congelados (snapshot al confirmar como obra). No se puede re-estimar.');
+            } else if (errorMsg.includes('estado')) {
+                alert(errorMsg + '\n\nSolo se puede estimar en presupuestos en borrador o enviado.');
+            } else {
+                alert(errorMsg);
+            }
+            return;
+        }
+        const fmt = (v) => '$' + (v || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+        const manualesRespetados = data.manuales_respetados || 0;
+        const composEvaluadas = data.composiciones_evaluadas || 0;
+        const sinPrecio = (data.sin_precio || 0) + (data.requiere_tc || 0);
+
+        if (composEvaluadas === 0 && manualesRespetados === 0) {
+            alert(
+                'No hay composiciones para estimar.\n\n' +
+                'Antes de cotizar con IA, generá la composición ejecutiva (APU): ' +
+                'volvé al detalle del presupuesto y usá "Generar composición ejecutiva" ' +
+                'desde el modal "Analizar con IA".'
+            );
+            return;
+        }
+
+        const lineaManuales = manualesRespetados > 0
+            ? '\n' + manualesRespetados + ' ítem(s) con precio manual respetado(s).'
+            : '';
+        alert(
+            'Precios estimados con éxito.\n\n' +
+            'Costo total: ' + fmt(data.total_costo) + '\n' +
+            'Sugerido cliente: ' + fmt(data.precio_sugerido_cliente) + '\n' +
+            'Cobertura: ' + (data.cobertura_pct || 0) + '%\n\n' +
+            'Composiciones evaluadas: ' + composEvaluadas + '\n' +
+            'Actualizadas: ' + (data.actualizados || 0) +
+            ' · Estimadas: ' + (data.estimados || 0) +
+            ' · Sin precio: ' + sinPrecio +
+            lineaManuales
+        );
+        location.reload();
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = htmlOrig;
+    }
+};
 
 function abrirModalComposicion(itemId, descripcion) {
   document.getElementById('compItemId').value = itemId;
