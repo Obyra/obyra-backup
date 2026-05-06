@@ -233,6 +233,64 @@ def detalle(id):
             activo=True
         ).order_by(ItemInventario.nombre).all()
 
+        # ====================================================
+        # UX simplificada: stepper + banner de estado.
+        # Computar el estado de avance del presupuesto para
+        # mostrar en el banner y deshabilitar acciones cuando
+        # no se cumplen prerrequisitos.
+        # ====================================================
+        from models.budgets import ItemPresupuestoComposicion
+        items_total_count = len(items)
+        items_con_precio = sum(
+            1 for it in items
+            if (it.precio_unitario or 0) > 0 and not getattr(it, 'excluido', False)
+        )
+        # tiene_composicion: hay al menos UNA composicion para algun item del pliego
+        tiene_composicion = False
+        if items:
+            item_ids = [it.id for it in items]
+            try:
+                tiene_composicion = (
+                    db.session.query(ItemPresupuestoComposicion.id)
+                    .filter(ItemPresupuestoComposicion.item_presupuesto_id.in_(item_ids))
+                    .first() is not None
+                )
+            except Exception:
+                tiene_composicion = False
+
+        # Decidir proximo paso recomendado segun estado actual del flujo.
+        # Orden:
+        #   1. Sin items -> importar pliego.
+        #   2. Items sin composicion -> generar composicion ejecutiva.
+        #   3. Composicion pero sin precios -> cotizar con IA.
+        #   4. Precios pero estado borrador -> ajustar/enviar al cliente.
+        #   5. Enviado o aprobado -> proveedores / armar obra.
+        if items_total_count == 0:
+            proximo_paso = 'importar'
+            proximo_paso_msg = 'Importá el Excel del pliego para empezar.'
+        elif not tiene_composicion:
+            proximo_paso = 'generar_composicion'
+            proximo_paso_msg = 'Generá la composición ejecutiva (APU) para que la IA pueda estimar precios.'
+        elif items_con_precio == 0:
+            proximo_paso = 'cotizar_ia'
+            proximo_paso_msg = 'Cotizá con la Calculadora IA para estimar precios automáticamente.'
+        elif presupuesto.estado == 'borrador':
+            proximo_paso = 'ajustar_enviar'
+            proximo_paso_msg = 'Ajustá los precios manualmente si hace falta y enviá al cliente.'
+        elif presupuesto.estado == 'enviado':
+            proximo_paso = 'esperar_o_proveedores'
+            proximo_paso_msg = 'Esperando respuesta del cliente. Podés ir pidiendo precios reales a proveedores.'
+        elif presupuesto.estado == 'aprobado':
+            proximo_paso = 'confirmar_obra'
+            proximo_paso_msg = 'Cliente aprobó. Confirmá y creá la obra.'
+        else:
+            proximo_paso = 'sin_pasos'
+            proximo_paso_msg = ''
+
+        # Flags para deshabilitar acciones que requieren prerrequisitos
+        puede_cotizar_ia = tiene_composicion and presupuesto.estado in ('borrador', 'enviado')
+        puede_pedir_proveedores = tiene_composicion and presupuesto.estado in ('borrador', 'enviado', 'aprobado')
+
         # Pasar subtotales como variables separadas al template
         return render_template('presupuestos/detalle.html',
                              presupuesto=presupuesto,
@@ -270,7 +328,15 @@ def detalle(id):
                              total_con_iva_ars=total_con_iva_ars,
                              datos_proyecto=datos_proyecto,
                              items_inventario=items_inventario,
-                             tasa_usd=tasa_usd)
+                             tasa_usd=tasa_usd,
+                             # UX simplificada: contexto del stepper + banner
+                             ux_items_total=items_total_count,
+                             ux_items_con_precio=items_con_precio,
+                             ux_tiene_composicion=tiene_composicion,
+                             ux_proximo_paso=proximo_paso,
+                             ux_proximo_paso_msg=proximo_paso_msg,
+                             ux_puede_cotizar_ia=puede_cotizar_ia,
+                             ux_puede_pedir_proveedores=puede_pedir_proveedores)
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.detalle: {e}")

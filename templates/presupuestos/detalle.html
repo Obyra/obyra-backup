@@ -121,8 +121,9 @@
                             </button>
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado', 'aprobado'] %}
-                            <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-primary">
-                                <i class="fas fa-calculator me-1"></i>Armar Ejecutivo
+                            <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-primary"
+                               title="Vista interna del APU: composiciones detalladas, mano de obra, materiales por ítem.">
+                                <i class="fas fa-calculator me-1"></i>Ver detalle ejecutivo (APU)
                             </a>
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
@@ -575,7 +576,50 @@
     </div>
     {% endif %}
 
-    {# Etapa 1 — Bifurcacion post-importacion: IA vs Proveedores #}
+    {# UX simplificada (2026-05-06): banner de estado + stepper de 3 pasos.
+       Visible solo si hay items y el presupuesto es editable (borrador/enviado),
+       o si esta aprobado (para mostrar "confirmar como obra"). #}
+    {% if presupuesto.items.count() > 0
+          and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+    {# === Banner de estado === #}
+    <div class="row mb-3" id="bannerEstadoPresupuesto">
+        <div class="col-12">
+            {% set _banner_color = (
+                'primary' if ux_proximo_paso in ['cotizar_ia', 'generar_composicion']
+                else 'info' if ux_proximo_paso == 'ajustar_enviar'
+                else 'warning' if ux_proximo_paso == 'esperar_o_proveedores'
+                else 'success' if ux_proximo_paso == 'confirmar_obra'
+                else 'secondary'
+            ) %}
+            <div class="alert alert-{{ _banner_color }} mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2"
+                 role="status">
+                <div>
+                    <strong>Estado: {{ presupuesto.estado|upper }}</strong>
+                    <span class="mx-2">·</span>
+                    <span>{{ ux_items_total }} ítems</span>
+                    <span class="mx-2">·</span>
+                    <span>{{ ux_items_con_precio }} con precio</span>
+                    <span class="mx-2">·</span>
+                    <span>
+                        {% if ux_tiene_composicion %}
+                            <i class="fas fa-check-circle text-success"></i> Composición generada
+                        {% else %}
+                            <i class="fas fa-times-circle text-muted"></i> Sin composición ejecutiva
+                        {% endif %}
+                    </span>
+                </div>
+                {% if ux_proximo_paso_msg %}
+                <div class="small">
+                    <i class="fas fa-arrow-right me-1"></i><strong>Próximo paso:</strong>
+                    {{ ux_proximo_paso_msg }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# === Stepper + acciones (Cotizar IA / Pedir proveedores) === #}
     {% if presupuesto.items.count() > 0
           and presupuesto.estado in ['borrador', 'enviado']
           and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
@@ -583,14 +627,57 @@
         <div class="col-12">
             <div class="card border-primary shadow-sm">
                 <div class="card-body">
-                    <h5 class="card-title mb-1">
+                    <h5 class="card-title mb-3">
                         <i class="fas fa-route text-primary me-2"></i>
                         ¿Cómo querés cotizar este presupuesto?
                     </h5>
-                    <p class="text-muted small mb-3">
-                        Podés usar la Calculadora IA para una estimación rápida o pedir precios reales a proveedores.
-                        Los dos caminos se pueden combinar.
-                    </p>
+
+                    {# Stepper de 3 pasos. Verde = hecho, azul = activo (próximo), gris = pendiente. #}
+                    {% set _step1_done = ux_tiene_composicion %}
+                    {% set _step2_done = ux_items_con_precio > 0 %}
+                    {% set _step1_active = not _step1_done %}
+                    {% set _step2_active = _step1_done and not _step2_done %}
+                    {% set _step3_active = _step2_done %}
+                    <div class="d-flex justify-content-between align-items-center mb-3 small flex-wrap gap-2"
+                         id="ux-stepper">
+                        <div class="d-flex align-items-center">
+                            <span class="badge rounded-pill {% if _step1_done %}bg-success{% elif _step1_active %}bg-primary{% else %}bg-secondary{% endif %} me-2">
+                                {% if _step1_done %}<i class="fas fa-check"></i>{% else %}1{% endif %}
+                            </span>
+                            <span class="{% if _step1_active %}fw-bold{% endif %}">Generar composición</span>
+                        </div>
+                        <i class="fas fa-chevron-right text-muted"></i>
+                        <div class="d-flex align-items-center">
+                            <span class="badge rounded-pill {% if _step2_done %}bg-success{% elif _step2_active %}bg-primary{% else %}bg-secondary{% endif %} me-2">
+                                {% if _step2_done %}<i class="fas fa-check"></i>{% else %}2{% endif %}
+                            </span>
+                            <span class="{% if _step2_active %}fw-bold{% endif %}">Estimar precios</span>
+                        </div>
+                        <i class="fas fa-chevron-right text-muted"></i>
+                        <div class="d-flex align-items-center">
+                            <span class="badge rounded-pill {% if _step3_active %}bg-primary{% else %}bg-secondary{% endif %} me-2">3</span>
+                            <span class="{% if _step3_active %}fw-bold{% endif %}">Pedir proveedores
+                                <span class="text-muted">(opcional)</span></span>
+                        </div>
+                    </div>
+
+                    {# Mensaje contextual según el paso actual #}
+                    {% if not ux_tiene_composicion %}
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Antes de cotizar, generá la <strong>composición ejecutiva (APU)</strong>.
+                        Es lo que la IA usa internamente para estimar precios de materiales y mano de obra.
+                        <button type="button" class="btn btn-sm btn-warning ms-2"
+                                {% if presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
+                                onclick="abrirAnalisisIA({{ presupuesto.id }})"
+                                {% else %}
+                                disabled title="Generación automática requiere pliego importado"
+                                {% endif %}>
+                            <i class="fas fa-magic me-1"></i>Generar composición ahora
+                        </button>
+                    </div>
+                    {% endif %}
+
                     <div class="row g-3">
                         <div class="col-md-6">
                             <div class="border rounded p-3 h-100 d-flex flex-column">
@@ -605,9 +692,15 @@
                                 <button type="button" class="btn btn-primary"
                                         id="btnCaminoCotizarIA"
                                         onclick="camCotizarIA()"
-                                        title="Estimar precios automáticamente con la Calculadora IA.">
+                                        {% if not ux_puede_cotizar_ia %}disabled{% endif %}
+                                        title="{% if not ux_tiene_composicion %}Primero generá la composición ejecutiva (APU){% else %}Estimar precios automáticamente con la Calculadora IA.{% endif %}">
                                     <i class="fas fa-dollar-sign me-1"></i>Cotizar con Calculadora IA
                                 </button>
+                                {% if not ux_tiene_composicion %}
+                                <small class="text-muted mt-2">
+                                    <i class="fas fa-lock me-1"></i>Requiere composición ejecutiva
+                                </small>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -620,11 +713,21 @@
                                     Asigná proveedores por material y enviá solicitudes de cotización por WhatsApp.
                                     Precios reales, comparables.
                                 </p>
+                                {% if ux_puede_pedir_proveedores %}
                                 <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
                                    class="btn btn-success"
                                    title="Ir a la vista de materiales para asignar proveedores y pedir cotizaciones.">
                                     <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
                                 </a>
+                                {% else %}
+                                <button type="button" class="btn btn-success" disabled
+                                        title="Primero generá la composición ejecutiva (APU)">
+                                    <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
+                                </button>
+                                <small class="text-muted mt-2">
+                                    <i class="fas fa-lock me-1"></i>Requiere composición ejecutiva
+                                </small>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -1740,9 +1843,15 @@
                             title="Crea materiales, mano de obra y equipos estimados a partir de los ítems ya clasificados. No se pisan composiciones manuales.">
                         <i class="fas fa-magic me-1"></i>Generar composición ejecutiva
                     </button>
-                    <button type="button" class="btn btn-primary" id="btnEstimarPrecios"
+                    {# UX simplificada (2026-05-06): este boton es duplicado del
+                       boton "Cotizar con Calculadora IA" del bloque de bifurcacion
+                       arriba en la pagina. Lo dejamos en el DOM con d-none para
+                       no romper la funcion iaEstimarPrecios que lo referencia,
+                       pero NO se muestra al usuario. Una sola entrada, menos confusion. #}
+                    <button type="button" class="btn btn-primary d-none" id="btnEstimarPrecios"
                             onclick="iaEstimarPrecios()"
-                            title="OBYRA busca precios en lista de proveedores, historial de OC, referencias y precios de mercado OBYRA. Para mano de obra usa costo empresa de referencia.">
+                            aria-hidden="true"
+                            title="(Oculto) Duplicado del boton de cotizar de la bifurcacion">
                         <i class="fas fa-dollar-sign me-1"></i>Estimar precios automáticamente
                     </button>
                 </div>
