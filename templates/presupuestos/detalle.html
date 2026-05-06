@@ -4565,9 +4565,31 @@ function _iaRenderBloquePrecios(data) {
 // confirmar/omitir grupos enteros sin revisar uno por uno.
 // ============================================================================
 
+function _iaCategorizarItem(it) {
+    /* Retorna la categoría del item para la UX de revisión por lotes:
+       - 'resuelto'       : revisado_ia=true (ya pasó por confirmación)
+       - 'auto_aplicable' : tiene sugerencia clara + confianza alta
+                            (también si tiene tipo_tratamiento — los catch-all
+                            son siempre auto-aplicables)
+       - 'dudoso'         : tiene sugerencia pero confianza media/baja
+       - 'sin_sugerencia' : ninguna sugerencia útil */
+    if (it.revisado_ia) return 'resuelto';
+    const sug = it.sugerencia || it.sugerencias || {};
+    const reglaId = sug.regla_id || it.regla_id;
+    const tt = sug.tipo_tratamiento || it.tipo_tratamiento_sugerido;
+    const conf = (sug.confianza_label || it.confianza_label || '').toLowerCase();
+    if (!reglaId && !tt) return 'sin_sugerencia';
+    // Catch-all (tiene tipo_tratamiento) → siempre auto-aplicable
+    if (tt) return 'auto_aplicable';
+    // Sino, requiere confianza alta
+    if (conf === 'alta') return 'auto_aplicable';
+    return 'dudoso';
+}
+
 function _iaAgruparPendientes(items) {
     /* Agrupa items por (regla_id sugerida + tipo_tratamiento + unidad).
-       Items sin sugerencia van a un grupo "Sin sugerencia". */
+       Items sin sugerencia van a un grupo "Sin sugerencia".
+       Cada grupo lleva además el conteo por categoría (auto/dudoso/etc). */
     const grupos = new Map();
     items.forEach(it => {
         const sug = it.sugerencia || it.sugerencias || {};
@@ -4575,8 +4597,7 @@ function _iaAgruparPendientes(items) {
         const tt = it.tipo_tratamiento_sugerido || sug.tipo_tratamiento || null;
         const rubro = sug.rubro_sugerido || it.rubro_sugerido || it.etapa_nombre || '';
         const unidad = (it.unidad || '').toLowerCase();
-        // Resuelto si revisado_ia o estado_revision presente
-        const resuelto = !!it.revisado_ia || !!(it.estado_revision);
+        const cat = _iaCategorizarItem(it);
         const key = reglaId
             ? `r:${reglaId}|u:${unidad}`
             : (tt
@@ -4586,20 +4607,25 @@ function _iaAgruparPendientes(items) {
             grupos.set(key, {
                 key, regla_id: reglaId, tipo_tratamiento: tt,
                 rubro: rubro, unidad: unidad,
-                titulo: '', items: [], pendientes: 0, resueltos: 0,
+                titulo: '', items: [],
+                cat_dominante: 'resuelto',
+                count_auto: 0, count_dudoso: 0,
+                count_sin: 0, count_resuelto: 0,
             });
         }
         const g = grupos.get(key);
         g.items.push(it);
-        if (resuelto) g.resueltos += 1; else g.pendientes += 1;
+        if (cat === 'auto_aplicable') g.count_auto += 1;
+        else if (cat === 'dudoso') g.count_dudoso += 1;
+        else if (cat === 'sin_sugerencia') g.count_sin += 1;
+        else g.count_resuelto += 1;
     });
 
-    // Generar título de cada grupo
+    // Generar título y categoría dominante
     grupos.forEach(g => {
         const partes = [];
         if (g.regla_id) {
-            const nombre_regla = g.regla_id.replaceAll('_', ' ');
-            partes.push(nombre_regla);
+            partes.push(g.regla_id.replaceAll('_', ' '));
         } else if (g.tipo_tratamiento) {
             partes.push('Tratamiento: ' + g.tipo_tratamiento);
         } else {
@@ -4608,29 +4634,124 @@ function _iaAgruparPendientes(items) {
         if (g.rubro) partes.push(g.rubro);
         if (g.unidad) partes.push('[' + g.unidad + ']');
         g.titulo = partes.join(' · ');
+
+        // Categoría dominante: la mayor de las 3 no-resueltas. Si todo resuelto, "resuelto".
+        if (g.count_dudoso > 0) g.cat_dominante = 'dudoso';
+        else if (g.count_sin > 0) g.cat_dominante = 'sin_sugerencia';
+        else if (g.count_auto > 0) g.cat_dominante = 'auto_aplicable';
+        else g.cat_dominante = 'resuelto';
     });
 
-    // Ordenar: primero los que tienen pendientes (más pendientes primero), después los resueltos
+    // Ordenar: dudosos > sin_sugerencia > auto > resueltos. Dentro: más items primero.
+    const orden = { dudoso: 0, sin_sugerencia: 1, auto_aplicable: 2, resuelto: 3 };
     return Array.from(grupos.values()).sort((a, b) => {
-        if (b.pendientes !== a.pendientes) return b.pendientes - a.pendientes;
+        const da = orden[a.cat_dominante];
+        const db = orden[b.cat_dominante];
+        if (da !== db) return da - db;
         return b.items.length - a.items.length;
     });
 }
 
-window._iaPanelGruposEstado = { soloPendientes: true, gruposExpandidos: new Set() };
+window._iaPanelGruposEstado = {
+    gruposExpandidos: new Set(),
+    mostrarAuto: false,    // sección "Auto-aplicables" colapsada por default
+    mostrarResueltos: false,
+};
+
+function _iaRenderGrupo(g, idx, prefijo) {
+    /* Renderiza un grupo individual. prefijo se usa para que los IDs no choquen
+       entre secciones (auto/dudoso/sin/resuelto). */
+    const gid = `iaGrupo_${prefijo}_${idx}`;
+    const expanded = window._iaPanelGruposEstado.gruposExpandidos.has(prefijo + ':' + g.key);
+    const cat = g.cat_dominante;
+
+    const colorClass = (cat === 'dudoso' || cat === 'sin_sugerencia') ? 'border-warning'
+                     : cat === 'auto_aplicable' ? 'border-info' : 'border-success';
+    const bgClass = (cat === 'dudoso' || cat === 'sin_sugerencia') ? 'bg-warning bg-opacity-10'
+                  : cat === 'auto_aplicable' ? 'bg-info bg-opacity-10' : 'bg-success bg-opacity-10';
+
+    let html = '';
+    html += '<div class="border rounded ' + colorClass + ' mb-2" data-grupo-key="' + _iaEsc(g.key) + '">';
+    html += '<div class="d-flex justify-content-between align-items-center p-2 ' + bgClass +
+            '" role="button" onclick="_iaToggleGrupo(\'' + prefijo + ':' + g.key + '\')">';
+    html += '<div class="flex-grow-1">';
+    html += '<i class="fas fa-' + (expanded ? 'chevron-down' : 'chevron-right') + ' me-2"></i>';
+    html += '<strong>' + _iaEsc(g.titulo) + '</strong>';
+    html += ' <span class="badge bg-secondary">' + g.items.length + ' ítem' + (g.items.length === 1 ? '' : 's') + '</span>';
+    if (g.count_dudoso > 0) html += ' <span class="badge bg-warning text-dark">' + g.count_dudoso + ' dudoso' + (g.count_dudoso === 1 ? '' : 's') + '</span>';
+    if (g.count_sin > 0) html += ' <span class="badge bg-warning text-dark">' + g.count_sin + ' sin sugerencia</span>';
+    if (g.count_auto > 0 && cat !== 'auto_aplicable') html += ' <span class="badge bg-info">' + g.count_auto + ' auto</span>';
+    if (g.count_resuelto > 0 && cat !== 'resuelto') html += ' <span class="badge bg-success">' + g.count_resuelto + ' resuelto</span>';
+    html += '</div>';
+
+    // Botones según categoría dominante
+    if (cat !== 'resuelto') {
+        const pendientesEnGrupo = g.count_dudoso + g.count_sin + g.count_auto;
+        if (pendientesEnGrupo > 0) {
+            html += '<div class="d-flex gap-1" onclick="event.stopPropagation()">';
+            html += '<button type="button" class="btn btn-success btn-sm" ' +
+                    'onclick="_iaConfirmarGrupo(\'' + _iaEsc(g.key) + '\')" ' +
+                    'title="Aplicar sugerencia IA a todos los pendientes del grupo">' +
+                    '<i class="fas fa-check me-1"></i>Confirmar grupo</button>';
+            html += '<button type="button" class="btn btn-outline-secondary btn-sm" ' +
+                    'onclick="_iaOmitirGrupo(\'' + _iaEsc(g.key) + '\')" ' +
+                    'title="Marcar este grupo como omitido">' +
+                    '<i class="fas fa-times"></i></button>';
+            html += '</div>';
+        }
+    }
+    html += '</div>'; // header
+
+    // Body del grupo
+    html += '<div class="' + (expanded ? '' : 'd-none') + '" id="' + gid + '_body">';
+    html += '<ul class="list-group list-group-flush small">';
+    g.items.slice(0, 50).forEach(it => {
+        const cat_it = _iaCategorizarItem(it);
+        const badge = cat_it === 'resuelto' ? '<span class="badge bg-success ms-1">resuelto</span>'
+                    : cat_it === 'auto_aplicable' ? '<span class="badge bg-info ms-1">auto</span>'
+                    : cat_it === 'dudoso' ? '<span class="badge bg-warning text-dark ms-1">revisar</span>'
+                    : '<span class="badge bg-secondary ms-1">sin sugerencia</span>';
+        html += '<li class="list-group-item py-1 px-3">' +
+                '<span class="text-muted">#' + it.id + '</span> ' +
+                _iaEsc((it.descripcion || '').substring(0, 100)) +
+                ' <span class="text-muted">(' + _iaEsc(it.unidad || '') + ', ' + _iaEsc(String(it.cantidad || 0)) + ')</span>' +
+                badge +
+                '</li>';
+    });
+    if (g.items.length > 50) {
+        html += '<li class="list-group-item py-1 px-3 text-muted">... y ' + (g.items.length - 50) + ' más</li>';
+    }
+    html += '</ul></div>';
+    html += '</div>'; // grupo
+    return html;
+}
 
 function _iaRenderPanelGrupos(data) {
     const items = data.items || [];
     if (!items.length) return;
-    const grupos = _iaAgruparPendientes(items);
-    const totalPendientes = grupos.reduce((acc, g) => acc + g.pendientes, 0);
-    const totalResueltos = grupos.reduce((acc, g) => acc + g.resueltos, 0);
+
+    // Categorizar ítems
+    let n_auto = 0, n_dudoso = 0, n_sin = 0, n_resuelto = 0;
+    items.forEach(it => {
+        const c = _iaCategorizarItem(it);
+        if (c === 'auto_aplicable') n_auto++;
+        else if (c === 'dudoso') n_dudoso++;
+        else if (c === 'sin_sugerencia') n_sin++;
+        else n_resuelto++;
+    });
     const total = items.length;
-    const cobertura = total > 0 ? Math.round(100 * totalResueltos / total) : 0;
+    const cobertura_actual = total > 0 ? Math.round(100 * n_resuelto / total) : 0;
+    // Cobertura proyectada si auto-aplicamos
+    const cobertura_proyectada = total > 0 ? Math.round(100 * (n_resuelto + n_auto) / total) : 0;
+
+    const grupos = _iaAgruparPendientes(items);
+    const grupos_dudosos = grupos.filter(g => g.cat_dominante === 'dudoso');
+    const grupos_sin = grupos.filter(g => g.cat_dominante === 'sin_sugerencia');
+    const grupos_auto = grupos.filter(g => g.cat_dominante === 'auto_aplicable');
+    const grupos_resueltos = grupos.filter(g => g.cat_dominante === 'resuelto');
 
     const vSimple = document.getElementById('iaVistaSimple');
     if (!vSimple) return;
-    // Borrar panel previo
     const prev = document.getElementById('iaPanelGrupos');
     if (prev) prev.remove();
 
@@ -4638,108 +4759,115 @@ function _iaRenderPanelGrupos(data) {
     wrap.id = 'iaPanelGrupos';
     wrap.className = 'card border-primary shadow-sm mb-3';
 
-    const soloPendientes = window._iaPanelGruposEstado.soloPendientes;
-    const gruposVisibles = soloPendientes
-        ? grupos.filter(g => g.pendientes > 0)
-        : grupos;
-
     let html = '';
-    // Header con resumen y acción global
-    html += '<div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap gap-2">';
+
+    // ============================================================
+    // HEADER + BOTÓN PRINCIPAL
+    // ============================================================
+    html += '<div class="card-header bg-primary text-white">';
+    html += '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">';
     html += '<div>';
-    html += '<h6 class="mb-0"><i class="fas fa-layer-group me-1"></i>Revisión por grupos</h6>';
-    html += '<div class="small">' + total + ' ítems · <strong>' + totalPendientes + ' pendientes</strong> · ' +
-            totalResueltos + ' resueltos · cobertura ' + cobertura + '%</div>';
-    html += '</div>';
-    html += '<div class="d-flex gap-2 align-items-center">';
-    html += '<div class="form-check form-switch m-0 text-white">' +
-            '<input class="form-check-input" type="checkbox" id="iaToggleSoloPendientes" ' +
-            (soloPendientes ? 'checked' : '') + '>' +
-            '<label class="form-check-label small text-white" for="iaToggleSoloPendientes">' +
-            'Solo pendientes</label></div>';
-    if (totalPendientes > 0) {
-        html += '<button type="button" class="btn btn-light btn-sm" onclick="_iaConfirmarTodasSugerencias()" ' +
-                'title="Confirma todas las sugerencias automaticas que la IA propuso para los pendientes con sugerencia.">' +
-                '<i class="fas fa-check-double me-1"></i>Confirmar todas las sugerencias' +
-                '</button>';
+    html += '<h5 class="mb-0"><i class="fas fa-magic me-1"></i>Análisis IA: revisión y composición</h5>';
+    html += '<div class="small">' + total + ' ítems · cobertura actual ' + cobertura_actual + '%';
+    if (n_auto > 0) {
+        html += ' <span class="ms-2"><i class="fas fa-arrow-right"></i> proyectada ' + cobertura_proyectada + '% si auto-aplicás</span>';
     }
+    html += '</div>';
     html += '</div></div>';
 
-    // Body con grupos
-    html += '<div class="card-body p-2" id="iaPanelGruposBody">';
-    if (gruposVisibles.length === 0) {
-        html += '<div class="alert alert-success small mb-0">' +
-                '<i class="fas fa-check me-1"></i>No hay pendientes. Todos los ítems están resueltos.</div>';
-    } else {
-        gruposVisibles.forEach((g, idx) => {
-            const gid = 'iaGrupo_' + idx;
-            const expanded = window._iaPanelGruposEstado.gruposExpandidos.has(g.key);
-            const colorClass = g.pendientes > 0 ? 'border-warning' : 'border-success';
-            html += '<div class="border rounded ' + colorClass + ' mb-2" data-grupo-key="' + _iaEsc(g.key) + '">';
-            // Header del grupo
-            html += '<div class="d-flex justify-content-between align-items-center p-2 ' +
-                    (g.pendientes > 0 ? 'bg-warning bg-opacity-10' : 'bg-success bg-opacity-10') +
-                    '" role="button" onclick="_iaToggleGrupo(\'' + g.key + '\')">';
-            html += '<div class="flex-grow-1">';
-            html += '<i class="fas fa-' + (expanded ? 'chevron-down' : 'chevron-right') + ' me-2"></i>';
-            html += '<strong>' + _iaEsc(g.titulo) + '</strong>';
-            html += ' <span class="badge bg-secondary">' + g.items.length + ' ítem' + (g.items.length === 1 ? '' : 's') + '</span>';
-            if (g.pendientes > 0) {
-                html += ' <span class="badge bg-warning text-dark">' + g.pendientes + ' pendiente' + (g.pendientes === 1 ? '' : 's') + '</span>';
-            }
-            if (g.resueltos > 0) {
-                html += ' <span class="badge bg-success">' + g.resueltos + ' resuelto' + (g.resueltos === 1 ? '' : 's') + '</span>';
-            }
-            html += '</div>';
-            // Botones de acción del grupo
-            if (g.pendientes > 0) {
-                html += '<div class="d-flex gap-1" onclick="event.stopPropagation()">';
-                html += '<button type="button" class="btn btn-success btn-sm" ' +
-                        'onclick="_iaConfirmarGrupo(\'' + _iaEsc(g.key) + '\')" ' +
-                        'title="Confirma la sugerencia IA para todos los ítems pendientes de este grupo">' +
-                        '<i class="fas fa-check me-1"></i>Confirmar grupo</button>';
-                html += '<button type="button" class="btn btn-outline-secondary btn-sm" ' +
-                        'onclick="_iaOmitirGrupo(\'' + _iaEsc(g.key) + '\')" ' +
-                        'title="Marcar este grupo como omitido (no entra en el ejecutivo)">' +
-                        '<i class="fas fa-times me-1"></i>Omitir</button>';
-                html += '</div>';
-            }
-            html += '</div>'; // header
+    // Estadísticas rápidas
+    html += '<div class="row g-2 mt-1 small">';
+    html += '<div class="col text-center bg-info bg-opacity-25 rounded p-2"><div class="h4 mb-0">' + n_auto + '</div><div>Auto-aplicables</div></div>';
+    html += '<div class="col text-center bg-warning bg-opacity-25 rounded p-2"><div class="h4 mb-0 text-dark">' + n_dudoso + '</div><div class="text-dark">Revisar</div></div>';
+    html += '<div class="col text-center bg-secondary bg-opacity-25 rounded p-2"><div class="h4 mb-0">' + n_sin + '</div><div>Sin sugerencia</div></div>';
+    html += '<div class="col text-center bg-success bg-opacity-25 rounded p-2"><div class="h4 mb-0">' + n_resuelto + '</div><div>Resueltos</div></div>';
+    html += '</div>';
+    html += '</div>'; // /card-header
 
-            // Body del grupo (lista de items)
-            html += '<div class="' + (expanded ? '' : 'd-none') + '" id="' + gid + '_body">';
-            html += '<ul class="list-group list-group-flush small">';
-            g.items.slice(0, 50).forEach(it => {
-                const tipoBadge = it.revisado_ia
-                    ? '<span class="badge bg-success ms-1">resuelto</span>'
-                    : '<span class="badge bg-warning text-dark ms-1">pendiente</span>';
-                html += '<li class="list-group-item py-1 px-3">' +
-                        '<span class="text-muted">#' + it.id + '</span> ' +
-                        _iaEsc((it.descripcion || '').substring(0, 100)) +
-                        ' <span class="text-muted">(' + _iaEsc(it.unidad || '') + ', ' + _iaEsc(String(it.cantidad || 0)) + ')</span>' +
-                        tipoBadge +
-                        '</li>';
-            });
-            if (g.items.length > 50) {
-                html += '<li class="list-group-item py-1 px-3 text-muted">... y ' + (g.items.length - 50) + ' más</li>';
-            }
-            html += '</ul></div>'; // body
-            html += '</div>'; // grupo
-        });
+    // ============================================================
+    // BOTÓN PRINCIPAL: Auto-aplicar y generar
+    // ============================================================
+    html += '<div class="card-body bg-light border-bottom p-3">';
+    if (n_auto > 0) {
+        html += '<button type="button" class="btn btn-primary btn-lg w-100 fw-bold" ' +
+                'id="btnIaAutoAplicarYGenerar" onclick="_iaAutoAplicarYGenerar()">' +
+                '<i class="fas fa-bolt me-2"></i>' +
+                'Aplicar ' + n_auto + ' sugerencias automáticas y generar composición' +
+                '</button>';
+        html += '<div class="text-muted small text-center mt-2">' +
+                'OBYRA aplica las sugerencias confiables y genera la composición ejecutiva en un solo paso.' +
+                (n_dudoso + n_sin > 0 ? ' Quedan ' + (n_dudoso + n_sin) + ' ítems para revisar manualmente.' : '') +
+                '</div>';
+    } else if (n_dudoso === 0 && n_sin === 0) {
+        html += '<div class="alert alert-success mb-0"><i class="fas fa-check-circle me-1"></i>' +
+                '¡Todo resuelto! Cerrá este modal y generá la composición ejecutiva.</div>';
+    } else {
+        html += '<div class="alert alert-warning mb-0"><i class="fas fa-info-circle me-1"></i>' +
+                'No hay sugerencias auto-aplicables. Revisá los grupos abajo y confirmá manualmente.</div>';
     }
-    html += '</div>'; // card-body
+    html += '</div>';
+
+    // ============================================================
+    // SECCIÓN: REVISAR (dudosos)
+    // ============================================================
+    html += '<div class="card-body p-3" id="iaPanelGruposBody">';
+
+    if (grupos_dudosos.length > 0) {
+        html += '<h6 class="text-warning border-bottom pb-1 mb-2">' +
+                '<i class="fas fa-exclamation-triangle me-1"></i>Revisar (' + n_dudoso + ' ítems)' +
+                '</h6>';
+        grupos_dudosos.forEach((g, i) => { html += _iaRenderGrupo(g, i, 'dud'); });
+    }
+
+    // SECCIÓN: SIN SUGERENCIA
+    if (grupos_sin.length > 0) {
+        html += '<h6 class="text-secondary border-bottom pb-1 mb-2 mt-3">' +
+                '<i class="fas fa-question-circle me-1"></i>Sin sugerencia (' + n_sin + ' ítems)' +
+                '</h6>';
+        html += '<div class="small text-muted mb-2">Estos no matchearon ninguna regla. Podés omitir el grupo o revisarlos uno por uno.</div>';
+        grupos_sin.forEach((g, i) => { html += _iaRenderGrupo(g, i, 'sin'); });
+    }
+
+    // SECCIÓN: AUTO-APLICABLES (colapsada)
+    if (grupos_auto.length > 0) {
+        html += '<h6 class="text-info border-bottom pb-1 mb-2 mt-3" role="button" onclick="_iaToggleSeccion(\'auto\')">' +
+                '<i class="fas fa-' + (window._iaPanelGruposEstado.mostrarAuto ? 'chevron-down' : 'chevron-right') +
+                ' me-1"></i>Auto-aplicables (' + n_auto + ' ítems)' +
+                ' <span class="badge bg-info ms-1">' + grupos_auto.length + ' grupos</span>' +
+                '</h6>';
+        if (window._iaPanelGruposEstado.mostrarAuto) {
+            grupos_auto.forEach((g, i) => { html += _iaRenderGrupo(g, i, 'auto'); });
+        } else {
+            html += '<div class="text-muted small mb-2">Estos se aplican solos al apretar el botón principal.</div>';
+        }
+    }
+
+    // SECCIÓN: RESUELTOS (colapsada)
+    if (grupos_resueltos.length > 0) {
+        html += '<h6 class="text-success border-bottom pb-1 mb-2 mt-3" role="button" onclick="_iaToggleSeccion(\'resueltos\')">' +
+                '<i class="fas fa-' + (window._iaPanelGruposEstado.mostrarResueltos ? 'chevron-down' : 'chevron-right') +
+                ' me-1"></i>Ya resueltos (' + n_resuelto + ' ítems)' +
+                '</h6>';
+        if (window._iaPanelGruposEstado.mostrarResueltos) {
+            grupos_resueltos.forEach((g, i) => { html += _iaRenderGrupo(g, i, 'res'); });
+        }
+    }
+
+    if (grupos_dudosos.length === 0 && grupos_sin.length === 0 && grupos_auto.length === 0) {
+        html += '<div class="alert alert-success small mb-0">' +
+                '<i class="fas fa-check me-1"></i>Todos los ítems están resueltos.</div>';
+    }
+    html += '</div>'; // /card-body
+
     wrap.innerHTML = html;
     vSimple.insertBefore(wrap, vSimple.firstChild);
-
-    // Wire toggle "Solo pendientes"
-    const toggle = document.getElementById('iaToggleSoloPendientes');
-    if (toggle) {
-        toggle.addEventListener('change', function() {
-            window._iaPanelGruposEstado.soloPendientes = toggle.checked;
-            _iaRenderPanelGrupos(_iaResultadoCache || {items: []});
-        });
-    }
 }
+
+window._iaToggleSeccion = function(nombre) {
+    if (nombre === 'auto') window._iaPanelGruposEstado.mostrarAuto = !window._iaPanelGruposEstado.mostrarAuto;
+    if (nombre === 'resueltos') window._iaPanelGruposEstado.mostrarResueltos = !window._iaPanelGruposEstado.mostrarResueltos;
+    _iaRenderPanelGrupos(_iaResultadoCache || {items: []});
+};
 
 window._iaToggleGrupo = function(key) {
     const set = window._iaPanelGruposEstado.gruposExpandidos;
@@ -4803,6 +4931,93 @@ window._iaOmitirGrupo = function(key) {
     if (!ids.length) return;
     if (!confirm('Omitir ' + ids.length + ' ítem(s) de este grupo? No entrarán en la composición ejecutiva.')) return;
     _iaBulkApply(ids, { accion: 'omitir' }, 'Grupo omitido: ' + ids.length + ' ítem(s).');
+};
+
+window._iaAutoAplicarYGenerar = async function() {
+    /* Botón principal del modal IA: en un solo paso confirma todos los items
+       auto-aplicables (alta confianza + tipo_tratamiento) y dispara
+       Generar composición ejecutiva. Para demo. */
+    const cache = _iaResultadoCache;
+    if (!cache || !_iaPresupuestoId) return;
+
+    const items = cache.items || [];
+    const auto_ids = items
+        .filter(it => _iaCategorizarItem(it) === 'auto_aplicable')
+        .map(it => it.id);
+    const dudosos_count = items.filter(it => _iaCategorizarItem(it) === 'dudoso').length;
+    const sin_count = items.filter(it => _iaCategorizarItem(it) === 'sin_sugerencia').length;
+
+    if (!auto_ids.length) {
+        alert('No hay sugerencias auto-aplicables. Revisá los grupos abajo manualmente.');
+        return;
+    }
+
+    let msg = 'OBYRA va a:\n\n';
+    msg += '  1. Aplicar ' + auto_ids.length + ' sugerencias automáticas (alta confianza).\n';
+    msg += '  2. Generar la composición ejecutiva con todo lo resuelto.\n\n';
+    if (dudosos_count + sin_count > 0) {
+        msg += 'Después quedan ' + (dudosos_count + sin_count) + ' ítems para revisar manualmente.\n\n';
+    }
+    msg += '¿Continuar?';
+    if (!confirm(msg)) return;
+
+    const btn = document.getElementById('btnIaAutoAplicarYGenerar');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Aplicando ' + auto_ids.length + ' sugerencias...';
+    }
+
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    try {
+        // Paso 1: bulk confirmar
+        const r1 = await fetch(`/presupuestos/${_iaPresupuestoId}/aplicar-analisis-ia/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+            body: JSON.stringify({ items: auto_ids, accion: 'confirmar' }),
+        });
+        const d1 = await r1.json();
+        if (!r1.ok || !d1.ok) {
+            alert('Error al aplicar sugerencias: ' + (d1.error || r1.status));
+            return;
+        }
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generando composición ejecutiva...';
+
+        // Paso 2: generar composición
+        const r2 = await fetch(`/presupuestos/${_iaPresupuestoId}/generar-preliminar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+        });
+        const d2 = await r2.json();
+        if (!r2.ok || !d2.ok) {
+            alert('Sugerencias aplicadas (' + d1.aplicados + ') pero falló generar composición: ' +
+                  (d2.error || r2.status));
+            return;
+        }
+
+        // Mostrar resumen consolidado
+        const cobertura = d2.cobertura_pct || 0;
+        const resumenMsg =
+            '✓ ' + d1.aplicados + ' sugerencias aplicadas.\n\n' +
+            'Composición ejecutiva generada:\n' +
+            '  · ' + (d2.contadores?.items_creados || 0) + ' ítems descompuestos\n' +
+            '  · ' + (d2.contadores?.items_globales_auto || 0) + ' globales automáticos\n' +
+            '  · ' + (d2.contadores?.items_servicio_auto || 0) + ' servicios automáticos\n' +
+            '  · Cobertura final: ' + cobertura + '%\n' +
+            (d2.pendientes_reales > 0
+                ? '\nQuedan ' + d2.pendientes_reales + ' ítems para revisar manualmente.'
+                : '\n¡Listo para cotizar con la Calculadora IA!');
+        alert(resumenMsg);
+        location.reload();
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bolt me-2"></i>Aplicar sugerencias automáticas y generar composición';
+        }
+    }
 };
 
 window._iaConfirmarTodasSugerencias = function() {
