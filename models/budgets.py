@@ -384,6 +384,16 @@ class ItemPresupuesto(db.Model):
         nullable=True,
     )
 
+    # Lock manual (MVP 2026-05-06): si el usuario edita precio o cantidad,
+    # la Calculadora IA no debe sobrescribir esos valores en futuras
+    # re-estimaciones. precio_locked tambien sincroniza
+    # ItemPresupuestoComposicion.precio_estado='manual' para coherencia.
+    # cantidad_locked es preventivo para Chandias (formulas paramétricas).
+    precio_locked = db.Column(db.Boolean, nullable=False, default=False,
+                              server_default=db.text('FALSE'))
+    cantidad_locked = db.Column(db.Boolean, nullable=False, default=False,
+                                server_default=db.text('FALSE'))
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')

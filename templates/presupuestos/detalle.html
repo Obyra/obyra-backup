@@ -740,7 +740,9 @@
                                     data-item-delete-confirm="¿Eliminar este item?"
                                     data-item-etapa-id="{{ item.etapa_presupuesto_id or '' }}"
                                     data-item-excluido="{{ 'true' if item.excluido else 'false' }}"
-                                    data-item-editado-at="{{ item.editado_at.isoformat() if item.editado_at else '' }}">
+                                    data-item-editado-at="{{ item.editado_at.isoformat() if item.editado_at else '' }}"
+                                    data-item-precio-locked="{{ 'true' if item.precio_locked else 'false' }}"
+                                    data-item-cantidad-locked="{{ 'true' if item.cantidad_locked else 'false' }}">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|entero }}</td>
@@ -1918,7 +1920,23 @@ window.peMoverItem = async function(itemId) {
     location.reload();
 };
 
-// Inyectar acciones extra y badge "editado" en cada fila con [data-item-id].
+// Lock Manual MVP — restaurar precio estimado por IA en un item lockeado.
+window.peRestaurarIA = async function(itemId) {
+    if (!confirm(
+        'Esto va a borrar el precio manual y volver a la estimación de la IA.\n\n' +
+        'La cantidad NO se modifica. ¿Continuar?'
+    )) return;
+    const r = await fetch('/presupuestos/items/' + itemId + '/restaurar-ia', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': _peCsrf() },
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'No se pudo restaurar IA'); return; }
+    if (d.requiere_apu) { alert(d.mensaje); }
+    location.reload();
+};
+
+// Inyectar acciones extra y badges (editado / lock) en cada fila con [data-item-id].
 // Se ejecuta al cargar y cada vez que las tablas se re-renderizan (poco frecuente).
 function _peInyectarAcciones() {
     if (!_PE_EDITABLE) return;
@@ -1928,6 +1946,8 @@ function _peInyectarAcciones() {
         const itemId = tr.dataset.itemId;
         const editadoAt = tr.dataset.itemEditadoAt;
         const excluido = tr.dataset.itemExcluido === 'true';
+        const precioLocked = tr.dataset.itemPrecioLocked === 'true';
+        const cantidadLocked = tr.dataset.itemCantidadLocked === 'true';
 
         // Badge "editado" pegado a la primera celda (descripción)
         if (editadoAt) {
@@ -1941,15 +1961,38 @@ function _peInyectarAcciones() {
             }
         }
 
+        // Lock Manual MVP — icono 🔒 pegado a precio o cantidad si están lockeados.
+        // El selector busca celdas por orden conocido en la tabla Materiales:
+        //   td[0]=descripcion, td[1]=unidad, td[2]=cantidad, td[3]=precio_unit_ARS, ...
+        const tds = tr.querySelectorAll('td');
+        if (cantidadLocked && tds.length > 2 && !tds[2].querySelector('.pe-lock-icon')) {
+            const ic = document.createElement('i');
+            ic.className = 'fas fa-lock pe-lock-icon ms-1 text-warning';
+            ic.title = 'Cantidad editada manualmente, la IA no la sobrescribe';
+            ic.style.fontSize = '0.75rem';
+            tds[2].appendChild(ic);
+        }
+        if (precioLocked && tds.length > 3 && !tds[3].querySelector('.pe-lock-icon')) {
+            const ic = document.createElement('i');
+            ic.className = 'fas fa-lock pe-lock-icon ms-1 text-warning';
+            ic.title = 'Precio editado manualmente, la IA no lo sobrescribe';
+            ic.style.fontSize = '0.75rem';
+            tds[3].appendChild(ic);
+        }
+
         // Botón "..." pegado al final del último td (acciones existentes)
         const tdAcciones = tr.querySelector('td:last-child');
         if (!tdAcciones || tdAcciones.querySelector('.pe-acciones-btn')) return;
         const div = document.createElement('div');
         div.className = 'btn-group btn-group-sm ms-1 pe-acciones-cell';
+        const restaurarItem = precioLocked
+            ? '<li><a class="dropdown-item text-primary" href="#" onclick="peRestaurarIA(' + itemId + ');return false;"><i class="fas fa-undo me-2"></i>Restaurar precio IA</a></li><li><hr class="dropdown-divider"></li>'
+            : '';
         div.innerHTML = (
             '<button type="button" class="btn btn-outline-secondary btn-sm pe-acciones-btn dropdown-toggle" data-bs-toggle="dropdown">' +
             '<i class="fas fa-ellipsis-v"></i></button>' +
             '<ul class="dropdown-menu dropdown-menu-end">' +
+            restaurarItem +
             '<li><a class="dropdown-item" href="#" onclick="peDuplicarItem(' + itemId + ');return false;"><i class="fas fa-copy me-2"></i>Duplicar</a></li>' +
             '<li><a class="dropdown-item" href="#" onclick="peMoverItem(' + itemId + ');return false;"><i class="fas fa-arrows-alt me-2"></i>Mover a etapa…</a></li>' +
             '<li><a class="dropdown-item" href="#" onclick="peExcluirItem(' + itemId + ');return false;">' +
@@ -3123,6 +3166,10 @@ window.camCotizarIA = async function() {
             return;
         }
         const fmt = (v) => '$' + (v || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+        const manualesRespetados = data.manuales_respetados || 0;
+        const lineaManuales = manualesRespetados > 0
+            ? '\n' + manualesRespetados + ' ítem(s) con precio manual respetado(s).'
+            : '';
         alert(
             'Precios estimados con éxito.\n\n' +
             'Costo total: ' + fmt(data.total_costo) + '\n' +
@@ -3130,7 +3177,8 @@ window.camCotizarIA = async function() {
             'Cobertura: ' + (data.cobertura_pct || 0) + '%\n\n' +
             'Actualizados: ' + (data.actualizados || 0) +
             ' · Estimados: ' + (data.estimados || 0) +
-            ' · Sin precio: ' + ((data.sin_precio || 0) + (data.requiere_tc || 0))
+            ' · Sin precio: ' + ((data.sin_precio || 0) + (data.requiere_tc || 0)) +
+            lineaManuales
         );
         location.reload();
     } catch (e) {

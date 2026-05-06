@@ -445,8 +445,9 @@ def estimar_precios_presupuesto(presupuesto, *, user_id=None):
         'vencidos': 0,
         'sin_precio': 0,
         'requiere_tc': 0,
-        'manual': 0,        # respetadas
+        'manual': 0,                  # composiciones individuales con precio_estado='manual'
         'mo_aplicadas': 0,
+        'manuales_respetados': 0,     # items completos con precio_locked=True (Lock Manual MVP)
     }
 
     org_id = presupuesto.organizacion_id
@@ -457,6 +458,13 @@ def estimar_precios_presupuesto(presupuesto, *, user_id=None):
     ).all()
 
     for item in items:
+        # Lock Manual MVP: si el item tiene precio_locked, la IA no toca
+        # ninguna de sus composiciones — el usuario lo ajusto a mano y no
+        # debe sobrescribirse en re-estimaciones.
+        if getattr(item, 'precio_locked', False):
+            contadores['manuales_respetados'] += 1
+            continue
+
         for comp in (item.composiciones.all() if hasattr(item.composiciones, 'all') else item.composiciones):
             contadores['composiciones_evaluadas'] += 1
             # Skip si es manual

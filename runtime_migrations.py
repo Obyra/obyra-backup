@@ -2663,3 +2663,22 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Runtime fallback Etapa 1 modulo flexible: {e}")
+
+    # =====================================================
+    # 2026-05-06: Fallback Lock Manual (precio_locked, cantidad_locked)
+    # Si la migracion 202605060002 falla silenciosamente, las columnas se
+    # crean aca al boot. Idempotente.
+    # =====================================================
+    try:
+        for ddl in [
+            "ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS precio_locked BOOLEAN NOT NULL DEFAULT FALSE;",
+            "ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS cantidad_locked BOOLEAN NOT NULL DEFAULT FALSE;",
+            "CREATE INDEX IF NOT EXISTS ix_items_pres_precio_locked ON items_presupuesto(precio_locked) WHERE precio_locked = TRUE;",
+            "CREATE INDEX IF NOT EXISTS ix_items_pres_cantidad_locked ON items_presupuesto(cantidad_locked) WHERE cantidad_locked = TRUE;",
+        ]:
+            db.session.execute(db.text(ddl))
+        db.session.commit()
+        print("[OK] Runtime fallback Lock Manual aplicado (precio_locked, cantidad_locked)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Runtime fallback Lock Manual: {e}")

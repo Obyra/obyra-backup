@@ -456,6 +456,10 @@ def editar_item(id):
         # Obtener datos del JSON
         data = request.get_json()
 
+        # Lock Manual (MVP 2026-05-06): capturar valores previos para detectar cambios
+        precio_previo = Decimal(str(item.precio_unitario or 0))
+        cantidad_previa = Decimal(str(item.cantidad or 0))
+
         # Actualizar campos básicos
         if 'descripcion' in data:
             item.descripcion = data['descripcion']
@@ -479,6 +483,66 @@ def editar_item(id):
         item.editado_at = _dt_now.utcnow()
         if current_user.is_authenticated:
             item.editado_por_user_id = current_user.id
+
+        # Lock Manual MVP: detectar cambios de precio o cantidad y marcar locks.
+        # NO se hace en cada guardado — solo cuando el valor realmente cambio.
+        precio_cambio = (
+            'precio_unitario' in data
+            and Decimal(str(item.precio_unitario or 0)) != precio_previo
+        )
+        cantidad_cambio = (
+            'cantidad' in data
+            and Decimal(str(item.cantidad or 0)) != cantidad_previa
+        )
+
+        if precio_cambio:
+            item.precio_locked = True
+            # Sincronizar composiciones: marca todas como manual para que la
+            # IA no las pise. Mantiene invariante "precio item = sum precios comp".
+            try:
+                for comp in (item.composiciones.all()
+                             if hasattr(item.composiciones, 'all')
+                             else item.composiciones):
+                    comp.precio_estado = 'manual'
+                    comp.precio_actualizado_at = _dt_now.utcnow()
+            except Exception:
+                current_app.logger.exception('No se pudo sincronizar composiciones manual')
+
+            # Insertar observacion best-effort (no bloquea edicion si falla).
+            # origen_tipo='manual_usuario' → la IA NO la consume hoy.
+            if item.precio_unitario and Decimal(str(item.precio_unitario)) > 0:
+                try:
+                    from models.precio_observado import PrecioObservado
+                    from models.provider_price_list import normalizar_descripcion_precio
+                    from datetime import date as _date_today
+                    obs = PrecioObservado(
+                        organizacion_id=presupuesto.organizacion_id,
+                        origen_tipo='manual_usuario',
+                        origen_presupuesto_id=presupuesto.id,
+                        origen_item_presupuesto_id=item.id,
+                        descripcion=item.descripcion or '',
+                        descripcion_normalizada=normalizar_descripcion_precio(
+                            item.descripcion or ''
+                        ),
+                        unidad=item.unidad or 'un',
+                        rubro_nombre=(item.etapa_nombre or '')[:100] or None,
+                        tipo_recurso='item_completo',
+                        precio_unitario=Decimal(str(item.precio_unitario)),
+                        moneda=item.currency or 'ARS',
+                        fecha_observado=_date_today.today(),
+                        notas=(f'Edicion manual por user_id='
+                               f'{current_user.id if current_user.is_authenticated else "anon"} '
+                               f'en presupuesto {presupuesto.id}'),
+                        valido=True,
+                    )
+                    db.session.add(obs)
+                except Exception:
+                    current_app.logger.exception(
+                        'No se pudo capturar PrecioObservado manual_usuario'
+                    )
+
+        if cantidad_cambio:
+            item.cantidad_locked = True
 
         # Recalcular total
         item.total = item.cantidad * item.precio_unitario
