@@ -663,18 +663,33 @@
 
                     {# Mensaje contextual según el paso actual #}
                     {% if not ux_tiene_composicion %}
-                    <div class="alert alert-warning small mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
-                        Antes de cotizar, generá la <strong>composición ejecutiva (APU)</strong>.
-                        Es lo que la IA usa internamente para estimar precios de materiales y mano de obra.
-                        <button type="button" class="btn btn-sm btn-warning ms-2"
-                                {% if presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
-                                onclick="abrirAnalisisIA({{ presupuesto.id }})"
-                                {% else %}
-                                disabled title="Generación automática requiere pliego importado"
-                                {% endif %}>
-                            <i class="fas fa-magic me-1"></i>Generar composición ahora
-                        </button>
+                    <div class="alert alert-primary small mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="flex-grow-1">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>Paso 1: generar la composición ejecutiva (APU).</strong>
+                            OBYRA va a analizar los ítems con IA, aplicar las sugerencias confiables
+                            y generar el desglose técnico. Después podés cotizar con la Calculadora IA.
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-primary"
+                                    id="btnCamGenerarRapido"
+                                    {% if presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
+                                    onclick="camGenerarComposicionRapido(this)"
+                                    {% else %}
+                                    disabled title="Necesitás haber importado un pliego primero"
+                                    {% endif %}>
+                                <i class="fas fa-bolt me-1"></i>Generar composición ejecutiva
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    {% if presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
+                                    onclick="abrirAnalisisIA({{ presupuesto.id }})"
+                                    {% else %}
+                                    disabled
+                                    {% endif %}
+                                    title="Revisar uno por uno antes de aplicar (avanzado).">
+                                Revisar análisis IA
+                            </button>
+                        </div>
                     </div>
                     {% endif %}
 
@@ -3251,6 +3266,150 @@ let _iaModoExpertoActivo = false;
 // Llama al MISMO endpoint que el boton existente "Estimar precios automaticamente"
 // (POST /<id>/estimar-precios). No duplica logica de precios; solo da feedback
 // visible sin requerir que el usuario abra el modal "Analizar con IA".
+// ============================================================================
+// UX simplificada (2026-05-06) — "Generar composición ejecutiva" en un click.
+// Hace analizar IA + auto-aplicar sugerencias confiables + generar composición.
+// El modal "Analizar con IA" queda como opción avanzada para revisar detalles.
+// ============================================================================
+window.camGenerarComposicionRapido = async function(btnEl) {
+    const btn = btnEl || document.getElementById('btnCamGenerarRapido');
+    const presId = {{ presupuesto.id }};
+
+    if (!confirm(
+        'OBYRA va a:\n\n' +
+        '  1. Analizar los ítems del presupuesto con IA.\n' +
+        '  2. Aplicar las sugerencias confiables automáticamente.\n' +
+        '  3. Generar la composición ejecutiva.\n\n' +
+        'Los ítems dudosos quedarán pendientes para revisar manualmente.\n\n' +
+        '¿Continuar?'
+    )) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset._htmlOrig = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>1/3 Analizando ítems...';
+    }
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    function _categoria(it) {
+        if (it.revisado_ia) return 'resuelto';
+        const sug = it.sugerencia || it.sugerencias || {};
+        const reglaId = sug.regla_id || it.regla_id;
+        const tt = sug.tipo_tratamiento || sug.tipo_tratamiento_sugerido;
+        const conf = (sug.confianza_label || it.confianza_label || '').toLowerCase();
+        const rubro = sug.rubro_sugerido || sug.etapa_sugerida || '';
+        const tarea = sug.tarea_sugerida || sug.tarea || '';
+        if (tt) return 'auto_aplicable';
+        if (!reglaId && !rubro && !tarea) return 'sin_sugerencia';
+        if (reglaId) {
+            if (conf === 'alta') return 'auto_aplicable';
+            if (conf === 'media' && (rubro || tarea)) return 'auto_aplicable';
+            return 'dudoso';
+        }
+        return 'dudoso';
+    }
+
+    try {
+        // PASO 1: analizar
+        const r1 = await fetch(`/presupuestos/${presId}/analizar-ia`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+        });
+        const d1 = await r1.json();
+        if (!r1.ok || !d1.ok) {
+            alert('Error al analizar: ' + (d1.error || r1.status));
+            return;
+        }
+
+        const items = d1.items || [];
+        const auto_ids = [];
+        const sugerencias_por_item = {};
+        let n_dudosos = 0, n_sin = 0;
+        items.forEach(it => {
+            const cat = _categoria(it);
+            if (cat === 'auto_aplicable') {
+                auto_ids.push(it.id);
+                sugerencias_por_item[String(it.id)] = it.sugerencia || it.sugerencias || {};
+            } else if (cat === 'dudoso') {
+                n_dudosos++;
+            } else if (cat === 'sin_sugerencia') {
+                n_sin++;
+            }
+        });
+
+        // PASO 2: aplicar sugerencias (si hay)
+        let aplicados = 0;
+        if (auto_ids.length > 0) {
+            if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>2/3 Aplicando ' + auto_ids.length + ' sugerencias...';
+            const r2 = await fetch(`/presupuestos/${presId}/aplicar-analisis-ia/bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    items: auto_ids,
+                    accion: 'confirmar',
+                    sugerencias_por_item: sugerencias_por_item,
+                }),
+            });
+            const d2 = await r2.json();
+            if (!r2.ok || !d2.ok) {
+                alert('Error al aplicar sugerencias: ' + (d2.error || r2.status));
+                return;
+            }
+            aplicados = d2.aplicados || 0;
+        }
+
+        // PASO 3: generar composicion
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>3/3 Generando composición...';
+        const r3 = await fetch(`/presupuestos/${presId}/generar-preliminar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+        });
+        const d3 = await r3.json();
+        if (!r3.ok || !d3.ok) {
+            alert('Sugerencias aplicadas pero falló generar composición: ' + (d3.error || r3.status));
+            return;
+        }
+
+        // Resumen final
+        const c = d3.contadores || {};
+        const cobertura = d3.cobertura_pct || 0;
+        const pendientes_total = n_dudosos + n_sin;
+        let msg = '✓ Composición ejecutiva generada\n\n';
+        if (aplicados > 0) {
+            msg += aplicados + ' sugerencias auto-aplicadas.\n';
+        }
+        msg += '\nResultado:\n';
+        msg += '  · ' + (c.items_creados || 0) + ' ítems descompuestos en materiales/MO/equipos\n';
+        if (c.items_globales_auto || c.items_globales) {
+            msg += '  · ' + ((c.items_globales || 0) + (c.items_globales_auto || 0)) + ' globales (personal, obrador, limpieza, seguros)\n';
+        }
+        if (c.items_servicio_auto || c.items_servicio) {
+            msg += '  · ' + ((c.items_servicio || 0) + (c.items_servicio_auto || 0)) + ' servicios (firma, gestoría, trámites)\n';
+        }
+        msg += '  · Cobertura final: ' + cobertura + '%\n';
+        if (pendientes_total > 0) {
+            msg += '\n⚠ Quedan ' + pendientes_total + ' ítems para revisar manualmente.\n';
+            msg += '   (Podés tocar "Revisar análisis IA" después).';
+        } else {
+            msg += '\n¡Listo para cotizar con la Calculadora IA!';
+        }
+        alert(msg);
+        location.reload();
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = btn.dataset._htmlOrig ||
+                '<i class="fas fa-magic me-1"></i>Generar composición ejecutiva';
+            delete btn.dataset._htmlOrig;
+        }
+    }
+};
+
 window.camCotizarIA = async function() {
     if (!confirm(
         'OBYRA va a buscar precios en lista de proveedores, historial de OC, ' +

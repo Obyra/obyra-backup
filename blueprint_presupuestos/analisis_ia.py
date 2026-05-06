@@ -576,6 +576,17 @@ def aplicar_analisis_ia_bulk(id: int):
     if tt and tt not in TIPOS_TRATAMIENTO:
         return jsonify(ok=False, error=f'tipo_tratamiento invalido: {tt}'), 400
 
+    # Opcional: sugerencias_por_item permite que el caller pase las sugerencias
+    # IA del paso anterior (por ej. de un POST a /analizar-ia justo antes), para
+    # que el endpoint bulk las persista en `analisis_ia.sugerencias` ANTES de
+    # marcar como sugerencia_confirmada. Sin esto, "confirmar" sin sugerencia
+    # previa no aporta info al generador de composicion.
+    # Estructura: { "<item_id>": {regla_id, rubro_sugerido, etapa_sugerida,
+    #                              tipo_tratamiento, confianza, ...} }
+    sugerencias_por_item = payload.get('sugerencias_por_item') or {}
+    if not isinstance(sugerencias_por_item, dict):
+        sugerencias_por_item = {}
+
     items = (ItemPresupuesto.query
              .filter(ItemPresupuesto.presupuesto_id == presupuesto.id,
                      ItemPresupuesto.id.in_(item_ids))
@@ -596,6 +607,26 @@ def aplicar_analisis_ia_bulk(id: int):
                 continue
 
             # accion == 'confirmar'
+            # Guardar sugerencia provista por el caller, si hay
+            sug_provista = sugerencias_por_item.get(str(it.id)) or sugerencias_por_item.get(it.id)
+            if isinstance(sug_provista, dict):
+                # Mergear con la existente (si hay) para preservar campos previos
+                sug_existente = blob.get('sugerencias') or {}
+                if isinstance(sug_existente, dict):
+                    sug_existente.update(sug_provista)
+                    blob['sugerencias'] = sug_existente
+                else:
+                    blob['sugerencias'] = sug_provista
+                # Si la sugerencia trae tipo_tratamiento, propagar al top-level
+                tt_sug = (sug_provista.get('tipo_tratamiento') or '').strip().lower()
+                if tt_sug and not tt:
+                    blob['tipo_tratamiento'] = tt_sug
+                # Si trae rubro, sincronizar etapa_nombre del item
+                rubro_sug = (sug_provista.get('rubro_sugerido') or
+                             sug_provista.get('etapa_sugerida') or '')
+                if rubro_sug and not rubro and not it.etapa_nombre:
+                    it.etapa_nombre = str(rubro_sug)[:100]
+
             if tt:
                 blob['tipo_tratamiento'] = tt
                 blob['tipo_tratamiento_origen'] = 'bulk_confirmar'
