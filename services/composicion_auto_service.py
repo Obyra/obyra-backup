@@ -33,6 +33,97 @@ CANTIDAD_MINIMA = Decimal('0.001')
 TIPOS_VALIDOS = ('material', 'mano_obra', 'equipo')
 
 
+def _normalizar_descripcion(s: str) -> str:
+    """Normaliza descripcion para matching: lowercase, sin acentos, collapse spaces."""
+    if not s:
+        return ''
+    import unicodedata, re
+    s = str(s).strip().lower()
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r'\s+', ' ', s)
+    return s
+
+
+def _match_catchall_para_item(descripcion: str, unidad: str = ''):
+    """MVP autoclasificación 2026-05-06.
+
+    Si el item no tiene regla_id (porque el matcher IA no se ejecutó o no
+    matcheó nada), intenta matchear contra las reglas catch-all de
+    REGLAS_TECNICAS que tienen `tipo_tratamiento` definido.
+
+    Retorna {'regla_id': str, 'tipo_tratamiento': str, 'confianza': str}
+    o None si no matchea.
+
+    Match por keyword fuerte = alta. Por keyword media = media. Excluyentes
+    bloquean el match.
+    """
+    if not descripcion:
+        return None
+    from services.base_tecnica_computos import REGLAS_TECNICAS
+
+    desc_norm = _normalizar_descripcion(descripcion)
+    unidad_norm = (unidad or '').strip().lower()
+
+    mejor = None
+    mejor_score = 0
+
+    for regla in REGLAS_TECNICAS:
+        tt = regla.get('tipo_tratamiento')
+        if not tt:
+            continue  # Solo evaluamos catch-all explícitas
+        # Excluyentes: si alguna keyword excluyente está en la descripción, salta.
+        excl = [_normalizar_descripcion(k) for k in regla.get('palabras_excluyentes', [])]
+        if any(k and k in desc_norm for k in excl):
+            continue
+
+        score = 0
+        for kw in regla.get('palabras_clave_fuertes', []) or []:
+            kn = _normalizar_descripcion(kw)
+            if kn and kn in desc_norm:
+                score += 50
+        for kw in regla.get('palabras_clave_medias', []) or []:
+            kn = _normalizar_descripcion(kw)
+            if kn and kn in desc_norm:
+                score += 25
+        for kw in regla.get('palabras_clave_debiles', []) or []:
+            kn = _normalizar_descripcion(kw)
+            if kn and kn in desc_norm:
+                score += 10
+
+        # Bonus por unidad coincidente
+        unidades_validas = [u.lower() for u in regla.get('unidades_validas', []) or []]
+        if unidad_norm and unidad_norm in unidades_validas:
+            score += 5
+
+        if score > mejor_score and score >= 50:  # mínimo: 1 keyword fuerte
+            mejor_score = score
+            mejor = regla
+
+    if not mejor:
+        return None
+    confianza = 'alta' if mejor_score >= 50 else 'media'
+    return {
+        'regla_id': mejor.get('id'),
+        'tipo_tratamiento': mejor.get('tipo_tratamiento'),
+        'confianza': confianza,
+        'score': mejor_score,
+    }
+
+
+def _tipo_tratamiento_de_regla(regla_id: str):
+    """Devuelve el tipo_tratamiento (global/servicio/desglosar/excluir) declarado
+    en la regla técnica si existe, sino None.
+    """
+    if not regla_id:
+        return None
+    from services.base_tecnica_computos import regla_por_id
+    r = regla_por_id(regla_id)
+    if not r:
+        return None
+    return (r.get('tipo_tratamiento') or '').lower() or None
+
+
 def _normalizar_tipo(tipo_yaml: str) -> str:
     """Mapea tipos del YAML a los tipos validos en BD.
 
@@ -109,7 +200,60 @@ def generar_para_item(item, *, regla_id: Optional[str]) -> Dict[str, Any]:
     if tt == 'servicio':
         return {'estado': 'servicio_no_desglosa', 'composiciones_creadas': 0}
 
+    # MVP autoclasificación: si la regla técnica matcheada por IA tiene
+    # tipo_tratamiento definido (ej: personal_admin, servicio_tecnico, etc.),
+    # respetarlo aunque el usuario NO lo haya elegido manualmente. Esto
+    # baja drásticamente la cantidad de items que quedan en "sin_regla" o
+    # "sin_coeficiente" pidiendo clasificación manual.
+    if regla_id:
+        tt_regla = _tipo_tratamiento_de_regla(regla_id)
+        if tt_regla in ('global', 'servicio', 'excluir'):
+            # Persistir el tipo_tratamiento auto en el blob para que el resto
+            # del sistema (vista ejecutiva, totales, banner) lo reconozca.
+            try:
+                if not isinstance(blob, dict):
+                    blob = {}
+                blob.setdefault('sugerencias', {})
+                blob['tipo_tratamiento'] = tt_regla
+                blob['tipo_tratamiento_origen'] = 'auto_regla_catchall'
+                item.analisis_ia = blob
+            except Exception:
+                pass
+            estado_map = {
+                'global': 'global_auto', 'servicio': 'servicio_auto',
+                'excluir': 'excluido',
+            }
+            return {'estado': estado_map[tt_regla], 'composiciones_creadas': 0}
+
+    # Si NO hay regla_id (o el matcher IA no detectó nada), intentar el
+    # matcher catch-all directamente acá. Cubre items que el usuario nunca
+    # pasó por "Analizar con IA" (caso típico: imports nuevos sin click).
     if not regla_id:
+        match = _match_catchall_para_item(
+            getattr(item, 'descripcion', '') or '',
+            getattr(item, 'unidad', '') or '',
+        )
+        if match:
+            tt_match = match['tipo_tratamiento']
+            try:
+                if not isinstance(blob, dict):
+                    blob = {}
+                blob.setdefault('sugerencias', {})
+                blob['sugerencias']['regla_id'] = match['regla_id']
+                blob['sugerencias']['confianza'] = match['confianza']
+                blob['tipo_tratamiento'] = tt_match
+                blob['tipo_tratamiento_origen'] = 'auto_catchall_directo'
+                item.analisis_ia = blob
+            except Exception:
+                pass
+            estado_map = {
+                'global': 'global_auto', 'servicio': 'servicio_auto',
+                'excluir': 'excluido',
+            }
+            return {
+                'estado': estado_map.get(tt_match, 'sin_regla'),
+                'composiciones_creadas': 0,
+            }
         return {'estado': 'sin_regla', 'composiciones_creadas': 0}
 
     if not tiene_coeficientes(regla_id):
@@ -199,6 +343,9 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
         'items_servicio': 0,
         'items_excluidos': 0,
         'recursos_filtrados_chicos': 0,
+        # MVP autoclasificación: items que la regla catch-all clasificó sola
+        'items_globales_auto': 0,
+        'items_servicio_auto': 0,
     }
     saltados: List[Dict[str, Any]] = []
     advertencias: List[str] = []
@@ -258,6 +405,10 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
             contadores['items_globales'] += 1
         elif estado == 'servicio_no_desglosa':
             contadores['items_servicio'] += 1
+        elif estado == 'global_auto':
+            contadores['items_globales_auto'] += 1
+        elif estado == 'servicio_auto':
+            contadores['items_servicio_auto'] += 1
         elif estado == 'excluido':
             contadores['items_excluidos'] += 1
 
@@ -278,6 +429,26 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
             'composiciones manuales. Borralas antes si querés regenerar.'
         )
 
+    # Cobertura: items "resueltos" / total. Resueltos = creados + globales/
+    # servicios (manuales o auto) + ya generados + excluidos. Pendientes
+    # reales = sin_regla + sin_coeficiente.
+    total = contadores['items_procesados']
+    resueltos = (
+        contadores['items_creados']
+        + contadores['items_globales']
+        + contadores['items_servicio']
+        + contadores['items_globales_auto']
+        + contadores['items_servicio_auto']
+        + contadores['items_ya_generado']
+        + contadores['items_excluidos']
+        + contadores['items_respetado_manual']
+    )
+    pendientes_reales = (
+        contadores['items_sin_regla']
+        + contadores['items_sin_coeficiente']
+    )
+    cobertura_pct = round(100.0 * resueltos / total, 1) if total > 0 else 0.0
+
     return {
         'contadores': contadores,
         'saltados': saltados,
@@ -290,4 +461,9 @@ def generar_preliminar(presupuesto, *, user_id: Optional[int] = None) -> Dict[st
         ),
         'advertencias': advertencias,
         'yaml_version': yaml_metadatos().get('version'),
+        # MVP autoclasificación: resumen de cobertura para mostrar al usuario.
+        'cobertura_pct': cobertura_pct,
+        'items_total': total,
+        'items_resueltos': resueltos,
+        'pendientes_reales': pendientes_reales,
     }

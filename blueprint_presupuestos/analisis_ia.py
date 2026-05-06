@@ -522,3 +522,151 @@ def clasificar_item_pendiente(id, item_id):
         estado_revision=estado_revision_aplicado,
         tipo_tratamiento=tipo_tratamiento_aplicado,
     )
+
+
+# ============================================================================
+# MVP autoclasificación 2026-05-06 — Aplicar clasificación a similares.
+# ============================================================================
+
+def _normalizar_tokens(s: str):
+    """Normaliza descripción y devuelve set de tokens (palabras > 2 letras)."""
+    if not s:
+        return set()
+    import unicodedata, re
+    s = str(s).strip().lower()
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r'[^\w\s]', ' ', s)
+    return set(t for t in s.split() if len(t) > 2)
+
+
+def _jaccard(a: set, b: set) -> float:
+    if not a or not b:
+        return 0.0
+    inter = len(a & b)
+    union = len(a | b)
+    return (inter / union) if union > 0 else 0.0
+
+
+@presupuestos_bp.route(
+    '/<int:id>/items/<int:item_id>/aplicar-similares',
+    methods=['POST']
+)
+@login_required
+def aplicar_clasificacion_a_similares(id: int, item_id: int):
+    """Aplica la clasificación de un ítem a otros similares del mismo presupuesto.
+
+    Body JSON:
+      tipo_tratamiento: 'global' | 'servicio' | 'desglosar' | 'excluir'   (opcional)
+      rubro:            string                                            (opcional)
+      threshold:        0.5 default — similitud Jaccard mínima por tokens
+
+    Busca items en el mismo presupuesto cuya descripción tenga similitud
+    Jaccard >= threshold con la del item base, y les aplica el mismo
+    tipo_tratamiento (y rubro si viene). Items con composiciones manuales
+    no se tocan.
+
+    Devuelve resumen con cuántos items se actualizaron.
+    """
+    from models.budgets import Presupuesto, ItemPresupuesto
+
+    org_id = get_current_org_id()
+    if not org_id:
+        return jsonify(ok=False, error='Sin organizacion activa'), 400
+    presupuesto = Presupuesto.query.filter_by(
+        id=id, organizacion_id=org_id
+    ).first()
+    if not presupuesto:
+        return jsonify(ok=False, error='Presupuesto no encontrado'), 404
+    if not getattr(current_user, 'puede_gestionar', lambda: False)():
+        return jsonify(ok=False, error='Sin permisos'), 403
+    if presupuesto.estado not in ('borrador', 'enviado'):
+        return jsonify(ok=False,
+                       error=f'Presupuesto en estado {presupuesto.estado}: no editable.'), 400
+
+    base = ItemPresupuesto.query.filter_by(
+        id=item_id, presupuesto_id=presupuesto.id
+    ).first()
+    if not base:
+        return jsonify(ok=False, error='Item base no encontrado'), 404
+
+    payload = request.get_json(silent=True) or {}
+    tt = (payload.get('tipo_tratamiento') or '').strip().lower()
+    rubro = (payload.get('rubro') or '').strip()[:120]
+    threshold = float(payload.get('threshold') or 0.5)
+    if tt and tt not in TIPOS_TRATAMIENTO:
+        return jsonify(ok=False, error=f'tipo_tratamiento invalido: {tt}'), 400
+    if not tt and not rubro:
+        return jsonify(ok=False, error='Pasá tipo_tratamiento o rubro'), 400
+
+    base_tokens = _normalizar_tokens(base.descripcion or '')
+    if len(base_tokens) < 1:
+        return jsonify(ok=False,
+                       error='El item base tiene descripcion vacía o muy corta'), 400
+
+    candidatos = ItemPresupuesto.query.filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuesto.id != base.id,
+    ).all()
+
+    aplicados = 0
+    items_aplicados = []
+    for it in candidatos:
+        # No tocar items con composiciones manuales (lock implícito)
+        try:
+            comps_manuales = sum(
+                1 for c in (it.composiciones.all()
+                            if hasattr(it.composiciones, 'all')
+                            else it.composiciones)
+                if (c.origen or 'manual').lower() != 'calculadora_ia'
+            )
+            if comps_manuales > 0:
+                continue
+        except Exception:
+            pass
+
+        tokens = _normalizar_tokens(it.descripcion or '')
+        if _jaccard(base_tokens, tokens) < threshold:
+            continue
+
+        blob = dict(it.analisis_ia) if isinstance(it.analisis_ia, dict) else {}
+        if tt:
+            blob['tipo_tratamiento'] = tt
+            blob['tipo_tratamiento_origen'] = 'aplicar_a_similares'
+            sug = blob.get('sugerencias') or {}
+            if isinstance(sug, dict):
+                sug['tipo_tratamiento'] = tt
+                blob['sugerencias'] = sug
+        if rubro:
+            sug = blob.get('sugerencias') or {}
+            if isinstance(sug, dict):
+                sug['rubro_sugerido'] = rubro
+                blob['sugerencias'] = sug
+            it.etapa_nombre = rubro[:100]
+        blob['estado_revision'] = 'clasificado_manual'
+        blob['resuelto_por_usuario'] = True
+        blob['resuelto_at'] = datetime.utcnow().isoformat()
+        it.analisis_ia = blob
+        it.revisado_ia = True
+        aplicados += 1
+        items_aplicados.append({
+            'id': it.id,
+            'descripcion': (it.descripcion or '')[:80],
+        })
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error en aplicar_a_similares')
+        return jsonify(ok=False, error=f'Error: {type(e).__name__}'), 500
+
+    return jsonify(
+        ok=True,
+        item_base_id=base.id,
+        aplicados=aplicados,
+        items=items_aplicados[:30],   # cap para response
+        threshold=threshold,
+        tipo_tratamiento=tt or None,
+        rubro=rubro or None,
+    )

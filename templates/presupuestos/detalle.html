@@ -4562,18 +4562,35 @@ function _iaMostrarResumenPreliminar(data) {
     const adv = data.advertencias || [];
     const sal = data.saltados || [];
     const trunc = data.saltados_truncado || 0;
+    // MVP autoclasificación: cobertura visible.
+    const cobertura = data.cobertura_pct || 0;
+    const itemsTotal = data.items_total || 0;
+    const itemsResueltos = data.items_resueltos || 0;
+    const pendientesReales = data.pendientes_reales || 0;
 
-    // Construir mensaje resumen como HTML para inyectar en una alerta dentro
-    // de la vista simple. No usamos modal anidado para no perderse en flow.
-    let html = '<div class="alert alert-success border-0">';
-    html += '<h6 class="alert-heading mb-2"><i class="fas fa-check-circle me-1"></i>Composición ejecutiva generada</h6>';
+    // Headline grande con la cobertura: este es el numero que vende la demo.
+    let html = '<div class="alert ' + (cobertura >= 80 ? 'alert-success' : (cobertura >= 50 ? 'alert-info' : 'alert-warning')) + ' border-0">';
+    html += '<h5 class="alert-heading mb-2">';
+    html += '<i class="fas fa-check-circle me-1"></i>';
+    html += 'OBYRA clasificó automáticamente ' + itemsResueltos + ' de ' + itemsTotal + ' ítems ';
+    html += '(<strong>' + cobertura + '%</strong>)';
+    if (pendientesReales > 0) {
+        html += '<span class="ms-2 small">· Quedan ' + pendientesReales + ' para revisar</span>';
+    }
+    html += '</h5>';
+
+    // Detalle compacto
     html += '<ul class="small mb-2">';
-    html += `<li><strong>${c.items_creados || 0}</strong> ítems con composición nueva</li>`;
-    html += `<li><strong>${c.composiciones_creadas || 0}</strong> recursos creados (materiales / MO / equipos)</li>`;
+    if (c.items_creados) html += `<li><strong>${c.items_creados}</strong> ítems descompuestos en materiales/MO/equipos (${c.composiciones_creadas || 0} recursos creados)</li>`;
+    if (c.items_globales_auto) html += `<li><strong>${c.items_globales_auto}</strong> ítems clasificados como <em>gasto global</em> automáticamente (vigilancia, llavero, obrador, limpieza, seguros)</li>`;
+    if (c.items_servicio_auto) html += `<li><strong>${c.items_servicio_auto}</strong> ítems clasificados como <em>servicio profesional</em> automáticamente (firma, dirección técnica, gestoría, trámites)</li>`;
+    if (c.items_globales) html += `<li>${c.items_globales} ítems globales (clasificados manualmente antes)</li>`;
+    if (c.items_servicio) html += `<li>${c.items_servicio} ítems servicio (clasificados manualmente antes)</li>`;
+    if (c.items_excluidos) html += `<li>${c.items_excluidos} ítems excluidos del ejecutivo</li>`;
     if (c.items_ya_generado) html += `<li>${c.items_ya_generado} ítems ya tenían composición auto (sin cambios)</li>`;
     if (c.items_respetado_manual) html += `<li>${c.items_respetado_manual} ítems con composición manual respetados</li>`;
-    if (c.items_sin_regla) html += `<li>${c.items_sin_regla} ítems sin regla técnica detectada</li>`;
-    if (c.items_sin_coeficiente) html += `<li>${c.items_sin_coeficiente} ítems con regla pero sin coeficiente cargado</li>`;
+    if (c.items_sin_regla) html += `<li class="text-warning"><strong>${c.items_sin_regla}</strong> ítems sin regla técnica — requieren revisión manual</li>`;
+    if (c.items_sin_coeficiente) html += `<li class="text-warning"><strong>${c.items_sin_coeficiente}</strong> ítems con regla pero sin coeficiente cargado</li>`;
     html += '</ul>';
 
     if (adv.length) {
