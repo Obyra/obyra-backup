@@ -4566,23 +4566,40 @@ function _iaRenderBloquePrecios(data) {
 // ============================================================================
 
 function _iaCategorizarItem(it) {
-    /* Retorna la categoría del item para la UX de revisión por lotes:
+    /* Categoría del item para la UX de revisión por lotes (2026-05-06 v2 demo).
+       Bar permisivo para auto-aplicable: si hay sugerencia clara, va a auto.
+       Solo cae en "dudoso" cuando la confianza es realmente baja.
+
        - 'resuelto'       : revisado_ia=true (ya pasó por confirmación)
-       - 'auto_aplicable' : tiene sugerencia clara + confianza alta
-                            (también si tiene tipo_tratamiento — los catch-all
-                            son siempre auto-aplicables)
-       - 'dudoso'         : tiene sugerencia pero confianza media/baja
-       - 'sin_sugerencia' : ninguna sugerencia útil */
+       - 'auto_aplicable' : tipo_tratamiento (catch-all) OR
+                            (regla_id + confianza alta/media + rubro_sugerido) OR
+                            (regla_id + tarea_sugerida con unidad coincidente)
+       - 'dudoso'         : tiene regla pero confianza baja, o solo rubro sin
+                            regla concreta → requiere ojo humano
+       - 'sin_sugerencia' : ni regla ni tratamiento ni rubro */
     if (it.revisado_ia) return 'resuelto';
     const sug = it.sugerencia || it.sugerencias || {};
     const reglaId = sug.regla_id || it.regla_id;
-    const tt = sug.tipo_tratamiento || it.tipo_tratamiento_sugerido;
+    const tt = sug.tipo_tratamiento || sug.tipo_tratamiento_sugerido || it.tipo_tratamiento_sugerido;
     const conf = (sug.confianza_label || it.confianza_label || '').toLowerCase();
-    if (!reglaId && !tt) return 'sin_sugerencia';
+    const rubro = sug.rubro_sugerido || sug.etapa_sugerida || '';
+    const tarea = sug.tarea_sugerida || sug.tarea || '';
+
     // Catch-all (tiene tipo_tratamiento) → siempre auto-aplicable
     if (tt) return 'auto_aplicable';
-    // Sino, requiere confianza alta
-    if (conf === 'alta') return 'auto_aplicable';
+
+    // Sin nada útil
+    if (!reglaId && !rubro && !tarea) return 'sin_sugerencia';
+
+    if (reglaId) {
+        // Confianza alta o media + rubro detectado → auto
+        if (conf === 'alta') return 'auto_aplicable';
+        if (conf === 'media' && (rubro || tarea)) return 'auto_aplicable';
+        // Confianza baja con regla → dudoso
+        return 'dudoso';
+    }
+
+    // Sin regla pero con rubro/tarea → dudoso (sugerencia floja)
     return 'dudoso';
 }
 

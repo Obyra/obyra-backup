@@ -149,12 +149,21 @@ def _normalizar_descripcion(descripcion: str) -> Optional[str]:
 
 
 def _confianza_label(score: float) -> str:
-    """Etiqueta de confianza según score 0..1."""
-    if score >= 0.80:
-        return 'alta'
+    """Etiqueta de confianza según score 0..1.
+
+    Thresholds ajustados (2026-05-06) para mejorar autoclasificación:
+      antes: alta>=0.80 / media>=0.60 / baja>=0.30
+      ahora: alta>=0.60 / media>=0.40 / baja>=0.20
+
+    El matcher de IA suele dar scores 0.50-0.65 para descripciones
+    constructivas tipicas (mamposteria, contrapiso, revoque). Con el
+    threshold viejo casi todas caian en 'baja' y quedaban como dudosas.
+    """
     if score >= 0.60:
+        return 'alta'
+    if score >= 0.40:
         return 'media'
-    if score >= 0.30:
+    if score >= 0.20:
         return 'baja'
     return 'sin'
 
