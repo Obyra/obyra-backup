@@ -599,7 +599,7 @@
                                     <strong>Calculadora IA</strong>
                                 </div>
                                 <p class="small text-muted flex-grow-1 mb-2">
-                                    Estimación automática usando lista de proveedores, historial y costos referencia (Gedif).
+                                    Estimación automática usando lista de proveedores, historial y precios de mercado OBYRA.
                                     Rápido e interno.
                                 </p>
                                 <button type="button" class="btn btn-primary"
@@ -1742,7 +1742,7 @@
                     </button>
                     <button type="button" class="btn btn-primary" id="btnEstimarPrecios"
                             onclick="iaEstimarPrecios()"
-                            title="OBYRA busca precios en lista de proveedores, historial de OC y referencias. Para mano de obra usa costo empresa Gedif.">
+                            title="OBYRA busca precios en lista de proveedores, historial de OC, referencias y precios de mercado OBYRA. Para mano de obra usa costo empresa de referencia.">
                         <i class="fas fa-dollar-sign me-1"></i>Estimar precios automáticamente
                     </button>
                 </div>
@@ -3145,7 +3145,7 @@ let _iaModoExpertoActivo = false;
 window.camCotizarIA = async function() {
     if (!confirm(
         'OBYRA va a buscar precios en lista de proveedores, historial de OC, ' +
-        'referencias y costo empresa Gedif.\n\nLos precios cargados manualmente se respetan.\n\n¿Continuar?'
+        'referencias y precios de mercado OBYRA.\n\nLos precios cargados manualmente se respetan.\n\n¿Continuar?'
     )) return;
 
     const btn = document.getElementById('btnCaminoCotizarIA');
@@ -4398,7 +4398,7 @@ window.iaEstimarPrecios = async function() {
     if (!btn) return;
     if (!confirm(
         'OBYRA va a buscar precios en lista de proveedores, historial de OC, referencias y ' +
-        'costo empresa Gedif para mano de obra.\n\n' +
+        'precios de mercado OBYRA.\n\n' +
         'Los precios cargados manualmente se respetan.\n\n¿Continuar?'
     )) return;
 
