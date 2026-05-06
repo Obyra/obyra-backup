@@ -72,6 +72,7 @@
 <script>
 const _PA_PRESUPUESTO_ID = {{ presupuesto.id }};
 const _PA_PUEDE_DESCARGAR = true;
+window._PA_PUEDE_GESTIONAR = {{ 'true' if puede_gestionar and presupuesto.estado in ['borrador', 'enviado'] else 'false' }};
 
 function _paEsc(s) {
     if (s == null) return '';
@@ -175,6 +176,14 @@ async function paCargarArchivos() {
             const dlBtn = '<a href="/presupuestos/' + _PA_PRESUPUESTO_ID + '/archivos/' + a.id + '/descargar" ' +
                           'class="btn btn-sm btn-outline-primary" title="Descargar archivo original">' +
                           '<i class="fas fa-download"></i></a>';
+            const delBtn = (window._PA_PUEDE_GESTIONAR === true)
+                ? '<button type="button" class="btn btn-sm btn-outline-danger" ' +
+                  'title="Eliminar archivo + sus ' + (a.cantidad_items_importados || 0) + ' ítem(s)" ' +
+                  'onclick="paEliminarArchivo(' + a.id + ',' +
+                  (a.cantidad_items_importados || 0) + ',' +
+                  JSON.stringify(a.filename_original || '') + ')">' +
+                  '<i class="fas fa-trash"></i></button>'
+                : '';
             const tooltipOrigen = (a.error_message
                 ? 'Error: ' + _paEsc(a.error_message)
                 : a.cantidad_hojas_detectadas
@@ -205,7 +214,7 @@ async function paCargarArchivos() {
                           'onclick="paMostrarDiagnostico(' + a.id + ')">Ver diagnóstico</button>' : '') +
                         '</div>' : '') +
                     '</div>' +
-                    '<div class="d-flex gap-1">' + dlBtn + '</div>' +
+                    '<div class="d-flex gap-1">' + dlBtn + delBtn + '</div>' +
                   '</div>' +
                   (a.diagnostico ?
                     '<div class="collapse mt-2" id="paDiag' + a.id + '">' +
@@ -278,6 +287,36 @@ window.paAgregarArchivos = async function() {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-upload me-1"></i>Subir e importar';
         cont.innerHTML = '<div class="alert alert-danger small">Error de red: ' + _paEsc(e.message) + '</div>';
+    }
+};
+
+window.paEliminarArchivo = async function(archivoId, itemsCount, filename) {
+    const msg = (
+        'Vas a ELIMINAR el archivo "' + filename + '" y sus ' + itemsCount + ' ítem(s).\n\n' +
+        'También se borran las observaciones de precio asociadas.\n' +
+        'No se puede deshacer (salvo re-subir el Excel).\n\n' +
+        '¿Continuar?'
+    );
+    if (!confirm(msg)) return;
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    try {
+        const r = await fetch('/presupuestos/' + _PA_PRESUPUESTO_ID + '/archivos/' + archivoId + '/eliminar', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) { alert(d.error || 'Error al eliminar'); return; }
+        alert(
+            'Archivo eliminado.\n\n' +
+            'Items borrados: ' + d.items_eliminados + '\n' +
+            'Observaciones borradas: ' + d.observaciones_eliminadas + '\n' +
+            'Items restantes en el presupuesto: ' + d.total_items_restantes
+        );
+        location.reload();
+    } catch (e) {
+        alert('Error de red: ' + e.message);
     }
 };
 

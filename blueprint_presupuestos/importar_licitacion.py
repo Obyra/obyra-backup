@@ -1194,6 +1194,127 @@ def descargar_archivo_pa(pid, aid):
     )
 
 
+@presupuestos_bp.route('/<int:pid>/archivos/<int:aid>/eliminar', methods=['POST'])
+@login_required
+def eliminar_archivo_pa(pid, aid):
+    """Elimina un archivo de licitacion + sus items + sus observaciones.
+
+    Es destructivo intencional: cuando el usuario equivoca un upload, necesita
+    deshacer la importacion. NO se puede recuperar (salvo re-subir el Excel).
+
+    Requiere:
+      - rol admin/pm
+      - presupuesto en estado 'borrador' o 'enviado'
+      - el archivo pertenece al mismo presupuesto y org
+
+    Hace:
+      1. Soft-delete del PresupuestoArchivo (deleted_at = now)
+      2. Hard-delete de items_presupuesto con archivo_origen_id = aid
+      3. Hard-delete de precio_observado con origen_archivo_id = aid
+      4. Borra archivo fisico de disco si existe
+      5. Recalcula totales del presupuesto
+
+    Devuelve resumen con conteos.
+    """
+    from datetime import datetime
+
+    if not current_user.puede_gestionar():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+    presupuesto = Presupuesto.query.filter_by(id=pid, organizacion_id=org_id).first()
+    if not presupuesto:
+        return jsonify(ok=False, error='Presupuesto no encontrado'), 404
+    if presupuesto.estado not in ('borrador', 'enviado'):
+        return jsonify(ok=False, error=(
+            f'No se puede eliminar archivos: presupuesto en estado {presupuesto.estado}'
+        )), 400
+
+    from models.presupuesto_archivo import PresupuestoArchivo
+    from models.budgets import ItemPresupuesto
+
+    archivo = PresupuestoArchivo.query.filter_by(id=aid, presupuesto_id=pid).first()
+    if not archivo:
+        return jsonify(ok=False, error='Archivo no encontrado en este presupuesto'), 404
+    if archivo.deleted_at is not None:
+        return jsonify(ok=False, error='El archivo ya fue eliminado'), 400
+
+    items_a_borrar = (ItemPresupuesto.query
+                      .filter_by(presupuesto_id=pid, archivo_origen_id=aid)
+                      .all())
+    items_count = len(items_a_borrar)
+
+    obs_count = 0
+    try:
+        from models.precio_observado import PrecioObservado
+        obs_count = (PrecioObservado.query
+                     .filter_by(origen_archivo_id=aid)
+                     .count())
+    except Exception:
+        pass
+
+    # Borrar precio_observado primero (FK a archivo es SET NULL pero igual los limpiamos)
+    try:
+        if obs_count > 0:
+            from models.precio_observado import PrecioObservado
+            PrecioObservado.query.filter_by(origen_archivo_id=aid).delete(
+                synchronize_session=False
+            )
+    except Exception:
+        current_app.logger.exception('Error borrando precio_observado')
+
+    # Borrar items
+    try:
+        ItemPresupuesto.query.filter_by(
+            presupuesto_id=pid, archivo_origen_id=aid,
+        ).delete(synchronize_session=False)
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error borrando items')
+        return jsonify(ok=False, error=f'Error borrando items: {type(e).__name__}'), 500
+
+    # Soft-delete del archivo
+    archivo.deleted_at = datetime.utcnow()
+
+    # Borrar archivo fisico (best-effort, no bloquea)
+    try:
+        import os
+        if archivo.file_path and os.path.exists(archivo.file_path):
+            os.remove(archivo.file_path)
+    except Exception:
+        current_app.logger.exception(f'No se pudo borrar archivo fisico {archivo.file_path}')
+
+    # Audit
+    try:
+        from models.audit import registrar_audit
+        registrar_audit(
+            accion='archivo_eliminado',
+            entidad='presupuesto_archivo',
+            entidad_id=archivo.id,
+            detalle=(f'pres={pid} file="{archivo.filename_original}" '
+                     f'items_borrados={items_count} obs_borradas={obs_count}'),
+        )
+    except Exception:
+        pass
+
+    # Recalcular totales
+    try:
+        presupuesto.calcular_totales()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error commiteando eliminar_archivo_pa')
+        return jsonify(ok=False, error=f'Error al guardar: {type(e).__name__}'), 500
+
+    return jsonify(
+        ok=True,
+        archivo_id=aid,
+        items_eliminados=items_count,
+        observaciones_eliminadas=obs_count,
+        total_items_restantes=presupuesto.items.count(),
+    )
+
+
 @presupuestos_bp.route('/precios-observados/stats', methods=['GET'])
 @login_required
 def precios_observados_stats():
