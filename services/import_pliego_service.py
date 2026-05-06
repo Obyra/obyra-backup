@@ -114,17 +114,66 @@ def _crear_items_con_origen(presupuesto, items_parseados, archivo_pa, modo_licit
     Retorna (creados, subtotal, pares) donde `pares` es lista de tuplas
     (ItemPresupuesto, dict_item_parseado). Los pares se usan despues para
     capturar precio_observado (Etapa 1 base IA) sin reparsear.
+
+    Etapa 1 modulo flexible: ademas de poblar `etapa_nombre` (cache
+    legacy), crea/reusa filas en `presupuesto_etapa` y popula la FK
+    `etapa_presupuesto_id`. Esto habilita renombrar/reordenar etapas
+    desde la UI sin reparsear.
     """
     from models.budgets import ItemPresupuesto
+    from models.presupuesto_etapa import PresupuestoEtapa
     from services.etapa_matcher import matchear_etapa_para_item
 
     creados = 0
     subtotal = Decimal('0')
     pares = []
+
+    # Cache de etapas por nombre normalizado para evitar queries N+1
+    etapas_cache = {}  # nombre_norm -> PresupuestoEtapa
+    # Pre-cargar etapas existentes del presupuesto
+    for e in (PresupuestoEtapa.query
+              .filter_by(presupuesto_id=presupuesto.id)
+              .all()):
+        etapas_cache[e.nombre] = e
+
+    # Calcular max(orden) actual para nuevas etapas
+    if etapas_cache:
+        max_orden_actual = max(e.orden for e in etapas_cache.values())
+    else:
+        max_orden_actual = -1
+
+    def _get_or_create_etapa(nombre_raw):
+        """Devuelve PresupuestoEtapa para `nombre_raw`. Crea si no existe.
+        nombre_raw puede ser None o vacio — devuelve None en ese caso.
+        """
+        if not nombre_raw:
+            return None
+        nombre_norm = PresupuestoEtapa.normalizar_nombre(nombre_raw)
+        if not nombre_norm:
+            return None
+        if nombre_norm in etapas_cache:
+            return etapas_cache[nombre_norm]
+        nonlocal max_orden_actual
+        max_orden_actual += 1
+        nueva = PresupuestoEtapa(
+            presupuesto_id=presupuesto.id,
+            nombre=nombre_norm,
+            orden=max_orden_actual,
+            oculto=False,
+        )
+        db.session.add(nueva)
+        # Flush para tener .id antes de asignar a items
+        db.session.flush()
+        etapas_cache[nombre_norm] = nueva
+        return nueva
+
     for it in items_parseados:
         etapa_excel = it.get('etapa_nombre')
         etapa_estandar = matchear_etapa_para_item(it['descripcion'], etapa_excel)
         etapa_final = etapa_estandar or etapa_excel
+
+        # Crear/obtener PresupuestoEtapa correspondiente
+        etapa_obj = _get_or_create_etapa(etapa_final)
 
         precio = Decimal('0') if modo_licitacion else (it.get('precio_unitario') or Decimal('0'))
         cantidad = it['cantidad']
@@ -140,7 +189,8 @@ def _crear_items_con_origen(presupuesto, items_parseados, archivo_pa, modo_licit
             total=total_item,
             origen='importado',
             currency='ARS',
-            etapa_nombre=etapa_final,
+            etapa_nombre=(etapa_obj.nombre if etapa_obj else etapa_final),
+            etapa_presupuesto_id=(etapa_obj.id if etapa_obj else None),
             archivo_origen_id=archivo_pa.id,
             hoja_origen=it.get('hoja_origen'),
             fila_origen=it.get('fila_origen'),

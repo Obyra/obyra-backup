@@ -191,8 +191,12 @@ class Presupuesto(db.Model):
         from services.calculation import BudgetCalculator, BudgetConstants
 
         items_raw = self.items.all() if hasattr(self.items, 'all') else list(self.items)
-        # Filtrar ítems internos del ejecutivo antes de calcular el precio al cliente
-        items = [i for i in items_raw if not getattr(i, 'solo_interno', False)]
+        # Filtrar ítems internos del ejecutivo y soft-excluidos antes de calcular
+        # el precio al cliente. Excluidos son items marcados manualmente como
+        # "no cotizables" sin borrarlos (Etapa 1 modulo flexible).
+        items = [i for i in items_raw
+                 if not getattr(i, 'solo_interno', False)
+                 and not getattr(i, 'excluido', False)]
 
         # Usar calculadora centralizada
         iva_rate = Decimal(self.iva_porcentaje) if self.iva_porcentaje else BudgetConstants.DEFAULT_IVA_RATE
@@ -362,11 +366,32 @@ class ItemPresupuesto(db.Model):
     fila_origen = db.Column(db.Integer, nullable=True)
     columna_descripcion_origen = db.Column(db.String(20), nullable=True)
 
+    # Etapa editable (Etapa 1 modulo flexible 2026-05-06).
+    # FK a presupuesto_etapa: fuente de verdad de la jerarquia editable
+    # (rename, mover items, ordenar, ocultar). etapa_nombre se mantiene
+    # como cache denormalizado para compatibilidad con queries legacy.
+    etapa_presupuesto_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('presupuesto_etapa.id', ondelete='SET NULL'),
+        nullable=True, index=True,
+    )
+    orden = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    excluido = db.Column(db.Boolean, nullable=False, default=False,
+                         server_default=db.text('FALSE'))
+    editado_at = db.Column(db.DateTime, nullable=True)
+    editado_por_user_id = db.Column(
+        db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')
+    etapa_presupuesto = db.relationship('PresupuestoEtapa',
+                                        foreign_keys=[etapa_presupuesto_id])
     item_inventario = db.relationship('ItemInventario', foreign_keys=[item_inventario_id])
     categoria_jornal = db.relationship('CategoriaJornal', foreign_keys=[categoria_jornal_id])
+    editado_por = db.relationship('Usuario', foreign_keys=[editado_por_user_id])
 
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'

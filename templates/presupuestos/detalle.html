@@ -634,6 +634,48 @@
     </div>
     {% endif %}
 
+    {# Etapa 1 modulo flexible: gestion editable de etapas #}
+    {% if presupuesto.estado in ['borrador', 'enviado']
+          and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+    <style>
+        .pe-item-excluido { opacity: 0.55; text-decoration: line-through; }
+        body.pe-ocultar-excluidos .pe-item-excluido { display: none !important; }
+        .pe-badge-editado {
+            font-size: 0.7rem; padding: 1px 6px; border-radius: 4px;
+            background: #fff3cd; color: #664d03; margin-left: 4px;
+            border: 1px solid #ffe69c;
+        }
+        .pe-acciones-cell { white-space: nowrap; }
+    </style>
+    <div class="row mb-3" id="peEstructuraEtapas">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="mb-0">
+                        <i class="fas fa-layer-group text-primary me-1"></i>
+                        Estructura de etapas
+                        <span class="badge bg-secondary" id="peEtapasCount">0</span>
+                    </h6>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" id="peSwitchOcultarExcluidos">
+                            <label class="form-check-label small" for="peSwitchOcultarExcluidos">
+                                Ocultar excluidos
+                            </label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="peCrearEtapa()">
+                            <i class="fas fa-plus me-1"></i>Nueva etapa
+                        </button>
+                    </div>
+                </div>
+                <ul class="list-group list-group-flush" id="peEtapasLista">
+                    <li class="list-group-item small text-muted">Cargando etapas...</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Materiales -->
     {% if materiales or current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
     <div class="row mb-4">
@@ -680,7 +722,7 @@
                                     </td>
                                 </tr>
                                 {% endif %}
-                                <tr class="etapa-mat-{{ ns_mat.idx }} d-none"
+                                <tr class="etapa-mat-{{ ns_mat.idx }} d-none{% if item.excluido %} pe-item-excluido{% endif %}"
                                     data-item-id="{{ item.id }}"
                                     data-item-tipo="material"
                                     data-item-descripcion="{{ item.descripcion }}"
@@ -695,7 +737,10 @@
                                     data-item-editable="{{ 'true' if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' else 'false' }}"
                                     data-item-can-delete="{{ 'true' if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' else 'false' }}"
                                     data-item-delete-url="{{ url_for('presupuestos.eliminar_item', id=item.id) if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'borrador' else '' }}"
-                                    data-item-delete-confirm="¿Eliminar este item?">
+                                    data-item-delete-confirm="¿Eliminar este item?"
+                                    data-item-etapa-id="{{ item.etapa_presupuesto_id or '' }}"
+                                    data-item-excluido="{{ 'true' if item.excluido else 'false' }}"
+                                    data-item-editado-at="{{ item.editado_at.isoformat() if item.editado_at else '' }}">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|entero }}</td>
@@ -1713,6 +1758,225 @@
 
 {% block scripts %}
 <script>
+// ============================================================================
+// Etapa 1 modulo flexible — gestion editable de etapas + acciones por item.
+// ============================================================================
+const _PE_PRES_ID = {{ presupuesto.id }};
+const _PE_EDITABLE = {{ 'true' if presupuesto.estado in ['borrador', 'enviado']
+                                 and current_user.role in ['admin', 'administrador', 'pm', 'project_manager']
+                              else 'false' }};
+let _peEtapasCache = [];
+
+function _peEsc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function _peCsrf() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') : '';
+}
+function _peFmt(n) {
+    return '$' + (n || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+}
+
+async function peCargarEtapas() {
+    const lista = document.getElementById('peEtapasLista');
+    if (!lista) return;
+    try {
+        const r = await fetch('/presupuestos/' + _PE_PRES_ID + '/etapas',
+                              { credentials: 'same-origin' });
+        const d = await r.json();
+        if (!d.ok) {
+            lista.innerHTML = '<li class="list-group-item small text-danger">' +
+                              _peEsc(d.error || 'Error') + '</li>';
+            return;
+        }
+        _peEtapasCache = d.etapas || [];
+        document.getElementById('peEtapasCount').textContent = _peEtapasCache.length;
+        if (!_peEtapasCache.length) {
+            lista.innerHTML = '<li class="list-group-item small text-muted text-center">' +
+                              'Sin etapas. Agregá la primera con "Nueva etapa".</li>';
+            return;
+        }
+        lista.innerHTML = _peEtapasCache.map(e => {
+            const acciones = _PE_EDITABLE
+                ? '<div class="btn-group btn-group-sm">' +
+                  '  <button class="btn btn-outline-secondary" onclick="peRenombrarEtapa(' + e.id + ')" title="Renombrar"><i class="fas fa-pen"></i></button>' +
+                  '  <button class="btn btn-outline-secondary" onclick="peToggleOcultar(' + e.id + ',' + (!e.oculto) + ')" title="' + (e.oculto?'Mostrar':'Ocultar') + '"><i class="fas fa-' + (e.oculto?'eye':'eye-slash') + '"></i></button>' +
+                  '  <button class="btn btn-outline-danger" onclick="peEliminarEtapa(' + e.id + ',' + e.items_count + ')" ' + (e.items_count>0?'disabled title="No se puede borrar: tiene ítems"':'title="Eliminar etapa vacía"') + '><i class="fas fa-trash"></i></button>' +
+                  '</div>'
+                : '';
+            const ocultoBadge = e.oculto
+                ? ' <span class="badge bg-warning text-dark ms-1">oculta</span>' : '';
+            return (
+                '<li class="list-group-item d-flex justify-content-between align-items-center" data-etapa-id="' + e.id + '">' +
+                  '<div>' +
+                    '<span class="fw-semibold">' + _peEsc(e.nombre) + '</span>' + ocultoBadge +
+                    '<span class="text-muted small ms-2">' + e.items_count + ' ítem(s) · ' + _peFmt(e.items_total) + '</span>' +
+                  '</div>' +
+                  acciones +
+                '</li>'
+            );
+        }).join('');
+    } catch (err) {
+        lista.innerHTML = '<li class="list-group-item small text-danger">Error de red: ' +
+                          _peEsc(err.message) + '</li>';
+    }
+}
+
+window.peCrearEtapa = async function() {
+    const nombre = prompt('Nombre de la nueva etapa:');
+    if (!nombre || !nombre.trim()) return;
+    const r = await fetch('/presupuestos/' + _PE_PRES_ID + '/etapas', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _peCsrf() },
+        body: JSON.stringify({ nombre: nombre.trim() }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'No se pudo crear'); return; }
+    peCargarEtapas();
+};
+
+window.peRenombrarEtapa = async function(etapaId) {
+    const e = _peEtapasCache.find(x => x.id === etapaId);
+    if (!e) return;
+    const nuevo = prompt('Nuevo nombre:', e.nombre);
+    if (!nuevo || !nuevo.trim() || nuevo.trim() === e.nombre) return;
+    const r = await fetch('/presupuestos/' + _PE_PRES_ID + '/etapas/' + etapaId, {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _peCsrf() },
+        body: JSON.stringify({ nombre: nuevo.trim() }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'No se pudo renombrar'); return; }
+    location.reload();
+};
+
+window.peToggleOcultar = async function(etapaId, nuevoValor) {
+    const r = await fetch('/presupuestos/' + _PE_PRES_ID + '/etapas/' + etapaId, {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _peCsrf() },
+        body: JSON.stringify({ oculto: nuevoValor }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'Error'); return; }
+    peCargarEtapas();
+};
+
+window.peEliminarEtapa = async function(etapaId, itemsCount) {
+    if (itemsCount > 0) { alert('La etapa tiene ítems. Mové o eliminá los ítems primero.'); return; }
+    if (!confirm('¿Eliminar etapa vacía?')) return;
+    const r = await fetch('/presupuestos/' + _PE_PRES_ID + '/etapas/' + etapaId, {
+        method: 'DELETE', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': _peCsrf() },
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'No se pudo eliminar'); return; }
+    peCargarEtapas();
+};
+
+window.peDuplicarItem = async function(itemId) {
+    if (!confirm('¿Duplicar este ítem?')) return;
+    const r = await fetch('/presupuestos/items/' + itemId + '/duplicar', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': _peCsrf() },
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'No se pudo duplicar'); return; }
+    location.reload();
+};
+
+window.peExcluirItem = async function(itemId) {
+    const r = await fetch('/presupuestos/items/' + itemId + '/excluir', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _peCsrf() },
+        body: JSON.stringify({}),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'Error'); return; }
+    location.reload();
+};
+
+window.peMoverItem = async function(itemId) {
+    if (!_peEtapasCache.length) { alert('No hay etapas disponibles. Creá una primero.'); return; }
+    const opts = _peEtapasCache.map((e, i) => (i + 1) + ') ' + e.nombre).join('\n');
+    const sel = prompt('Elegí etapa destino (número):\n' + opts);
+    if (!sel) return;
+    const idx = parseInt(sel, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= _peEtapasCache.length) {
+        alert('Selección inválida.'); return;
+    }
+    const etapaDestId = _peEtapasCache[idx].id;
+    const r = await fetch('/presupuestos/items/' + itemId + '/mover', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _peCsrf() },
+        body: JSON.stringify({ etapa_id: etapaDestId }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { alert(d.error || 'Error'); return; }
+    location.reload();
+};
+
+// Inyectar acciones extra y badge "editado" en cada fila con [data-item-id].
+// Se ejecuta al cargar y cada vez que las tablas se re-renderizan (poco frecuente).
+function _peInyectarAcciones() {
+    if (!_PE_EDITABLE) return;
+    document.querySelectorAll('tr[data-item-id]').forEach(tr => {
+        if (tr.dataset.peWired === '1') return;
+        tr.dataset.peWired = '1';
+        const itemId = tr.dataset.itemId;
+        const editadoAt = tr.dataset.itemEditadoAt;
+        const excluido = tr.dataset.itemExcluido === 'true';
+
+        // Badge "editado" pegado a la primera celda (descripción)
+        if (editadoAt) {
+            const td = tr.querySelector('td');
+            if (td && !td.querySelector('.pe-badge-editado')) {
+                const span = document.createElement('span');
+                span.className = 'pe-badge-editado';
+                span.textContent = 'editado';
+                span.title = 'Editado el ' + editadoAt;
+                td.appendChild(span);
+            }
+        }
+
+        // Botón "..." pegado al final del último td (acciones existentes)
+        const tdAcciones = tr.querySelector('td:last-child');
+        if (!tdAcciones || tdAcciones.querySelector('.pe-acciones-btn')) return;
+        const div = document.createElement('div');
+        div.className = 'btn-group btn-group-sm ms-1 pe-acciones-cell';
+        div.innerHTML = (
+            '<button type="button" class="btn btn-outline-secondary btn-sm pe-acciones-btn dropdown-toggle" data-bs-toggle="dropdown">' +
+            '<i class="fas fa-ellipsis-v"></i></button>' +
+            '<ul class="dropdown-menu dropdown-menu-end">' +
+            '<li><a class="dropdown-item" href="#" onclick="peDuplicarItem(' + itemId + ');return false;"><i class="fas fa-copy me-2"></i>Duplicar</a></li>' +
+            '<li><a class="dropdown-item" href="#" onclick="peMoverItem(' + itemId + ');return false;"><i class="fas fa-arrows-alt me-2"></i>Mover a etapa…</a></li>' +
+            '<li><a class="dropdown-item" href="#" onclick="peExcluirItem(' + itemId + ');return false;">' +
+            (excluido ? '<i class="fas fa-undo me-2"></i>Reactivar' : '<i class="fas fa-ban me-2"></i>Excluir') +
+            '</a></li>' +
+            '</ul>'
+        );
+        // Si la fila tiene algún wrapper d-flex en la cell, lo extiendo. Sino, agrego al final.
+        const wrapper = tdAcciones.querySelector('.d-flex') || tdAcciones;
+        wrapper.appendChild(div);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('peEstructuraEtapas')) {
+        peCargarEtapas();
+        const sw = document.getElementById('peSwitchOcultarExcluidos');
+        if (sw) sw.addEventListener('change', function() {
+            document.body.classList.toggle('pe-ocultar-excluidos', sw.checked);
+        });
+    }
+    _peInyectarAcciones();
+});
+
+// ============================================================================
+// (resto del JS legacy)
+// ============================================================================
 function toggleEtapa(prefix, idx) {
     const rows = document.querySelectorAll('.etapa-' + prefix + '-' + idx);
     rows.forEach(r => r.classList.toggle('d-none'));

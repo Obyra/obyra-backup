@@ -474,6 +474,12 @@ def editar_item(id):
             if item.tipo == 'equipo' and nueva_mod in ('compra', 'alquiler'):
                 item.modalidad_costo = nueva_mod
 
+        # Auditoria liviana: marcar quien y cuando edito (Etapa 1 modulo flexible)
+        from datetime import datetime as _dt_now
+        item.editado_at = _dt_now.utcnow()
+        if current_user.is_authenticated:
+            item.editado_por_user_id = current_user.id
+
         # Recalcular total
         item.total = item.cantidad * item.precio_unitario
 
