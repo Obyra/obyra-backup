@@ -12,7 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from flask import (render_template, request, flash, redirect, url_for,
-                   current_app, abort)
+                   current_app, abort, jsonify)
 from flask_login import login_required, current_user
 
 from blueprint_presupuestos import presupuestos_bp
