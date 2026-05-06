@@ -666,9 +666,10 @@
                     <div class="alert alert-primary small mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div class="flex-grow-1">
                             <i class="fas fa-info-circle me-1"></i>
-                            <strong>Paso 1: generar la composición ejecutiva (APU).</strong>
-                            OBYRA va a analizar los ítems con IA, aplicar las sugerencias confiables
-                            y generar el desglose técnico. Después podés cotizar con la Calculadora IA.
+                            <strong>Tu presupuesto está listo para calcular.</strong>
+                            OBYRA va a analizar los ítems, aplicar las sugerencias confiables y
+                            estimar precios automáticamente. En 30 segundos tenés el presupuesto
+                            con precios cargados.
                         </div>
                         <div class="d-flex gap-2">
                             <button type="button" class="btn btn-primary"
@@ -678,7 +679,7 @@
                                     {% else %}
                                     disabled title="Necesitás haber importado un pliego primero"
                                     {% endif %}>
-                                <i class="fas fa-bolt me-1"></i>Generar composición ejecutiva
+                                <i class="fas fa-bolt me-1"></i>Calcular con IA
                             </button>
                             <button type="button" class="btn btn-outline-secondary btn-sm"
                                     {% if presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
@@ -735,13 +736,13 @@
                                     <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
                                 </a>
                                 {% else %}
-                                <button type="button" class="btn btn-success" disabled
-                                        title="Primero generá la composición ejecutiva (APU)">
+                                {# Sin APU todavia: en vez de ir a una vista vacia, abrir modal
+                                   explicando que primero hay que calcular o generar APU manual. #}
+                                <button type="button" class="btn btn-success"
+                                        data-bs-toggle="modal" data-bs-target="#modalPedirPreciosSinAPU"
+                                        title="Para pedir precios necesitamos agrupar los recursos primero.">
                                     <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
                                 </button>
-                                <small class="text-muted mt-2">
-                                    <i class="fas fa-lock me-1"></i>Requiere composición ejecutiva
-                                </small>
                                 {% endif %}
                             </div>
                         </div>
@@ -3276,18 +3277,20 @@ window.camGenerarComposicionRapido = async function(btnEl) {
     const presId = {{ presupuesto.id }};
 
     if (!confirm(
-        'OBYRA va a:\n\n' +
-        '  1. Analizar los ítems del presupuesto con IA.\n' +
-        '  2. Aplicar las sugerencias confiables automáticamente.\n' +
-        '  3. Generar la composición ejecutiva.\n\n' +
-        'Los ítems dudosos quedarán pendientes para revisar manualmente.\n\n' +
+        'OBYRA va a calcular tu presupuesto:\n\n' +
+        '  1. Analizar los ítems del pliego.\n' +
+        '  2. Aplicar las sugerencias confiables.\n' +
+        '  3. Generar el desglose técnico interno.\n' +
+        '  4. Estimar precios automáticamente.\n\n' +
+        'En 30 segundos tenés el presupuesto con precios.\n' +
+        'Los ítems dudosos quedan para revisar después.\n\n' +
         '¿Continuar?'
     )) return;
 
     if (btn) {
         btn.disabled = true;
         btn.dataset._htmlOrig = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>1/3 Analizando ítems...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>1/4 Analizando ítems...';
     }
     const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
@@ -3341,7 +3344,7 @@ window.camGenerarComposicionRapido = async function(btnEl) {
         // PASO 2: aplicar sugerencias (si hay)
         let aplicados = 0;
         if (auto_ids.length > 0) {
-            if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>2/3 Aplicando ' + auto_ids.length + ' sugerencias...';
+            if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>2/4 Aplicando ' + auto_ids.length + ' sugerencias...';
             const r2 = await fetch(`/presupuestos/${presId}/aplicar-analisis-ia/bulk`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
@@ -3361,7 +3364,7 @@ window.camGenerarComposicionRapido = async function(btnEl) {
         }
 
         // PASO 3: generar composicion
-        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>3/3 Generando composición...';
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>3/4 Generando composición...';
         const r3 = await fetch(`/presupuestos/${presId}/generar-preliminar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
@@ -3373,7 +3376,27 @@ window.camGenerarComposicionRapido = async function(btnEl) {
             return;
         }
 
-        // Resumen final con métricas claras (KPI principal: ítems listos para cotizar).
+        // PASO 4: estimar precios sobre las composiciones recién generadas.
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>4/4 Estimando precios...';
+        let d4 = null;
+        try {
+            const r4 = await fetch(`/presupuestos/${presId}/estimar-precios`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                credentials: 'same-origin',
+            });
+            d4 = await r4.json();
+            if (!r4.ok || !d4.ok) {
+                // No abortamos: el usuario igual tiene composición y puede estimar manual.
+                console.warn('Estimar precios falló:', d4 && d4.error);
+                d4 = null;
+            }
+        } catch (eEst) {
+            console.warn('Error en estimar-precios:', eEst);
+            d4 = null;
+        }
+
+        // Resumen final comercial: total, cobertura, pendientes para revisar.
         const c = d3.contadores || {};
         const total = d3.items_total || 0;
         const resueltos = d3.items_resueltos || 0;
@@ -3384,23 +3407,35 @@ window.camGenerarComposicionRapido = async function(btnEl) {
         const clasificados_sin_coef = d3.items_clasificados_sin_coef || 0;
         const pendientes = d3.pendientes_reales || 0;
 
-        let msg = '✓ OBYRA resolvió ' + resueltos + ' de ' + total + ' ítems (' + cobertura + '%)\n\n';
-        msg += '  · ' + descompuestos + ' con desglose técnico (materiales / MO / equipos)\n';
-        if (globales > 0) {
-            msg += '  · ' + globales + ' como gasto global (personal, obrador, limpieza, seguros)\n';
+        // Datos de precios (si el paso 4 corrió OK).
+        const fmt = (v) => '$' + Math.round(v || 0).toLocaleString('es-AR');
+        let bloquePrecios = '';
+        if (d4 && d4.ok) {
+            const totalCosto = d4.total_costo || 0;
+            const sugerido = d4.precio_sugerido_cliente || 0;
+            const cobPrecios = d4.cobertura_pct || 0;
+            const sinPrecio = (d4.sin_precio || 0) + (d4.requiere_tc || 0);
+            const conPrecio = (d4.actualizados || 0) + (d4.estimados || 0);
+            bloquePrecios = '\n💰 Precios estimados:\n';
+            bloquePrecios += '  · Costo interno: ' + fmt(totalCosto) + '\n';
+            bloquePrecios += '  · Sugerido al cliente: ' + fmt(sugerido) + '\n';
+            bloquePrecios += '  · ' + conPrecio + ' ítems con precio · ' + sinPrecio + ' sin precio\n';
+            bloquePrecios += '  · Cobertura de precios: ' + cobPrecios + '%\n';
+        } else {
+            bloquePrecios = '\n⚠ La estimación de precios no se pudo correr automáticamente.\n' +
+                            '   Podés intentarlo después con el botón "Cotizar con IA".\n';
         }
-        if (servicios > 0) {
-            msg += '  · ' + servicios + ' como servicios (firma, gestoría, trámites)\n';
-        }
-        if (clasificados_sin_coef > 0) {
-            msg += '  · ' + clasificados_sin_coef + ' clasificados como ítem completo (cotizables sin desglose)\n';
-        }
-        msg += '\n';
+
+        let msg = '✓ Tu presupuesto está listo\n\n';
+        msg += 'Composición: ' + resueltos + ' de ' + total + ' ítems (' + cobertura + '%)\n';
+        msg += '  · ' + descompuestos + ' con desglose técnico\n';
+        if (globales > 0) msg += '  · ' + globales + ' como gasto global\n';
+        if (servicios > 0) msg += '  · ' + servicios + ' como servicios\n';
+        if (clasificados_sin_coef > 0) msg += '  · ' + clasificados_sin_coef + ' como ítem completo\n';
+        msg += bloquePrecios;
         if (pendientes > 0) {
-            msg += '⚠ Quedan ' + pendientes + ' ítems sin clasificar.\n';
-            msg += '   Podés tocar "Revisar análisis IA" para verlos uno por uno.\n\n';
+            msg += '\n⚠ Quedan ' + pendientes + ' ítems sin clasificar para revisar (opcional).\n';
         }
-        msg += '¡Listo para cotizar con la Calculadora IA!';
         alert(msg);
         location.reload();
     } catch (e) {
@@ -3409,7 +3444,7 @@ window.camGenerarComposicionRapido = async function(btnEl) {
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = btn.dataset._htmlOrig ||
-                '<i class="fas fa-magic me-1"></i>Generar composición ejecutiva';
+                '<i class="fas fa-bolt me-1"></i>Calcular con IA';
             delete btn.dataset._htmlOrig;
         }
     }
@@ -5303,6 +5338,51 @@ function _iaMostrarResumenPreliminar(data) {
     }
 }
 </script>
+
+{# ================================================================
+   Modal: Pedir precios a proveedores sin composición previa
+   (UX simplificada 2026-05-06 — guía al usuario al flujo correcto)
+================================================================ #}
+<div class="modal fade" id="modalPedirPreciosSinAPU" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-handshake me-2"></i>Pedir precios a proveedores
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">
+                    Para pedir cotizaciones reales, OBYRA necesita primero
+                    <strong>agrupar los recursos</strong> de cada ítem del pliego
+                    (materiales, mano de obra, equipos).
+                </p>
+                <div class="alert alert-info small mb-3">
+                    <i class="fas fa-lightbulb me-1"></i>
+                    <strong>Recomendado:</strong> tocá <strong>"Calcular con IA"</strong>.
+                    En 30 segundos OBYRA arma los recursos automáticamente y
+                    podés pedir precios reales sobre eso.
+                </div>
+                <p class="small text-muted mb-0">
+                    Si querés hacerlo manualmente o revisar el desglose antes,
+                    podés usar <em>"Revisar análisis IA"</em> para clasificar
+                    los ítems uno por uno.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <button type="button" class="btn btn-primary"
+                        onclick="document.getElementById('modalPedirPreciosSinAPU').querySelector('[data-bs-dismiss=modal]').click(); setTimeout(function(){ const b=document.getElementById('btnCamGenerarRapido'); if(b) b.click(); }, 250);">
+                    <i class="fas fa-bolt me-1"></i>Calcular con IA primero
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 {# ================================================================
    Modal: Perfil tecnico del proyecto (Fase 2)
