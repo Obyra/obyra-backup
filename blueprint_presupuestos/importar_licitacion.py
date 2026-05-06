@@ -1244,6 +1244,13 @@ def eliminar_archivo_pa(pid, aid):
                       .all())
     items_count = len(items_a_borrar)
 
+    # Recolectar etapa_presupuesto_id de los items que se van a borrar.
+    # Despues de borrar, si una etapa queda con 0 items, la eliminamos tambien.
+    etapas_afectadas_ids = set(
+        it.etapa_presupuesto_id for it in items_a_borrar
+        if it.etapa_presupuesto_id is not None
+    )
+
     obs_count = 0
     try:
         from models.precio_observado import PrecioObservado
@@ -1273,6 +1280,27 @@ def eliminar_archivo_pa(pid, aid):
         current_app.logger.exception('Error borrando items')
         return jsonify(ok=False, error=f'Error borrando items: {type(e).__name__}'), 500
 
+    # Eliminar etapas que quedaron vacias por este borrado.
+    # Solo borramos etapas que (1) estaban afectadas por items del archivo Y
+    # (2) ya no tienen ningun item vinculado (incluyendo items de otros archivos).
+    etapas_vacias_count = 0
+    if etapas_afectadas_ids:
+        try:
+            from models.presupuesto_etapa import PresupuestoEtapa
+            for eid in etapas_afectadas_ids:
+                items_restantes = (ItemPresupuesto.query
+                                   .filter_by(presupuesto_id=pid, etapa_presupuesto_id=eid)
+                                   .count())
+                if items_restantes == 0:
+                    etapa = PresupuestoEtapa.query.filter_by(
+                        id=eid, presupuesto_id=pid,
+                    ).first()
+                    if etapa:
+                        db.session.delete(etapa)
+                        etapas_vacias_count += 1
+        except Exception:
+            current_app.logger.exception('Error borrando etapas vacias')
+
     # Soft-delete del archivo
     archivo.deleted_at = datetime.utcnow()
 
@@ -1292,7 +1320,8 @@ def eliminar_archivo_pa(pid, aid):
             entidad='presupuesto_archivo',
             entidad_id=archivo.id,
             detalle=(f'pres={pid} file="{archivo.filename_original}" '
-                     f'items_borrados={items_count} obs_borradas={obs_count}'),
+                     f'items_borrados={items_count} obs_borradas={obs_count} '
+                     f'etapas_vacias_borradas={etapas_vacias_count}'),
         )
     except Exception:
         pass
@@ -1311,6 +1340,7 @@ def eliminar_archivo_pa(pid, aid):
         archivo_id=aid,
         items_eliminados=items_count,
         observaciones_eliminadas=obs_count,
+        etapas_vacias_eliminadas=etapas_vacias_count,
         total_items_restantes=presupuesto.items.count(),
     )
 

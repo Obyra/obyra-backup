@@ -172,16 +172,20 @@ async function paCargarArchivos() {
                 'Sin archivos cargados todavía.</li>';
             return;
         }
+        // Cache para event delegation: paEliminarArchivo lee el archivo desde aca
+        window._PA_ARCHIVOS_CACHE = {};
+        archivos.forEach(a => { window._PA_ARCHIVOS_CACHE[a.id] = a; });
+
         lista.innerHTML = archivos.map(a => {
             const dlBtn = '<a href="/presupuestos/' + _PA_PRESUPUESTO_ID + '/archivos/' + a.id + '/descargar" ' +
                           'class="btn btn-sm btn-outline-primary" title="Descargar archivo original">' +
                           '<i class="fas fa-download"></i></a>';
+            // Boton eliminar via data-attribute + event delegation (evita escape issues
+            // del filename con comillas o caracteres especiales en onclick="...").
             const delBtn = (window._PA_PUEDE_GESTIONAR === true)
-                ? '<button type="button" class="btn btn-sm btn-outline-danger" ' +
-                  'title="Eliminar archivo + sus ' + (a.cantidad_items_importados || 0) + ' ítem(s)" ' +
-                  'onclick="paEliminarArchivo(' + a.id + ',' +
-                  (a.cantidad_items_importados || 0) + ',' +
-                  JSON.stringify(a.filename_original || '') + ')">' +
+                ? ' <button type="button" class="btn btn-sm btn-outline-danger pa-btn-eliminar" ' +
+                  'data-archivo-id="' + a.id + '" ' +
+                  'title="Eliminar archivo + sus ' + (a.cantidad_items_importados || 0) + ' ítem(s)">' +
                   '<i class="fas fa-trash"></i></button>'
                 : '';
             const tooltipOrigen = (a.error_message
@@ -290,10 +294,14 @@ window.paAgregarArchivos = async function() {
     }
 };
 
-window.paEliminarArchivo = async function(archivoId, itemsCount, filename) {
+window.paEliminarArchivo = async function(archivoId) {
+    const a = (window._PA_ARCHIVOS_CACHE || {})[archivoId];
+    const filename = a ? a.filename_original : 'este archivo';
+    const itemsCount = a ? (a.cantidad_items_importados || 0) : 0;
     const msg = (
         'Vas a ELIMINAR el archivo "' + filename + '" y sus ' + itemsCount + ' ítem(s).\n\n' +
         'También se borran las observaciones de precio asociadas.\n' +
+        'Si quedan etapas vacías por este borrado, también se eliminan.\n' +
         'No se puede deshacer (salvo re-subir el Excel).\n\n' +
         '¿Continuar?'
     );
@@ -312,6 +320,7 @@ window.paEliminarArchivo = async function(archivoId, itemsCount, filename) {
             'Archivo eliminado.\n\n' +
             'Items borrados: ' + d.items_eliminados + '\n' +
             'Observaciones borradas: ' + d.observaciones_eliminadas + '\n' +
+            'Etapas vacías eliminadas: ' + (d.etapas_vacias_eliminadas || 0) + '\n' +
             'Items restantes en el presupuesto: ' + d.total_items_restantes
         );
         location.reload();
@@ -320,5 +329,21 @@ window.paEliminarArchivo = async function(archivoId, itemsCount, filename) {
     }
 };
 
-document.addEventListener('DOMContentLoaded', paCargarArchivos);
+// Event delegation: el listener vive en el contenedor de la lista, asi que
+// captura clicks en botones que se inyectan dinamicamente sin necesidad de
+// re-bindear cada vez que paCargarArchivos refresca el DOM.
+document.addEventListener('DOMContentLoaded', function() {
+    paCargarArchivos();
+    const lista = document.getElementById('paArchivosLista');
+    if (lista) {
+        lista.addEventListener('click', function(e) {
+            const btn = e.target.closest('.pa-btn-eliminar');
+            if (!btn) return;
+            const archivoId = parseInt(btn.dataset.archivoId, 10);
+            if (!isNaN(archivoId)) {
+                paEliminarArchivo(archivoId);
+            }
+        });
+    }
+});
 </script>
