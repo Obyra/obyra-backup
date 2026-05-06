@@ -2474,3 +2474,192 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Seed Directorio Global: {e}")
+
+    # =====================================================
+    # 2026-05-06: Fallback Etapa 2 base IA (zona/modalidad/codigo + import_batch)
+    # Si la migracion 202605050002 fallo silenciosamente, recreamos las
+    # estructuras aca de forma idempotente. Postgres only.
+    # =====================================================
+    try:
+        # Tabla import_batch
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS import_batch (
+                id BIGSERIAL PRIMARY KEY,
+                organizacion_id INTEGER NOT NULL
+                    REFERENCES organizaciones(id) ON DELETE CASCADE,
+                perfil VARCHAR(40) NOT NULL,
+                filename VARCHAR(255) NOT NULL,
+                checksum_sha256 VARCHAR(64),
+                user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                total_input INTEGER NOT NULL DEFAULT 0,
+                total_inserted INTEGER NOT NULL DEFAULT 0,
+                total_updated INTEGER NOT NULL DEFAULT 0,
+                total_invalid INTEGER NOT NULL DEFAULT 0,
+                started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                estado VARCHAR(20) NOT NULL DEFAULT 'en_curso',
+                deshecho_at TIMESTAMP,
+                undo_motivo TEXT,
+                metadata_json JSONB
+            );
+        """))
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_import_batch_org_checksum
+                ON import_batch(organizacion_id, checksum_sha256)
+                WHERE checksum_sha256 IS NOT NULL AND deshecho_at IS NULL;
+        """))
+        for ddl in [
+            "CREATE INDEX IF NOT EXISTS ix_import_batch_org ON import_batch(organizacion_id);",
+            "CREATE INDEX IF NOT EXISTS ix_import_batch_perfil ON import_batch(perfil);",
+            "CREATE INDEX IF NOT EXISTS ix_import_batch_estado ON import_batch(estado);",
+            "CREATE INDEX IF NOT EXISTS ix_import_batch_started ON import_batch(started_at);",
+        ]:
+            db.session.execute(db.text(ddl))
+
+        # provider_price_list: nuevas columnas
+        for ddl in [
+            "ALTER TABLE provider_price_list ADD COLUMN IF NOT EXISTS zona VARCHAR(40);",
+            "ALTER TABLE provider_price_list ADD COLUMN IF NOT EXISTS modalidad VARCHAR(30);",
+            "ALTER TABLE provider_price_list ADD COLUMN IF NOT EXISTS codigo_proveedor VARCHAR(60);",
+            "ALTER TABLE provider_price_list ADD COLUMN IF NOT EXISTS import_batch_id BIGINT REFERENCES import_batch(id) ON DELETE SET NULL;",
+        ]:
+            db.session.execute(db.text(ddl))
+        # Drop UNIQUE viejo si todavia existe
+        db.session.execute(db.text("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'uq_ppl_org_prov_desc_un'
+                ) THEN
+                    ALTER TABLE provider_price_list
+                        DROP CONSTRAINT uq_ppl_org_prov_desc_un;
+                END IF;
+            END$$;
+        """))
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_ppl_org_prov_desc_un_zona_modalidad
+                ON provider_price_list(
+                    organizacion_id,
+                    COALESCE(proveedor_id, 0),
+                    descripcion_normalizada,
+                    unidad,
+                    COALESCE(zona, ''),
+                    COALESCE(modalidad, 'compra')
+                );
+        """))
+        for ddl in [
+            "CREATE INDEX IF NOT EXISTS ix_ppl_org_zona ON provider_price_list(organizacion_id, zona);",
+            "CREATE INDEX IF NOT EXISTS ix_ppl_org_modalidad ON provider_price_list(organizacion_id, modalidad);",
+            "CREATE INDEX IF NOT EXISTS ix_ppl_codigo_proveedor ON provider_price_list(organizacion_id, proveedor_id, codigo_proveedor);",
+            "CREATE INDEX IF NOT EXISTS ix_ppl_import_batch ON provider_price_list(import_batch_id);",
+        ]:
+            db.session.execute(db.text(ddl))
+
+        # precio_observado: nuevas columnas
+        for ddl in [
+            "ALTER TABLE precio_observado ADD COLUMN IF NOT EXISTS zona VARCHAR(40);",
+            "ALTER TABLE precio_observado ADD COLUMN IF NOT EXISTS modalidad VARCHAR(30);",
+            "ALTER TABLE precio_observado ADD COLUMN IF NOT EXISTS codigo_proveedor VARCHAR(60);",
+            "ALTER TABLE precio_observado ADD COLUMN IF NOT EXISTS import_batch_id BIGINT REFERENCES import_batch(id) ON DELETE SET NULL;",
+            "CREATE INDEX IF NOT EXISTS ix_precio_obs_zona ON precio_observado(organizacion_id, zona);",
+            "CREATE INDEX IF NOT EXISTS ix_precio_obs_modalidad ON precio_observado(organizacion_id, modalidad);",
+            "CREATE INDEX IF NOT EXISTS ix_precio_obs_import_batch ON precio_observado(import_batch_id);",
+        ]:
+            db.session.execute(db.text(ddl))
+        db.session.commit()
+        print("[OK] Runtime fallback Etapa 2 base IA aplicado (zona/modalidad/codigo/import_batch)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Runtime fallback Etapa 2 base IA: {e}")
+
+    # =====================================================
+    # 2026-05-06: Fallback Etapa 1 modulo flexible (presupuesto_etapa)
+    # Si la migracion 202605060001 fallo silenciosamente, recreamos las
+    # estructuras aca de forma idempotente. Postgres only.
+    #
+    # CRITICO: sin este fallback, /obras/<id> y /presupuestos/<id> revientan
+    # con UndefinedColumn porque el modelo SQLAlchemy declara las columnas
+    # nuevas pero la BD no las tiene.
+    # =====================================================
+    try:
+        # Tabla presupuesto_etapa
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS presupuesto_etapa (
+                id BIGSERIAL PRIMARY KEY,
+                presupuesto_id INTEGER NOT NULL
+                    REFERENCES presupuestos(id) ON DELETE CASCADE,
+                nombre VARCHAR(150) NOT NULL,
+                orden INTEGER NOT NULL DEFAULT 0,
+                oculto BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_presupuesto_etapa_pres_nombre
+                ON presupuesto_etapa(presupuesto_id, nombre);
+        """))
+        for ddl in [
+            "CREATE INDEX IF NOT EXISTS ix_presupuesto_etapa_pres ON presupuesto_etapa(presupuesto_id);",
+            "CREATE INDEX IF NOT EXISTS ix_presupuesto_etapa_orden ON presupuesto_etapa(presupuesto_id, orden);",
+            "CREATE INDEX IF NOT EXISTS ix_presupuesto_etapa_oculto ON presupuesto_etapa(oculto);",
+        ]:
+            db.session.execute(db.text(ddl))
+
+        # items_presupuesto: 5 columnas nuevas
+        for ddl in [
+            "ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS etapa_presupuesto_id BIGINT REFERENCES presupuesto_etapa(id) ON DELETE SET NULL;",
+            "ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS excluido BOOLEAN NOT NULL DEFAULT FALSE;",
+            "ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS editado_at TIMESTAMP;",
+            "ALTER TABLE items_presupuesto ADD COLUMN IF NOT EXISTS editado_por_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;",
+            "CREATE INDEX IF NOT EXISTS ix_items_pres_etapa_pres ON items_presupuesto(etapa_presupuesto_id);",
+            "CREATE INDEX IF NOT EXISTS ix_items_pres_excluido ON items_presupuesto(excluido);",
+            "CREATE INDEX IF NOT EXISTS ix_items_pres_orden ON items_presupuesto(presupuesto_id, etapa_presupuesto_id, orden);",
+        ]:
+            db.session.execute(db.text(ddl))
+        db.session.commit()
+        print("[OK] Runtime fallback Etapa 1 modulo flexible aplicado (presupuesto_etapa + columnas)")
+
+        # Backfill: por cada presupuesto, crear etapas a partir de etapa_nombre
+        # legacy y poblar etapa_presupuesto_id en cada item.
+        # Solo corre items que aun no tienen FK seteada.
+        # NOTA: usar r-string para que \\s+ se mande literal a Postgres.
+        db.session.execute(db.text(r"""
+            INSERT INTO presupuesto_etapa (presupuesto_id, nombre, orden, oculto, created_at, updated_at)
+            SELECT
+                ip.presupuesto_id,
+                TRIM(REGEXP_REPLACE(ip.etapa_nombre, '\s+', ' ', 'g')) AS nombre_norm,
+                ROW_NUMBER() OVER (
+                    PARTITION BY ip.presupuesto_id
+                    ORDER BY MIN(ip.id)
+                ) AS orden,
+                FALSE,
+                NOW(),
+                NOW()
+            FROM items_presupuesto ip
+            WHERE ip.etapa_nombre IS NOT NULL
+              AND TRIM(ip.etapa_nombre) <> ''
+              AND ip.etapa_presupuesto_id IS NULL
+            GROUP BY ip.presupuesto_id, TRIM(REGEXP_REPLACE(ip.etapa_nombre, '\s+', ' ', 'g'))
+            ON CONFLICT (presupuesto_id, nombre) DO NOTHING;
+        """))
+        result = db.session.execute(db.text(r"""
+            UPDATE items_presupuesto i
+            SET etapa_presupuesto_id = e.id
+            FROM presupuesto_etapa e
+            WHERE i.presupuesto_id = e.presupuesto_id
+              AND TRIM(REGEXP_REPLACE(COALESCE(i.etapa_nombre, ''), '\s+', ' ', 'g')) = e.nombre
+              AND i.etapa_presupuesto_id IS NULL
+              AND i.etapa_nombre IS NOT NULL
+              AND TRIM(i.etapa_nombre) <> '';
+        """))
+        rc = getattr(result, 'rowcount', 0) or 0
+        db.session.commit()
+        if rc > 0:
+            print(f"[OK] Backfill etapa_presupuesto_id: {rc} items vinculados")
+        else:
+            print("[OK] Backfill etapa_presupuesto_id: nada que vincular")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Runtime fallback Etapa 1 modulo flexible: {e}")
