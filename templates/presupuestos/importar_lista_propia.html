@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Importar lista propia de precios - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-3">
+        <div class="col">
+            <h2 class="mb-1">
+                <i class="fas fa-file-import text-primary me-2"></i>Importar lista propia de precios
+            </h2>
+            <p class="text-muted small mb-0">
+                Cargá tus precios desde Excel para que la Calculadora IA pueda usarlos como
+                fuente principal al estimar presupuestos.
+            </p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Volver
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-7">
+            <div class="card border-primary shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-upload me-2"></i>Subir Excel</h5>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        Soportamos hojas con la estructura de OBYRA:
+                    </p>
+                    <ul class="small text-muted mb-3">
+                        <li><code>02_Materiales_CABA_GBA</code> — del Excel <em>OBYRA_base_precios_recursos_v1.xlsx</em></li>
+                        <li><code>Import_OBYRA</code> — del Excel <em>Costo mano obra-abr2026.xlsx</em></li>
+                    </ul>
+                    <p class="small text-muted mb-3">
+                        Las filas se guardan en <strong>provider_price_list</strong> como lista propia
+                        (sin proveedor), con zona y modalidad. Si una fila ya existe con misma
+                        descripción + unidad + zona, se actualiza el precio.
+                    </p>
+
+                    <form id="formImportarLista" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
+                            <input type="file" class="form-control" name="archivo_excel"
+                                   accept=".xlsx,.xls" required>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="btnImportar"
+                                onclick="ipImportar()">
+                            <i class="fas fa-bolt me-1"></i>Importar precios
+                        </button>
+                    </form>
+
+                    <div id="ipResultado" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-history me-1"></i>Últimos imports
+                    </h6>
+                </div>
+                {% if ultimos_batches %}
+                <ul class="list-group list-group-flush">
+                    {% for b in ultimos_batches %}
+                    <li class="list-group-item small">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-semibold">
+                                    {{ b.filename }}
+                                    {% if b.estado == 'completado' %}
+                                    <span class="badge bg-success">{{ b.estado }}</span>
+                                    {% elif b.estado == 'deshecho' %}
+                                    <span class="badge bg-secondary">{{ b.estado }}</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">{{ b.estado }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-muted">
+                                    {{ b.started_at.strftime('%d/%m/%Y %H:%M') if b.started_at else '' }}
+                                    · perfil: {{ b.perfil }}
+                                </div>
+                                <div class="text-muted">
+                                    {{ b.total_inserted }} insertadas ·
+                                    {{ b.total_updated }} actualizadas ·
+                                    {{ b.total_invalid }} inválidas
+                                </div>
+                            </div>
+                            {% if b.estado == 'completado' %}
+                            <button class="btn btn-sm btn-outline-danger"
+                                    onclick="ipDeshacer({{ b.id }})"
+                                    title="Borrar todas las filas creadas/actualizadas por este batch">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="card-body small text-muted text-center">
+                    Aún no hiciste imports.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function ipImportar() {
+    const form = document.getElementById('formImportarLista');
+    const fd = new FormData(form);
+    const btn = document.getElementById('btnImportar');
+    const cont = document.getElementById('ipResultado');
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                 || form.querySelector('input[name="csrf_token"]').value;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importando...';
+    cont.innerHTML = '';
+    try {
+        const r = await fetch('{{ url_for("presupuestos.importar_lista_propia") }}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+            body: fd,
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            cont.innerHTML = '<div class="alert alert-danger">' +
+                'Error: ' + (d.error || ('HTTP ' + r.status)) + '</div>';
+            return;
+        }
+        cont.innerHTML = (
+            '<div class="alert alert-success">' +
+            '<strong><i class="fas fa-check me-1"></i>Import OK</strong><br>' +
+            'Archivo: ' + d.filename + '<br>' +
+            'Total filas: ' + d.total_input + '<br>' +
+            '· Hoja 02_Materiales: ' + (d.hoja_02_filas || 0) + '<br>' +
+            '· Hoja Import_OBYRA (mano de obra): ' + (d.hoja_import_obyra_filas || 0) + '<br>' +
+            'Insertadas: <strong>' + d.inserted + '</strong> · ' +
+            'Actualizadas: <strong>' + d.updated + '</strong> · ' +
+            'Inválidas: ' + d.invalid + '<br>' +
+            'Batch ID: ' + d.batch_id +
+            '</div>' +
+            '<button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">Recargar</button>'
+        );
+    } catch (e) {
+        cont.innerHTML = '<div class="alert alert-danger">Error de red: ' + e.message + '</div>';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-bolt me-1"></i>Importar precios';
+    }
+}
+
+async function ipDeshacer(batchId) {
+    if (!confirm('¿Borrar todas las filas de este batch? Se elimina de provider_price_list y precio_observado.'))
+        return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    try {
+        const r = await fetch('/presupuestos/precios/import-batches/' + batchId + '/deshacer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+            body: JSON.stringify({ motivo: 'manual desde UI' }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert('Error al deshacer: ' + (d.error || r.status));
+            return;
+        }
+        alert('Deshecho: ' + d.rows_ppl_borradas + ' filas en provider_price_list, ' +
+              d.rows_po_borradas + ' filas en precio_observado.');
+        location.reload();
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    }
+}
+</script>
+{% endblock %}

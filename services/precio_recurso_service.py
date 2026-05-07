@@ -23,6 +23,7 @@ tiene exchange_rate_value cargado, se convierte. Si no, queda en
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
@@ -197,27 +198,157 @@ def _buscar_categoria_jornal(organizacion_id, descripcion, unidad):
 # JERARQUIA: MATERIALES / EQUIPOS
 # =====================================================================
 
+_STOPWORDS_MATCHING = {
+    'de', 'del', 'la', 'el', 'los', 'las', 'y', 'o', 'u', 'a', 'al', 'en',
+    'para', 'por', 'con', 'sin', 'un', 'una', 'unos', 'unas', 'es', 'son',
+    'que', 'se', 'no', 'lo', 'le', 'su', 'sus', 'mi', 'tu', 'mas', 'mas',
+    'tipo', 'segun', 'sobre', 'desde', 'hacia',
+}
+
+
+def _tokens_significativos(texto: str) -> set:
+    """Extrae tokens útiles para matching fuzzy: lowercase, sin acentos,
+    sin stopwords. Mantiene tokens largos Y splittea números pegados a
+    letras: '8mm' -> {'8', 'mm', '8mm'}, 'h21' -> {'h', '21', 'h21'}.
+    Esto permite que 'Hierro 8mm' matchee con 'Hierro del 8 mm'.
+    """
+    if not texto:
+        return set()
+    import unicodedata
+    s = str(texto).lower()
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r'[^\w\s]', ' ', s)
+    out = set()
+    for t in s.split():
+        if t in _STOPWORDS_MATCHING:
+            continue
+        if len(t) >= 3 or any(ch.isdigit() for ch in t):
+            out.add(t)
+        # Split números/letras: '8mm' -> '8', 'mm'. 'h21' -> 'h', '21'.
+        partes = re.findall(r'\d+|[a-z]+', t)
+        for p in partes:
+            if p in _STOPWORDS_MATCHING:
+                continue
+            if len(p) >= 2 or p.isdigit():
+                out.add(p)
+    return out
+
+
+_UNIDADES_SINONIMOS = {
+    'm2': {'m2', 'm²', 'mts2', 'mt2', 'metros cuadrados', 'metro cuadrado'},
+    'm3': {'m3', 'm³', 'mts3', 'mt3', 'metros cubicos', 'metro cubico'},
+    'ml': {'ml', 'm', 'mts', 'mtrs', 'metro lineal', 'metros lineales'},
+    'kg': {'kg', 'kilo', 'kilos', 'kgr'},
+    'un': {'un', 'u', 'ud', 'und', 'unidad', 'unidades', 'gl', 'global', 'gbl', 'glb'},
+    'hora': {'hora', 'hr', 'hs', 'h'},
+    'jornal': {'jornal', 'jrnl', 'dia', 'día', 'd'},
+    'l': {'l', 'lt', 'litro', 'litros'},
+    'tn': {'tn', 'tonelada', 'toneladas'},
+    'bolsa': {'bolsa', 'bolsas'},
+}
+
+
+def _unidades_compatibles(u1: str, u2: str) -> bool:
+    """True si u1 y u2 son la misma unidad o sinónimos."""
+    if not u1 or not u2:
+        return False
+    a = u1.strip().lower()
+    b = u2.strip().lower()
+    if a == b:
+        return True
+    for grupo in _UNIDADES_SINONIMOS.values():
+        if a in grupo and b in grupo:
+            return True
+    return False
+
+
 def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_inventario_id=None):
-    """Busca en provider_price_list. Devuelve (mejor, alternativas)."""
+    """Busca en provider_price_list. Devuelve (mejor, alternativas).
+
+    Estrategia (prioridad descendente):
+      0. Match por item_inventario_id (más fuerte).
+      1. Match exacto por (descripcion_normalizada, unidad).
+      2. Match exacto por descripcion_normalizada con UNIDAD COMPATIBLE
+         (sinónimos: m2/m²/mts2; un/u/ud/gl; hora/hr/hs).
+      3. Match FUZZY por tokens significativos (Jaccard >=0.5) con unidad
+         compatible. Ranking por overlap de tokens.
+
+    El paso 3 es el que sube fuerte la cobertura: items del JMG con
+    descripciones largas matchean precios de la lista propia aunque la
+    redacción exacta sea distinta.
+    """
     from models.provider_price_list import ProviderPriceList
 
-    base = ProviderPriceList.query.filter(
-        ProviderPriceList.organizacion_id == organizacion_id,
-        ProviderPriceList.unidad == unidad,
-    )
     # Prioridad 0: matching por item_inventario_id (mas fuerte)
     if item_inventario_id:
-        candidatos = base.filter(
-            ProviderPriceList.item_inventario_id == item_inventario_id
-        ).order_by(ProviderPriceList.fecha_actualizacion.desc()).all()
+        candidatos = (ProviderPriceList.query
+                      .filter(ProviderPriceList.organizacion_id == organizacion_id,
+                              ProviderPriceList.item_inventario_id == item_inventario_id)
+                      .order_by(ProviderPriceList.fecha_actualizacion.desc())
+                      .all())
         if candidatos:
             return candidatos[0], candidatos[1:6]
 
-    # Prioridad 1: descripcion_normalizada exacto
-    candidatos = base.filter(
-        ProviderPriceList.descripcion_normalizada == descripcion_norm
-    ).order_by(ProviderPriceList.fecha_actualizacion.desc()).all()
-    return (candidatos[0] if candidatos else None), candidatos[1:6]
+    # Prioridad 1: descripcion_normalizada exacto + unidad exacta
+    candidatos = (ProviderPriceList.query
+                  .filter(ProviderPriceList.organizacion_id == organizacion_id,
+                          ProviderPriceList.unidad == unidad,
+                          ProviderPriceList.descripcion_normalizada == descripcion_norm)
+                  .order_by(ProviderPriceList.fecha_actualizacion.desc())
+                  .all())
+    if candidatos:
+        return candidatos[0], candidatos[1:6]
+
+    # Prioridad 2: descripcion exacta con unidad compatible (sinónimos)
+    candidatos_desc_exacta = (ProviderPriceList.query
+                              .filter(ProviderPriceList.organizacion_id == organizacion_id,
+                                      ProviderPriceList.descripcion_normalizada == descripcion_norm)
+                              .order_by(ProviderPriceList.fecha_actualizacion.desc())
+                              .all())
+    matches_compatibles = [c for c in candidatos_desc_exacta if _unidades_compatibles(c.unidad, unidad)]
+    if matches_compatibles:
+        return matches_compatibles[0], matches_compatibles[1:6]
+
+    # Prioridad 3: FUZZY por tokens. Solo si hay tokens significativos
+    # en la descripción del item.
+    tokens_item = _tokens_significativos(descripcion_norm)
+    if not tokens_item:
+        return None, []
+
+    # Traer todos los precios del org (limitado a 500 para no explotar memoria).
+    # En producción real con miles de filas habría que filtrar antes por
+    # prefijo o algún heurístico. Para demo y JMG (≤200 items, lista propia
+    # ≤300 filas), 500 alcanza sin problema.
+    todos = (ProviderPriceList.query
+             .filter(ProviderPriceList.organizacion_id == organizacion_id)
+             .order_by(ProviderPriceList.fecha_actualizacion.desc())
+             .limit(500)
+             .all())
+
+    scored = []
+    for c in todos:
+        tokens_c = _tokens_significativos(c.descripcion_normalizada or c.descripcion or '')
+        if not tokens_c:
+            continue
+        # Jaccard de tokens
+        inter = tokens_item & tokens_c
+        union = tokens_item | tokens_c
+        jaccard = len(inter) / len(union) if union else 0
+        if jaccard < 0.4:  # threshold permisivo para demo
+            continue
+        # Bonus si la unidad es compatible
+        unidad_bonus = 0.2 if _unidades_compatibles(c.unidad, unidad) else 0.0
+        score = jaccard + unidad_bonus
+        scored.append((score, c))
+
+    if not scored:
+        return None, []
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    mejor = scored[0][1]
+    alternativas = [s[1] for s in scored[1:6]]
+    return mejor, alternativas
 
 
 def _buscar_historial_proveedor(organizacion_id, descripcion_norm, unidad):

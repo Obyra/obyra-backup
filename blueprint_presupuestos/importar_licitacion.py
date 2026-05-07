@@ -8,6 +8,7 @@ Flujo:
   GET  /presupuestos/importar-licitacion         -> formulario
   POST /presupuestos/importar-licitacion         -> procesa archivo y crea presupuesto
 """
+import os
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -1399,6 +1400,83 @@ def precios_observados_stats():
         top_archivos=por_archivo,
         ultimas_10=[o.to_dict() for o in ultimas],
     )
+
+
+# ============================================================================
+# Importer de lista propia OBYRA (demo viernes 2026-05-07)
+# ============================================================================
+
+@presupuestos_bp.route('/precios/importar-lista-propia', methods=['GET', 'POST'])
+@login_required
+def importar_lista_propia():
+    """Importa Excel de lista propia OBYRA a provider_price_list.
+
+    GET: muestra form con upload + último batch importado.
+    POST: recibe archivo Excel y dispara importer.
+    """
+    if current_user.role not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    org_id = get_current_org_id()
+
+    if request.method == 'GET':
+        # Mini UI
+        from models.import_batch import ImportBatch
+        ultimos = (ImportBatch.query
+                   .filter_by(organizacion_id=org_id)
+                   .order_by(ImportBatch.started_at.desc())
+                   .limit(10).all())
+        return render_template(
+            'presupuestos/importar_lista_propia.html',
+            ultimos_batches=ultimos,
+        )
+
+    # POST
+    f = request.files.get('archivo_excel')
+    if not f or not f.filename:
+        return jsonify(ok=False, error='Subí un archivo Excel'), 400
+    if not f.filename.lower().endswith(('.xlsx', '.xls')):
+        return jsonify(ok=False, error='Formato no soportado (solo .xlsx/.xls)'), 400
+
+    # Persistir tmp para que el parser pueda leerlo
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(suffix='.xlsx', prefix='lista_propia_')
+    os.close(fd)
+    try:
+        f.save(tmp_path)
+        from services.importer_lista_propia import importar_archivo
+        resumen = importar_archivo(
+            db=db,
+            xlsx_path=tmp_path,
+            organizacion_id=org_id,
+            user_id=current_user.id,
+            perfil='lista_propia_obyra',
+            sobrescribir=True,
+        )
+    except Exception as e:
+        current_app.logger.exception('Error importando lista propia')
+        return jsonify(ok=False, error=f'{type(e).__name__}: {str(e)[:200]}'), 500
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    return jsonify(resumen)
+
+
+@presupuestos_bp.route('/precios/import-batches/<int:batch_id>/deshacer', methods=['POST'])
+@login_required
+def deshacer_import_batch(batch_id):
+    """Deshace un import batch (borra todas sus filas)."""
+    if current_user.role not in ('admin', 'administrador', 'pm', 'project_manager'):
+        return jsonify(ok=False, error='Sin permisos'), 403
+    org_id = get_current_org_id()
+    motivo = (request.get_json() or {}).get('motivo', 'manual')[:500]
+    from services.importer_lista_propia import deshacer_batch
+    return jsonify(deshacer_batch(
+        db=db, batch_id=batch_id, motivo=motivo, organizacion_id=org_id
+    ))
 
 
 def _puede_ver_presupuesto(presupuesto):
