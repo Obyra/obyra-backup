@@ -150,6 +150,15 @@
                                 <i class="fas fa-users me-2"></i>Gestión de Clientes
                             </a></li>
                             {% endif %}
+                            {# Solo super_admin: herramienta interna para cargar lista propia
+                               de precios que la Calculadora IA usa como fuente principal. #}
+                            {% if current_user.is_super_admin and has_endpoint('presupuestos.importar_lista_propia') %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('presupuestos.importar_lista_propia') }}">
+                                <i class="fas fa-file-import me-2 text-primary"></i>Lista de precios OBYRA
+                                <small class="text-muted ms-1">(super admin)</small>
+                            </a></li>
+                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}
