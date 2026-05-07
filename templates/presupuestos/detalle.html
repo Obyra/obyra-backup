@@ -106,13 +106,10 @@
                                 <i class="fas fa-file-excel me-1"></i>Pliego
                             </a>
                             {% endif %}
-                            {% if (_primer_archivo_pa or presupuesto.archivo_pliego_path) and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
-                            <button type="button" class="btn btn-outline-info"
-                                    onclick="abrirAnalisisIA({{ presupuesto.id }})"
-                                    title="Analizá los ítems con la Calculadora IA: clasifica rubros, normaliza unidades y sugiere materiales.">
-                                <i class="fas fa-magic me-1"></i>Analizar con IA
-                            </button>
-                            {% endif %}
+                            {# UX 2026-05-07: 'Analizar con IA' eliminado del header.
+                               El acceso unico al analisis avanzado esta como link
+                               secundario debajo del CTA principal en la card de
+                               '?Como queres cotizar este presupuesto?'. #}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
                             <button type="button" class="btn btn-outline-primary"
                                     onclick="abrirPerfilTecnico({{ presupuesto.id }})"
@@ -661,84 +658,71 @@
                         </div>
                     </div>
 
-                    {# Mensaje contextual según el paso actual #}
-                    {% if not ux_tiene_composicion %}
-                    <div class="alert alert-primary small mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div class="flex-grow-1">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <strong>Tu presupuesto está listo para calcular.</strong>
-                            OBYRA va a analizar los ítems, aplicar las sugerencias confiables y
-                            estimar precios automáticamente. En 30 segundos tenés el presupuesto
-                            con precios cargados.
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-primary"
-                                    id="btnCamGenerarRapido"
-                                    {% if presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
-                                    onclick="camGenerarComposicionRapido(this)"
-                                    {% else %}
-                                    disabled title="Necesitás haber importado un pliego primero"
-                                    {% endif %}>
-                                <i class="fas fa-bolt me-1"></i>Calcular con IA
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                    {% if presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
-                                    onclick="abrirAnalisisIA({{ presupuesto.id }})"
-                                    {% else %}
-                                    disabled
-                                    {% endif %}
-                                    title="Revisar uno por uno antes de aplicar (avanzado).">
-                                Revisar análisis IA
-                            </button>
-                        </div>
-                    </div>
-                    {% endif %}
+                    {# UX 2026-05-07: un solo CTA principal que corre el flujo completo
+                       (analizar + aplicar sugerencias confiables + componer + estimar precios).
+                       Antes había 2 botones (Calcular con IA + Cotizar con Calculadora IA)
+                       que confundían al usuario. Ahora todo entra por el mismo camino. #}
+                    {% set _tiene_pliego = presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
+                    {% set _ya_calculado = ux_tiene_composicion and ux_items_con_precio > 0 %}
 
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="border rounded p-3 h-100 d-flex flex-column">
+                    <div class="row g-3 align-items-stretch">
+                        <div class="col-md-7">
+                            <div class="border rounded p-3 h-100 d-flex flex-column bg-light">
                                 <div class="d-flex align-items-center mb-2">
                                     <i class="fas fa-magic fa-lg text-primary me-2"></i>
-                                    <strong>Calculadora IA</strong>
+                                    <strong>{% if _ya_calculado %}Recalcular presupuesto{% else %}Calcular presupuesto con IA{% endif %}</strong>
                                 </div>
-                                <p class="small text-muted flex-grow-1 mb-2">
-                                    Estimación automática usando lista de proveedores, historial y precios de mercado OBYRA.
-                                    Rápido e interno.
+                                <p class="small text-muted flex-grow-1 mb-3">
+                                    {% if _ya_calculado %}
+                                    Volvé a correr el cálculo completo: re-analiza ítems, regenera la composición técnica
+                                    y reestima precios sobre la última lista de proveedores y precios OBYRA.
+                                    {% else %}
+                                    En un solo paso OBYRA analiza los ítems, aplica las sugerencias confiables, genera
+                                    el desglose técnico interno y estima precios. En 30 segundos tenés el presupuesto valorizado.
+                                    {% endif %}
                                 </p>
-                                <button type="button" class="btn btn-primary"
-                                        id="btnCaminoCotizarIA"
-                                        onclick="camCotizarIA()"
-                                        {% if not ux_puede_cotizar_ia %}disabled{% endif %}
-                                        title="{% if not ux_tiene_composicion %}Primero generá la composición ejecutiva (APU){% else %}Estimar precios automáticamente con la Calculadora IA.{% endif %}">
-                                    <i class="fas fa-dollar-sign me-1"></i>Cotizar con Calculadora IA
+                                <button type="button" class="btn btn-primary btn-lg fw-bold"
+                                        id="btnCamGenerarRapido"
+                                        {% if _tiene_pliego %}
+                                        onclick="camGenerarComposicionRapido(this)"
+                                        {% else %}
+                                        disabled title="Necesitás haber importado un pliego primero"
+                                        {% endif %}>
+                                    <i class="fas fa-bolt me-2"></i>{% if _ya_calculado %}Recalcular presupuesto con IA{% else %}Calcular presupuesto con IA{% endif %}
                                 </button>
-                                {% if not ux_tiene_composicion %}
-                                <small class="text-muted mt-2">
-                                    <i class="fas fa-lock me-1"></i>Requiere composición ejecutiva
-                                </small>
-                                {% endif %}
+                                <div class="text-center mt-2">
+                                    <button type="button" class="btn btn-link btn-sm text-muted p-0"
+                                            {% if _tiene_pliego %}
+                                            onclick="abrirAnalisisIA({{ presupuesto.id }})"
+                                            {% else %}
+                                            disabled
+                                            {% endif %}
+                                            title="Avanzado: revisar ítem por ítem antes de aplicar.">
+                                        <i class="fas fa-cog me-1"></i>Revisar análisis avanzado
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <div class="border rounded p-3 h-100 d-flex flex-column">
                                 <div class="d-flex align-items-center mb-2">
                                     <i class="fas fa-handshake fa-lg text-success me-2"></i>
                                     <strong>Proveedores reales</strong>
+                                    <span class="badge bg-light text-muted ms-2">opcional</span>
                                 </div>
-                                <p class="small text-muted flex-grow-1 mb-2">
+                                <p class="small text-muted flex-grow-1 mb-3">
                                     Asigná proveedores por material y enviá solicitudes de cotización por WhatsApp.
                                     Precios reales, comparables.
                                 </p>
                                 {% if ux_puede_pedir_proveedores %}
                                 <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
-                                   class="btn btn-success"
+                                   class="btn btn-outline-success"
                                    title="Ir a la vista de materiales para asignar proveedores y pedir cotizaciones.">
                                     <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
                                 </a>
                                 {% else %}
-                                {# Sin APU todavia: en vez de ir a una vista vacia, abrir modal
-                                   explicando que primero hay que calcular o generar APU manual. #}
-                                <button type="button" class="btn btn-success"
+                                {# Sin APU todavia: abrir modal explicando que primero hay que calcular. #}
+                                <button type="button" class="btn btn-outline-success"
                                         data-bs-toggle="modal" data-bs-target="#modalPedirPreciosSinAPU"
                                         title="Para pedir precios necesitamos agrupar los recursos primero.">
                                     <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
@@ -3416,14 +3400,32 @@ window.camGenerarComposicionRapido = async function(btnEl) {
             const cobPrecios = d4.cobertura_pct || 0;
             const sinPrecio = (d4.sin_precio || 0) + (d4.requiere_tc || 0);
             const conPrecio = (d4.actualizados || 0) + (d4.estimados || 0);
+            // 2026-05-07 NEW: items_volcados = cantidad de ItemPresupuesto que recibieron precio
+            // (lo que se VE en el presupuesto comercial). Es lo que importa al user.
+            const volcados = d4.items_volcados;
+            const sinComp = d4.items_sin_composicion;
+            const itemsLocked = d4.items_locked;
+            const costoCero = d4.items_costo_cero;
             bloquePrecios = '\n💰 Precios estimados:\n';
             bloquePrecios += '  · Costo interno: ' + fmt(totalCosto) + '\n';
             bloquePrecios += '  · Sugerido al cliente: ' + fmt(sugerido) + '\n';
-            bloquePrecios += '  · ' + conPrecio + ' ítems con precio · ' + sinPrecio + ' sin precio\n';
-            bloquePrecios += '  · Cobertura de precios: ' + cobPrecios + '%\n';
+            bloquePrecios += '  · Composiciones: ' + conPrecio + ' con precio / ' + sinPrecio + ' sin precio (cob. ' + cobPrecios + '%)\n';
+            if (typeof volcados !== 'undefined') {
+                const directos = d4.items_volcados_directos || 0;
+                bloquePrecios += '  · Ítems valorizados al comercial: ' + volcados;
+                if (directos > 0) {
+                    bloquePrecios += ' (' + directos + ' por precio directo sin APU)';
+                }
+                bloquePrecios += '\n';
+                if (sinComp || itemsLocked || costoCero) {
+                    bloquePrecios += '    (sin precio: ' + (sinComp || 0) +
+                                     ' · locked: ' + (itemsLocked || 0) +
+                                     ' · costo cero: ' + (costoCero || 0) + ')\n';
+                }
+            }
         } else {
             bloquePrecios = '\n⚠ La estimación de precios no se pudo correr automáticamente.\n' +
-                            '   Podés intentarlo después con el botón "Cotizar con IA".\n';
+                            '   Probá recargar y volver a "Calcular presupuesto con IA".\n';
         }
 
         let msg = '✓ Tu presupuesto está listo\n\n';
@@ -4805,14 +4807,19 @@ function _iaCategorizarItem(it) {
 function _iaAgruparPendientes(items) {
     /* Agrupa items por (regla_id sugerida + tipo_tratamiento + unidad).
        Items sin sugerencia van a un grupo "Sin sugerencia".
-       Cada grupo lleva además el conteo por categoría (auto/dudoso/etc). */
+       Cada grupo lleva además el conteo por categoría (auto/dudoso/etc).
+       FIX 2026-05-07: la respuesta del backend trae los datos del item
+       en `it.original` (descripcion / unidad / cantidad / etapa_nombre).
+       Antes accediamos a it.unidad / it.etapa_nombre directamente y eran
+       undefined -> grupos sin info. */
     const grupos = new Map();
     items.forEach(it => {
+        const orig = it.original || {};
         const sug = it.sugerencia || it.sugerencias || {};
         const reglaId = sug.regla_id || it.regla_id || null;
         const tt = it.tipo_tratamiento_sugerido || sug.tipo_tratamiento || null;
-        const rubro = sug.rubro_sugerido || it.rubro_sugerido || it.etapa_nombre || '';
-        const unidad = (it.unidad || '').toLowerCase();
+        const rubro = sug.rubro_sugerido || it.rubro_sugerido || orig.etapa_nombre || '';
+        const unidad = (orig.unidad || it.unidad || '').toLowerCase();
         const cat = _iaCategorizarItem(it);
         const key = reglaId
             ? `r:${reglaId}|u:${unidad}`
@@ -4869,17 +4876,28 @@ function _iaAgruparPendientes(items) {
 }
 
 window._iaPanelGruposEstado = {
-    gruposExpandidos: new Set(),
+    gruposExpandidos: new Set(),    // grupos abiertos manualmente por el usuario
+    gruposColapsadosManual: new Set(), // grupos que el usuario cerró a proposito (sobreescribe el default expandido)
     mostrarAuto: false,    // sección "Auto-aplicables" colapsada por default
     mostrarResueltos: false,
 };
 
 function _iaRenderGrupo(g, idx, prefijo) {
     /* Renderiza un grupo individual. prefijo se usa para que los IDs no choquen
-       entre secciones (auto/dudoso/sin/resuelto). */
+       entre secciones (auto/dudoso/sin/resuelto).
+       UX 2026-05-07: dudosos y sin_sugerencia se expanden por default (a menos
+       que el usuario los haya colapsado manualmente). Auto/resueltos siguen
+       colapsados por default. */
     const gid = `iaGrupo_${prefijo}_${idx}`;
-    const expanded = window._iaPanelGruposEstado.gruposExpandidos.has(prefijo + ':' + g.key);
     const cat = g.cat_dominante;
+    const groupKey = prefijo + ':' + g.key;
+    const expandidoManual = window._iaPanelGruposEstado.gruposExpandidos.has(groupKey);
+    const colapsadoManual = window._iaPanelGruposEstado.gruposColapsadosManual.has(groupKey);
+    // Auto-expandir solo grupos pequeños (<=10 items) de dudoso/sin_sugerencia
+    // para que el usuario vea inmediatamente qué ítems están y por qué.
+    // Grupos más grandes quedan colapsados (acción de grupo + click para ver detalle).
+    const defaultExpanded = (cat === 'dudoso' || cat === 'sin_sugerencia') && g.items.length <= 10;
+    const expanded = expandidoManual || (defaultExpanded && !colapsadoManual);
 
     const colorClass = (cat === 'dudoso' || cat === 'sin_sugerencia') ? 'border-warning'
                      : cat === 'auto_aplicable' ? 'border-info' : 'border-success';
@@ -4918,26 +4936,132 @@ function _iaRenderGrupo(g, idx, prefijo) {
     }
     html += '</div>'; // header
 
-    // Body del grupo
+    // Body del grupo - UX 2026-05-07: tarjeta por ítem con info completa
+    // y acciones inline (aceptar / marcar global / omitir) para dudosos y
+    // sin_sugerencia. Auto/resueltos mantienen vista compacta.
     html += '<div class="' + (expanded ? '' : 'd-none') + '" id="' + gid + '_body">';
-    html += '<ul class="list-group list-group-flush small">';
-    g.items.slice(0, 50).forEach(it => {
-        const cat_it = _iaCategorizarItem(it);
-        const badge = cat_it === 'resuelto' ? '<span class="badge bg-success ms-1">resuelto</span>'
-                    : cat_it === 'auto_aplicable' ? '<span class="badge bg-info ms-1">auto</span>'
-                    : cat_it === 'dudoso' ? '<span class="badge bg-warning text-dark ms-1">revisar</span>'
-                    : '<span class="badge bg-secondary ms-1">sin sugerencia</span>';
-        html += '<li class="list-group-item py-1 px-3">' +
-                '<span class="text-muted">#' + it.id + '</span> ' +
-                _iaEsc((it.descripcion || '').substring(0, 100)) +
-                ' <span class="text-muted">(' + _iaEsc(it.unidad || '') + ', ' + _iaEsc(String(it.cantidad || 0)) + ')</span>' +
-                badge +
-                '</li>';
-    });
-    if (g.items.length > 50) {
-        html += '<li class="list-group-item py-1 px-3 text-muted">... y ' + (g.items.length - 50) + ' más</li>';
+
+    const compacto = (cat === 'auto_aplicable' || cat === 'resuelto');
+
+    if (compacto) {
+        html += '<ul class="list-group list-group-flush small">';
+        g.items.slice(0, 50).forEach(it => {
+            const orig = it.original || {};
+            const cat_it = _iaCategorizarItem(it);
+            const badge = cat_it === 'resuelto' ? '<span class="badge bg-success ms-1">resuelto</span>'
+                        : cat_it === 'auto_aplicable' ? '<span class="badge bg-info ms-1">auto</span>'
+                        : cat_it === 'dudoso' ? '<span class="badge bg-warning text-dark ms-1">revisar</span>'
+                        : '<span class="badge bg-secondary ms-1">sin sugerencia</span>';
+            const desc = orig.descripcion || it.descripcion || '';
+            const un = orig.unidad || it.unidad || '';
+            const cant = orig.cantidad != null ? orig.cantidad : (it.cantidad != null ? it.cantidad : 0);
+            html += '<li class="list-group-item py-1 px-3">' +
+                    '<span class="text-muted">#' + it.id + '</span> ' +
+                    _iaEsc(desc.substring(0, 100)) +
+                    ' <span class="text-muted">(' + _iaEsc(un) + ', ' + _iaEsc(String(cant)) + ')</span>' +
+                    badge +
+                    '</li>';
+        });
+        if (g.items.length > 50) {
+            html += '<li class="list-group-item py-1 px-3 text-muted">... y ' + (g.items.length - 50) + ' más</li>';
+        }
+        html += '</ul>';
+    } else {
+        // Vista enriquecida: tarjeta por item con descripción completa, etapa,
+        // sugerencia, motivo/confianza y acciones inline.
+        // FIX 2026-05-07: leer desde it.original (estructura del backend).
+        const limite = 30;
+        g.items.slice(0, limite).forEach(it => {
+            const cat_it = _iaCategorizarItem(it);
+            if (cat_it === 'resuelto') return; // ya resuelto, no mostrar acciones
+            const orig = it.original || {};
+            const sug = it.sugerencias || it.sugerencia || {};
+            const conf = (sug.confianza_label || it.confianza_label || '').toLowerCase();
+            const reglaId = sug.regla_id || it.regla_id || '';
+            const rubro = sug.rubro_sugerido || sug.etapa_sugerida || '';
+            const tarea = sug.tarea_sugerida || '';
+            const etapaActual = orig.etapa_nombre || it.etapa_nombre || '';
+            const descActual = orig.descripcion || it.descripcion || '';
+            const unActual = orig.unidad || it.unidad || '';
+            const cantActual = orig.cantidad != null ? orig.cantidad : (it.cantidad != null ? it.cantidad : 0);
+
+            // Motivo: por qué está en revisar / sin sugerencia
+            let motivo = '';
+            if (cat_it === 'sin_sugerencia') {
+                motivo = 'No matcheó ninguna regla técnica de OBYRA. Marcá manualmente.';
+            } else if (conf === 'baja') {
+                motivo = 'La sugerencia tiene confianza baja. Revisá antes de aplicar.';
+            } else if (!reglaId && (rubro || tarea)) {
+                motivo = 'Sugerencia floja (sin regla concreta). Revisá rubro / tarea.';
+            } else if (reglaId && conf === 'media') {
+                motivo = 'Confianza media: regla detectada pero sin total certeza.';
+            } else {
+                motivo = 'Requiere revisión manual.';
+            }
+
+            const badgeEstado = cat_it === 'dudoso'
+                ? '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Revisar</span>'
+                : '<span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i>Sin sugerencia</span>';
+            const badgeConf = conf
+                ? ' <span class="badge bg-light text-muted border">confianza ' + _iaEsc(conf) + '</span>'
+                : '';
+
+            // Bloque sugerencia (si hay)
+            let sugHtml = '';
+            if (rubro || tarea || sug.unidad_sugerida) {
+                const partes = [];
+                if (rubro) partes.push('<strong>Rubro:</strong> ' + _iaEsc(rubro));
+                if (tarea) partes.push('<strong>Tarea:</strong> ' + _iaEsc(tarea));
+                if (sug.unidad_sugerida) partes.push('<strong>Unidad:</strong> ' + _iaEsc(sug.unidad_sugerida));
+                sugHtml = '<div class="alert alert-light border py-1 px-2 small mb-2 mt-1">' +
+                          '<i class="fas fa-lightbulb text-info me-1"></i>OBYRA sugiere: ' +
+                          partes.join(' &middot; ') + '</div>';
+            }
+
+            // Acciones inline
+            let accionesHtml = '<div class="d-flex flex-wrap gap-1 mt-1">';
+            if (cat_it === 'dudoso' && (rubro || tarea || reglaId)) {
+                accionesHtml += '<button type="button" class="btn btn-sm btn-success" ' +
+                                'onclick="_iaAceptarItemEnGrupo(' + it.id + ')" ' +
+                                'title="Aplicar la sugerencia tal cual">' +
+                                '<i class="fas fa-check me-1"></i>Aceptar sugerencia</button>';
+            }
+            accionesHtml += '<button type="button" class="btn btn-sm btn-outline-primary" ' +
+                            'onclick="_iaMarcarItemComoGlobal(' + it.id + ')" ' +
+                            'title="No desglosar: tratarlo como gasto global / item completo">' +
+                            '<i class="fas fa-box me-1"></i>Ítem completo</button>';
+            accionesHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" ' +
+                            'onclick="_iaOmitirItemEnGrupo(' + it.id + ')" ' +
+                            'title="Postergar este ítem para después">' +
+                            '<i class="fas fa-clock me-1"></i>Omitir</button>';
+            accionesHtml += '</div>';
+
+            html += '<div class="border-top px-3 py-2" data-item-id="' + it.id + '" id="iaPanelItem' + it.id + '">';
+            html += '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">';
+            html += '<div class="flex-grow-1" style="min-width: 200px;">';
+            html += '<div class="fw-semibold">' + _iaEsc(descActual || '(sin descripción)') + '</div>';
+            html += '<div class="small text-muted">';
+            html += 'Cantidad: <strong>' + _iaEsc(String(cantActual)) + '</strong> &middot; ';
+            html += 'Unidad: <strong>' + _iaEsc(unActual || '-') + '</strong>';
+            if (etapaActual) html += ' &middot; Etapa: <strong>' + _iaEsc(etapaActual) + '</strong>';
+            html += ' &middot; <span class="text-muted">#' + it.id + '</span>';
+            html += '</div>';
+            html += '</div>';
+            html += '<div class="text-end">' + badgeEstado + badgeConf + '</div>';
+            html += '</div>';
+            html += sugHtml;
+            html += '<div class="small text-muted fst-italic mb-1">' +
+                    '<i class="fas fa-info-circle me-1"></i>' + _iaEsc(motivo) + '</div>';
+            html += accionesHtml;
+            html += '<div class="ia-clasif-resultado small mt-1" id="iaPanelItemMsg' + it.id + '"></div>';
+            html += '</div>';
+        });
+        if (g.items.length > limite) {
+            html += '<div class="border-top px-3 py-2 text-muted small">... y ' +
+                    (g.items.length - limite) + ' más en este grupo. Usá las acciones de grupo arriba.</div>';
+        }
     }
-    html += '</ul></div>';
+    html += '</div>';
     html += '</div>'; // grupo
     return html;
 }
@@ -5086,8 +5210,30 @@ window._iaToggleSeccion = function(nombre) {
 };
 
 window._iaToggleGrupo = function(key) {
-    const set = window._iaPanelGruposEstado.gruposExpandidos;
-    if (set.has(key)) set.delete(key); else set.add(key);
+    /* Toggle robusto: contempla que dudosos/sin_sugerencia arrancan expandidos
+       por default. Si el usuario los cierra, hay que registrarlos en
+       gruposColapsadosManual en vez de simplemente sacarlos de gruposExpandidos. */
+    const estado = window._iaPanelGruposEstado;
+    const exp = estado.gruposExpandidos;
+    const col = estado.gruposColapsadosManual;
+    const prefijo = (key || '').split(':')[0] || '';
+    const esDefaultExpandido = (prefijo === 'dud' || prefijo === 'sin');
+
+    if (esDefaultExpandido) {
+        // default abierto. Toggle = mover entre col y limpio.
+        if (col.has(key)) {
+            col.delete(key);
+            exp.add(key); // forzar abierto incluso si volvió a defaults
+        } else if (exp.has(key)) {
+            exp.delete(key);
+            col.add(key);
+        } else {
+            col.add(key);
+        }
+    } else {
+        // default cerrado. Toggle clásico sobre exp.
+        if (exp.has(key)) exp.delete(key); else exp.add(key);
+    }
     _iaRenderPanelGrupos(_iaResultadoCache || {items: []});
 };
 
@@ -5147,6 +5293,86 @@ window._iaOmitirGrupo = function(key) {
     if (!ids.length) return;
     if (!confirm('Omitir ' + ids.length + ' ítem(s) de este grupo? No entrarán en la composición ejecutiva.')) return;
     _iaBulkApply(ids, { accion: 'omitir' }, 'Grupo omitido: ' + ids.length + ' ítem(s).');
+};
+
+// ============================================================================
+// UX 2026-05-07: acciones inline por ítem dentro del panel de grupos.
+// Endpoint: POST /presupuestos/<pid>/items/<id>/clasificar.
+// Devuelven feedback en la fila sin refrescar el modal entero.
+// ============================================================================
+async function _iaPanelPostClasificar(itemId, payload, msgEl, exitoMsg) {
+    if (!_iaPresupuestoId) return false;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    if (msgEl) msgEl.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Aplicando...</span>';
+    try {
+        const r = await fetch(`/presupuestos/${_iaPresupuestoId}/items/${itemId}/clasificar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            if (msgEl) msgEl.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>' +
+                                          _iaEsc(d.error || 'Error al guardar') + '</span>';
+            return false;
+        }
+        // Marcar el item como resuelto en cache local para que la próxima
+        // re-render del panel ya no lo muestre como pendiente.
+        if (_iaResultadoCache && Array.isArray(_iaResultadoCache.items)) {
+            const it = _iaResultadoCache.items.find(x => x.id === itemId);
+            if (it) {
+                it.revisado_ia = true;
+                if (payload.tipo_tratamiento) {
+                    it.sugerencias = it.sugerencias || {};
+                    it.sugerencias.tipo_tratamiento = payload.tipo_tratamiento;
+                }
+            }
+        }
+        if (msgEl) {
+            msgEl.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>' +
+                              _iaEsc(exitoMsg || 'Aplicado.') + '</span>';
+        }
+        // Fade out de la fila después de un momento.
+        const card = document.getElementById('iaPanelItem' + itemId);
+        if (card) {
+            card.style.transition = 'opacity 0.5s';
+            setTimeout(() => { card.style.opacity = '0.5'; }, 700);
+        }
+        return true;
+    } catch (e) {
+        if (msgEl) msgEl.innerHTML = '<span class="text-danger">Error de red: ' + _iaEsc(e.message) + '</span>';
+        return false;
+    }
+}
+
+window._iaAceptarItemEnGrupo = async function(itemId) {
+    const item = (_iaResultadoCache?.items || []).find(i => i.id === itemId);
+    if (!item) return;
+    const sug = item.sugerencias || item.sugerencia || {};
+    const msgEl = document.getElementById('iaPanelItemMsg' + itemId);
+    const payload = {
+        accion: 'confirmar',
+        descripcion: sug.descripcion_normalizada,
+        unidad: sug.unidad_sugerida,
+        etapa_nombre: sug.etapa_sugerida,
+        rubro: sug.rubro_sugerido,
+    };
+    await _iaPanelPostClasificar(itemId, payload, msgEl,
+        'Sugerencia aceptada. Se usa para el presupuesto.');
+};
+
+window._iaMarcarItemComoGlobal = async function(itemId) {
+    const msgEl = document.getElementById('iaPanelItemMsg' + itemId);
+    const payload = { accion: 'guardar', tipo_tratamiento: 'global' };
+    await _iaPanelPostClasificar(itemId, payload, msgEl,
+        'Marcado como ítem completo / global. Se cargará como línea editable.');
+};
+
+window._iaOmitirItemEnGrupo = async function(itemId) {
+    const msgEl = document.getElementById('iaPanelItemMsg' + itemId);
+    await _iaPanelPostClasificar(itemId, { accion: 'omitir' }, msgEl,
+        'Omitido. Podés recuperarlo más tarde.');
 };
 
 window._iaAutoAplicarYGenerar = async function() {

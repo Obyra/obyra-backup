@@ -640,19 +640,141 @@ def estimar_precios_presupuesto(presupuesto, *, user_id=None):
             if (comp.tipo or '').lower() == 'mano_obra' and info['precio'] > 0:
                 contadores['mo_aplicadas'] += 1
 
-    # Calcular costo y precio sugerido
-    total_costo = Decimal('0')
-    for item in items:
-        for comp in (item.composiciones.all() if hasattr(item.composiciones, 'all') else item.composiciones):
-            total_costo += Decimal(str(comp.total or 0))
-
+    # Margen comercial unico para el presupuesto (override > org > 25%).
     margen = (
         presupuesto.margen_comercial_override
         or presupuesto.organizacion.margen_comercial_default
         or Decimal('25.00')
     )
     margen_dec = Decimal(str(margen))
-    precio_sugerido = (total_costo * (Decimal('1') + margen_dec / Decimal('100'))).quantize(Decimal('0.01'))
+    factor_margen = Decimal('1') + margen_dec / Decimal('100')
+
+    # 2026-05-07 FIX: ademas de actualizar precio en composiciones, volcar
+    # el precio al ItemPresupuesto (precio_unitario / total) para que el
+    # presupuesto comercial muestre los valores. Antes /estimar-precios
+    # solo tocaba composiciones y el presupuesto seguia viendose en $0.
+    # Reglas:
+    #   - precio_locked=True -> no tocar (Lock Manual respetado).
+    #   - solo_interno=True  -> no entra al loop original (filtro arriba).
+    #   - cantidad <= 0      -> no se puede dividir; saltamos.
+    #   - sin composiciones  -> usar item.cantidad * costo unitario sugerido
+    #     desde la lista de precios propios sobre la descripcion del item.
+    contadores['items_volcados'] = 0
+    contadores['items_sin_composicion'] = 0
+    contadores['items_locked'] = 0
+    contadores['items_costo_cero'] = 0
+    contadores['items_cantidad_cero'] = 0
+    contadores['items_volcados_directos'] = 0  # sin composicion, precio buscado por descripcion
+    total_costo = Decimal('0')
+    items_total = len(items)
+
+    for item in items:
+        # items ya filtra solo_interno=False. Falta saltar locked aqui.
+        item_locked = bool(getattr(item, 'precio_locked', False))
+        comps = list(
+            item.composiciones.all() if hasattr(item.composiciones, 'all') else item.composiciones
+        )
+        costo_item = Decimal('0')
+        for comp in comps:
+            costo_item += Decimal(str(comp.total or 0))
+        total_costo += costo_item
+
+        if item_locked:
+            contadores['items_locked'] += 1
+            continue
+
+        cantidad = Decimal(str(item.cantidad or 0))
+        if cantidad <= 0:
+            contadores['items_cantidad_cero'] += 1
+            continue
+
+        precio_unit_item = None
+        precio_total_item = None
+        es_directo = False
+
+        if comps and costo_item > 0:
+            # Camino normal: APU armada + composiciones con precio.
+            precio_total_item = (costo_item * factor_margen).quantize(Decimal('0.01'))
+            precio_unit_item = (precio_total_item / cantidad).quantize(Decimal('0.01'))
+        else:
+            # Fallback 2026-05-07: items sin composicion (globales/servicios o
+            # items que generar-preliminar no descompuso) intentan precio
+            # directo desde la lista propia / proveedores por descripcion.
+            # Esto evita que el comercial quede en $0 cuando hay items sin APU.
+            try:
+                info = buscar_mejor_precio(
+                    organizacion_id=org_id,
+                    descripcion=item.descripcion or '',
+                    unidad=item.unidad or '',
+                    tipo_recurso=item.tipo,
+                    item_inventario_id=getattr(item, 'item_inventario_id', None),
+                    presupuesto=presupuesto,
+                )
+            except Exception:
+                info = None
+
+            precio_directo = Decimal(str((info or {}).get('precio') or 0))
+            if precio_directo > 0:
+                # Aplicamos el mismo margen comercial que en composiciones para
+                # llegar al precio sugerido al cliente.
+                precio_unit_item = (precio_directo * factor_margen).quantize(Decimal('0.01'))
+                precio_total_item = (precio_unit_item * cantidad).quantize(Decimal('0.01'))
+                es_directo = True
+                # Sumar al total_costo para que el total general reflije esto tambien.
+                total_costo += (precio_directo * cantidad).quantize(Decimal('0.01'))
+            else:
+                if not comps:
+                    contadores['items_sin_composicion'] += 1
+                else:
+                    contadores['items_costo_cero'] += 1
+                continue
+
+        item.precio_unitario = precio_unit_item
+        item.total = precio_total_item
+        # Mirror en columnas ARS si la moneda del presupuesto es ARS
+        # (presupuestos JMG/demo son todos ARS). Para currency!=ARS dejamos
+        # los espejos como estan y dejamos que la conversion la haga el caller.
+        currency_item = (item.currency or 'ARS').upper()
+        if currency_item == 'ARS':
+            item.price_unit_ars = precio_unit_item
+            item.total_ars = precio_total_item
+        item.origen = item.origen or 'ia'
+        contadores['items_volcados'] += 1
+        if es_directo:
+            contadores['items_volcados_directos'] += 1
+
+    # Logging visible en Railway logs para diagnostico de "presupuesto sigue en $0".
+    # WARNING level para que sea facil de filtrar en Railway logs.
+    try:
+        from flask import current_app
+        current_app.logger.warning(
+            '[estimar_precios] presupuesto=%s items_total=%d volcados=%d '
+            'sin_comp=%d locked=%d costo_cero=%d cant_cero=%d total_costo=%s factor=%s',
+            presupuesto.id, items_total, contadores['items_volcados'],
+            contadores['items_sin_composicion'], contadores['items_locked'],
+            contadores['items_costo_cero'], contadores['items_cantidad_cero'],
+            total_costo, factor_margen,
+        )
+    except Exception:
+        pass
+
+    # Forzar flush para detectar errores de persistencia inmediatamente.
+    # Si algun UPDATE falla por constraint/tipo, sale aca y no en el commit
+    # final del endpoint (donde el rollback nos perderia el log de items_volcados).
+    try:
+        db.session.flush()
+    except Exception as e:
+        try:
+            from flask import current_app
+            current_app.logger.exception(
+                '[estimar_precios] flush fallo presupuesto=%s err=%s',
+                presupuesto.id, type(e).__name__,
+            )
+        except Exception:
+            pass
+        raise
+
+    precio_sugerido = (total_costo * factor_margen).quantize(Decimal('0.01'))
 
     total_eval = contadores['composiciones_evaluadas']
     cobertura_pct = 0.0
