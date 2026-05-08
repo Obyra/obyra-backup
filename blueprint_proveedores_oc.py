@@ -7,7 +7,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
 from flask_login import login_required, current_user
 from datetime import datetime
 from extensions import db
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 
 proveedores_oc_bp = Blueprint('proveedores_oc', __name__, url_prefix='/proveedores-oc')
 
@@ -32,8 +32,14 @@ def _es_super_admin():
 def _query_visible(org_id):
     """Query base de ProveedorOC visible para el tenant `org_id`.
 
-    El superadmin ve TODO (globales + todos los tenants).
-    Cada tenant ve los suyos + los globales (scope='global', org_id NULL).
+    El superadmin ve TODO (globales + todos los tenants + pendientes).
+    Cada tenant ve:
+      - sus proveedores tenant
+      - globales que NO tengan estado_compartido='pendiente' o 'rechazado'
+        (es decir: globales originales sin flag, o aprobados por super admin).
+
+    2026-05-08: filtro de estado_compartido para que pendientes/rechazados
+    no se vean cruzados entre tenants antes de la aprobacion del super admin.
     """
     from models.proveedores_oc import ProveedorOC
     base = ProveedorOC.query
@@ -41,7 +47,13 @@ def _query_visible(org_id):
         return base
     return base.filter(
         or_(
-            ProveedorOC.scope == 'global',
+            and_(
+                ProveedorOC.scope == 'global',
+                or_(
+                    ProveedorOC.estado_compartido.is_(None),
+                    ProveedorOC.estado_compartido == 'aprobado',
+                ),
+            ),
             ProveedorOC.organizacion_id == org_id,
         )
     )
@@ -820,3 +832,223 @@ def eliminar_contacto(proveedor_id, contacto_id):
         db.session.rollback()
         current_app.logger.error(f'Error eliminando contacto: {e}')
         return jsonify({'ok': False, 'error': 'Error al eliminar'}), 500
+
+
+# =============================================================================
+# IMPORT EXCEL DE PROVEEDORES DEL USUARIO + COMPARTIR CON DIRECTORIO OBYRA
+# 2026-05-08
+# =============================================================================
+
+@proveedores_oc_bp.route('/importar/template', methods=['GET'])
+@login_required
+def descargar_template_proveedores():
+    """Descarga el Excel template con columnas fijas + ejemplo."""
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    import os
+    import tempfile
+    from flask import send_file
+    from services.importer_proveedores import generar_template_xlsx
+
+    tmpfile = tempfile.NamedTemporaryFile(
+        suffix='.xlsx', delete=False, prefix='OBYRA_template_proveedores_'
+    )
+    tmpfile.close()
+    try:
+        generar_template_xlsx(tmpfile.name)
+        return send_file(
+            tmpfile.name,
+            as_attachment=True,
+            download_name='OBYRA_template_proveedores.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+    except Exception as e:
+        try:
+            os.unlink(tmpfile.name)
+        except Exception:
+            pass
+        current_app.logger.exception('Error generando template proveedores')
+        return jsonify({'ok': False, 'error': f'Error: {e}'}), 500
+
+
+@proveedores_oc_bp.route('/importar/excel', methods=['POST'])
+@login_required
+def importar_excel_proveedores_endpoint():
+    """Importa Excel del usuario al ProveedorOC scope='tenant' de su org.
+
+    Si el form-field 'compartir_directorio' viene como '1' o 'true', ademas
+    crea un duplicado scope='global' con estado_compartido='pendiente' para
+    revision del super admin.
+    """
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+
+    org_id = _get_org_id()
+    if not org_id:
+        return jsonify({'ok': False, 'error': 'Tu usuario no tiene organizacion asignada'}), 400
+
+    archivo = request.files.get('archivo')
+    if not archivo or not archivo.filename:
+        return jsonify({'ok': False, 'error': 'Adjuntá el archivo Excel'}), 400
+    if not archivo.filename.lower().endswith(('.xlsx', '.xls')):
+        return jsonify({'ok': False, 'error': 'El archivo debe ser .xlsx'}), 400
+
+    compartir = (request.form.get('compartir_directorio') or '').lower() in ('1', 'true', 'on')
+
+    import os
+    import tempfile
+    tmpfile = tempfile.NamedTemporaryFile(
+        suffix='.xlsx', delete=False, prefix='upload_proveedores_'
+    )
+    try:
+        archivo.save(tmpfile.name)
+        tmpfile.close()
+
+        from services.importer_proveedores import importar_excel_proveedores
+        resumen = importar_excel_proveedores(
+            db=db,
+            xlsx_path=tmpfile.name,
+            organizacion_id=org_id,
+            user_id=current_user.id if current_user.is_authenticated else None,
+            compartir_con_directorio=compartir,
+        )
+
+        # Audit
+        try:
+            from models.audit import registrar_audit
+            registrar_audit(
+                accion='importar_excel_proveedores',
+                entidad='proveedor_oc',
+                entidad_id=None,
+                detalle=(
+                    f'filas={resumen["filas_total"]} '
+                    f'creados={resumen["privados_creados"]} '
+                    f'actualizados={resumen["privados_actualizados"]} '
+                    f'compartidos={resumen["compartidos_pendientes"]} '
+                    f'compartir={compartir}'
+                ),
+            )
+        except Exception:
+            pass
+
+        return jsonify({'ok': True, 'resumen': resumen, 'compartir': compartir})
+    except Exception as e:
+        current_app.logger.exception('Error importando Excel proveedores del usuario')
+        return jsonify({'ok': False, 'error': f'Error al importar: {type(e).__name__}: {e}'}), 500
+    finally:
+        try:
+            os.unlink(tmpfile.name)
+        except Exception:
+            pass
+
+
+# =============================================================================
+# REVISION DE PROVEEDORES COMPARTIDOS - SUPER ADMIN
+# =============================================================================
+
+@proveedores_oc_bp.route('/admin/compartidos-pendientes', methods=['GET'])
+@login_required
+def admin_compartidos_pendientes():
+    """Lista proveedores con estado_compartido='pendiente' para revision del super admin."""
+    if not _es_super_admin():
+        flash('Solo el super admin puede revisar proveedores compartidos.', 'warning')
+        return redirect(url_for('proveedores_oc.lista'))
+
+    from models.proveedores_oc import ProveedorOC
+    from models.users import Organizacion
+
+    pendientes = ProveedorOC.query.filter(
+        ProveedorOC.scope == 'global',
+        ProveedorOC.estado_compartido == 'pendiente',
+    ).order_by(ProveedorOC.created_at.desc()).all()
+
+    aprobados_recientes = ProveedorOC.query.filter(
+        ProveedorOC.scope == 'global',
+        ProveedorOC.estado_compartido == 'aprobado',
+    ).order_by(ProveedorOC.compartido_revisado_at.desc().nullslast()).limit(20).all()
+
+    rechazados_recientes = ProveedorOC.query.filter(
+        ProveedorOC.scope == 'global',
+        ProveedorOC.estado_compartido == 'rechazado',
+    ).order_by(ProveedorOC.compartido_revisado_at.desc().nullslast()).limit(20).all()
+
+    # Pre-fetch nombres de orgs para mostrar quien compartio
+    org_ids = {p.compartido_por_org_id for p in pendientes if p.compartido_por_org_id}
+    org_ids |= {p.compartido_por_org_id for p in aprobados_recientes if p.compartido_por_org_id}
+    org_ids |= {p.compartido_por_org_id for p in rechazados_recientes if p.compartido_por_org_id}
+    orgs = {o.id: o.nombre for o in Organizacion.query.filter(Organizacion.id.in_(org_ids)).all()} if org_ids else {}
+
+    return render_template(
+        'proveedores_oc/compartidos_pendientes.html',
+        pendientes=pendientes,
+        aprobados_recientes=aprobados_recientes,
+        rechazados_recientes=rechazados_recientes,
+        orgs=orgs,
+    )
+
+
+@proveedores_oc_bp.route('/admin/compartidos/<int:id>/aprobar', methods=['POST'])
+@login_required
+def admin_aprobar_compartido(id):
+    """Super admin aprueba un proveedor compartido. Pasa a estado_compartido='aprobado'.
+    Permite editar campos antes de aprobar via form."""
+    if not _es_super_admin():
+        return jsonify({'ok': False, 'error': 'Solo super admin'}), 403
+
+    from models.proveedores_oc import ProveedorOC
+    prov = ProveedorOC.query.get_or_404(id)
+    if prov.scope != 'global' or prov.estado_compartido != 'pendiente':
+        return jsonify({'ok': False, 'error': 'Solo se aprueban globales en estado pendiente'}), 400
+
+    # Permitir edicion de campos clave antes de aprobar
+    data = request.get_json(silent=True) or {}
+    if 'razon_social' in data and data['razon_social']:
+        prov.razon_social = str(data['razon_social']).strip()[:200]
+    if 'cuit' in data:
+        cuit = str(data.get('cuit') or '').strip() or None
+        prov.cuit = cuit
+    for campo in ('categoria', 'subcategoria', 'ubicacion_detalle',
+                  'contacto_nombre', 'email', 'telefono',
+                  'contacto_whatsapp', 'notas'):
+        if campo in data:
+            v = data[campo]
+            setattr(prov, campo, (str(v).strip() or None) if v else None)
+
+    prov.estado_compartido = 'aprobado'
+    prov.compartido_revisado_at = datetime.utcnow()
+    prov.compartido_revisado_por_id = current_user.id if current_user.is_authenticated else None
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error aprobando proveedor compartido')
+        return jsonify({'ok': False, 'error': f'Error: {e}'}), 500
+
+
+@proveedores_oc_bp.route('/admin/compartidos/<int:id>/rechazar', methods=['POST'])
+@login_required
+def admin_rechazar_compartido(id):
+    """Super admin rechaza un proveedor compartido."""
+    if not _es_super_admin():
+        return jsonify({'ok': False, 'error': 'Solo super admin'}), 403
+
+    from models.proveedores_oc import ProveedorOC
+    prov = ProveedorOC.query.get_or_404(id)
+    if prov.scope != 'global' or prov.estado_compartido != 'pendiente':
+        return jsonify({'ok': False, 'error': 'Solo se rechazan globales en estado pendiente'}), 400
+
+    data = request.get_json(silent=True) or {}
+    motivo = (data.get('motivo') or '').strip()[:500] or None
+
+    prov.estado_compartido = 'rechazado'
+    prov.compartido_motivo_rechazo = motivo
+    prov.compartido_revisado_at = datetime.utcnow()
+    prov.compartido_revisado_por_id = current_user.id if current_user.is_authenticated else None
+    try:
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error rechazando proveedor compartido')
+        return jsonify({'ok': False, 'error': f'Error: {e}'}), 500

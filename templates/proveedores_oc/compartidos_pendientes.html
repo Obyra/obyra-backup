@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}Proveedores compartidos pendientes - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-clipboard-check text-warning me-2"></i>Proveedores compartidos
+            </h2>
+            <p class="text-muted small mb-0">
+                Usuarios sugieren proveedores para que aparezcan en el Directorio OBYRA.
+                Aprobalos solo si los datos son confiables y completos.
+            </p>
+        </div>
+        <a href="{{ url_for('proveedores_oc.lista') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver a Proveedores
+        </a>
+    </div>
+
+    {# === Pendientes === #}
+    <div class="card mb-4 border-warning">
+        <div class="card-header bg-warning bg-opacity-25">
+            <h5 class="mb-0">
+                <i class="fas fa-hourglass-half me-2"></i>Pendientes de revisión
+                <span class="badge bg-warning text-dark ms-2">{{ pendientes|length }}</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            {% if pendientes %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Razón social</th>
+                            <th>CUIT</th>
+                            <th>Categoría</th>
+                            <th>Zona</th>
+                            <th>Contacto</th>
+                            <th>Compartido por</th>
+                            <th>Fecha</th>
+                            <th width="240">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in pendientes %}
+                        <tr id="rowProv{{ p.id }}">
+                            <td>
+                                <strong>{{ p.razon_social }}</strong>
+                                {% if p.subcategoria %}
+                                <br><small class="text-muted">{{ p.subcategoria }}</small>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ p.cuit or '—' }}</small></td>
+                            <td><small>{{ p.categoria or '—' }}</small></td>
+                            <td><small>{{ p.ubicacion_detalle or '—' }}</small></td>
+                            <td>
+                                <small>
+                                    {% if p.contacto_nombre %}{{ p.contacto_nombre }}<br>{% endif %}
+                                    {% if p.email %}<i class="fas fa-envelope me-1"></i>{{ p.email }}<br>{% endif %}
+                                    {% if p.telefono %}<i class="fas fa-phone me-1"></i>{{ p.telefono }}{% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                <small>{{ orgs.get(p.compartido_por_org_id, '—') if p.compartido_por_org_id else '—' }}</small>
+                            </td>
+                            <td><small>{{ p.created_at.strftime('%d/%m/%Y %H:%M') if p.created_at else '—' }}</small></td>
+                            <td>
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <button class="btn btn-sm btn-success" onclick="aprobarProv({{ p.id }})">
+                                        <i class="fas fa-check me-1"></i>Aprobar
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editarYAprobar({{ p.id }})">
+                                        <i class="fas fa-edit me-1"></i>Editar
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="rechazarProv({{ p.id }})">
+                                        <i class="fas fa-times me-1"></i>Rechazar
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted small py-4">
+                <i class="fas fa-check-circle me-1"></i>No hay proveedores pendientes de revisión.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# === Aprobados recientes === #}
+    {% if aprobados_recientes %}
+    <div class="card mb-4 border-success">
+        <div class="card-header bg-success bg-opacity-10">
+            <h6 class="mb-0">
+                <i class="fas fa-check-circle text-success me-2"></i>Aprobados recientes
+                <span class="badge bg-success ms-2">{{ aprobados_recientes|length }}</span>
+            </h6>
+        </div>
+        <ul class="list-group list-group-flush">
+            {% for p in aprobados_recientes %}
+            <li class="list-group-item small d-flex justify-content-between">
+                <div>
+                    <strong>{{ p.razon_social }}</strong>
+                    {% if p.cuit %} · CUIT {{ p.cuit }}{% endif %}
+                    {% if p.compartido_por_org_id %}
+                    · Compartido por {{ orgs.get(p.compartido_por_org_id, '—') }}
+                    {% endif %}
+                </div>
+                <span class="text-muted">
+                    {{ p.compartido_revisado_at.strftime('%d/%m/%Y %H:%M') if p.compartido_revisado_at else '' }}
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {# === Rechazados recientes === #}
+    {% if rechazados_recientes %}
+    <div class="card mb-4 border-danger">
+        <div class="card-header bg-danger bg-opacity-10">
+            <h6 class="mb-0">
+                <i class="fas fa-times-circle text-danger me-2"></i>Rechazados recientes
+                <span class="badge bg-danger ms-2">{{ rechazados_recientes|length }}</span>
+            </h6>
+        </div>
+        <ul class="list-group list-group-flush">
+            {% for p in rechazados_recientes %}
+            <li class="list-group-item small">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <strong>{{ p.razon_social }}</strong>
+                        {% if p.compartido_por_org_id %}
+                        · {{ orgs.get(p.compartido_por_org_id, '—') }}
+                        {% endif %}
+                    </div>
+                    <span class="text-muted">
+                        {{ p.compartido_revisado_at.strftime('%d/%m/%Y %H:%M') if p.compartido_revisado_at else '' }}
+                    </span>
+                </div>
+                {% if p.compartido_motivo_rechazo %}
+                <div class="small text-muted mt-1">
+                    <i class="fas fa-comment me-1"></i>{{ p.compartido_motivo_rechazo }}
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal: editar antes de aprobar -->
+<div class="modal fade" id="modalEditarProv" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Editar y aprobar proveedor</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="frmEditarProv">
+                <input type="hidden" id="editProvId">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small">Razón social *</label>
+                            <input type="text" id="ed_razon_social" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">CUIT</label>
+                            <input type="text" id="ed_cuit" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Categoría</label>
+                            <input type="text" id="ed_categoria" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Subcategoría</label>
+                            <input type="text" id="ed_subcategoria" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Zona</label>
+                            <input type="text" id="ed_ubicacion_detalle" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Contacto</label>
+                            <input type="text" id="ed_contacto_nombre" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Email</label>
+                            <input type="email" id="ed_email" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Teléfono</label>
+                            <input type="text" id="ed_telefono" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">WhatsApp</label>
+                            <input type="text" id="ed_contacto_whatsapp" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Notas</label>
+                            <textarea id="ed_notas" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check me-1"></i>Guardar y aprobar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function _csrf() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+async function aprobarProv(id) {
+    if (!confirm('¿Aprobar este proveedor para el Directorio OBYRA?')) return;
+    try {
+        const r = await fetch('/proveedores-oc/admin/compartidos/' + id + '/aprobar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+            body: '{}',
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert('Error: ' + (d.error || r.status));
+            return;
+        }
+        const row = document.getElementById('rowProv' + id);
+        if (row) row.style.opacity = '0.4';
+        setTimeout(() => window.location.reload(), 600);
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    }
+}
+
+async function rechazarProv(id) {
+    const motivo = prompt('Motivo del rechazo (opcional):') || '';
+    if (motivo === null) return;
+    try {
+        const r = await fetch('/proveedores-oc/admin/compartidos/' + id + '/rechazar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+            body: JSON.stringify({ motivo: motivo }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert('Error: ' + (d.error || r.status));
+            return;
+        }
+        const row = document.getElementById('rowProv' + id);
+        if (row) row.style.opacity = '0.4';
+        setTimeout(() => window.location.reload(), 600);
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    }
+}
+
+function editarYAprobar(id) {
+    const row = document.getElementById('rowProv' + id);
+    if (!row) return;
+    document.getElementById('editProvId').value = id;
+    // Pre-cargar campos desde el row visible (texto). En una version mejorada
+    // haria fetch al endpoint GET /proveedores-oc/api/<id> pero para demo es OK.
+    const cells = row.querySelectorAll('td');
+    document.getElementById('ed_razon_social').value = (cells[0].querySelector('strong') || {}).innerText || '';
+    document.getElementById('ed_cuit').value = cells[1].innerText.trim() === '—' ? '' : cells[1].innerText.trim();
+    document.getElementById('ed_categoria').value = cells[2].innerText.trim() === '—' ? '' : cells[2].innerText.trim();
+    document.getElementById('ed_ubicacion_detalle').value = cells[3].innerText.trim() === '—' ? '' : cells[3].innerText.trim();
+    // contacto: parsear las 3 lineas (nombre, email, tel)
+    document.getElementById('ed_contacto_nombre').value = '';
+    document.getElementById('ed_email').value = '';
+    document.getElementById('ed_telefono').value = '';
+    document.getElementById('ed_contacto_whatsapp').value = '';
+    document.getElementById('ed_subcategoria').value = '';
+    document.getElementById('ed_notas').value = '';
+
+    new bootstrap.Modal(document.getElementById('modalEditarProv')).show();
+}
+
+document.getElementById('frmEditarProv').addEventListener('submit', async function(ev) {
+    ev.preventDefault();
+    const id = document.getElementById('editProvId').value;
+    const payload = {
+        razon_social: document.getElementById('ed_razon_social').value,
+        cuit: document.getElementById('ed_cuit').value,
+        categoria: document.getElementById('ed_categoria').value,
+        subcategoria: document.getElementById('ed_subcategoria').value,
+        ubicacion_detalle: document.getElementById('ed_ubicacion_detalle').value,
+        contacto_nombre: document.getElementById('ed_contacto_nombre').value,
+        email: document.getElementById('ed_email').value,
+        telefono: document.getElementById('ed_telefono').value,
+        contacto_whatsapp: document.getElementById('ed_contacto_whatsapp').value,
+        notas: document.getElementById('ed_notas').value,
+    };
+    try {
+        const r = await fetch('/proveedores-oc/admin/compartidos/' + id + '/aprobar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+            body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            alert('Error: ' + (d.error || r.status));
+            return;
+        }
+        bootstrap.Modal.getInstance(document.getElementById('modalEditarProv')).hide();
+        setTimeout(() => window.location.reload(), 400);
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    }
+});
+</script>
+{% endblock %}
