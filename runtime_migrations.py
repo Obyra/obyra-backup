@@ -1512,6 +1512,13 @@ def run_runtime_migrations(db, app):
         ("cobertura", "VARCHAR(255)"),
         ("web", "VARCHAR(300)"),
         ("tipo_alianza", "VARCHAR(80)"),
+        # 2026-05-08: importacion masiva con flag de compartir al Directorio OBYRA
+        ("contacto_whatsapp", "VARCHAR(50)"),
+        ("compartido_por_org_id", "INTEGER REFERENCES organizaciones(id) ON DELETE SET NULL"),
+        ("estado_compartido", "VARCHAR(20)"),
+        ("compartido_revisado_at", "TIMESTAMP"),
+        ("compartido_revisado_por_id", "INTEGER REFERENCES usuarios(id) ON DELETE SET NULL"),
+        ("compartido_motivo_rechazo", "TEXT"),
     ]
     for col, ddl in columnas_proveedores:
         try:
@@ -1567,6 +1574,22 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] unique external_key: {e}")
+
+    # 6) CHECK estado_compartido in (pendiente, aprobado, rechazado) - 2026-05-08
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='ck_proveedores_oc_estado_compartido') THEN
+                ALTER TABLE proveedores_oc
+                    ADD CONSTRAINT ck_proveedores_oc_estado_compartido
+                    CHECK (estado_compartido IS NULL OR estado_compartido IN ('pendiente', 'aprobado', 'rechazado'));
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] check estado_compartido: {e}")
 
     # 6) Indices auxiliares para filtros
     for idx_sql in [
