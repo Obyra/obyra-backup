@@ -214,7 +214,7 @@
                                         {% elif dias <= 3 %}
                                         <span class="badge bg-warning text-dark">{{ oc.fecha_entrega_estimada.strftime('%d/%m') }} ({{ dias }}d)</span>
                                         {% else %}
-                                        <span class="badge bg-info text-dark">{{ oc.fecha_entrega_estimada.strftime('%d/%m') }} ({{ dias }}d)</span>
+                                        <span class="badge bg-info text-white">{{ oc.fecha_entrega_estimada.strftime('%d/%m') }} ({{ dias }}d)</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end"><strong>{{ oc.moneda }} {{ '{:,.0f}'.format(oc.total|float) }}</strong></td>
