@@ -616,10 +616,21 @@
     </div>
     {% endif %}
 
-    {# === Stepper + acciones (Cotizar IA / Pedir proveedores) === #}
+    {# === Stepper + acciones (Cotizar IA / Pedir proveedores) ===
+       2026-05-08: Distinguimos origen del presupuesto.
+         - Desde pliego/Excel -> bloque "Como queres cotizar" (4 pasos IA).
+         - Desde "Nuevo Presupuesto -> Con Calculadora IA" -> bloque distinto
+           porque el calculo ya esta hecho; no tiene sentido pedir cotizacion
+           de nuevo.
+       Senal: tiene archivos pliego o archivo_pliego_path -> es desde pliego.
+       Si NO hay pliego pero hay items con precio -> es desde calc IA. #}
+    {% set _es_desde_pliego_demo = presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
+    {% set _es_desde_calc_ia_demo = (not _es_desde_pliego_demo) and (ux_items_con_precio or 0) > 0 %}
+
     {% if presupuesto.items.count() > 0
           and presupuesto.estado in ['borrador', 'enviado']
-          and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+          and current_user.role in ['admin', 'administrador', 'pm', 'project_manager']
+          and not _es_desde_calc_ia_demo %}
     <div class="row mb-4" id="bloqueCotizarCamino">
         <div class="col-12">
             <div class="card border-primary shadow-sm">
@@ -729,6 +740,50 @@
                                 </button>
                                 {% endif %}
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# 2026-05-08: bloque alternativo para presupuestos creados desde
+       "Nuevo Presupuesto -> Con Calculadora IA". El calculo ya esta hecho,
+       no tiene sentido ofrecer "Calcular presupuesto con IA" de nuevo. #}
+    {% if _es_desde_calc_ia_demo
+          and presupuesto.estado in ['borrador', 'enviado']
+          and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+    <div class="row mb-4" id="bloqueCalcIaListo">
+        <div class="col-12">
+            <div class="card border-success shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-start gap-3 flex-wrap">
+                        <div class="flex-grow-1">
+                            <h5 class="card-title mb-2 text-success">
+                                <i class="fas fa-check-circle me-2"></i>Presupuesto generado con Calculadora IA
+                            </h5>
+                            <p class="text-muted small mb-0">
+                                Este presupuesto fue calculado a partir de datos generales de obra
+                                (superficie, tipo de construcción, etapas seleccionadas). Los precios
+                                de mano de obra usan tu lista propia OBYRA cuando está disponible.
+                                Podés editar valores, revisar costos o convertirlo en obra cuando lo confirmes.
+                            </p>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% if ux_puede_pedir_proveedores %}
+                            <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
+                               class="btn btn-outline-success"
+                               title="Ver materiales del presupuesto y, opcionalmente, pedir cotizaciones a proveedores reales.">
+                                <i class="fas fa-handshake me-1"></i>Pedir precios a proveedores
+                            </a>
+                            {% endif %}
+                            {% if presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
+                            <a href="{{ url_for('presupuestos.confirmar_como_obra', id=presupuesto.id) }}"
+                               class="btn btn-success">
+                                <i class="fas fa-hard-hat me-1"></i>Confirmar como obra
+                            </a>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

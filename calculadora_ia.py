@@ -2949,20 +2949,114 @@ def obtener_multiplicador_tipo(tipo):
     return 1.0, clave.title()
 
 
+# 2026-05-08: cache in-process del mapeo de precios MO desde lista propia
+# OBYRA. Se invalida por org. Evita 1 query por cada codigo MO (puede ser
+# decenas en un calculo de presupuesto completo).
+_CACHE_MO_LISTA_PROPIA_BY_CAT = {'org_id': None, 'data': None}
+
+
+def _mapear_mo_codigo_a_categoria(codigo: str) -> str:
+    """Mapea un codigo de mano de obra (MO-REV, MO-IMP-AYUDANTE, etc.)
+    a una de las 4 categorias UOCRA estandar.
+    Returns: 'ayudante' | 'medio_oficial' | 'oficial' | 'oficial_especializado'
+    """
+    upper = (codigo or '').upper()
+    if 'AYUDANTE' in upper:
+        return 'ayudante'
+    if 'MAQUINISTA' in upper or 'OPERADOR' in upper or 'SOLADOR' in upper:
+        return 'oficial_especializado'
+    if 'MEDIO' in upper:
+        return 'medio_oficial'
+    # Default: cualquier MO-XXX sin pista especifica = oficial.
+    return 'oficial'
+
+
+def _obtener_mo_lista_propia_por_categoria(org_id: int):
+    """Lee provider_price_list (fuente='lista_propia_obyra') y agrupa precios
+    por categoria UOCRA. Convierte todo a precio/JORNAL (8h).
+
+    Returns: dict {ayudante, medio_oficial, oficial, oficial_especializado: float}
+             con 0.0 cuando no hay datos para esa categoria.
+    """
+    if not org_id:
+        return None
+
+    if _CACHE_MO_LISTA_PROPIA_BY_CAT.get('org_id') == org_id:
+        return _CACHE_MO_LISTA_PROPIA_BY_CAT.get('data')
+
+    cats = {
+        'ayudante': [],
+        'medio_oficial': [],
+        'oficial': [],
+        'oficial_especializado': [],
+    }
+    try:
+        from models.provider_price_list import ProviderPriceList
+        rows = ProviderPriceList.query.filter_by(
+            organizacion_id=org_id,
+            fuente='lista_propia_obyra',
+        ).all()
+
+        for row in rows:
+            desc = (row.descripcion or '').lower()
+            unidad = (row.unidad or '').lower()
+            precio = float(row.precio_unitario or 0)
+            if precio <= 0:
+                continue
+
+            # Convertir a precio/JORNAL (8h)
+            if unidad in ('hora', 'h'):
+                precio_jornal = precio * 8.0
+            elif unidad in ('jornal', 'j', 'dia', 'día'):
+                precio_jornal = precio
+            elif unidad == 'mes':
+                precio_jornal = precio / 22.0  # 22 dias/mes
+            else:
+                continue  # unidad no reconocida -> skip
+
+            # Categorizar por descripcion
+            if 'ayudante' in desc:
+                cats['ayudante'].append(precio_jornal)
+            elif 'especializado' in desc:
+                cats['oficial_especializado'].append(precio_jornal)
+            elif 'medio oficial' in desc or 'medio-oficial' in desc:
+                cats['medio_oficial'].append(precio_jornal)
+            elif 'oficial' in desc:
+                cats['oficial'].append(precio_jornal)
+
+        promedios = {
+            k: (sum(v) / len(v) if v else 0.0)
+            for k, v in cats.items()
+        }
+    except Exception as e:
+        logging.warning(f'No se pudo leer MO desde lista propia: {e}')
+        promedios = {'ayudante': 0.0, 'medio_oficial': 0.0,
+                     'oficial': 0.0, 'oficial_especializado': 0.0}
+
+    _CACHE_MO_LISTA_PROPIA_BY_CAT['org_id'] = org_id
+    _CACHE_MO_LISTA_PROPIA_BY_CAT['data'] = promedios
+    return promedios
+
+
 def _precio_referencia(codigo: str, cac_context: CACContext, org_id: Optional[int] = None) -> Tuple[Decimal, str]:
     """
-    Obtiene el precio de referencia con 4 niveles de prioridad:
+    Obtiene el precio de referencia con 5 niveles de prioridad:
     1. Inventario de la organización (precio_promedio de ItemInventario)
     2. Promedio de presupuestos importados de constructoras
+    1.5 (NUEVO 2026-05-08): Lista propia OBYRA (provider_price_list) para
+        codigos de mano de obra (MO-XXX). Mapea cada codigo a una categoria
+        UOCRA (ayudante/medio_oficial/oficial/oficial_especializado) y usa
+        el promedio de la lista vigente (Excel mensual del super admin).
     3. Precios de MercadoLibre (cache 24hs)
     4. Precio de referencia hardcodeado (PRECIO_REFERENCIA)
 
-    Los precios de inventario, constructoras y MercadoLibre ya están en ARS
-    actuales, por lo que NO se les aplica multiplicador CAC. El multiplicador
-    CAC solo se aplica al fallback hardcodeado.
+    Los precios de inventario, constructoras, lista propia y MercadoLibre ya
+    estan en ARS actuales, por lo que NO se les aplica multiplicador CAC.
+    El multiplicador CAC solo se aplica al fallback hardcodeado.
 
     Retorna: (precio_decimal, fuente)
-    fuente = 'inventario' | 'constructora' | 'mercadolibre' | 'referencia'
+    fuente = 'inventario' | 'constructora' | 'lista_propia_obyra' |
+             'mercadolibre' | 'referencia'
     """
     # Tier 1 y 2: Inventario y constructoras (via cache)
     if org_id:
@@ -2975,6 +3069,31 @@ def _precio_referencia(codigo: str, cac_context: CACContext, org_id: Optional[in
                 return _quantize_currency(precio), fuente
         except Exception as e:
             logging.warning(f"Error consultando cache de precios para {codigo}: {e}")
+
+    # Tier 1.5 (NUEVO): Lista propia OBYRA para MANO DE OBRA.
+    # Si el codigo es MO-XXX y el super admin cargo Excel mensual, usar
+    # el promedio por categoria UOCRA de la lista vigente.
+    if org_id and (codigo or '').upper().startswith('MO-'):
+        try:
+            precios_por_cat = _obtener_mo_lista_propia_por_categoria(org_id)
+            if precios_por_cat:
+                cat = _mapear_mo_codigo_a_categoria(codigo)
+                precio_jornal = precios_por_cat.get(cat) or 0.0
+                # Si no hay datos de la categoria especifica, caer al promedio
+                # general de oficiales (mejor que el hardcoded $41k).
+                if precio_jornal <= 0:
+                    precio_jornal = (
+                        precios_por_cat.get('oficial')
+                        or precios_por_cat.get('oficial_especializado')
+                        or 0.0
+                    )
+                if precio_jornal > 0:
+                    return (
+                        _quantize_currency(_to_decimal(precio_jornal)),
+                        'lista_propia_obyra',
+                    )
+        except Exception as e:
+            logging.warning(f'Error consultando lista propia MO para {codigo}: {e}')
 
     # Tier 3: Precios de MercadoLibre (cache)
     try:
