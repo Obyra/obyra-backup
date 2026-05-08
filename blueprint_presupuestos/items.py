@@ -186,6 +186,41 @@ def detalle(id):
         subtotal_mano_obra = sum(i.total for i in items_mano_obra)
         subtotal_equipos = sum(i.total for i in items_equipos)
 
+        # 2026-05-08 FIX: el importer del pliego carga TODOS los items con
+        # tipo='material' (no hay items pliego clasificados como MO o equipo).
+        # Pero las COMPOSICIONES de cada item si tienen tipo material/mano_obra/equipo.
+        # Si el subtotal de MO y equipos quedo en $0 pero hay composiciones,
+        # redistribuimos el subtotal_materiales segun la mezcla real de costos
+        # de las composiciones. Asi el "Resumen del Presupuesto" muestra MO
+        # y equipos > $0 cuando la APU los tiene.
+        if subtotal_mano_obra == 0 and subtotal_equipos == 0 and subtotal_materiales > 0:
+            costo_mat = Decimal('0')
+            costo_mo = Decimal('0')
+            costo_eq = Decimal('0')
+            for it in items:
+                comps = (it.composiciones.all() if hasattr(it.composiciones, 'all')
+                         else list(it.composiciones))
+                for comp in comps:
+                    ctotal = Decimal(str(comp.total or 0))
+                    ctipo = (comp.tipo or '').lower()
+                    if ctipo == 'mano_obra':
+                        costo_mo += ctotal
+                    elif ctipo == 'equipo':
+                        costo_eq += ctotal
+                    else:
+                        costo_mat += ctotal
+            costo_total = costo_mat + costo_mo + costo_eq
+            if costo_total > 0 and (costo_mo > 0 or costo_eq > 0):
+                # Mantener el total general (subtotal_materiales actual) pero
+                # repartir entre los 3 segun las proporciones de costo de comps.
+                subtotal_total_actual = subtotal_materiales
+                ratio_mo = costo_mo / costo_total
+                ratio_eq = costo_eq / costo_total
+                ratio_mat = costo_mat / costo_total
+                subtotal_mano_obra = (subtotal_total_actual * ratio_mo).quantize(Decimal('0.01'))
+                subtotal_equipos = (subtotal_total_actual * ratio_eq).quantize(Decimal('0.01'))
+                subtotal_materiales = (subtotal_total_actual * ratio_mat).quantize(Decimal('0.01'))
+
         # Calcular subtotales en USD (usando total_currency si existe, o total_ars/tasa como fallback)
         tasa_usd = presupuesto.tasa_usd_venta or Decimal('0')
 
@@ -206,6 +241,27 @@ def detalle(id):
         subtotal_materiales_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items_materiales)
         subtotal_mano_obra_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items_mano_obra)
         subtotal_equipos_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items_equipos)
+
+        # 2026-05-08 FIX (continuacion): aplicar la misma redistribucion a los
+        # espejos USD/ARS si ya se redistribuyo en la moneda principal.
+        if (subtotal_mano_obra_ars == 0 and subtotal_equipos_ars == 0
+                and subtotal_materiales_ars > 0
+                and subtotal_mano_obra > 0):
+            # Si redistribuimos arriba, aplicamos las mismas ratios aca.
+            subtotal_total_ars = subtotal_materiales_ars
+            subtotal_total_usd = subtotal_materiales_usd
+            try:
+                ratio_mo = subtotal_mano_obra / (subtotal_materiales + subtotal_mano_obra + subtotal_equipos)
+                ratio_eq = subtotal_equipos / (subtotal_materiales + subtotal_mano_obra + subtotal_equipos)
+                ratio_mat = subtotal_materiales / (subtotal_materiales + subtotal_mano_obra + subtotal_equipos)
+                subtotal_mano_obra_ars = (subtotal_total_ars * ratio_mo).quantize(Decimal('0.01'))
+                subtotal_equipos_ars = (subtotal_total_ars * ratio_eq).quantize(Decimal('0.01'))
+                subtotal_materiales_ars = (subtotal_total_ars * ratio_mat).quantize(Decimal('0.01'))
+                subtotal_mano_obra_usd = (subtotal_total_usd * ratio_mo).quantize(Decimal('0.01'))
+                subtotal_equipos_usd = (subtotal_total_usd * ratio_eq).quantize(Decimal('0.01'))
+                subtotal_materiales_usd = (subtotal_total_usd * ratio_mat).quantize(Decimal('0.01'))
+            except (ZeroDivisionError, Exception):
+                pass
 
         # Calcular total general del presupuesto
         subtotal = sum(i.total for i in items)

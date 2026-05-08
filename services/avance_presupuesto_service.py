@@ -165,32 +165,91 @@ def calcular_avance(
         )
 
     # ---- 4. Precios encontrados ----
+    # 2026-05-08 FIX: contar composiciones con precio>0 e items con precio_unitario>0
+    # para reflejar que el usuario YA corrio "Calcular presupuesto con IA".
+    precios_pts = 0
+    precios_desc = 'Sin precios cargados'
+    items_con_precio_count = 0
+    comps_con_precio_count = 0
+    comps_total_count = 0
+    comps_mo_con_precio = 0
+    comps_eq_con_precio = 0
+    if presupuesto is not None:
+        try:
+            for it in (presupuesto.items.all() if hasattr(presupuesto.items, 'all') else presupuesto.items):
+                if (it.precio_unitario or 0) > 0:
+                    items_con_precio_count += 1
+                for comp in (it.composiciones.all() if hasattr(it.composiciones, 'all') else it.composiciones):
+                    comps_total_count += 1
+                    if (comp.precio_unitario or 0) > 0:
+                        comps_con_precio_count += 1
+                        ctipo = (comp.tipo or '').lower()
+                        if ctipo == 'mano_obra':
+                            comps_mo_con_precio += 1
+                        elif ctipo == 'equipo':
+                            comps_eq_con_precio += 1
+        except Exception:
+            pass
+    if total_items > 0 and items_con_precio_count > 0:
+        ratio_p = items_con_precio_count / total_items
+        precios_pts = round(PESOS['precios_encontrados'] * ratio_p, 1)
+        precios_desc = f'{items_con_precio_count} de {total_items} items con precio cargado'
     breakdown['precios_encontrados'] = {
-        'puntos_obtenidos': 0,
+        'puntos_obtenidos': precios_pts,
         'puntos_max': PESOS['precios_encontrados'],
-        'descripcion': 'Sin lista de precios de proveedores cargada',
+        'descripcion': precios_desc,
     }
-    _add_pendiente(
-        'precios_proveedores',
-        'Falta cargar precios de proveedores',
-        'Para calcular costos reales, OBYRA necesita una lista de precios actualizada o precios cargados manualmente.',
-        'Cargar lista de precios',
-        'cargar_precios',
-        boton_disabled=True,  # se habilita en la etapa de precios
-    )
+    if precios_pts < PESOS['precios_encontrados']:
+        _add_pendiente(
+            'precios_proveedores',
+            'Faltan precios para más ítems',
+            'Importá la lista propia OBYRA o cargá precios manualmente sobre los items que quedaron en $0.',
+            'Cargar lista de precios',
+            'cargar_precios',
+            boton_disabled=True,
+        )
 
     # ---- 5. Mano de obra / equipos estimados ----
+    # 2026-05-08 FIX: contar composiciones tipo mano_obra/equipo con precio>0.
+    mo_eq_pts = 0
+    mo_eq_desc = 'Sin estimacion automatica de MO/equipos'
+    if (comps_mo_con_precio + comps_eq_con_precio) > 0:
+        if comps_mo_con_precio > 0 and comps_eq_con_precio > 0:
+            mo_eq_pts = PESOS['mano_obra_equipos']
+            mo_eq_desc = f'{comps_mo_con_precio} composiciones MO + {comps_eq_con_precio} equipos cotizados'
+        else:
+            mo_eq_pts = round(PESOS['mano_obra_equipos'] * 0.6, 1)
+            mo_eq_desc = (
+                f'{comps_mo_con_precio} MO cotizadas (faltan equipos)'
+                if comps_mo_con_precio else
+                f'{comps_eq_con_precio} equipos cotizados (faltan MO)'
+            )
     breakdown['mano_obra_equipos'] = {
-        'puntos_obtenidos': 0,
+        'puntos_obtenidos': mo_eq_pts,
         'puntos_max': PESOS['mano_obra_equipos'],
-        'descripcion': 'Sin estimacion automatica de MO/equipos',
+        'descripcion': mo_eq_desc,
     }
 
     # ---- 6. Margen / indirectos configurados ----
+    # 2026-05-08 FIX: si presupuesto u organizacion tienen margen comercial > 0,
+    # ya esta configurado.
+    margen_pts = 0
+    margen_desc = 'Sin margen comercial configurado'
+    try:
+        margen_val = (
+            getattr(presupuesto, 'margen_comercial_override', None)
+            or (getattr(presupuesto.organizacion, 'margen_comercial_default', None)
+                if presupuesto and presupuesto.organizacion else None)
+        )
+        if margen_val and float(margen_val) > 0:
+            margen_pts = PESOS['margen_indirectos']
+            margen_desc = f'Margen comercial: {float(margen_val):.0f}%'
+    except Exception:
+        pass
     breakdown['margen_indirectos'] = {
-        'puntos_obtenidos': 0,
+        'puntos_obtenidos': margen_pts,
         'puntos_max': PESOS['margen_indirectos'],
-        'descripcion': 'Sin margen comercial e indirectos configurados',
+        'descripcion': margen_desc,
     }
 
     # ---- 7. Perfil tecnico cargado / completo ----
