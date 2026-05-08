@@ -545,12 +545,106 @@ PREFIJO_A_ETAPA = {
 }
 
 # Precios de mano de obra por hora (en ARS) - Referencia UOCRA 2025
+# Se usan como FALLBACK cuando la org no tiene MO en provider_price_list.
 PRECIOS_MANO_OBRA = {
     'oficial': 3500,      # Oficial especializado
     'medio_oficial': 2800, # Medio oficial
     'ayudante': 2200,     # Ayudante
     'promedio': 2800,     # Promedio ponderado
 }
+
+
+# Cache muy corto (in-process) para no consultar provider_price_list 1 vez por
+# etapa cuando se calcula un presupuesto completo de varias etapas.
+_CACHE_MO_LISTA_PROPIA = {'org_id': None, 'precio_hora': None, 'fuente': None}
+
+
+def _obtener_precio_mo_lista_propia(org_id: int) -> Dict[str, Any]:
+    """Calcula precio promedio /hora de mano de obra desde provider_price_list.
+
+    Mira los precios cargados por el super admin desde el menu
+    'Lista de precios OBYRA' (Excel mensual `Costo mano obra-MMMYYYY.xlsx`).
+    Las filas se identifican por:
+      - fuente='lista_propia_obyra' OR
+      - unidad in {hora, h, dia, día, jornal, j, mes}
+
+    Convierte todas las unidades a precio por hora:
+      - hora/h          -> precio (sin conversion)
+      - jornal/j/dia/día -> precio / 8 (jornal = 8h)
+      - mes             -> precio / 176 (22 dias x 8h)
+
+    Returns:
+      {'precio_hora': float, 'fuente': 'lista_propia'|'fallback', 'count': int}
+    """
+    if not org_id:
+        return {'precio_hora': 0.0, 'fuente': 'fallback', 'count': 0}
+
+    # Cache hit
+    if _CACHE_MO_LISTA_PROPIA.get('org_id') == org_id:
+        return {
+            'precio_hora': _CACHE_MO_LISTA_PROPIA.get('precio_hora') or 0.0,
+            'fuente': _CACHE_MO_LISTA_PROPIA.get('fuente') or 'fallback',
+            'count': _CACHE_MO_LISTA_PROPIA.get('count') or 0,
+        }
+
+    try:
+        from models.provider_price_list import ProviderPriceList
+        from extensions import db as _db
+
+        unidades_mo = ('hora', 'h', 'dia', 'día', 'jornal', 'j', 'mes')
+        rows = (
+            _db.session.query(
+                ProviderPriceList.unidad,
+                ProviderPriceList.precio_unitario,
+                ProviderPriceList.fuente,
+            )
+            .filter(ProviderPriceList.organizacion_id == org_id)
+            .filter(
+                _db.or_(
+                    ProviderPriceList.fuente == 'lista_propia_obyra',
+                    _db.func.lower(ProviderPriceList.unidad).in_(unidades_mo),
+                )
+            )
+            .all()
+        )
+
+        precios_hora = []
+        for unidad, precio, fuente_row in rows:
+            if not precio or float(precio) <= 0:
+                continue
+            u = (unidad or '').strip().lower()
+            p = float(precio)
+            if u in ('hora', 'h'):
+                precios_hora.append(p)
+            elif u in ('jornal', 'j', 'dia', 'día'):
+                precios_hora.append(p / 8.0)
+            elif u == 'mes':
+                precios_hora.append(p / 176.0)
+            elif fuente_row == 'lista_propia_obyra':
+                # Fila de la lista propia con otra unidad: la dejamos pasar
+                # solo si la unidad sugiere mano de obra. Si no, skip.
+                pass
+
+        if precios_hora:
+            promedio = sum(precios_hora) / len(precios_hora)
+            _CACHE_MO_LISTA_PROPIA.update({
+                'org_id': org_id,
+                'precio_hora': promedio,
+                'fuente': 'lista_propia',
+                'count': len(precios_hora),
+            })
+            return {
+                'precio_hora': promedio,
+                'fuente': 'lista_propia',
+                'count': len(precios_hora),
+            }
+    except Exception as e:
+        logger.warning(f'No se pudo calcular precio MO desde lista propia: {e}')
+
+    _CACHE_MO_LISTA_PROPIA.update({
+        'org_id': org_id, 'precio_hora': 0.0, 'fuente': 'fallback', 'count': 0,
+    })
+    return {'precio_hora': 0.0, 'fuente': 'fallback', 'count': 0}
 
 # Precios de equipos por día (en ARS) - Valores por defecto
 PRECIOS_EQUIPOS = {
@@ -843,16 +937,34 @@ def calcular_etapa_mejorada(
     )
     usa_referencia = costo_ref_ars is not None and costo_ref_ars > 0
 
+    # 2026-05-08: consultar lista propia OBYRA para precio MO/hora ANTES de
+    # decidir el camino. Si el super admin cargo Excel mensual de mano de obra,
+    # usamos ese precio en vez del 30% fijo o del UOCRA hardcoded.
+    info_mo_lista = _obtener_precio_mo_lista_propia(org_id)
+    precio_mo_hora_lista = info_mo_lista.get('precio_hora') or 0.0
+    fuente_mo = 'fallback'
+
     if usa_referencia:
         # Usar precio de constructora real como base.
         # El precio de referencia ya incluye materiales + mano de obra instalados.
         # Desglosamos: ~60% materiales, ~30% mano obra, ~10% equipos.
         costo_materiales_base = costo_ref_ars * 0.60
         costo_mano_obra = costo_ref_ars * 0.30
+        fuente_mo = 'referencia_constructora'
         costo_equipos = costo_ref_ars * 0.10
         fuente_equipos = 'referencia_constructora'
         equipos_detalle = []
         horas_totales = metros_cuadrados * coef['mano_obra_hs']
+        # Si tenemos precio MO desde la lista propia OBYRA, REEMPLAZAR el 30%
+        # fijo por el calculo real (horas estimadas * precio/hora del Excel).
+        if precio_mo_hora_lista > 0 and horas_totales > 0:
+            costo_mano_obra = horas_totales * precio_mo_hora_lista
+            fuente_mo = 'lista_propia_obyra'
+            # Re-balancear materiales: lo que MO no consumio del costo total
+            # de referencia se redistribuye a materiales (no equipos, que
+            # tienen su propia logica con Leiten).
+            costo_materiales_base = max(costo_ref_ars - costo_mano_obra - costo_equipos,
+                                         costo_ref_ars * 0.40)
         dias_equipo = metros_cuadrados * coef['equipos_dias']
         dias_equipo = max(dias_equipo, 1)
         fuente_precio = 'constructora_real'
@@ -907,9 +1019,15 @@ def calcular_etapa_mejorada(
                         costo_materiales_base * 0.7 + costo_ml_estimado * 0.3
                     )
 
-        # Mano de obra
+        # Mano de obra: si la org tiene MO en provider_price_list (lista propia
+        # OBYRA), usarla. Si no, usar el promedio UOCRA hardcoded.
         horas_totales = metros_cuadrados * coef['mano_obra_hs']
-        costo_mano_obra = horas_totales * PRECIOS_MANO_OBRA['promedio']
+        if precio_mo_hora_lista > 0:
+            costo_mano_obra = horas_totales * precio_mo_hora_lista
+            fuente_mo = 'lista_propia_obyra'
+        else:
+            costo_mano_obra = horas_totales * PRECIOS_MANO_OBRA['promedio']
+            fuente_mo = 'uocra_referencia'
 
         # Equipos - Intentar usar precios de Leiten
         dias_equipo = metros_cuadrados * coef['equipos_dias']
@@ -953,7 +1071,11 @@ def calcular_etapa_mejorada(
         },
         'mano_obra': {
             'horas_estimadas': round(horas_totales, 1),
-            'costo_hora': PRECIOS_MANO_OBRA['promedio'],
+            'costo_hora': round(
+                precio_mo_hora_lista if precio_mo_hora_lista > 0
+                else PRECIOS_MANO_OBRA['promedio'], 2
+            ),
+            'fuente': fuente_mo,
             'costo_ars': round(costo_mano_obra, 2),
             'costo_usd': round(costo_mano_obra / tipo_cambio_usd, 2),
         },
