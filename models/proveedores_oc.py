@@ -75,6 +75,7 @@ class ProveedorOC(db.Model):
     # Persona de contacto (legacy: campos sueltos. Para multi-contacto usar ContactoProveedor)
     contacto_nombre = db.Column(db.String(200))
     contacto_telefono = db.Column(db.String(50))
+    contacto_whatsapp = db.Column(db.String(50))
 
     # Comercial
     condicion_pago = db.Column(db.String(100))  # "Contado", "30 días", etc
@@ -87,6 +88,25 @@ class ProveedorOC(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 2026-05-08: importacion masiva con opcion de compartir al Directorio OBYRA.
+    # Cuando un usuario importa Excel y marca "Compartir con Directorio OBYRA",
+    # ademas de crear el ProveedorOC scope='tenant' privado, se crea un duplicado
+    # con scope='global' + estado_compartido='pendiente' que el super admin debe
+    # aprobar para que pase a 'aprobado' y sea visible en el directorio.
+    compartido_por_org_id = db.Column(
+        db.Integer, db.ForeignKey('organizaciones.id', ondelete='SET NULL'),
+        nullable=True, index=True,
+    )
+    estado_compartido = db.Column(
+        db.String(20), nullable=True, index=True,
+    )  # NULL | 'pendiente' | 'aprobado' | 'rechazado'
+    compartido_revisado_at = db.Column(db.DateTime, nullable=True)
+    compartido_revisado_por_id = db.Column(
+        db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    compartido_motivo_rechazo = db.Column(db.Text, nullable=True)
 
     # Relaciones
     organizacion = db.relationship('Organizacion', backref='proveedores_oc')

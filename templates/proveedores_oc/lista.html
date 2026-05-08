@@ -6,15 +6,84 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="fas fa-truck me-2"></i>Proveedores</h2>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
             {% if es_super_admin %}
-            <button type="button" class="btn btn-info text-dark" data-bs-toggle="modal" data-bs-target="#modalImportarDirectorio">
+            <a href="{{ url_for('proveedores_oc.admin_compartidos_pendientes') }}"
+               class="btn btn-warning"
+               title="Aprobar / rechazar proveedores que los usuarios sugieren para el Directorio OBYRA.">
+                <i class="fas fa-clipboard-check me-1"></i>Pendientes de aprobación
+            </a>
+            <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalImportarDirectorio">
                 <i class="fas fa-globe me-1"></i>Importar Directorio OBYRA
             </button>
             {% endif %}
+            {# 2026-05-08: import del usuario - admin/PM #}
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalImportarMisProveedores">
+                <i class="fas fa-file-import me-1"></i>Importar mis proveedores
+            </button>
             <a href="{{ url_for('proveedores_oc.crear') }}" class="btn btn-primary">
                 <i class="fas fa-plus me-1"></i>Nuevo Proveedor
             </a>
+        </div>
+    </div>
+
+    <!-- Modal: importar Excel de proveedores del usuario (admin/PM) -->
+    <div class="modal fade" id="modalImportarMisProveedores" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-file-import me-2"></i>Importar mis proveedores</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <form id="frmImportarMisProveedores" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">
+                            Subí tu Excel con la lista de proveedores. Las filas se cargan a tu organización
+                            como proveedores privados. Si querés, también podés sugerirlos para el
+                            Directorio OBYRA: el super administrador los revisa y aprueba antes de
+                            que sean visibles al resto de los usuarios.
+                        </p>
+
+                        <div class="alert alert-light border small mb-3">
+                            <strong>Columnas requeridas:</strong>
+                            <code>razon_social</code> (obligatorio), <code>cuit</code>, <code>categoria</code>,
+                            <code>subcategoria</code>, <code>zona</code>, <code>contacto</code>, <code>email</code>,
+                            <code>telefono</code>, <code>whatsapp</code>, <code>notas</code>.
+                            <br>
+                            <a href="{{ url_for('proveedores_oc.descargar_template_proveedores') }}" class="small">
+                                <i class="fas fa-download me-1"></i>Descargar Excel template con ejemplo
+                            </a>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
+                            <input type="file" name="archivo" class="form-control" accept=".xlsx,.xls" required>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input type="checkbox" name="compartir_directorio" value="1" id="chkCompartirDirectorio" class="form-check-input">
+                            <label for="chkCompartirDirectorio" class="form-check-label">
+                                <strong>Compartir estos proveedores con el Directorio OBYRA</strong>
+                                <br>
+                                <small class="text-muted">
+                                    Si marcás esta opción, los proveedores quedan en estado
+                                    <em>pendiente de aprobación</em>. El super administrador los revisa
+                                    antes de publicarlos a otros usuarios. Mientras tanto, igual quedan
+                                    cargados como tus proveedores privados.
+                                </small>
+                            </label>
+                        </div>
+
+                        <div id="resumenImportMisProveedores"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="submit" class="btn btn-primary" id="btnImportarMisProveedores">
+                            <i class="fas fa-upload me-1"></i>Importar
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -321,6 +390,68 @@ function cambiarEstado(id, nombre) {
     })
     .catch(function() { alert('Error al cambiar estado'); });
 }
+
+// 2026-05-08: handler para "Importar mis proveedores" (admin/PM)
+(function() {
+    var form = document.getElementById('frmImportarMisProveedores');
+    if (!form) return;
+    form.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        var btn = document.getElementById('btnImportarMisProveedores');
+        var resumen = document.getElementById('resumenImportMisProveedores');
+        var csrf = document.querySelector('meta[name="csrf-token"]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importando...';
+        resumen.innerHTML = '<div class="alert alert-info small mb-0">Procesando…</div>';
+
+        var fd = new FormData(form);
+        fetch('/proveedores-oc/importar/excel', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf ? csrf.getAttribute('content') : '' },
+            body: fd,
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(resp) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+            if (!resp.ok || !resp.data.ok) {
+                resumen.innerHTML = '<div class="alert alert-danger small mb-0">Error: ' + (resp.data.error || 'desconocido') + '</div>';
+                return;
+            }
+            var r = resp.data.resumen;
+            var compartirHtml = '';
+            if (resp.data.compartir) {
+                compartirHtml = '<br><strong>Compartidos al Directorio OBYRA (pendientes de aprobación):</strong> ' + r.compartidos_pendientes;
+                if (r.compartidos_ya_existian > 0) {
+                    compartirHtml += ' · Ya existían: ' + r.compartidos_ya_existian;
+                }
+            }
+            var erroresHtml = '';
+            if (r.errores && r.errores.length > 0) {
+                erroresHtml = '<details class="mt-2"><summary>Errores (' + r.errores.length + ')</summary><ul class="small mb-0">';
+                r.errores.slice(0, 10).forEach(function(e) {
+                    erroresHtml += '<li>' + (e.razon_social || '?') + ': ' + (e.error || '') + '</li>';
+                });
+                erroresHtml += '</ul></details>';
+            }
+            resumen.innerHTML = '<div class="alert alert-success small mb-0">' +
+                '<strong>Importación OK</strong><br>' +
+                'Total filas: ' + r.filas_total + '<br>' +
+                'Creados (privados): <strong>' + r.privados_creados + '</strong> · ' +
+                'Actualizados (privados): <strong>' + r.privados_actualizados + '</strong> · ' +
+                'Inválidos: ' + r.invalidos +
+                compartirHtml +
+                erroresHtml +
+                '</div>' +
+                '<button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="window.location.reload()">Recargar lista</button>';
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+            resumen.innerHTML = '<div class="alert alert-danger small mb-0">Error de red: ' + err.message + '</div>';
+        });
+    });
+})();
 
 (function() {
     var form = document.getElementById('frmImportarDirectorio');
