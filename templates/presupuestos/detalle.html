@@ -4985,10 +4985,13 @@ function _iaRenderGrupo(g, idx, prefijo) {
             const unActual = orig.unidad || it.unidad || '';
             const cantActual = orig.cantidad != null ? orig.cantidad : (it.cantidad != null ? it.cantidad : 0);
 
-            // Motivo: por qué está en revisar / sin sugerencia
+            // Motivo: por qué está en revisar / sin sugerencia.
+            // Para sin_sugerencia damos guia explicita: el camino correcto es
+            // "Confirmar como ítem completo" (se carga como linea editable).
             let motivo = '';
             if (cat_it === 'sin_sugerencia') {
-                motivo = 'No matcheó ninguna regla técnica de OBYRA. Marcá manualmente.';
+                motivo = 'No se encontró regla técnica automática. Podés usarlo como ' +
+                         'ítem completo para que se cargue como línea editable del presupuesto.';
             } else if (conf === 'baja') {
                 motivo = 'La sugerencia tiene confianza baja. Revisá antes de aplicar.';
             } else if (!reglaId && (rubro || tarea)) {
@@ -5018,18 +5021,28 @@ function _iaRenderGrupo(g, idx, prefijo) {
                           partes.join(' &middot; ') + '</div>';
             }
 
-            // Acciones inline
+            // Acciones inline. Botones cambian segun la categoria:
+            //  - dudoso (con sugerencia): primario = "Aceptar sugerencia",
+            //    secundario = "Usar como ítem completo".
+            //  - sin_sugerencia: primario = "Confirmar como ítem completo"
+            //    (es la accion correcta cuando no hay regla automatica).
             let accionesHtml = '<div class="d-flex flex-wrap gap-1 mt-1">';
             if (cat_it === 'dudoso' && (rubro || tarea || reglaId)) {
                 accionesHtml += '<button type="button" class="btn btn-sm btn-success" ' +
                                 'onclick="_iaAceptarItemEnGrupo(' + it.id + ')" ' +
                                 'title="Aplicar la sugerencia tal cual">' +
                                 '<i class="fas fa-check me-1"></i>Aceptar sugerencia</button>';
+                accionesHtml += '<button type="button" class="btn btn-sm btn-outline-primary" ' +
+                                'onclick="_iaMarcarItemComoGlobal(' + it.id + ')" ' +
+                                'title="Marcarlo como linea completa editable, sin desglose tecnico.">' +
+                                '<i class="fas fa-box me-1"></i>Usar como ítem completo</button>';
+            } else {
+                // Sin sugerencia: confirmar como ítem completo es la accion principal.
+                accionesHtml += '<button type="button" class="btn btn-sm btn-success" ' +
+                                'onclick="_iaMarcarItemComoGlobal(' + it.id + ')" ' +
+                                'title="Confirma este item para que se cargue como linea editable del presupuesto.">' +
+                                '<i class="fas fa-check me-1"></i>Confirmar como ítem completo</button>';
             }
-            accionesHtml += '<button type="button" class="btn btn-sm btn-outline-primary" ' +
-                            'onclick="_iaMarcarItemComoGlobal(' + it.id + ')" ' +
-                            'title="No desglosar: tratarlo como gasto global / item completo">' +
-                            '<i class="fas fa-box me-1"></i>Ítem completo</button>';
             accionesHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" ' +
                             'onclick="_iaOmitirItemEnGrupo(' + it.id + ')" ' +
                             'title="Postergar este ítem para después">' +
@@ -5366,7 +5379,7 @@ window._iaMarcarItemComoGlobal = async function(itemId) {
     const msgEl = document.getElementById('iaPanelItemMsg' + itemId);
     const payload = { accion: 'guardar', tipo_tratamiento: 'global' };
     await _iaPanelPostClasificar(itemId, payload, msgEl,
-        'Marcado como ítem completo / global. Se cargará como línea editable.');
+        '✓ Confirmado. Este ítem se usará como línea completa en el presupuesto.');
 };
 
 window._iaOmitirItemEnGrupo = async function(itemId) {
