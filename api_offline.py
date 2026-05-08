@@ -52,18 +52,25 @@ def mis_obras():
         # Obtener obras según rol
         try:
             if hasattr(current_user, 'is_super_admin') and current_user.is_super_admin:
-                # Super admin ve todas las obras activas
+                # Super admin ve todas las obras activas (no soft-deleted)
+                # 2026-05-08: Obra no tiene columna 'activo'; usa deleted_at IS NULL.
                 if org_id:
-                    obras = Obra.query.filter_by(organizacion_id=org_id, activo=True).all()
+                    obras = Obra.query.filter(
+                        Obra.organizacion_id == org_id,
+                        Obra.deleted_at.is_(None),
+                    ).all()
                 else:
-                    obras = Obra.query.filter_by(activo=True).limit(100).all()
+                    obras = Obra.query.filter(Obra.deleted_at.is_(None)).limit(100).all()
             elif current_user.role in ('admin', 'pm'):
-                obras = Obra.query.filter_by(organizacion_id=org_id, activo=True).all()
+                obras = Obra.query.filter(
+                    Obra.organizacion_id == org_id,
+                    Obra.deleted_at.is_(None),
+                ).all()
             else:
                 # Operarios ven obras donde tienen tareas asignadas
                 obras = db.session.query(Obra).join(EtapaObra).join(TareaEtapa).join(TareaResponsables).filter(
                     TareaResponsables.user_id == current_user.id,
-                    Obra.activo == True
+                    Obra.deleted_at.is_(None),
                 ).distinct().all()
         except Exception as query_error:
             current_app.logger.error(f"Error en query de obras: {query_error}")
@@ -439,7 +446,11 @@ def sync_status():
         ).count()
 
         stats = {
-            'obras': Obra.query.filter_by(organizacion_id=org_id, activo=True).count(),
+            # 2026-05-08: Obra no tiene 'activo'; soft-delete por deleted_at.
+            'obras': Obra.query.filter(
+                Obra.organizacion_id == org_id,
+                Obra.deleted_at.is_(None),
+            ).count(),
             'tareas_pendientes': tareas_count,
             'inventario': ItemInventario.query.filter_by(organizacion_id=org_id, activo=True).count(),
             'server_time': datetime.utcnow().isoformat()
