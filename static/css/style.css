@@ -584,6 +584,7 @@ body {
 
 .badge.bg-secondary {
     background-color: var(--carbon-500) !important;
+    color: #ffffff !important;
 }
 
 .badge.bg-success {
@@ -601,6 +602,21 @@ body {
 
 .badge.bg-info {
     background-color: var(--info) !important;
+    color: #ffffff !important;
+}
+
+/* 2026-05-08: forzar texto blanco en bg-info / bg-secondary aunque el HTML
+   tenga 'text-dark'. El tema custom pinta esos backgrounds en azul marino
+   oscuro y text-dark queda ilegible. Mismo problema con btn-info / btn-secondary. */
+.badge.bg-info.text-dark,
+.badge.bg-secondary.text-dark,
+.btn.btn-info,
+.btn.btn-info.text-dark,
+.btn.btn-secondary,
+.btn.btn-secondary.text-dark,
+.btn-outline-info:hover,
+.btn-outline-secondary:hover {
+    color: #ffffff !important;
 }
 
 .badge.bg-light {
