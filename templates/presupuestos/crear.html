@@ -1203,10 +1203,15 @@ function cargarEtapasPredefinidas() {
         const esExcluida = naturaleza === 'remodelacion' && excluidas.has(etapa.slug);
         const esSugerida = naturaleza === 'remodelacion' && sugeridas.has(etapa.slug);
         const checkboxId = `etapa_${etapa.slug}`;
-        const badgeSugerida = esSugerida ? '<span class="badge bg-info text-dark ms-1">Sugerida</span>' : '';
-        const badgeNoAplica = esExcluida ? '<span class="badge bg-secondary ms-1">No aplica en remodelación</span>' : '';
-        const disabledAttr = esExcluida ? 'disabled' : '';
-        const opacityStyle = esExcluida ? 'style="opacity:0.5;"' : '';
+        // 2026-05-08 UX: text-white sobre bg-info / bg-secondary porque el tema
+        // custom los pinta azul marino oscuro y text-dark queda ilegible.
+        const badgeSugerida = esSugerida ? '<span class="badge bg-info text-white ms-1">Sugerida</span>' : '';
+        const badgeNoAplica = esExcluida ? '<span class="badge bg-secondary text-white ms-1">No aplica en remodelación</span>' : '';
+        // 2026-05-08 UX: las etapas "no aplica en remodelacion" antes estaban
+        // disabled. Ahora son seleccionables (el badge informa pero no bloquea)
+        // para que el usuario pueda elegir TODAS si su caso es atipico.
+        const disabledAttr = '';
+        const opacityStyle = esExcluida ? 'style="opacity:0.7;"' : '';
         const etapaHTML = `
             <div class="col-md-4 mb-2" ${opacityStyle}>
                 <div class="form-check">
