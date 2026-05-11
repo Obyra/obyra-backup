@@ -109,7 +109,23 @@ class ProveedorOC(db.Model):
     compartido_motivo_rechazo = db.Column(db.Text, nullable=True)
 
     # Relaciones
-    organizacion = db.relationship('Organizacion', backref='proveedores_oc')
+    # 2026-05-11 FIX: especificar foreign_keys explicitamente porque ahora hay
+    # 2 FKs a organizaciones (organizacion_id y compartido_por_org_id). Sin esto
+    # SQLAlchemy no sabe cual usar y rompe TODOS los mappers al iniciar
+    # (_check_configure falla -> cualquier query del sistema tira 500).
+    organizacion = db.relationship(
+        'Organizacion',
+        foreign_keys=[organizacion_id],
+        backref='proveedores_oc',
+    )
+    compartido_por_org = db.relationship(
+        'Organizacion',
+        foreign_keys=[compartido_por_org_id],
+    )
+    compartido_revisado_por = db.relationship(
+        'Usuario',
+        foreign_keys=[compartido_revisado_por_id],
+    )
     created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
     zona = db.relationship('Zona', foreign_keys=[zona_id])
     historial_precios = db.relationship('HistorialPrecioProveedor', back_populates='proveedor',
