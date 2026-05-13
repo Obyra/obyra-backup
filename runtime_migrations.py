@@ -2412,6 +2412,97 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] drop index presupuestos_numero_key: {e}")
 
     # =====================================================
+    # 2026-05-11: Presupuesto.origen_creacion
+    # Marca por que camino se creo el presupuesto (manual / calc_ia / excel).
+    # Gobierna que CTAs/banners muestra detalle.html. Para presupuestos
+    # existentes hacemos backfill heuristico:
+    #   - archivo_pliego_path NOT NULL OR tiene archivos en presupuesto_archivo
+    #     -> 'excel'
+    #   - sin pliego pero tiene items con origen='ia' -> 'calc_ia'
+    #   - resto -> 'manual'
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+            ALTER TABLE presupuestos
+            ADD COLUMN IF NOT EXISTS origen_creacion VARCHAR(20);
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] add presupuestos.origen_creacion: {e}")
+
+    try:
+        db.session.execute(db.text("""
+            CREATE INDEX IF NOT EXISTS ix_presupuestos_origen_creacion
+                ON presupuestos(origen_creacion);
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] index origen_creacion: {e}")
+
+    # Backfill solo para filas que aun no tienen origen seteado.
+    try:
+        # 1) excel: con archivo_pliego_path no nulo
+        db.session.execute(db.text("""
+            UPDATE presupuestos
+            SET origen_creacion = 'excel'
+            WHERE origen_creacion IS NULL
+              AND archivo_pliego_path IS NOT NULL
+              AND archivo_pliego_path <> '';
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] backfill origen=excel via archivo_pliego_path: {e}")
+
+    # excel via tabla presupuesto_archivo (Fase 6.A)
+    try:
+        db.session.execute(db.text("""
+            UPDATE presupuestos p
+            SET origen_creacion = 'excel'
+            WHERE p.origen_creacion IS NULL
+              AND EXISTS (
+                SELECT 1 FROM presupuesto_archivo pa
+                WHERE pa.presupuesto_id = p.id
+              );
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] backfill origen=excel via presupuesto_archivo: {e}")
+
+    # 2) calc_ia: sin archivo pliego pero con items origen='ia'
+    try:
+        db.session.execute(db.text("""
+            UPDATE presupuestos p
+            SET origen_creacion = 'calc_ia'
+            WHERE p.origen_creacion IS NULL
+              AND EXISTS (
+                SELECT 1 FROM items_presupuesto ip
+                WHERE ip.presupuesto_id = p.id
+                  AND ip.origen = 'ia'
+              );
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] backfill origen=calc_ia: {e}")
+
+    # 3) manual: resto de filas sin origen
+    try:
+        db.session.execute(db.text("""
+            UPDATE presupuestos
+            SET origen_creacion = 'manual'
+            WHERE origen_creacion IS NULL;
+        """))
+        db.session.commit()
+        print("[OK] Migracion runtime: presupuestos.origen_creacion + backfill aplicado")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] backfill origen=manual: {e}")
+
+    # =====================================================
     # 2026-04-29: Tabla variaciones_cac_pendientes
     # Cada vez que el scraper detecta un boletin Camarco nuevo, registra aca
     # la variacion mensual. El superadmin la aplica/descarta desde la UI.

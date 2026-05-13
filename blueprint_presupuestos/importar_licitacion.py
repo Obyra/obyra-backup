@@ -618,6 +618,8 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
         geo_latitud=ubicacion_lat,
         geo_longitud=ubicacion_lng,
         currency='ARS',
+        # 2026-05-11: marca de origen para que detalle.html sepa que CTAs mostrar.
+        origen_creacion='excel',
     )
     db.session.add(presu)
     db.session.flush()

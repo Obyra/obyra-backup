@@ -96,6 +96,13 @@ class Presupuesto(db.Model):
     # documento contractual descargable en la obra).
     archivo_pliego_path = db.Column(db.String(500), nullable=True)
     archivo_pliego_nombre = db.Column(db.String(255), nullable=True)
+    # 2026-05-11: origen del presupuesto. Marca el camino por el que se creo y
+    # gobierna que CTAs/banners se muestran en detalle.html. Valores:
+    #   'manual'  -> el usuario carga items uno por uno
+    #   'calc_ia' -> nuevo presupuesto con Calculadora IA desde datos generales
+    #   'excel'   -> importado desde Excel/pliego de licitacion
+    # Los presupuestos pre-existentes (sin valor) se inferiran via backfill SQL.
+    origen_creacion = db.Column(db.String(20), nullable=True, index=True)
     datos_proyecto = db.Column(db.Text)  # NUEVO: Datos del proyecto en JSON
     ubicacion_texto = db.Column(db.String(300))
     ubicacion_normalizada = db.Column(db.String(300))

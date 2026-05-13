@@ -369,7 +369,12 @@
 </div>
 
 <!-- Google Maps API -->
+{# 2026-05-12: guard contra key vacia (sino Google muestra error en pagina). #}
+{% if google_maps_key %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&loading=async" async defer></script>
+{% else %}
+<script>console.warn('[ubicacion] GOOGLE_MAPS_API_KEY no configurada. Mapa deshabilitado.');</script>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

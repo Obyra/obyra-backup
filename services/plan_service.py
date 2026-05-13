@@ -612,6 +612,24 @@ def inject_plan_context():
     if not current_user or not current_user.is_authenticated:
         return {}
 
+    # 2026-05-11: el super admin de OBYRA no esta sujeto a plan/trial.
+    # Ocultamos banner "Tu prueba gratuita vence en X dias" y el badge
+    # "PRUEBA GRATUITA" en navbar.
+    if getattr(current_user, 'is_super_admin', False):
+        return {
+            'plan_info': {
+                'tipo': 'admin',
+                'nombre': 'Administrador OBYRA',
+                'status': 'active',
+                'status_label': 'Activo',
+                'days_remaining': 999999,
+                'is_writable': True,
+                'is_trial': False,
+                'is_expired': False,
+            },
+            'can_feature': lambda f: True,
+        }
+
     try:
         org = get_org()
         if not org:

@@ -567,7 +567,15 @@
     </div>
 </div>
 
+{# 2026-05-12: cargar Google Maps SOLO si hay API key configurada. Sin guard,
+   el script se llama con key=<vacio> y Google muestra "Esta pagina no puede
+   cargar Google Maps correctamente". Las busquedas de direccion siguen
+   funcionando via Nominatim/OpenStreetMap (MAPS_PROVIDER backend). #}
+{% if google_maps_key %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&loading=async" async defer></script>
+{% else %}
+<script>console.warn('[ubicacion] GOOGLE_MAPS_API_KEY no configurada. El mapa no va a renderizar; la busqueda de direcciones usa Nominatim/OpenStreetMap.');</script>
+{% endif %}
 <script>
 const hiddenPresupuestoIdInput = document.getElementById('presupuestoIdInput');
 if (typeof window !== 'undefined') {

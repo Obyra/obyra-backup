@@ -1027,7 +1027,10 @@ def guardar_presupuesto():
             vigencia_dias=30,
             estado='borrador',
             currency='ARS',
-            iva_porcentaje=BudgetConstants.DEFAULT_IVA_RATE
+            iva_porcentaje=BudgetConstants.DEFAULT_IVA_RATE,
+            # 2026-05-11: endpoint usado por la Calculadora IA para persistir
+            # el presupuesto calculado desde datos generales.
+            origen_creacion='calc_ia',
         )
 
         db.session.add(presupuesto)

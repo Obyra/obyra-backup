@@ -6,6 +6,26 @@
 {% set obra = presupuesto.obra %}
 {% set obra_nombre = obra.nombre if obra else (datos_proyecto.get('nombre_obra', 'Sin obra asociada') if datos_proyecto else 'Sin obra asociada') %}
 {% set obra_cliente = obra.cliente if obra and obra.cliente else (datos_proyecto.get('cliente_nombre', 'Sin especificar') if datos_proyecto else 'Sin especificar') %}
+
+{# 2026-05-11: origen del presupuesto, computado al inicio para que este
+   disponible en TODO el template (header + bloques + footers).
+   Si la columna origen_creacion esta seteada, la usamos directo.
+   Para presupuestos viejos sin valor, inferimos via heuristica. #}
+{% set _origen = presupuesto.origen_creacion %}
+{% if not _origen %}
+  {% set _tiene_pliego_fallback = presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
+  {% if _tiene_pliego_fallback %}
+    {% set _origen = 'excel' %}
+  {% elif (ux_items_con_precio or 0) > 0 %}
+    {% set _origen = 'calc_ia' %}
+  {% else %}
+    {% set _origen = 'manual' %}
+  {% endif %}
+{% endif %}
+{% set _es_desde_excel = (_origen == 'excel') %}
+{% set _es_desde_calc_ia_demo = (_origen == 'calc_ia') %}
+{% set _es_manual = (_origen == 'manual') %}
+
 <div class="container-fluid mt-4">
     <!-- Header -->
     <div class="row">
@@ -110,7 +130,11 @@
                                El acceso unico al analisis avanzado esta como link
                                secundario debajo del CTA principal en la card de
                                '?Como queres cotizar este presupuesto?'. #}
-                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado'] %}
+                            {# 2026-05-11: 'Perfil tecnico' es solo para Calc IA / Excel
+                               (distribuye cantidades por piso). En Manual no aplica. #}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager']
+                                  and presupuesto.estado in ['borrador', 'enviado']
+                                  and not _es_manual %}
                             <button type="button" class="btn btn-outline-primary"
                                     onclick="abrirPerfilTecnico({{ presupuesto.id }})"
                                     title="Datos técnicos de obra que usa la Calculadora IA para distribuir cantidades por piso.">
@@ -617,20 +641,12 @@
     {% endif %}
 
     {# === Stepper + acciones (Cotizar IA / Pedir proveedores) ===
-       2026-05-08: Distinguimos origen del presupuesto.
-         - Desde pliego/Excel -> bloque "Como queres cotizar" (4 pasos IA).
-         - Desde "Nuevo Presupuesto -> Con Calculadora IA" -> bloque distinto
-           porque el calculo ya esta hecho; no tiene sentido pedir cotizacion
-           de nuevo.
-       Senal: tiene archivos pliego o archivo_pliego_path -> es desde pliego.
-       Si NO hay pliego pero hay items con precio -> es desde calc IA. #}
-    {% set _es_desde_pliego_demo = presupuesto.archivos.first() or presupuesto.archivo_pliego_path %}
-    {% set _es_desde_calc_ia_demo = (not _es_desde_pliego_demo) and (ux_items_con_precio or 0) > 0 %}
-
+       Las variables _es_desde_excel / _es_desde_calc_ia_demo / _es_manual
+       se computan al inicio del template (ver bloque arriba). #}
     {% if presupuesto.items.count() > 0
           and presupuesto.estado in ['borrador', 'enviado']
           and current_user.role in ['admin', 'administrador', 'pm', 'project_manager']
-          and not _es_desde_calc_ia_demo %}
+          and _es_desde_excel %}
     <div class="row mb-4" id="bloqueCotizarCamino">
         <div class="col-12">
             <div class="card border-primary shadow-sm">
@@ -775,6 +791,55 @@
                             <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
                                class="btn btn-outline-success"
                                title="Ver materiales del presupuesto y, opcionalmente, pedir cotizaciones a proveedores reales.">
+                                <i class="fas fa-handshake me-1"></i>Pedir precios a proveedores
+                            </a>
+                            {% endif %}
+                            {% if presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
+                            <a href="{{ url_for('presupuestos.confirmar_como_obra', id=presupuesto.id) }}"
+                               class="btn btn-success">
+                                <i class="fas fa-hard-hat me-1"></i>Confirmar como obra
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# 2026-05-11: bloque para presupuestos manuales. Texto explicativo + CTAs
+       coherentes (agregar items / pedir proveedores cuando aplica). NO se muestra
+       "Calcular con IA" ni "Revisar analisis avanzado" porque no hay pliego. #}
+    {% if _es_manual
+          and presupuesto.estado in ['borrador', 'enviado']
+          and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+    <div class="row mb-4" id="bloqueManualInfo">
+        <div class="col-12">
+            <div class="card border-secondary shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-start gap-3 flex-wrap">
+                        <div class="flex-grow-1">
+                            <h5 class="card-title mb-2 text-secondary">
+                                <i class="fas fa-edit me-2"></i>Presupuesto manual
+                            </h5>
+                            <p class="text-muted small mb-0">
+                                {% if presupuesto.items.count() == 0 %}
+                                Cargá los ítems desde los botones de cada sección
+                                (Materiales, Mano de obra, Equipos). Vos definís descripción,
+                                cantidad y precio unitario de cada renglón.
+                                {% else %}
+                                Estás armando este presupuesto manualmente. Sumá o editá
+                                ítems desde cada sección. Cuando esté listo, podés exportarlo
+                                o enviarlo al cliente.
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% if presupuesto.items.count() > 0 and ux_puede_pedir_proveedores %}
+                            <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
+                               class="btn btn-outline-success"
+                               title="Asignar proveedores y pedir cotizaciones reales por WhatsApp.">
                                 <i class="fas fa-handshake me-1"></i>Pedir precios a proveedores
                             </a>
                             {% endif %}

@@ -384,8 +384,13 @@ def dashboard():
     datos_financieros = calcular_datos_financieros(obras_activas, org_id)
 
     # Checklist de onboarding (primeros pasos para usuario nuevo)
+    # 2026-05-11: super admin no necesita onboarding (es interno OBYRA),
+    # se salta el bloque dejando onboarding_checklist=None.
     onboarding_checklist = None
+    _skip_onboarding = getattr(current_user, 'is_super_admin', False)
     try:
+        if _skip_onboarding:
+            raise RuntimeError('__skip_onboarding__')
         from models import Organizacion as _Org, Cliente as _Cliente
         organizacion = db.session.get(_Org, org_id) if org_id else None
         total_obras = Obra.query.filter(
@@ -441,6 +446,12 @@ def dashboard():
                 'total': total_pasos,
                 'porcentaje': porcentaje,
             }
+    except RuntimeError as e:
+        if str(e) == '__skip_onboarding__':
+            pass  # skip silencioso para super admin
+        else:
+            current_app.logger.warning(f"No se pudo calcular onboarding checklist: {e}")
+            db.session.rollback()
     except Exception as e:
         current_app.logger.warning(f"No se pudo calcular onboarding checklist: {e}")
         db.session.rollback()

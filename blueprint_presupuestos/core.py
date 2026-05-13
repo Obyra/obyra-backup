@@ -223,7 +223,10 @@ def crear():
                 exchange_rate_as_of=tasa_fecha,
                 exchange_rate_provider=tasa_provider,
                 indice_cac_valor=indice_cac,
-                indice_cac_fecha=cac_fecha
+                indice_cac_fecha=cac_fecha,
+                # 2026-05-11: endpoint /presupuestos/crear es la pantalla con
+                # Calculadora IA (datos generales -> calcular etapas).
+                origen_creacion='calc_ia',
             )
 
             db.session.add(presupuesto)
@@ -546,7 +549,10 @@ def crear_manual():
                 exchange_rate_as_of=tasa_fecha,
                 exchange_rate_provider=tasa_provider,
                 indice_cac_valor=indice_cac,
-                indice_cac_fecha=cac_fecha
+                indice_cac_fecha=cac_fecha,
+                # 2026-05-11: endpoint /presupuestos/crear-manual recibe items
+                # cargados a mano (no usa Calculadora IA ni Excel).
+                origen_creacion='manual',
             )
 
             db.session.add(presupuesto)
