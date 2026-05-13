@@ -455,14 +455,10 @@ def _crear_avance_impl(tarea_id):
     obra = tarea.etapa.obra
     obra.calcular_progreso_automatico()
 
-    costo_materiales = calcular_costo_materiales(obra.id)
-
-    from models import LiquidacionMO
-    costo_mano_obra = db.session.query(
-        db.func.coalesce(db.func.sum(LiquidacionMO.monto_total), 0)
-    ).filter(LiquidacionMO.obra_id == obra.id).scalar() or Decimal('0')
-
-    obra.costo_real = Decimal(str(costo_materiales)) + Decimal(str(costo_mano_obra))
+    # 2026-05-13 (B.2): centralizar calculo via service. Flag minima:
+    # incluir_mo_pagada_solo=False -> usa LiquidacionMO.monto_total (todas).
+    from services.obra_costos_service import recalcular_y_persistir
+    recalcular_y_persistir(obra.id, incluir_mo_pagada_solo=False)
 
     db.session.commit()
 

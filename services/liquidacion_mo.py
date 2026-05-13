@@ -767,25 +767,11 @@ def registrar_pago_item(item_id, metodo_pago, fecha_pago=None, comprobante_url=N
     # Actualizar estado de la liquidación padre
     item.liquidacion.recalcular_estado()
 
-    # Sumar al costo real de la obra
+    # 2026-05-13 (B.2): centralizar via service. Formula media
+    # (materiales + LiquidacionMOItem.monto where estado='pagado').
     obra = item.liquidacion.obra
-    costo_mo_pagado = _decimal(
-        db.session.query(db.func.coalesce(db.func.sum(LiquidacionMOItem.monto), 0))
-        .join(LiquidacionMO)
-        .filter(LiquidacionMO.obra_id == obra.id, LiquidacionMOItem.estado == 'pagado')
-        .scalar()
-    )
-    # Actualizar costo_real (MO + materiales)
-    from models.inventory import ItemInventario
-    from models import UsoInventario
-    costo_materiales = _decimal(
-        db.session.query(
-            db.func.coalesce(db.func.sum(
-                UsoInventario.cantidad_usada * db.func.coalesce(UsoInventario.precio_unitario_al_uso, 0)
-            ), 0)
-        ).filter(UsoInventario.obra_id == obra.id).scalar()
-    )
-    obra.costo_real = float(costo_materiales + costo_mo_pagado)
+    from services.obra_costos_service import recalcular_y_persistir
+    recalcular_y_persistir(obra.id, incluir_mo_pagada_solo=True)
 
     db.session.commit()
     return item

@@ -89,16 +89,10 @@ def actualizar_progreso_automatico(id):
 
         nuevo_progreso = obra.calcular_progreso_automatico()
 
-        from sqlalchemy import func
-
-        costo_materiales = calcular_costo_materiales(obra.id)
-
-        from models import LiquidacionMO
-        costo_mano_obra = db.session.query(
-            db.func.coalesce(db.func.sum(LiquidacionMO.monto_total), 0)
-        ).filter(LiquidacionMO.obra_id == obra.id).scalar() or Decimal('0')
-
-        obra.costo_real = Decimal(str(costo_materiales)) + Decimal(str(costo_mano_obra))
+        # 2026-05-13 (B.2): centralizar via service. Formula minima
+        # (LiquidacionMO.monto_total de TODAS las liquidaciones).
+        from services.obra_costos_service import recalcular_y_persistir
+        recalcular_y_persistir(obra.id, incluir_mo_pagada_solo=False)
 
         db.session.commit()
 
@@ -297,18 +291,17 @@ def confirmar_y_pagar_liquidacion(obra_id):
         liq.estado = 'pagado'
 
         from services.liquidacion_mo import _decimal
-        from models.templates import LiquidacionMOItem, LiquidacionMO as LiqMO
         obra = validate_obra_ownership(obra_id)
 
-        costo_mo_pagado = _decimal(
-            db.session.query(db.func.coalesce(db.func.sum(LiquidacionMOItem.monto), 0))
-            .join(LiqMO)
-            .filter(LiqMO.obra_id == obra_id, LiquidacionMOItem.estado == 'pagado')
-            .scalar()
-        ) + _decimal(liq.monto_total)
-
-        costo_materiales = calcular_costo_materiales(obra_id)
-        obra.costo_real = float(costo_materiales + costo_mo_pagado)
+        # 2026-05-13 (B.2): centralizar via service. Formula media + mo_extra
+        # (la liquidacion `liq` recien certificada se suma como extra porque
+        # sus items todavia no estan marcados como 'pagado').
+        from services.obra_costos_service import recalcular_y_persistir
+        recalcular_y_persistir(
+            obra_id,
+            incluir_mo_pagada_solo=True,
+            mo_extra=_decimal(liq.monto_total),
+        )
 
         db.session.commit()
         return jsonify(

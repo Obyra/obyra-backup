@@ -891,9 +891,23 @@ def detalle(id):
     except Exception:
         db.session.rollback()
 
-    costo_real_calc = float(Decimal(str(costo_materiales)) + costo_mano_obra + costo_maquinaria + costo_caja)
-    if obra.costo_real != costo_real_calc:
-        obra.costo_real = costo_real_calc
+    # 2026-05-13 (B.2): la escritura de obra.costo_real va por service
+    # centralizado. El service usa los flags de la "formula rica" que es
+    # la que historicamente aplica obras/core.py:
+    #   materiales + MO pagada + maquinaria + Caja B legacy (gasto_obra +
+    #   pago_proveedor confirmados, SIN mirar impacta_costo_real).
+    # El calculo inline arriba se mantiene porque sus componentes se usan
+    # despues para armar `costos_desglosados` (el JSON del endpoint).
+    from services.obra_costos_service import calcular_costo_real as _calc_costo_real
+    nuevo_costo = float(_calc_costo_real(
+        obra.id,
+        incluir_mo_pagada_solo=True,
+        incluir_maquinaria=True,
+        incluir_caja_b_confirmados_legacy=True,
+    ))
+    costo_real_calc = nuevo_costo
+    if obra.costo_real != nuevo_costo:
+        obra.costo_real = nuevo_costo
         db.session.commit()
 
     costos_desglosados = {

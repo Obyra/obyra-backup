@@ -845,16 +845,10 @@ def api_consumo_batch(obra_id):
         if not resultados:
             return jsonify({'ok': False, 'error': 'No se pudo consumir ningun material'}), 400
 
-        # Recalcular costo real
-        costo_materiales = calcular_costo_materiales(obra_id)
-        from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
-        costo_mo = db.session.query(
-            db.func.coalesce(db.func.sum(LiquidacionMOItem.monto), 0)
-        ).join(LiqMO).filter(
-            LiqMO.obra_id == obra_id,
-            LiquidacionMOItem.estado == 'pagado'
-        ).scalar() or Decimal('0')
-        obra.costo_real = float(Decimal(str(costo_materiales)) + Decimal(str(costo_mo)))
+        # 2026-05-13 (B.2): centralizar via service. Formula media
+        # (materiales + LiquidacionMOItem.monto where estado='pagado').
+        from services.obra_costos_service import recalcular_y_persistir
+        recalcular_y_persistir(obra_id, incluir_mo_pagada_solo=True)
 
         db.session.commit()
 
