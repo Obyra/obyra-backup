@@ -854,3 +854,116 @@ def mano_obra_importar_gedif():
         advertencias_calculo=result['advertencias_calculo'],
         advertencias_parser=parsed.get('advertencias', []),
     )
+
+
+# ============================================================================
+# Biblioteca de formulas tecnicas (Fase 1 Plan 90%) - read-only UI + import
+# ============================================================================
+
+@superadmin_bp.route('/biblioteca-formulas', methods=['GET'])
+@login_required
+@require_super_admin
+def biblioteca_formulas_vista():
+    """Vista read-only: lista de formulas tecnicas + coeficientes cargados."""
+    from models.formulas import FormulaTecnica, Coeficiente, ImportBatchFormulas
+
+    rubro_filtro = (request.args.get('rubro') or '').strip()
+    categoria_filtro = (request.args.get('categoria') or '').strip()
+    buscar = (request.args.get('buscar') or '').strip()
+    tab = request.args.get('tab', 'formulas')
+
+    # Formulas
+    q_form = FormulaTecnica.query.filter(FormulaTecnica.organizacion_id.is_(None))
+    if rubro_filtro:
+        q_form = q_form.filter(FormulaTecnica.rubro == rubro_filtro)
+    if categoria_filtro:
+        q_form = q_form.filter(FormulaTecnica.categoria_calculo == categoria_filtro)
+    if buscar:
+        like = f'%{buscar}%'
+        q_form = q_form.filter(
+            db.or_(
+                FormulaTecnica.codigo.ilike(like),
+                FormulaTecnica.item_concepto.ilike(like),
+                FormulaTecnica.que_calcula.ilike(like),
+            )
+        )
+    formulas = q_form.order_by(FormulaTecnica.rubro, FormulaTecnica.codigo).all()
+
+    rubros_disponibles = [r[0] for r in db.session.query(FormulaTecnica.rubro)
+                          .filter(FormulaTecnica.organizacion_id.is_(None))
+                          .distinct().order_by(FormulaTecnica.rubro).all()]
+    categorias_disponibles = [c[0] for c in db.session.query(FormulaTecnica.categoria_calculo)
+                              .filter(FormulaTecnica.organizacion_id.is_(None),
+                                       FormulaTecnica.categoria_calculo.isnot(None))
+                              .distinct().all()]
+
+    # Coeficientes
+    q_coef = Coeficiente.query.filter(Coeficiente.organizacion_id.is_(None))
+    if buscar:
+        like = f'%{buscar}%'
+        q_coef = q_coef.filter(
+            db.or_(
+                Coeficiente.codigo.ilike(like),
+                Coeficiente.descripcion.ilike(like),
+                Coeficiente.aplicable_a.ilike(like),
+            )
+        )
+    coeficientes = q_coef.order_by(Coeficiente.tipo, Coeficiente.codigo).all()
+
+    # Ultimos batches
+    ultimos_batches = ImportBatchFormulas.query.order_by(
+        ImportBatchFormulas.started_at.desc()
+    ).limit(5).all()
+
+    return render_template(
+        'superadmin/biblioteca_formulas.html',
+        formulas=formulas,
+        coeficientes=coeficientes,
+        rubros_disponibles=rubros_disponibles,
+        categorias_disponibles=categorias_disponibles,
+        ultimos_batches=ultimos_batches,
+        rubro_filtro=rubro_filtro,
+        categoria_filtro=categoria_filtro,
+        buscar=buscar,
+        tab=tab,
+    )
+
+
+@superadmin_bp.route('/biblioteca-formulas/importar', methods=['POST'])
+@login_required
+@require_super_admin
+def biblioteca_formulas_importar():
+    """Sube el Excel de biblioteca y popula formulas + coeficientes.
+
+    Multipart: archivo=<xlsx>. Devuelve JSON con contadores.
+    """
+    archivo = request.files.get('archivo')
+    if not archivo or not archivo.filename:
+        return jsonify(ok=False, error='Adjuntá el archivo Excel'), 400
+    if not archivo.filename.lower().endswith(('.xlsx', '.xls')):
+        return jsonify(ok=False, error='El archivo debe ser .xlsx'), 400
+
+    import os as _os
+    import tempfile
+    tmpfile = tempfile.NamedTemporaryFile(
+        suffix='.xlsx', delete=False, prefix='upload_biblioteca_'
+    )
+    try:
+        archivo.save(tmpfile.name)
+        tmpfile.close()
+
+        from services.importer_biblioteca_formulas import importar_excel_formulas
+        resumen = importar_excel_formulas(
+            db=db,
+            xlsx_path=tmpfile.name,
+            user_id=current_user.id if current_user.is_authenticated else None,
+        )
+        return jsonify(ok=True, resumen=resumen)
+    except Exception as e:
+        current_app.logger.exception('Error importando biblioteca de formulas')
+        return jsonify(ok=False, error=f'Error: {type(e).__name__}: {e}'), 500
+    finally:
+        try:
+            _os.unlink(tmpfile.name)
+        except Exception:
+            pass

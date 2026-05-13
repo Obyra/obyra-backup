@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Biblioteca de Fórmulas - Super Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-book text-primary me-2"></i>Biblioteca de Fórmulas Técnicas
+            </h2>
+            <p class="text-muted small mb-0">
+                Fórmulas y coeficientes que el motor de cómputo OBYRA va a consumir
+                para presupuestos (Fase 1 — solo persistencia y validación, sin
+                cálculo conectado todavía).
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('superadmin.panel') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver al panel
+            </a>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalImportarBiblioteca">
+                <i class="fas fa-upload me-1"></i>Importar Excel de biblioteca
+            </button>
+        </div>
+    </div>
+
+    {# === Resumen de ultimos imports === #}
+    {% if ultimos_batches %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fas fa-history me-1"></i>Últimos imports</h6>
+            <span class="badge bg-light text-muted">{{ ultimos_batches|length }} batches recientes</span>
+        </div>
+        <ul class="list-group list-group-flush">
+            {% for b in ultimos_batches %}
+            <li class="list-group-item small d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <span class="badge bg-{% if b.estado == 'completado' %}success{% elif b.estado == 'fallido' %}danger{% else %}warning text-dark{% endif %}">
+                        {{ b.estado }}
+                    </span>
+                    <strong class="ms-2">{{ b.filename or '(sin nombre)' }}</strong>
+                    <span class="text-muted ms-2">
+                        {{ b.started_at.strftime('%d/%m/%Y %H:%M') if b.started_at else '' }}
+                    </span>
+                </div>
+                <div class="text-muted">
+                    Fórmulas: <strong>{{ b.formulas_creadas }}</strong> creadas /
+                    <strong>{{ b.formulas_actualizadas }}</strong> actualizadas
+                    · Coeficientes: <strong>{{ b.coeficientes_creados }}</strong> creados /
+                    <strong>{{ b.coeficientes_actualizados }}</strong> actualizados
+                    {% if b.invalidos %}<span class="badge bg-danger ms-2">{{ b.invalidos }} inválidos</span>{% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {# === Filtros === #}
+    <form method="GET" class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <input type="hidden" name="tab" value="{{ tab }}">
+                    <input type="text" name="buscar" class="form-control"
+                           placeholder="Buscar por código, ítem, descripción…"
+                           value="{{ buscar }}">
+                </div>
+                <div class="col-md-3">
+                    <select name="rubro" class="form-select">
+                        <option value="">Todos los rubros</option>
+                        {% for r in rubros_disponibles %}
+                        <option value="{{ r }}" {% if rubro_filtro == r %}selected{% endif %}>{{ r }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="categoria" class="form-select">
+                        <option value="">Todas las categorías</option>
+                        {% for c in categorias_disponibles %}
+                        <option value="{{ c }}" {% if categoria_filtro == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-filter me-1"></i>Filtrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {# === Tabs Fórmulas / Coeficientes === #}
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <a class="nav-link {% if tab != 'coeficientes' %}active{% endif %}"
+               href="?tab=formulas&buscar={{ buscar }}&rubro={{ rubro_filtro }}&categoria={{ categoria_filtro }}">
+                <i class="fas fa-calculator me-1"></i>Fórmulas
+                <span class="badge bg-secondary ms-1">{{ formulas|length }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if tab == 'coeficientes' %}active{% endif %}"
+               href="?tab=coeficientes&buscar={{ buscar }}">
+                <i class="fas fa-sliders-h me-1"></i>Coeficientes editables
+                <span class="badge bg-secondary ms-1">{{ coeficientes|length }}</span>
+            </a>
+        </li>
+    </ul>
+
+    {# === Tabla Fórmulas === #}
+    {% if tab != 'coeficientes' %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            {% if formulas %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="100">Código</th>
+                            <th width="120">Rubro</th>
+                            <th>Ítem / concepto</th>
+                            <th width="80">Unidad</th>
+                            <th>Fórmula técnica</th>
+                            <th width="100">Categoría</th>
+                            <th width="60">Coef. editable</th>
+                            <th width="100">Hoja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in formulas %}
+                        <tr>
+                            <td><code>{{ f.codigo }}</code></td>
+                            <td><small>{{ f.rubro }}</small></td>
+                            <td>
+                                <strong>{{ f.item_concepto }}</strong>
+                                {% if f.que_calcula %}
+                                <br><small class="text-muted">{{ f.que_calcula }}</small>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ f.unidad_salida or '—' }}</small></td>
+                            <td>
+                                <small class="font-monospace">{{ f.formula_texto or f.formula_expr or '—' }}</small>
+                            </td>
+                            <td>
+                                {% if f.categoria_calculo %}
+                                <span class="badge bg-info">{{ f.categoria_calculo }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if f.usa_coeficiente_editable %}
+                                <i class="fas fa-check text-success"></i>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td><small class="text-muted">{{ f.hoja_origen or '' }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted py-5">
+                <i class="fas fa-inbox fa-2x mb-2"></i>
+                <p class="mb-1">No hay fórmulas cargadas todavía.</p>
+                <small>Subí el Excel <code>OBYRA_Biblioteca_Formulas_Computos_DETALLADA_SIN_PRECIOS.xlsx</code>
+                con el botón "Importar Excel de biblioteca".</small>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# === Tabla Coeficientes === #}
+    {% if tab == 'coeficientes' %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            {% if coeficientes %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="180">Código</th>
+                            <th width="140">Tipo</th>
+                            <th>Descripción</th>
+                            <th width="120">Aplicable a</th>
+                            <th width="80">Valor default</th>
+                            <th width="80">Unidad</th>
+                            <th>Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in coeficientes %}
+                        <tr>
+                            <td><code class="small">{{ c.codigo }}</code></td>
+                            <td><span class="badge bg-light text-dark">{{ c.tipo }}</span></td>
+                            <td>{{ c.descripcion }}</td>
+                            <td><small>{{ c.aplicable_a or '—' }}</small></td>
+                            <td class="text-end"><strong>{{ '%.4f'|format(c.valor_default|float) if c.valor_default else '—' }}</strong></td>
+                            <td><small>{{ c.unidad or '—' }}</small></td>
+                            <td><small class="text-muted">{{ c.notas[:100] if c.notas else '' }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted py-5">
+                <i class="fas fa-inbox fa-2x mb-2"></i>
+                <p class="mb-0">No hay coeficientes cargados todavía.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal: Importar Excel -->
+<div class="modal fade" id="modalImportarBiblioteca" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-upload me-2"></i>Importar biblioteca de fórmulas</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="frmImportarBiblioteca" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Subí el Excel
+                        <code>OBYRA_Biblioteca_Formulas_Computos_DETALLADA_SIN_PRECIOS.xlsx</code>
+                        con las 17 hojas (01–16 fórmulas + 17 coeficientes editables).
+                    </p>
+                    <p class="small alert alert-light border">
+                        Idempotente: las fórmulas que ya existan se actualizan por código;
+                        las nuevas se crean. No se borra nada que no esté en el Excel
+                        (para borrar usar la edición manual en versiones futuras).
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Archivo Excel <span class="text-danger">*</span></label>
+                        <input type="file" name="archivo" class="form-control" accept=".xlsx,.xls" required>
+                    </div>
+                    <div id="resumenImportBiblioteca"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-primary" id="btnImportarBiblioteca">
+                        <i class="fas fa-upload me-1"></i>Importar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var form = document.getElementById('frmImportarBiblioteca');
+    if (!form) return;
+    form.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        var btn = document.getElementById('btnImportarBiblioteca');
+        var resumenEl = document.getElementById('resumenImportBiblioteca');
+        var csrf = document.querySelector('meta[name="csrf-token"]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importando…';
+        resumenEl.innerHTML = '<div class="alert alert-info small mb-0">Procesando…</div>';
+
+        var fd = new FormData(form);
+        fetch('/superadmin/biblioteca-formulas/importar', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf ? csrf.getAttribute('content') : '' },
+            body: fd,
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(resp) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+            if (!resp.ok || !resp.data.ok) {
+                resumenEl.innerHTML = '<div class="alert alert-danger small mb-0">Error: ' + (resp.data.error || 'desconocido') + '</div>';
+                return;
+            }
+            var r = resp.data.resumen;
+            var erroresHtml = '';
+            if (r.errores && r.errores.length) {
+                erroresHtml = '<details class="mt-2"><summary>Errores (' + r.errores.length + ')</summary><ul class="small mb-0">';
+                r.errores.slice(0, 10).forEach(function(e) {
+                    erroresHtml += '<li>' + (e.codigo || '?') + ': ' + (e.error || '') + '</li>';
+                });
+                erroresHtml += '</ul></details>';
+            }
+            resumenEl.innerHTML = '<div class="alert alert-success small mb-0">' +
+                '<strong>Import OK</strong><br>' +
+                'Fórmulas: <strong>' + r.formulas_creadas + '</strong> creadas · ' +
+                '<strong>' + r.formulas_actualizadas + '</strong> actualizadas<br>' +
+                'Coeficientes: <strong>' + r.coeficientes_creados + '</strong> creados · ' +
+                '<strong>' + r.coeficientes_actualizados + '</strong> actualizados<br>' +
+                'Batch: <code>' + r.batch_id + '</code>' +
+                (r.invalidos ? ' · <span class="text-danger">' + r.invalidos + ' inválidos</span>' : '') +
+                erroresHtml +
+                '</div>' +
+                '<button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="window.location.reload()">Recargar página</button>';
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Importar';
+            resumenEl.innerHTML = '<div class="alert alert-danger small mb-0">Error de red: ' + err.message + '</div>';
+        });
+    });
+})();
+</script>
+{% endblock %}

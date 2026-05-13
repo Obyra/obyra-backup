@@ -2540,6 +2540,130 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] variaciones_cac_pendientes: {e}")
 
     # =====================================================
+    # 2026-05-12: Biblioteca de formulas tecnicas + coeficientes (Fase 1 Plan 90%)
+    # Crea las tablas formulas_tecnicas, coeficientes_tecnicos e
+    # import_batches_formulas idempotentemente. No conecta con presupuestos
+    # todavia; solo persiste la biblioteca para que el super admin la cargue
+    # y valide antes de que el motor de calculo (Fase 2+) la consuma.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                           WHERE table_name='formulas_tecnicas') THEN
+                CREATE TABLE formulas_tecnicas (
+                    id SERIAL PRIMARY KEY,
+                    codigo VARCHAR(40) NOT NULL,
+                    rubro VARCHAR(80) NOT NULL,
+                    item_concepto VARCHAR(300) NOT NULL,
+                    unidad_salida VARCHAR(40),
+                    formula_texto TEXT,
+                    formula_expr TEXT,
+                    inputs_requeridos TEXT,
+                    usa_coeficiente_editable BOOLEAN NOT NULL DEFAULT FALSE,
+                    categoria_calculo VARCHAR(40),
+                    que_calcula TEXT,
+                    observaciones TEXT,
+                    hoja_origen VARCHAR(80),
+                    orden INTEGER DEFAULT 0,
+                    activa BOOLEAN NOT NULL DEFAULT TRUE,
+                    organizacion_id INTEGER REFERENCES organizaciones(id) ON DELETE CASCADE,
+                    batch_id VARCHAR(40),
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX ix_formulas_codigo ON formulas_tecnicas(codigo);
+                CREATE INDEX ix_formulas_rubro ON formulas_tecnicas(rubro);
+                CREATE INDEX ix_formulas_categoria ON formulas_tecnicas(categoria_calculo);
+                CREATE INDEX ix_formulas_organizacion ON formulas_tecnicas(organizacion_id);
+                -- Unicidad de codigo SOLO para globales (organizacion_id IS NULL).
+                -- Permite que un tenant tenga su override sin colisionar.
+                CREATE UNIQUE INDEX uq_formulas_codigo_global
+                    ON formulas_tecnicas(codigo)
+                    WHERE organizacion_id IS NULL;
+                CREATE UNIQUE INDEX uq_formulas_codigo_tenant
+                    ON formulas_tecnicas(organizacion_id, codigo)
+                    WHERE organizacion_id IS NOT NULL;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] tabla formulas_tecnicas: {e}")
+
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                           WHERE table_name='coeficientes_tecnicos') THEN
+                CREATE TABLE coeficientes_tecnicos (
+                    id SERIAL PRIMARY KEY,
+                    codigo VARCHAR(80) NOT NULL,
+                    tipo VARCHAR(40) NOT NULL,
+                    descripcion VARCHAR(300),
+                    valor_default NUMERIC(15, 6) NOT NULL DEFAULT 0,
+                    unidad VARCHAR(40),
+                    rubro VARCHAR(80),
+                    aplicable_a VARCHAR(120),
+                    notas TEXT,
+                    activo BOOLEAN NOT NULL DEFAULT TRUE,
+                    organizacion_id INTEGER REFERENCES organizaciones(id) ON DELETE CASCADE,
+                    batch_id VARCHAR(40),
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX ix_coef_codigo ON coeficientes_tecnicos(codigo);
+                CREATE INDEX ix_coef_tipo ON coeficientes_tecnicos(tipo);
+                CREATE INDEX ix_coef_rubro ON coeficientes_tecnicos(rubro);
+                CREATE INDEX ix_coef_organizacion ON coeficientes_tecnicos(organizacion_id);
+                CREATE UNIQUE INDEX uq_coef_codigo_global
+                    ON coeficientes_tecnicos(codigo)
+                    WHERE organizacion_id IS NULL;
+                CREATE UNIQUE INDEX uq_coef_codigo_tenant
+                    ON coeficientes_tecnicos(organizacion_id, codigo)
+                    WHERE organizacion_id IS NOT NULL;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] tabla coeficientes_tecnicos: {e}")
+
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                           WHERE table_name='import_batches_formulas') THEN
+                CREATE TABLE import_batches_formulas (
+                    id SERIAL PRIMARY KEY,
+                    batch_id VARCHAR(40) NOT NULL UNIQUE,
+                    filename VARCHAR(255),
+                    checksum VARCHAR(80),
+                    estado VARCHAR(20) NOT NULL DEFAULT 'en_curso',
+                    formulas_creadas INTEGER DEFAULT 0,
+                    formulas_actualizadas INTEGER DEFAULT 0,
+                    coeficientes_creados INTEGER DEFAULT 0,
+                    coeficientes_actualizados INTEGER DEFAULT 0,
+                    invalidos INTEGER DEFAULT 0,
+                    errores_json TEXT,
+                    started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    finished_at TIMESTAMP,
+                    started_by_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
+                );
+                CREATE INDEX ix_import_batches_formulas_batch_id
+                    ON import_batches_formulas(batch_id);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] Biblioteca de formulas (formulas_tecnicas + coeficientes_tecnicos + import_batches_formulas) lista")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] tabla import_batches_formulas: {e}")
+
+    # =====================================================
     # 2026-04-29: Seed superadmin OBYRA
     # Asegura que los duenios del sistema tengan is_super_admin=True.
     # Idempotente: solo updatea si esta en False.

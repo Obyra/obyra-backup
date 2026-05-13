@@ -212,6 +212,13 @@ from models.cierre_obra import CierreObra, ActaEntrega
 
 # Fase 5.A: catalogo de precios de proveedores + costo empresa de mano de obra
 from models.provider_price_list import ProviderPriceList, normalizar_descripcion_precio
+
+# Biblioteca de formulas tecnicas + coeficientes (Fase 1 Plan 90%)
+from models.formulas import (
+    FormulaTecnica,
+    Coeficiente,
+    ImportBatchFormulas,
+)
 from models.mano_obra_costo_referencia import (
     ManoObraCostoReferencia, CATEGORIAS_BASE, categoria_canonica_para,
 )
