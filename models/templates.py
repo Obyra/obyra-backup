@@ -392,7 +392,12 @@ class LiquidacionMOItem(db.Model):
 # ============================================================
 
 class MovimientoCaja(db.Model):
-    """Movimiento de caja: transferencias de dinero entre oficina y obras."""
+    """Movimiento de caja: transferencias de dinero entre oficina y obras.
+
+    2026-05-13 (Caja B.1): se agregaron campos para soportar el modelo
+    ingreso/egreso con clasificacion + flag impacta_costo_real. En B.1
+    el flag NO se usa todavia para calcular costo_real (eso es B.4).
+    """
     __tablename__ = 'movimientos_caja'
     __table_args__ = (
         db.UniqueConstraint('organizacion_id', 'numero', name='uq_mv_caja_org_numero'),
@@ -403,8 +408,12 @@ class MovimientoCaja(db.Model):
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
 
-    # Tipo: transferencia_a_obra, devolucion_obra, pago_proveedor, gasto_obra
-    tipo = db.Column(db.String(20), nullable=False)
+    # Tipo (string, validado a nivel app). Lista ampliada B.1:
+    # Ingresos:  transferencia_a_obra, devolucion_proveedor, ingreso_extra
+    # Egresos:   gasto_obra, pago_proveedor, compra_inventario, compra_equipo,
+    #            viatico, reintegro_usuario, otro
+    # Legacy:    devolucion_obra (egreso desde la perspectiva de la caja de obra)
+    tipo = db.Column(db.String(40), nullable=False)
 
     monto = db.Column(db.Numeric(15, 2), nullable=False)
     moneda = db.Column(db.String(3), default='ARS')
@@ -423,12 +432,52 @@ class MovimientoCaja(db.Model):
     notas = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # === Caja B.1 (2026-05-13) ===
+    # direccion: 'ingreso' | 'egreso' — calculado del tipo en backfill.
+    # impacta_costo_real: si TRUE y direccion='egreso' y estado='confirmado',
+    #   sumara a obra.costo_real cuando B.4 lo active. Default FALSE para
+    #   no afectar historicos.
+    # usuario_relacionado_id: a quien se le paga / quien hizo el gasto /
+    #   quien recibe el viatico.
+    # categoria: texto libre dentro del tipo (ej: "Combustible", "Comidas").
+    direccion = db.Column(db.String(10), nullable=True, index=True)
+    impacta_costo_real = db.Column(db.Boolean, nullable=False, default=False,
+                                    server_default=db.text('false'))
+    usuario_relacionado_id = db.Column(db.Integer,
+                                        db.ForeignKey('usuarios.id', ondelete='SET NULL'),
+                                        nullable=True)
+    categoria = db.Column(db.String(80), nullable=True)
+
     # Relaciones
     organizacion = db.relationship('Organizacion')
     obra = db.relationship('Obra', backref='movimientos_caja')
     orden_compra = db.relationship('OrdenCompra')
     created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
     confirmado_por = db.relationship('Usuario', foreign_keys=[confirmado_por_id])
+    usuario_relacionado = db.relationship('Usuario', foreign_keys=[usuario_relacionado_id])
+
+    @property
+    def es_ingreso(self) -> bool:
+        return (self.direccion or '').lower() == 'ingreso'
+
+    @property
+    def es_egreso(self) -> bool:
+        return (self.direccion or '').lower() == 'egreso'
+
+    @property
+    def signo_para_costo(self) -> int:
+        """+1 si suma al costo, 0 si no impacta. Util para reportes."""
+        if (self.estado or '').lower() != 'confirmado':
+            return 0
+        if not self.es_egreso:
+            return 0
+        if not self.impacta_costo_real:
+            return 0
+        return 1
+
+    @property
+    def direccion_display(self) -> str:
+        return 'Ingreso' if self.es_ingreso else ('Egreso' if self.es_egreso else '—')
 
     @classmethod
     def generar_numero(cls, organizacion_id=None):

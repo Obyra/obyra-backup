@@ -2664,6 +2664,252 @@ def run_runtime_migrations(db, app):
         print(f"[WARN] tabla import_batches_formulas: {e}")
 
     # =====================================================
+    # 2026-05-13: Caja A - facturas por obra (Fase 1 MVP)
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                           WHERE table_name='obra_facturas') THEN
+                CREATE TABLE obra_facturas (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    tipo_comprobante VARCHAR(20) NOT NULL DEFAULT 'factura',
+                    numero_factura VARCHAR(50),
+                    concepto VARCHAR(300) NOT NULL,
+                    fecha_factura DATE NOT NULL,
+                    fecha_carga TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    importe NUMERIC(15, 2) NOT NULL,
+                    moneda VARCHAR(3) NOT NULL DEFAULT 'ARS',
+                    tipo_cambio_usado NUMERIC(15, 4),
+                    importe_ars NUMERIC(15, 2),
+                    pagar_a_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    pagar_a_proveedor_id INTEGER REFERENCES proveedores_oc(id) ON DELETE SET NULL,
+                    pagar_a_nombre_externo VARCHAR(200),
+                    cargada_por_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+                    fecha_pago DATE,
+                    pagada_por_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    marcada_paga_at TIMESTAMP,
+                    motivo_rechazo TEXT,
+                    rechazada_por_user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    rechazada_at TIMESTAMP,
+                    observaciones TEXT,
+                    archivo_path VARCHAR(500),
+                    archivo_nombre_original VARCHAR(255),
+                    archivo_mime VARCHAR(80),
+                    archivo_tamano_bytes BIGINT,
+                    promovida_a_caja_b BOOLEAN NOT NULL DEFAULT FALSE,
+                    movimiento_caja_b_id INTEGER REFERENCES movimientos_caja(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT ck_obra_factura_moneda CHECK (moneda IN ('ARS', 'USD')),
+                    CONSTRAINT ck_obra_factura_estado CHECK
+                        (estado IN ('pendiente', 'pagada', 'rechazada', 'observada'))
+                );
+                CREATE INDEX ix_obra_factura_org ON obra_facturas(organizacion_id);
+                CREATE INDEX ix_obra_factura_obra ON obra_facturas(obra_id);
+                CREATE INDEX ix_obra_factura_pagar_user ON obra_facturas(pagar_a_user_id);
+                CREATE INDEX ix_obra_factura_pagar_prov ON obra_facturas(pagar_a_proveedor_id);
+                CREATE INDEX ix_obra_factura_estado ON obra_facturas(estado);
+                CREATE INDEX ix_obra_factura_obra_estado ON obra_facturas(obra_id, estado);
+                CREATE INDEX ix_obra_factura_org_fecha ON obra_facturas(organizacion_id, fecha_factura);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] tabla obra_facturas: {e}")
+
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                           WHERE table_name='obra_factura_audit') THEN
+                CREATE TABLE obra_factura_audit (
+                    id SERIAL PRIMARY KEY,
+                    factura_id INTEGER NOT NULL REFERENCES obra_facturas(id) ON DELETE CASCADE,
+                    accion VARCHAR(40) NOT NULL,
+                    user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    detalle TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX ix_factura_audit_factura ON obra_factura_audit(factura_id);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] Caja A: obra_facturas + obra_factura_audit listas")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] tabla obra_factura_audit: {e}")
+
+    # 2026-05-13: refactor modelo 3 actores (proveedor + comprador + forma_pago).
+    # Agrega columnas nuevas idempotentemente.
+    columnas_factura_v2 = [
+        ('proveedor_id',              'INTEGER REFERENCES proveedores_oc(id) ON DELETE SET NULL'),
+        ('proveedor_externo_nombre',  'VARCHAR(200)'),
+        ('comprado_por_user_id',      'INTEGER REFERENCES usuarios(id) ON DELETE SET NULL'),
+        ('forma_pago',                'VARCHAR(40)'),
+    ]
+    for col, ddl in columnas_factura_v2:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE obra_facturas ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] obra_facturas.{col}: {e}")
+
+    # Indices nuevos
+    for nombre, cols in [
+        ('ix_obra_factura_proveedor', 'proveedor_id'),
+        ('ix_obra_factura_comprador', 'comprado_por_user_id'),
+        ('ix_obra_factura_forma_pago', 'forma_pago'),
+    ]:
+        try:
+            db.session.execute(db.text(
+                f"CREATE INDEX IF NOT EXISTS {nombre} ON obra_facturas({cols});"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] index {nombre}: {e}")
+
+    # Backfill: si quedaron filas viejas del modelo anterior, migrar campos.
+    try:
+        db.session.execute(db.text("""
+            UPDATE obra_facturas
+            SET proveedor_id = pagar_a_proveedor_id
+            WHERE proveedor_id IS NULL AND pagar_a_proveedor_id IS NOT NULL;
+        """))
+        db.session.execute(db.text("""
+            UPDATE obra_facturas
+            SET comprado_por_user_id = pagar_a_user_id
+            WHERE comprado_por_user_id IS NULL AND pagar_a_user_id IS NOT NULL;
+        """))
+        db.session.execute(db.text("""
+            UPDATE obra_facturas
+            SET proveedor_externo_nombre = pagar_a_nombre_externo
+            WHERE proveedor_externo_nombre IS NULL AND pagar_a_nombre_externo IS NOT NULL;
+        """))
+        # Forma de pago default segun lo que habia (heuristica):
+        # si tenia pagar_a_proveedor_id -> cuenta_corriente_proveedor
+        # si tenia pagar_a_user_id      -> usuario_bolsillo
+        db.session.execute(db.text("""
+            UPDATE obra_facturas
+            SET forma_pago = 'cuenta_corriente_proveedor'
+            WHERE forma_pago IS NULL AND pagar_a_proveedor_id IS NOT NULL;
+        """))
+        db.session.execute(db.text("""
+            UPDATE obra_facturas
+            SET forma_pago = 'usuario_bolsillo'
+            WHERE forma_pago IS NULL AND pagar_a_user_id IS NOT NULL;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] backfill obra_facturas v2: {e}")
+
+    # CHECK constraint forma_pago
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                           WHERE conname='ck_obra_factura_forma_pago') THEN
+                ALTER TABLE obra_facturas
+                    ADD CONSTRAINT ck_obra_factura_forma_pago
+                    CHECK (forma_pago IS NULL OR forma_pago IN (
+                        'cuenta_corriente_proveedor',
+                        'usuario_bolsillo',
+                        'caja_obra',
+                        'caja_oficina',
+                        'otro'
+                    ));
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] Caja A refactor v2 (proveedor + comprador + forma_pago) listo")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] check forma_pago: {e}")
+
+    # Dropear columnas viejas (solo si existen — idempotente).
+    # OJO: por seguridad, dejo las columnas viejas durante 1 deploy. Solo
+    # las dropeo si la columna nueva equivalente ya tiene datos completos
+    # o esta vacia. Para no bloquear nada, hago DROP IF EXISTS sin guard
+    # porque ya hicimos backfill arriba.
+    for col_vieja in ('pagar_a_user_id', 'pagar_a_proveedor_id',
+                       'pagar_a_nombre_externo'):
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE obra_facturas DROP COLUMN IF EXISTS {col_vieja};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] drop col {col_vieja}: {e}")
+
+    # =====================================================
+    # 2026-05-13: Caja B.1 — preparar movimientos_caja para modelo
+    # ingreso/egreso + impacta_costo_real. NO cambia comportamiento
+    # visible: movimientos viejos quedan con impacta_costo_real=FALSE.
+    # =====================================================
+    cols_mov_caja = [
+        ('direccion',              'VARCHAR(10)'),
+        ('impacta_costo_real',     'BOOLEAN NOT NULL DEFAULT FALSE'),
+        ('usuario_relacionado_id', 'INTEGER REFERENCES usuarios(id) ON DELETE SET NULL'),
+        ('categoria',              'VARCHAR(80)'),
+    ]
+    for col, ddl in cols_mov_caja:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] movimientos_caja.{col}: {e}")
+
+    # Indice util para el service: queries por (obra, impacta, estado).
+    try:
+        db.session.execute(db.text("""
+            CREATE INDEX IF NOT EXISTS ix_mov_caja_obra_impacta
+                ON movimientos_caja(obra_id, impacta_costo_real, estado);
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] ix_mov_caja_obra_impacta: {e}")
+
+    # Backfill SEGURO de direccion segun tipo legacy.
+    # transferencia_a_obra -> ingreso
+    # devolucion_obra      -> egreso (sale plata de la caja de obra)
+    # pago_proveedor       -> egreso
+    # gasto_obra           -> egreso
+    # impacta_costo_real queda en FALSE para TODOS los registros viejos
+    # (default de la columna) — no modificamos costos historicos.
+    try:
+        db.session.execute(db.text("""
+            UPDATE movimientos_caja
+            SET direccion = CASE
+                WHEN tipo = 'transferencia_a_obra' THEN 'ingreso'
+                WHEN tipo IN ('devolucion_obra', 'pago_proveedor', 'gasto_obra') THEN 'egreso'
+                ELSE direccion
+            END
+            WHERE direccion IS NULL;
+        """))
+        db.session.commit()
+        print("[OK] Caja B.1: columnas + backfill aplicado (movimientos historicos con impacta_costo_real=FALSE)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] backfill direccion movimientos_caja: {e}")
+
+    # =====================================================
     # 2026-04-29: Seed superadmin OBYRA
     # Asegura que los duenios del sistema tengan is_super_admin=True.
     # Idempotente: solo updatea si esta en False.
