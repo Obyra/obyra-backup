@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Facturas - {{ obra.nombre }} - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-file-invoice text-info me-2"></i>Caja A — Facturas
+            </h2>
+            <p class="text-muted small mb-0">
+                Obra: <strong>{{ obra.nombre }}</strong> · Comprobantes administrativos.
+                <span class="text-warning">No impacta en costo real.</span>
+            </p>
+        </div>
+        <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver a obra
+        </a>
+    </div>
+
+    <div class="row g-2 mb-3">
+        <div class="col-md-3">
+            <div class="border rounded p-2 small bg-white">
+                <strong>Total facturas</strong><br>{{ totales.count_total }}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="border rounded p-2 small bg-white text-warning">
+                <strong>Pendiente ARS</strong><br>${{ '{:,.0f}'.format(totales.pendiente_ars|float) }}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="border rounded p-2 small bg-white text-success">
+                <strong>Pagado ARS</strong><br>${{ '{:,.0f}'.format(totales.pagado_ars|float) }}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="border rounded p-2 small bg-white text-danger">
+                <strong>Rechazado ARS</strong><br>${{ '{:,.0f}'.format(totales.rechazado_ars|float) }}
+            </div>
+        </div>
+    </div>
+
+    <form method="GET" class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <select name="estado" class="form-select form-select-sm">
+                        <option value="">Todos los estados</option>
+                        {% for e in estados_disponibles %}
+                        <option value="{{ e }}" {% if estado_filtro == e %}selected{% endif %}>{{ e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-sm btn-outline-primary w-100">
+                        <i class="fas fa-filter me-1"></i>Filtrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="card-body p-0">
+            {% if facturas %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha</th>
+                            <th>Proveedor</th>
+                            <th>Comprador</th>
+                            <th>Concepto</th>
+                            <th class="text-end">Importe</th>
+                            <th>Forma pago</th>
+                            <th>Deuda con</th>
+                            <th>Estado</th>
+                            <th width="80">Adj.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in facturas %}
+                        <tr>
+                            <td><small>{{ f.numero_factura or '#' ~ f.id }}</small></td>
+                            <td><small>{{ f.fecha_factura.strftime('%d/%m/%Y') if f.fecha_factura else '' }}</small></td>
+                            <td><small>{{ f.proveedor_display }}</small></td>
+                            <td><small>{{ f.comprador_display }}</small></td>
+                            <td>{{ f.concepto }}</td>
+                            <td class="text-end">
+                                {{ f.moneda }} {{ '{:,.2f}'.format(f.importe|float) }}
+                            </td>
+                            <td><small>{{ f.forma_pago or '—' }}</small></td>
+                            <td>
+                                {% if f.deuda_con != 'ninguno' %}
+                                <small><strong>{{ f.deuda_display }}</strong><br>
+                                <span class="text-muted">{{ f.deuda_con }}</span></small>
+                                {% else %}
+                                <small class="text-muted">—</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set badges = {'pendiente': 'warning text-dark',
+                                                  'pagada': 'success',
+                                                  'rechazada': 'danger',
+                                                  'observada': 'info'} %}
+                                <span class="badge bg-{{ badges.get(f.estado, 'secondary') }}">
+                                    {{ f.estado }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if f.tiene_adjunto %}
+                                <a href="{{ url_for('obras.facturas_descargar_archivo', obra_id=obra.id, factura_id=f.id) }}"
+                                   class="btn btn-sm btn-outline-info" target="_blank" title="Ver adjunto">
+                                    <i class="fas fa-paperclip"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-inbox fa-2x mb-2"></i>
+                <p class="mb-0">No hay facturas cargadas para esta obra.</p>
+                <small>Cargá la primera desde el tab "Caja A · Facturas" del detalle de obra.</small>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

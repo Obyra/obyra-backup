@@ -1118,6 +1118,16 @@
                             </button>
                         </li>
                         {% endif %}
+                        {# Caja A: facturas administrativas (MVP) #}
+                        {% if has_endpoint('obras.facturas_listar') %}
+                        <li class="nav-item">
+                            <button class="nav-link" id="tab-facturas" data-bs-toggle="tab"
+                                    data-bs-target="#pane-facturas" type="button" role="tab"
+                                    onclick="cajaAFacturasCargar({{ obra.id }})">
+                                <i class="fas fa-file-invoice me-1"></i>Caja A · Facturas
+                            </button>
+                        </li>
+                        {% endif %}
                         {% if has_endpoint('ordenes_compra.lista') %}
                         <li class="nav-item">
                             <button class="nav-link" id="tab-oc" data-bs-toggle="tab"
@@ -1241,6 +1251,48 @@
                                 <div class="spinner-border spinner-border-sm text-success"></div> Cargando caja...
                             </div>
                             <div id="cajaTabContent" style="display:none"></div>
+                        </div>
+                        {% endif %}
+
+                        {# Caja A: facturas administrativas (MVP 2026-05-13) #}
+                        {% if has_endpoint('obras.facturas_listar') %}
+                        <div class="tab-pane fade" id="pane-facturas" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                                <div>
+                                    <h5 class="mb-1">
+                                        <i class="fas fa-file-invoice text-info me-1"></i>Caja A — Facturas
+                                    </h5>
+                                    <small class="text-muted">
+                                        Administrativo. No impacta en el costo real de obra.
+                                    </small>
+                                </div>
+                                <button class="btn btn-primary" type="button"
+                                        data-bs-toggle="modal" data-bs-target="#modalCargarFactura">
+                                    <i class="fas fa-plus me-1"></i>Cargar factura
+                                </button>
+                            </div>
+
+                            {# Cartel persistente — Caja A vs Caja B #}
+                            <div class="alert alert-info small d-flex align-items-start gap-2 mb-3">
+                                <i class="fas fa-circle-info mt-1"></i>
+                                <div>
+                                    <strong>Caja A</strong> ordena facturas y pagos pendientes
+                                    (quién compró, a quién se debe, qué se pagó).
+                                    <strong>No suma al costo real de obra.</strong><br>
+                                    Para que estos importes impacten en el costo real, deben
+                                    ingresarse manualmente en
+                                    <strong>Caja B</strong> (tab "Caja" de esta obra).
+                                </div>
+                            </div>
+                            <div id="facturasTabLoading" class="text-center py-4 d-none">
+                                <div class="spinner-border spinner-border-sm text-info"></div>
+                                Cargando facturas...
+                            </div>
+                            <div id="facturasTabContent">
+                                <p class="text-muted small text-center py-3">
+                                    Hacé click en el tab para cargar el listado.
+                                </p>
+                            </div>
                         </div>
                         {% endif %}
 
@@ -1389,6 +1441,385 @@
         </div>
     </div>
 </div>
+
+{# ==========================================================
+   Caja A: Modal Cargar Factura + JS del tab (MVP 2026-05-13)
+   ========================================================== #}
+{% if has_endpoint('obras.facturas_listar') %}
+<div class="modal fade" id="modalCargarFactura" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+    <div class="modal-content" style="max-height: 90vh;">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-file-invoice me-2"></i>Cargar factura — Caja A</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="frmCargarFactura" enctype="multipart/form-data" class="d-flex flex-column" style="min-height: 0; max-height: calc(90vh - 60px);">
+        {# 2026-05-13: forzar scroll en el body porque el contenido es largo
+           y en algunos viewports no se ve la scrollbar default. #}
+        <div class="modal-body" style="overflow-y: auto; flex: 1 1 auto;">
+          <div class="alert alert-warning small py-2 mb-3" role="alert">
+            <i class="fas fa-info-circle me-1"></i>
+            <strong>Caja A es administrativa.</strong>
+            No impacta en el costo real de obra.
+            Para que el monto se compute, cargalo manualmente en <strong>Caja B</strong>
+            (tab "Caja").
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Tipo *</label>
+              <select name="tipo_comprobante" id="ftipo" class="form-select" required>
+                <option value="factura_a">Factura A</option>
+                <option value="factura_b">Factura B</option>
+                <option value="factura_c">Factura C</option>
+                <option value="factura">Factura (sin discriminar)</option>
+                <option value="recibo">Recibo</option>
+                <option value="remito">Remito</option>
+                <option value="nota_credito">Nota de crédito</option>
+                <option value="nota_debito">Nota de débito</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Número</label>
+              <input type="text" name="numero_factura" class="form-control" maxlength="50"
+                     placeholder="A-0001-00012345">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Fecha *</label>
+              <input type="date" name="fecha_factura" class="form-control" required>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small fw-bold">Concepto / descripción *</label>
+              <input type="text" name="concepto" class="form-control" maxlength="300" required
+                     placeholder="Ej: Materiales sanitarios, mano de obra adicional, viaje, etc.">
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Importe *</label>
+              <input type="number" name="importe" step="0.01" min="0.01" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Moneda *</label>
+              <select name="moneda" class="form-select" required>
+                <option value="ARS" selected>ARS</option>
+                <option value="USD">USD</option>
+              </select>
+              <small class="text-muted">Si es USD, se captura el TC del día.</small>
+            </div>
+          </div>
+
+          <hr class="my-3">
+
+          {# === 3 actores: proveedor + comprador interno + forma de pago === #}
+          <h6 class="mb-2 small text-muted">PROVEEDOR Y COMPRADOR</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small">Proveedor</label>
+              <input type="text" name="_search_prov" id="fpagarprovsearch" class="form-control"
+                     placeholder="Buscar por razón social, CUIT…"
+                     oninput="cajaAFBuscarProveedor(this.value)">
+              <input type="hidden" name="proveedor_id" id="fpagarprov" value="">
+              <div id="fpagarprovresults" class="list-group small mt-1"
+                   style="position:absolute; z-index:10; max-width:400px;"></div>
+              <small class="text-muted">
+                Si no está cargado, dejá el campo vacío y usá "Proveedor externo" abajo.
+              </small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Proveedor externo (si no está en la lista)</label>
+              <input type="text" name="proveedor_externo_nombre" id="fprovext" class="form-control"
+                     maxlength="200" placeholder="Ej: Fletero Juan / Albañil eventual">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Comprador interno *</label>
+              <select name="comprado_por_user_id" id="fpagaruser" class="form-select" required>
+                <option value="">— Quien fue a comprar —</option>
+                {# Los usuarios se cargan via AJAX al abrir el modal (lazy) #}
+              </select>
+              <small class="text-muted">Usuario de OBYRA que realizó la compra.</small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Forma de pago *</label>
+              <select name="forma_pago" id="fformapago" class="form-select" required
+                      onchange="cajaAFActualizarHintDeuda()">
+                <option value="">— Cómo se pagó —</option>
+                <option value="cuenta_corriente_proveedor">Cuenta corriente con el proveedor</option>
+                <option value="usuario_bolsillo">Pagó el comprador (de su bolsillo)</option>
+                <option value="caja_obra">Caja de obra (ya pagada)</option>
+                <option value="caja_oficina">Caja oficina / transferencia (ya pagada)</option>
+                <option value="otro">Otro</option>
+              </select>
+              <div id="fdeudaHint" class="small mt-1"></div>
+            </div>
+          </div>
+
+          <hr class="my-3">
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Adjunto</label>
+              <input type="file" name="archivo" id="farchivo" class="form-control"
+                     accept=".pdf,.jpg,.jpeg,.png,.webp">
+              <small class="text-muted" id="fadjuntohelp">
+                PDF / JPG / PNG / WEBP — máx 10 MB.
+                <span class="text-danger" id="fadjuntoobligatorio">Obligatorio para tipo Factura.</span>
+              </small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Observaciones</label>
+              <textarea name="observaciones" class="form-control" rows="2" maxlength="500"></textarea>
+            </div>
+          </div>
+
+          <div id="fresultado" class="mt-3"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn btn-primary" id="fsubmit">
+            <i class="fas fa-save me-1"></i>Cargar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // 2026-05-13: helper para limpiar la seleccion de proveedor cuando el usuario
+  // empieza a escribir nuevamente en el buscador.
+  window.cajaAFLimpiarOtras = function(elegida) {
+    if (elegida !== 'prov') {
+      document.getElementById('fpagarprov').value = '';
+      document.getElementById('fpagarprovsearch').value = '';
+    }
+  };
+
+  // Mostrar hint segun forma de pago elegida.
+  window.cajaAFActualizarHintDeuda = function() {
+    const fp = document.getElementById('fformapago').value;
+    const hint = document.getElementById('fdeudaHint');
+    if (!fp) { hint.innerHTML = ''; return; }
+    const mensajes = {
+      'cuenta_corriente_proveedor': '<span class="text-warning">⚠ Quedará pendiente. Deuda con el proveedor.</span>',
+      'usuario_bolsillo':           '<span class="text-warning">⚠ Quedará pendiente. Deuda con el comprador (reintegro).</span>',
+      'caja_obra':                  '<span class="text-success">✓ Nace ya pagada. No genera deuda.</span>',
+      'caja_oficina':               '<span class="text-success">✓ Nace ya pagada. No genera deuda.</span>',
+      'otro':                       '<span class="text-muted">Se carga como pendiente. Ajustá manualmente después.</span>',
+    };
+    hint.innerHTML = mensajes[fp] || '';
+  };
+
+  // Búsqueda de proveedores contra el endpoint REAL: /proveedores-oc/api/buscar
+  // (devuelve array directo de proveedores con razon_social/id).
+  let _searchTimer = null;
+  window.cajaAFBuscarProveedor = function(q) {
+    cajaAFLimpiarOtras('prov');
+    document.getElementById('fpagarprov').value = '';
+    clearTimeout(_searchTimer);
+    if (!q || q.length < 2) {
+      document.getElementById('fpagarprovresults').innerHTML = '';
+      return;
+    }
+    _searchTimer = setTimeout(function() {
+      fetch('/proveedores-oc/api/buscar?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(r => r.json()).then(data => {
+          const box = document.getElementById('fpagarprovresults');
+          // Endpoint devuelve array directo de proveedores
+          const lista = Array.isArray(data) ? data : (data.proveedores || []);
+          if (!lista.length) { box.innerHTML = '<div class="list-group-item small text-muted">Sin resultados</div>'; return; }
+          box.innerHTML = lista.slice(0, 8).map(p => {
+            const nombre = (p.razon_social || p.nombre_fantasia || ('Proveedor #' + p.id));
+            const extra = p.cuit ? ' · CUIT ' + p.cuit : (p.categoria ? ' · ' + p.categoria : '');
+            return `<button type="button" class="list-group-item list-group-item-action small"
+                     onclick='cajaAFElegirProv(${p.id}, ${JSON.stringify(nombre)})'>
+               <strong>${nombre}</strong><span class="text-muted">${extra}</span>
+             </button>`;
+          }).join('');
+        })
+        .catch(() => {
+          document.getElementById('fpagarprovresults').innerHTML =
+            '<div class="list-group-item small text-danger">Error consultando proveedores.</div>';
+        });
+    }, 250);
+  };
+  window.cajaAFElegirProv = function(id, nombre) {
+    document.getElementById('fpagarprov').value = id;
+    document.getElementById('fpagarprovsearch').value = nombre;
+    document.getElementById('fpagarprovresults').innerHTML = '';
+    cajaAFLimpiarOtras('prov');
+  };
+
+  // Carga lazy de usuarios elegibles al abrir el modal "Cargar factura".
+  let _usuariosCargados = false;
+  function cajaAFCargarUsuarios() {
+    if (_usuariosCargados) return;
+    const obraId = {{ obra.id }};
+    fetch(`/obras/${obraId}/facturas/_usuarios`, { credentials: 'same-origin' })
+      .then(r => r.json()).then(d => {
+        if (!d || !d.ok) return;
+        const sel = document.getElementById('fpagaruser');
+        if (!sel) return;
+        // Mantener "Ninguno" + agregar los usuarios.
+        sel.innerHTML = '<option value="">— Ninguno —</option>' +
+          (d.usuarios || []).map(u =>
+            `<option value="${u.id}">${u.nombre}${u.role ? ' · ' + u.role : ''}</option>`
+          ).join('');
+        _usuariosCargados = true;
+      })
+      .catch(() => {});
+  }
+  // Suscribirse a la apertura del modal
+  const modalEl = document.getElementById('modalCargarFactura');
+  if (modalEl) {
+    modalEl.addEventListener('show.bs.modal', cajaAFCargarUsuarios);
+  }
+
+  // Cargar listado del tab (lazy)
+  window.cajaAFacturasCargar = function(obraId) {
+    const cont = document.getElementById('facturasTabContent');
+    if (!cont || cont.dataset.cargado === '1') return;
+    document.getElementById('facturasTabLoading').classList.remove('d-none');
+    fetch(`/obras/${obraId}/facturas?format=json`, { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('facturasTabLoading').classList.add('d-none');
+        if (!data || !data.ok) { cont.innerHTML = '<div class="alert alert-danger small">No se pudo cargar.</div>'; return; }
+        cajaAFRenderListado(data.facturas || [], data.totales || {}, obraId);
+        cont.dataset.cargado = '1';
+      })
+      .catch(() => {
+        document.getElementById('facturasTabLoading').classList.add('d-none');
+        cont.innerHTML = '<div class="alert alert-danger small">Error de red al cargar facturas.</div>';
+      });
+  };
+
+  function cajaAFRenderListado(facturas, totales, obraId) {
+    const cont = document.getElementById('facturasTabContent');
+    const fmt = v => '$' + Math.round(v || 0).toLocaleString('es-AR');
+    let html = `
+      <div class="row g-2 mb-3">
+        <div class="col-md-3"><div class="border rounded p-2 small"><strong>Total facturas</strong><br>${totales.count_total||0}</div></div>
+        <div class="col-md-3"><div class="border rounded p-2 small text-warning"><strong>Pendiente</strong><br>${fmt(totales.pendiente_ars)}</div></div>
+        <div class="col-md-3"><div class="border rounded p-2 small text-success"><strong>Pagado</strong><br>${fmt(totales.pagado_ars)}</div></div>
+        <div class="col-md-3"><div class="border rounded p-2 small text-danger"><strong>Rechazado</strong><br>${fmt(totales.rechazado_ars)}</div></div>
+      </div>`;
+    if (!facturas.length) {
+      html += '<div class="text-center text-muted py-4"><i class="fas fa-inbox fa-2x mb-2"></i><p class="mb-0">No hay facturas cargadas aún.</p></div>';
+      cont.innerHTML = html;
+      return;
+    }
+    const estadoBadge = e => {
+      const map = {pendiente:'warning text-dark', pagada:'success', rechazada:'danger', observada:'info'};
+      return `<span class="badge bg-${map[e]||'secondary'}">${e}</span>`;
+    };
+    html += '<div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr>' +
+      '<th>#</th><th>Fecha</th><th>Proveedor</th><th>Comprador</th><th>Concepto</th>' +
+      '<th class="text-end">Importe</th><th>Forma pago</th><th>Deuda con</th><th>Estado</th><th></th>' +
+      '</tr></thead><tbody>';
+    const formaPagoLabel = fp => ({
+      'cuenta_corriente_proveedor': 'CC proveedor',
+      'usuario_bolsillo': 'Comprador bolsillo',
+      'caja_obra': 'Caja obra',
+      'caja_oficina': 'Caja oficina',
+      'otro': 'Otro',
+    }[fp] || '—');
+    facturas.forEach(f => {
+      const adj = f.tiene_adjunto
+        ? `<a href="/obras/${obraId}/facturas/${f.id}/archivo" target="_blank" class="btn btn-sm btn-outline-info" title="Ver adjunto"><i class="fas fa-paperclip"></i></a>`
+        : '';
+      let acciones = '';
+      if (f.estado === 'pendiente' || f.estado === 'observada') {
+        acciones += `<button class="btn btn-sm btn-success" onclick="cajaAFAccion(${obraId},${f.id},'pagar')">Pagar</button> `;
+        acciones += `<button class="btn btn-sm btn-outline-danger" onclick="cajaAFAccion(${obraId},${f.id},'rechazar')">Rechazar</button>`;
+      }
+      const deudaCol = f.deuda_con === 'ninguno'
+        ? '<small class="text-muted">—</small>'
+        : `<small><strong>${f.deuda_display}</strong><br><span class="text-muted">${f.deuda_con}</span></small>`;
+      html += `<tr>
+        <td><small>${f.numero_factura || '#'+f.id}</small></td>
+        <td><small>${f.fecha_factura||''}</small></td>
+        <td><small>${f.proveedor_display||'—'}</small></td>
+        <td><small>${f.comprador_display||'—'}</small></td>
+        <td>${f.concepto}</td>
+        <td class="text-end">${f.moneda} ${Number(f.importe).toLocaleString('es-AR')}</td>
+        <td><small>${formaPagoLabel(f.forma_pago)}</small></td>
+        <td>${deudaCol}</td>
+        <td>${estadoBadge(f.estado)}</td>
+        <td>${adj} ${acciones}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    cont.innerHTML = html;
+  }
+
+  window.cajaAFAccion = function(obraId, fid, accion) {
+    let payload = {};
+    if (accion === 'pagar') {
+      const fecha = prompt('Fecha de pago (YYYY-MM-DD, vacío = hoy):') || '';
+      payload.fecha_pago = fecha;
+    } else if (accion === 'rechazar') {
+      const motivo = prompt('Motivo de rechazo (obligatorio):');
+      if (!motivo) return;
+      payload.motivo = motivo;
+    }
+    const csrf = document.querySelector('meta[name="csrf-token"]');
+    fetch(`/obras/${obraId}/facturas/${fid}/${accion}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf ? csrf.getAttribute('content') : '' },
+      body: JSON.stringify(payload),
+    }).then(r => r.json()).then(d => {
+      if (!d.ok) { alert('Error: ' + (d.error || 'desconocido')); return; }
+      // recargar tab
+      document.getElementById('facturasTabContent').dataset.cargado = '';
+      cajaAFacturasCargar(obraId);
+    }).catch(e => alert('Error de red: ' + e.message));
+  };
+
+  // Submit del modal
+  const form = document.getElementById('frmCargarFactura');
+  const obligatorioMsg = document.getElementById('fadjuntoobligatorio');
+  document.getElementById('ftipo').addEventListener('change', function() {
+    const tipo = this.value;
+    const obl = ['factura','factura_a','factura_b','factura_c'].includes(tipo);
+    obligatorioMsg.style.display = obl ? 'inline' : 'none';
+    document.getElementById('farchivo').required = obl;
+  });
+  form.addEventListener('submit', function(ev) {
+    ev.preventDefault();
+    const obraId = {{ obra.id }};
+    const btn = document.getElementById('fsubmit');
+    const res = document.getElementById('fresultado');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando...';
+    res.innerHTML = '';
+    const csrf = document.querySelector('meta[name="csrf-token"]');
+    const fd = new FormData(form);
+    fetch(`/obras/${obraId}/facturas`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': csrf ? csrf.getAttribute('content') : '' },
+      body: fd,
+    })
+    .then(r => r.json()).then(d => {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Cargar';
+      if (!d.ok) { res.innerHTML = '<div class="alert alert-danger small mb-0">' + (d.error || 'Error') + '</div>'; return; }
+      res.innerHTML = '<div class="alert alert-success small mb-0">Factura cargada (#' + d.factura.id + '). Estado: ' + d.factura.estado + '</div>';
+      form.reset();
+      document.getElementById('facturasTabContent').dataset.cargado = '';
+      cajaAFacturasCargar(obraId);
+      setTimeout(() => bootstrap.Modal.getInstance(document.getElementById('modalCargarFactura')).hide(), 1500);
+    })
+    .catch(e => {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Cargar';
+      res.innerHTML = '<div class="alert alert-danger small mb-0">Error de red: ' + e.message + '</div>';
+    });
+  });
+})();
+</script>
+{% endif %}
 
 <!-- Modal Cargar Remito -->
 <div id="modal-remito" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1050; justify-content:center; align-items:start; padding-top:60px; overflow-y:auto;">

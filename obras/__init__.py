@@ -916,3 +916,5 @@ def _serialize_tarea_detalle(tarea):
 
 # Import sub-modules to register routes
 from obras import core, tareas, materiales, certificaciones, etapas, wizard, remitos, equipos, escalas, admin
+# Caja A - Facturas administrativas (Fase 1 MVP)
+from obras import facturas  # noqa: F401

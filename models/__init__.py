@@ -219,6 +219,15 @@ from models.formulas import (
     Coeficiente,
     ImportBatchFormulas,
 )
+
+# Caja A: Facturas administrativas por obra (MVP)
+from models.obra_factura import (
+    ObraFactura,
+    ObraFacturaAudit,
+    TIPOS_COMPROBANTE,
+    ESTADOS_FACTURA,
+    adjunto_es_obligatorio,
+)
 from models.mano_obra_costo_referencia import (
     ManoObraCostoReferencia, CATEGORIAS_BASE, categoria_canonica_para,
 )
