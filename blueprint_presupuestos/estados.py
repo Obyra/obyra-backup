@@ -25,6 +25,10 @@ def _copiar_pliego_a_legajo(presupuesto, obra):
     Toma presupuesto.archivo_pliego_path (relativo a static/), lo copia a la
     carpeta de documentos de la obra y crea un registro en documentos_obra
     con tipo 'Pliego de Especificaciones'.
+
+    NO hace commit: participa de la transacción del caller (confirmar_como_obra),
+    que commitea todo junto una sola vez al final. Antes hacía un commit anidado
+    que rompía la atomicidad de la conversión a obra.
     """
     import os
     import shutil
@@ -72,7 +76,7 @@ def _copiar_pliego_a_legajo(presupuesto, obra):
             'user_id': current_user.id,
         }
     )
-    db.session.commit()
+    # (sin commit — lo hace el caller de forma atómica)
 
 
 @presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
@@ -276,9 +280,17 @@ def confirmar_como_obra(id):
         orden_etapa = 1
         etapas_creadas = {}  # Mapeo nombre -> id de etapa en la obra
 
+        # Pre-cargar en UNA sola query las etapas ya existentes en la obra, para
+        # evitar el N+1 de consultar EtapaObra por nombre dentro del loop. El
+        # dict se mantiene actualizado a medida que se crean/asocian etapas.
+        etapas_existentes = {
+            e.nombre: e
+            for e in db.session.query(EtapaObra).filter_by(obra_id=obra.id).all()
+        }
+
         for etapa_nombre, items_etapa in etapas_dict.items():
-            # Buscar si ya existe una etapa con ese nombre en la obra
-            etapa = EtapaObra.query.filter_by(obra_id=obra.id, nombre=etapa_nombre).first()
+            # Buscar si ya existe una etapa con ese nombre en la obra (en memoria)
+            etapa = etapas_existentes.get(etapa_nombre)
 
             if not etapa:
                 # Verificar si hay una etapa existente (del presupuesto) que podemos asociar
@@ -299,6 +311,9 @@ def confirmar_como_obra(id):
                     db.session.add(etapa)
                     db.session.flush()  # Para obtener etapa.id
                     current_app.logger.info(f"Creada nueva etapa '{etapa_nombre}' (ID: {etapa.id}) para obra {obra.id}")
+
+                # Registrar en el dict para que el resto del loop la encuentre
+                etapas_existentes[etapa_nombre] = etapa
 
             etapas_creadas[etapa_nombre] = etapa.id
 
@@ -355,6 +370,21 @@ def confirmar_como_obra(id):
 
                 from tareas_predefinidas import obtener_tareas_por_etapa as _obt_tareas
 
+                # Pre-cargar en UNA sola query TODAS las composiciones de mano de
+                # obra de los ítems, agrupadas por item_id. Evita el N+1 de
+                # item.composiciones.filter_by(...) dentro del doble loop
+                # (etapas × items).
+                from models.budgets import ItemPresupuestoComposicion
+                _item_ids = [it.id for its in etapas_dict.values() for it in its]
+                comps_mo_por_item = {}
+                if _item_ids:
+                    _comps_mo = db.session.query(ItemPresupuestoComposicion).filter(
+                        ItemPresupuestoComposicion.item_presupuesto_id.in_(_item_ids),
+                        ItemPresupuestoComposicion.tipo == 'mano_obra',
+                    ).all()
+                    for _c in _comps_mo:
+                        comps_mo_por_item.setdefault(_c.item_presupuesto_id, []).append(_c)
+
                 for etapa_nombre, items_etapa in etapas_dict.items():
                     etapa_id = etapas_creadas[etapa_nombre]
 
@@ -363,7 +393,7 @@ def confirmar_como_obra(id):
                         for item in items_etapa:
                             horas_estimadas = Decimal('0')
                             presupuesto_mo = Decimal('0')
-                            for comp in item.composiciones.filter_by(tipo='mano_obra').all():
+                            for comp in comps_mo_por_item.get(item.id, []):
                                 cantidad = Decimal(str(comp.cantidad or 0))
                                 total = Decimal(str(comp.total or 0))
                                 unidad_norm = (comp.unidad or '').strip().lower()
@@ -453,61 +483,70 @@ def confirmar_como_obra(id):
                     f"Creadas {tareas_creadas_count} tareas predefinidas para {len(etapas_dict)} etapas en obra {obra.id}"
                 )
 
-        db.session.commit()
+        # NOTA: NO se commitea acá. La obra + etapas + tareas quedan pendientes
+        # y se persisten en un ÚNICO commit atómico al final de la función.
 
-        # Asignar niveles de encadenamiento, dependencias y fechas
+        # Asignar niveles de encadenamiento, dependencias y fechas.
+        # Paso BEST-EFFORT: se ejecuta dentro de un SAVEPOINT (begin_nested) para
+        # que, si falla, solo se revierta este bloque y la obra + etapas + tareas
+        # sigan intactas en la transacción principal (antes esto se lograba con un
+        # commit prematuro de la obra).
         try:
-            from services.dependency_service import (
-                asignar_niveles_por_defecto,
-                generar_dependencias_desde_niveles,
-                propagar_fechas_obra,
-            )
-            from datetime import timedelta as td
+            with db.session.begin_nested():
+                from services.dependency_service import (
+                    asignar_niveles_por_defecto,
+                    generar_dependencias_desde_niveles,
+                    propagar_fechas_obra,
+                )
+                from datetime import timedelta as td
 
-            # 1. Asignar niveles de encadenamiento
-            asignadas = asignar_niveles_por_defecto(obra.id)
-            if asignadas:
+                # 1. Asignar niveles de encadenamiento
+                asignadas = asignar_niveles_por_defecto(obra.id)
+                if asignadas:
+                    db.session.flush()
+                    current_app.logger.info(f"Niveles asignados a {asignadas} etapas de obra {obra.id}")
+
+                # 2. Generar dependencias FS entre niveles
+                deps_creadas = generar_dependencias_desde_niveles(obra.id)
+                if deps_creadas:
+                    db.session.flush()
+                    current_app.logger.info(f"Creadas {deps_creadas} dependencias para obra {obra.id}")
+
+                # 3. Asignar fecha de inicio a la primera etapa (fecha_inicio de la obra o hoy)
+                from models.projects import EtapaObra as EO
+                primera_etapa = EO.query.filter_by(obra_id=obra.id).order_by(
+                    EO.nivel_encadenamiento.asc().nullslast(), EO.orden
+                ).first()
+                if primera_etapa and not primera_etapa.fecha_inicio_estimada:
+                    fecha_inicio = obra.fecha_inicio or date.today()
+                    primera_etapa.fecha_inicio_estimada = fecha_inicio
+                    primera_etapa.fecha_fin_estimada = fecha_inicio + td(days=14)  # 2 semanas default
+                    db.session.flush()
+
+                # 4. Propagar fechas a todas las etapas sucesoras
+                modificadas = propagar_fechas_obra(obra.id, force_cascade=True)
                 db.session.flush()
-                current_app.logger.info(f"Niveles asignados a {asignadas} etapas de obra {obra.id}")
-
-            # 2. Generar dependencias FS entre niveles
-            deps_creadas = generar_dependencias_desde_niveles(obra.id)
-            if deps_creadas:
-                db.session.flush()
-                current_app.logger.info(f"Creadas {deps_creadas} dependencias para obra {obra.id}")
-
-            # 3. Asignar fecha de inicio a la primera etapa (fecha_inicio de la obra o hoy)
-            from models.projects import EtapaObra as EO
-            primera_etapa = EO.query.filter_by(obra_id=obra.id).order_by(
-                EO.nivel_encadenamiento.asc().nullslast(), EO.orden
-            ).first()
-            if primera_etapa and not primera_etapa.fecha_inicio_estimada:
-                fecha_inicio = obra.fecha_inicio or date.today()
-                primera_etapa.fecha_inicio_estimada = fecha_inicio
-                primera_etapa.fecha_fin_estimada = fecha_inicio + td(days=14)  # 2 semanas default
-                db.session.flush()
-
-            # 4. Propagar fechas a todas las etapas sucesoras
-            modificadas = propagar_fechas_obra(obra.id, force_cascade=True)
-            db.session.commit()
-            if modificadas:
-                current_app.logger.info(f"Fechas propagadas a {len(modificadas)} etapas de obra {obra.id}")
+                if modificadas:
+                    current_app.logger.info(f"Fechas propagadas a {len(modificadas)} etapas de obra {obra.id}")
 
         except Exception as e_dep:
-            db.session.rollback()
+            # El savepoint ya revirtió SOLO este bloque; la obra sigue en la transacción.
             current_app.logger.warning(f"Error en encadenamiento de etapas: {e_dep}")
-            try:
-                db.session.commit()  # Commit lo que se pueda
-            except Exception:
-                pass
 
         # Gap 18: si el presupuesto tiene el Excel del pliego adjunto,
         # copiarlo automáticamente al Legajo Digital de la obra como
         # documento contractual ("Pliego de Especificaciones").
+        # BEST-EFFORT dentro de un SAVEPOINT: si falla, la obra no se pierde.
         try:
-            _copiar_pliego_a_legajo(presupuesto, obra)
+            with db.session.begin_nested():
+                _copiar_pliego_a_legajo(presupuesto, obra)
         except Exception as e_leg:
             current_app.logger.warning(f"No se pudo copiar pliego al legajo: {e_leg}")
+
+        # UN ÚNICO commit atómico de todo: obra + etapas + tareas + (dependencias
+        # y legajo que hayan sobrevivido a sus savepoints). Si esto falla, el
+        # except externo hace rollback de TODA la conversión.
+        db.session.commit()
 
         current_app.logger.info(f"Presupuesto {presupuesto.numero} confirmado como obra {obra.id}")
 
@@ -694,7 +733,7 @@ def cambiar_estado(id):
         ).first_or_404()
 
         nuevo_estado = request.form.get('estado', '').strip()
-        estados_validos = ['borrador', 'enviado', 'aprobado', 'confirmado', 'rechazado', 'perdido', 'vencido']
+        estados_validos = ['borrador', 'enviado', 'aprobado', 'confirmado', 'rechazado', 'vencido']
 
         if nuevo_estado not in estados_validos:
             flash('Estado inválido', 'danger')
@@ -732,17 +771,12 @@ def revertir_borrador(id):
         ).first_or_404()
 
         # Verificar que el presupuesto esté en un estado que permita revertir
-        if presupuesto.estado not in ['enviado', 'aprobado', 'rechazado', 'perdido']:
+        if presupuesto.estado not in ['enviado', 'aprobado', 'rechazado']:
             return jsonify({'error': f'No se puede revertir un presupuesto en estado {presupuesto.estado}'}), 400
 
         # Revertir a borrador
         estado_anterior = presupuesto.estado
         presupuesto.estado = 'borrador'
-
-        # Si estaba marcado como perdido, limpiar esos datos
-        if estado_anterior == 'perdido':
-            presupuesto.perdido_motivo = None
-            presupuesto.perdido_fecha = None
 
         db.session.commit()
 
@@ -756,39 +790,6 @@ def revertir_borrador(id):
         current_app.logger.error(f"Error en presupuestos.revertir_borrador: {e}", exc_info=True)
         db.session.rollback()
         return jsonify({'error': 'Error al revertir el presupuesto'}), 500
-
-
-@presupuestos_bp.route('/<int:id>/restaurar', methods=['POST'])
-@login_required
-def restaurar(id):
-    """Restaurar presupuesto perdido a borrador"""
-    try:
-        org_id = get_current_org_id()
-        if not org_id:
-            return jsonify({'error': 'Sin organización activa'}), 400
-
-        presupuesto = Presupuesto.query.filter_by(
-            id=id,
-            organizacion_id=org_id
-        ).first_or_404()
-
-        # Solo se pueden restaurar presupuestos perdidos
-        if presupuesto.estado != 'perdido':
-            return jsonify({'error': 'Solo se pueden restaurar presupuestos marcados como perdidos'}), 400
-
-        presupuesto.estado = 'borrador'
-        presupuesto.perdido_motivo = None
-        presupuesto.perdido_fecha = None
-        db.session.commit()
-
-        return jsonify({
-            'mensaje': f'Presupuesto {presupuesto.numero} restaurado a borrador'
-        })
-
-    except Exception as e:
-        current_app.logger.error(f"Error en presupuestos.restaurar: {e}", exc_info=True)
-        db.session.rollback()
-        return jsonify({'error': 'Error al restaurar el presupuesto'}), 500
 
 
 @presupuestos_bp.route('/<int:id>/asignar-cliente', methods=['POST'])
