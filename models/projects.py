@@ -80,8 +80,14 @@ class Obra(db.Model):
         self.estado = 'cancelada'
 
     def restore(self):
-        """Restaura una obra eliminada."""
+        """Restaura una obra eliminada, dejándola en un estado usable.
+
+        Limpia deleted_at Y restaura el estado a 'planificacion'. Antes solo
+        limpiaba deleted_at, dejando estado='cancelada': la obra volvía a ser
+        visible (query_active) pero quedaba inutilizable/inconsistente.
+        """
         self.deleted_at = None
+        self.estado = 'planificacion'
 
     @classmethod
     def query_active(cls):
