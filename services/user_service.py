@@ -615,6 +615,7 @@ class UserService(BaseService[Usuario]):
 
         # Verificar permisos del rol
         role_perm = RoleModule.query.filter_by(
+            org_id=getattr(user, 'organizacion_id', None),
             role=user.rol,
             module=module
         ).first()
@@ -653,6 +654,7 @@ class UserService(BaseService[Usuario]):
 
         # Verificar permisos del rol
         role_perm = RoleModule.query.filter_by(
+            org_id=getattr(user, 'organizacion_id', None),
             role=user.rol,
             module=module
         ).first()

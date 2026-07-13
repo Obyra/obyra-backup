@@ -6,7 +6,7 @@ from flask_login import login_required, current_user
 
 import roles_construccion as roles_defs
 from extensions import db
-from models import Usuario, AsignacionObra, Obra, RegistroTiempo, OrgMembership
+from models import Usuario, AsignacionObra, Obra, RegistroTiempo, OrgMembership, CustomRole, RoleModule
 from services.memberships import get_current_membership
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
@@ -115,6 +115,47 @@ def verificar_limite_usuarios(org_id):
 
 equipos_bp = Blueprint('equipos', __name__)
 
+
+# ============================================================================
+# Fase 2: roles personalizados por organización
+# ============================================================================
+
+# Módulos del sistema sobre los que se definen permisos.
+# OBYRA enforcea solo 2 niveles: Ver (can_view) y Editar (can_edit).
+MODULOS_SISTEMA = [
+    'obras', 'presupuestos', 'equipos', 'inventario',
+    'marketplaces', 'reportes', 'seguridad',
+]
+MODULO_LABELS = {
+    'obras': 'Obras', 'presupuestos': 'Presupuestos', 'equipos': 'Equipos',
+    'inventario': 'Inventario', 'marketplaces': 'Marketplace',
+    'reportes': 'Reportes', 'seguridad': 'Seguridad',
+}
+# Roles base que no se pueden borrar (rompería el acceso de la org).
+ROLES_BASE = {'admin', 'pm', 'tecnico', 'operario'}
+
+
+def _org_id_actual():
+    """org activa del usuario (membresía actual o fallback legacy)."""
+    m = get_current_membership()
+    if m:
+        return m.org_id
+    return getattr(current_user, 'organizacion_id', None)
+
+
+def _es_admin_org():
+    return bool(getattr(current_user, 'is_super_admin', False)) or current_user.role == 'admin'
+
+
+def _rol_valido_en_org(nombre, org_id):
+    """True si `nombre` es un custom_role activo de esa organización."""
+    if not nombre or not org_id:
+        return False
+    return CustomRole.query.filter_by(
+        org_id=org_id, nombre=nombre, activo=True
+    ).first() is not None
+
+
 @equipos_bp.route('/')
 @login_required
 def lista():
@@ -220,6 +261,11 @@ def usuarios_nuevo():
         flash('Ya existe un usuario con ese email.', 'danger')
         return redirect(url_for('equipos.usuarios_nuevo'))
 
+    # Fase 2a: sin collapse. El rol debe existir en custom_roles de la org.
+    if not _rol_valido_en_org(role, _org_id_actual()):
+        flash(f"El rol '{role}' no existe en tu organización.", 'danger')
+        return redirect(url_for('equipos.usuarios_nuevo'))
+
     # Verificar límite de usuarios por organización
     membership_actual = get_current_membership()
     if membership_actual:
@@ -237,8 +283,8 @@ def usuarios_nuevo():
             apellido=apellido,
             email=email.lower(),
             telefono=telefono,
-            rol=role,
-            role='admin' if role in ('administrador', 'admin') else 'operario',
+            rol=Usuario._sync_rol_from_role(role),
+            role=role,
             auth_provider='manual',
             activo=True,
             organizacion_id=current_user.organizacion_id,
@@ -261,7 +307,7 @@ def usuarios_nuevo():
         if target_org_id:
             membership = user.ensure_membership(
                 target_org_id,
-                role='admin' if role in ('administrador', 'admin') else 'operario',
+                role=role,
                 status='active',
             )
         else:
@@ -764,26 +810,16 @@ def usuarios_crear():
             return jsonify(ok=False, error=mensaje_limite), 400
 
     f = request.form
-    role = (f.get('role') or 'operario').strip()
-    org_id = getattr(current_user, 'organizacion_id', None)
+    role = (f.get('role') or '').strip()
+    org_id = _org_id_actual()
 
     raw_password = (f.get('password', '').strip() or 'temp123456')
 
-    # Normalizar rol: mapear admin/administrador -> admin, pm -> pm, resto -> operario
-    if role in ('admin', 'administrador'):
-        normalized_role = 'admin'
-    elif role == 'pm':
-        normalized_role = 'pm'
-    else:
-        normalized_role = 'operario'
-
-    # Mapear rol para campo legado
-    if normalized_role == 'admin':
-        rol_legado = 'administrador'
-    elif normalized_role == 'pm':
-        rol_legado = 'tecnico'  # PM se mapea a técnico en el sistema legado
-    else:
-        rol_legado = 'operario'
+    # Fase 2a: sin collapse. El rol debe existir en custom_roles de la org.
+    if not _rol_valido_en_org(role, org_id):
+        return jsonify(ok=False, error=f"El rol '{role}' no existe en tu organización."), 400
+    normalized_role = role
+    rol_legado = Usuario._sync_rol_from_role(role)  # campo legado derivado
 
     email_nuevo = f.get('email', '').lower().strip()
 
@@ -864,8 +900,15 @@ def usuarios_cambiar_rol(uid):
         return jsonify(ok=False, error="Usuario no encontrado en tu organización"), 404
 
     u = Usuario.query.get_or_404(uid)
+    nuevo_role = (request.form.get('role') or '').strip()
+    # Fase 2a: validar contra custom_roles de la org.
+    if not _rol_valido_en_org(nuevo_role, membership.org_id):
+        return jsonify(ok=False, error=f"El rol '{nuevo_role}' no existe en tu organización."), 400
+
     old_role = u.role
-    u.role = request.form.get('role', 'operario')
+    u.role = nuevo_role
+    u.rol = Usuario._sync_rol_from_role(nuevo_role)      # campo legado derivado
+    target_membership.role = nuevo_role                  # FIX: sincronizar la membresía
     try:
         from models.audit import registrar_audit
         registrar_audit('cambiar_rol', 'usuario', uid,
@@ -932,3 +975,202 @@ def usuarios_editar(uid):
     except IntegrityError:
         db.session.rollback()
         return jsonify(ok=False, error="Error al actualizar usuario"), 400
+
+
+# ============================================================================
+# Fase 2a — API de roles para poblar dropdowns dinámicos
+# ============================================================================
+
+@equipos_bp.route('/api/roles', methods=['GET'])
+@login_required
+def api_roles_listar():
+    """Lista los custom_roles activos de la org actual (para dropdowns)."""
+    org_id = _org_id_actual()
+    roles = (CustomRole.query
+             .filter_by(org_id=org_id, activo=True)
+             .order_by(CustomRole.nombre)
+             .all())
+    return jsonify([
+        {'id': r.id, 'nombre': r.nombre, 'descripcion': r.descripcion, 'activo': r.activo}
+        for r in roles
+    ])
+
+
+# ============================================================================
+# Fase 2b — Administración de roles (solo admin de la org)
+# ============================================================================
+
+@equipos_bp.route('/roles', methods=['GET'])
+@login_required
+def roles_admin():
+    """Pantalla de administración de roles y permisos."""
+    if not _es_admin_org():
+        flash('Solo los administradores pueden gestionar roles.', 'danger')
+        return redirect(url_for('equipos.lista'))
+    org_id = _org_id_actual()
+    roles = (CustomRole.query
+             .filter_by(org_id=org_id)
+             .order_by(CustomRole.activo.desc(), CustomRole.nombre)
+             .all())
+    return render_template(
+        'equipos/roles_admin.html',
+        roles=roles,
+        modulos=MODULOS_SISTEMA,
+        modulo_labels=MODULO_LABELS,
+        roles_base=ROLES_BASE,
+    )
+
+
+@equipos_bp.route('/api/roles', methods=['POST'])
+@login_required
+def api_roles_crear():
+    """Crea un custom_role + seedea RoleModule (todos Ver, sin Editar)."""
+    if not _es_admin_org():
+        return jsonify(ok=False, error="Sin permisos"), 403
+    org_id = _org_id_actual()
+    data = request.get_json(silent=True) or request.form
+    nombre = (data.get('nombre') or '').strip()
+    descripcion = (data.get('descripcion') or '').strip() or None
+
+    if not nombre:
+        return jsonify(ok=False, error="El nombre del rol es obligatorio."), 400
+    if CustomRole.query.filter_by(org_id=org_id, nombre=nombre).first():
+        return jsonify(ok=False, error=f"Ya existe un rol '{nombre}' en tu organización."), 400
+
+    rol = CustomRole(org_id=org_id, nombre=nombre, descripcion=descripcion, activo=True)
+    db.session.add(rol)
+    # Permisos default: Ver en todos los módulos, sin Editar.
+    for modulo in MODULOS_SISTEMA:
+        db.session.add(RoleModule(
+            org_id=org_id, role=nombre, module=modulo, can_view=True, can_edit=False,
+        ))
+    db.session.commit()
+    return jsonify(ok=True, id=rol.id, nombre=rol.nombre)
+
+
+@equipos_bp.route('/api/roles/<int:rid>', methods=['PUT'])
+@login_required
+def api_roles_editar(rid):
+    """Edita nombre/descripción/activo de un custom_role.
+
+    Si cambia el nombre, propaga el rename a RoleModule, Usuario.role y
+    OrgMembership.role de esa org (el rol se referencia por string).
+    """
+    if not _es_admin_org():
+        return jsonify(ok=False, error="Sin permisos"), 403
+    org_id = _org_id_actual()
+    rol = CustomRole.query.filter_by(id=rid, org_id=org_id).first_or_404()
+    data = request.get_json(silent=True) or request.form
+
+    nuevo_nombre = (data.get('nombre') or rol.nombre).strip()
+    if nuevo_nombre != rol.nombre:
+        if rol.nombre in ROLES_BASE:
+            return jsonify(ok=False, error="No se puede renombrar un rol base."), 400
+        if CustomRole.query.filter_by(org_id=org_id, nombre=nuevo_nombre).first():
+            return jsonify(ok=False, error=f"Ya existe un rol '{nuevo_nombre}'."), 400
+        # Propagar rename
+        RoleModule.query.filter_by(org_id=org_id, role=rol.nombre).update({'role': nuevo_nombre})
+        Usuario.query.filter_by(organizacion_id=org_id, role=rol.nombre).update({'role': nuevo_nombre})
+        OrgMembership.query.filter_by(org_id=org_id, role=rol.nombre).update({'role': nuevo_nombre})
+        rol.nombre = nuevo_nombre
+
+    if 'descripcion' in data:
+        rol.descripcion = (data.get('descripcion') or '').strip() or None
+    if 'activo' in data:
+        rol.activo = str(data.get('activo')).lower() in ('1', 'true', 'on', 'yes')
+
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@equipos_bp.route('/api/roles/<int:rid>', methods=['DELETE'])
+@login_required
+def api_roles_borrar(rid):
+    """Borra un custom_role + sus RoleModule. Bloquea si está en uso o es base."""
+    if not _es_admin_org():
+        return jsonify(ok=False, error="Sin permisos"), 403
+    org_id = _org_id_actual()
+    rol = CustomRole.query.filter_by(id=rid, org_id=org_id).first_or_404()
+
+    if rol.nombre in ROLES_BASE:
+        return jsonify(ok=False, error="No se puede borrar un rol base del sistema."), 400
+
+    en_uso = (OrgMembership.query
+              .filter_by(org_id=org_id, role=rol.nombre, status='active')
+              .count())
+    if en_uso:
+        return jsonify(ok=False,
+                       error=f"El rol está asignado a {en_uso} usuario(s). Reasignalos antes de borrar."), 400
+
+    RoleModule.query.filter_by(org_id=org_id, role=rol.nombre).delete()
+    db.session.delete(rol)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@equipos_bp.route('/api/roles/<int:rid>/permisos', methods=['GET'])
+@login_required
+def api_roles_permisos_listar(rid):
+    """Devuelve los permisos (por módulo) de un rol."""
+    if not _es_admin_org():
+        return jsonify(ok=False, error="Sin permisos"), 403
+    org_id = _org_id_actual()
+    rol = CustomRole.query.filter_by(id=rid, org_id=org_id).first_or_404()
+    perms = {rm.module: {'view': rm.can_view, 'edit': rm.can_edit}
+             for rm in RoleModule.query.filter_by(org_id=org_id, role=rol.nombre)}
+    return jsonify({
+        'rol': rol.nombre,
+        'permisos': [
+            {'module': m, 'label': MODULO_LABELS.get(m, m),
+             'view': perms.get(m, {}).get('view', False),
+             'edit': perms.get(m, {}).get('edit', False)}
+            for m in MODULOS_SISTEMA
+        ],
+    })
+
+
+@equipos_bp.route('/api/roles/<int:rid>/permisos', methods=['POST'])
+@login_required
+def api_roles_permisos_upsert(rid):
+    """Upsert de un permiso RoleModule (rol, módulo, can_view, can_edit)."""
+    if not _es_admin_org():
+        return jsonify(ok=False, error="Sin permisos"), 403
+    org_id = _org_id_actual()
+    rol = CustomRole.query.filter_by(id=rid, org_id=org_id).first_or_404()
+    data = request.get_json(silent=True) or request.form
+
+    module = (data.get('module') or '').strip()
+    if module not in MODULOS_SISTEMA:
+        return jsonify(ok=False, error=f"Módulo inválido: '{module}'."), 400
+
+    def _b(v):
+        return str(v).lower() in ('1', 'true', 'on', 'yes')
+    can_view = _b(data.get('view'))
+    can_edit = _b(data.get('edit'))
+    if can_edit:
+        can_view = True  # editar implica ver
+
+    rm = RoleModule.query.filter_by(org_id=org_id, role=rol.nombre, module=module).first()
+    if rm:
+        rm.can_view = can_view
+        rm.can_edit = can_edit
+    else:
+        db.session.add(RoleModule(
+            org_id=org_id, role=rol.nombre, module=module,
+            can_view=can_view, can_edit=can_edit,
+        ))
+    db.session.commit()
+    return jsonify(ok=True, module=module, view=can_view, edit=can_edit)
+
+
+@equipos_bp.route('/api/roles/<int:rid>/permisos/<modulo>', methods=['DELETE'])
+@login_required
+def api_roles_permisos_borrar(rid, modulo):
+    """Borra el permiso de un módulo para un rol (queda sin acceso)."""
+    if not _es_admin_org():
+        return jsonify(ok=False, error="Sin permisos"), 403
+    org_id = _org_id_actual()
+    rol = CustomRole.query.filter_by(id=rid, org_id=org_id).first_or_404()
+    RoleModule.query.filter_by(org_id=org_id, role=rol.nombre, module=modulo).delete()
+    db.session.commit()
+    return jsonify(ok=True)

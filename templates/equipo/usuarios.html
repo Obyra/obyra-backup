@@ -26,10 +26,8 @@
                 <td>{{ u.email }}</td>
                 <td>
                     <form class="d-flex gap-2" onsubmit="return setRol(event, {{u.id}})">
-                        <select class="form-select form-select-sm" name="role">
-                            <option value="operario" {{'selected' if u.role=='operario'}}>Operario</option>
-                            <option value="pm" {{'selected' if u.role=='pm'}}>PM</option>
-                            <option value="admin" {{'selected' if u.role=='admin'}}>Admin</option>
+                        <select class="form-select form-select-sm role-select" name="role" data-current="{{ u.role }}">
+                            <option value="{{ u.role }}" selected>{{ u.role|capitalize }}</option>
                         </select>
                         <button class="btn btn-sm btn-outline-secondary">Guardar</button>
                     </form>
@@ -76,10 +74,8 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label">Rol</label>
-                            <select class="form-select" name="role">
+                            <select class="form-select role-select" name="role" data-current="operario">
                                 <option value="operario" selected>Operario</option>
-                                <option value="pm">PM</option>
-                                <option value="admin">Admin</option>
                             </select>
                         </div>
                     </div>
@@ -115,10 +111,8 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label">Rol</label>
-                            <select class="form-select" name="role" id="editRole">
+                            <select class="form-select role-select" name="role" id="editRole" data-current="">
                                 <option value="operario">Operario</option>
-                                <option value="pm">PM</option>
-                                <option value="admin">Admin</option>
                             </select>
                         </div>
                     </div>
@@ -133,6 +127,23 @@
 </div>
 
 <script>
+// Fase 2a: poblar los dropdowns de rol dinámicamente desde custom_roles de la org.
+async function cargarRoles(){
+    let roles = [];
+    try {
+        const r = await fetch('/equipos/api/roles');
+        roles = await r.json();
+    } catch(e){ return; }
+    document.querySelectorAll('select.role-select').forEach(sel => {
+        const actual = sel.dataset.current || '';
+        sel.innerHTML = roles.map(rol =>
+            `<option value="${rol.nombre}" ${rol.nombre===actual?'selected':''}>` +
+            `${rol.nombre.charAt(0).toUpperCase()+rol.nombre.slice(1)}</option>`
+        ).join('');
+    });
+}
+document.addEventListener('DOMContentLoaded', cargarRoles);
+
 async function setRol(e, uid){
     e.preventDefault();
     const fd = new FormData(e.target);

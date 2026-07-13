@@ -27,6 +27,7 @@ from models.core import (
     BillingProfile,
     RoleModule,
     UserModule,
+    CustomRole,
     get_allowed_modules,
     upsert_user_module,
 )
@@ -245,56 +246,73 @@ from models.import_batch import ImportBatch
 from models.presupuesto_etapa import PresupuestoEtapa
 
 
-def seed_default_role_permissions():
-    """Seed permisos por defecto para roles"""
-    default_permissions = {
-        'administrador': {
-            'obras': {'view': True, 'edit': True},
-            'presupuestos': {'view': True, 'edit': True},
-            'equipos': {'view': True, 'edit': True},
-            'inventario': {'view': True, 'edit': True},
-            'marketplaces': {'view': True, 'edit': True},
-            'reportes': {'view': True, 'edit': True}
-        },
-        'tecnico': {
-            'obras': {'view': True, 'edit': True},
-            'presupuestos': {'view': True, 'edit': True},
-            'inventario': {'view': True, 'edit': True},
-            'marketplaces': {'view': True, 'edit': False},
-            'reportes': {'view': True, 'edit': False}
-        },
-        'operario': {
-            'obras': {'view': True, 'edit': False},
-            'inventario': {'view': True, 'edit': False},
-            'marketplaces': {'view': True, 'edit': False}
-        },
-        'jefe_obra': {
-            'obras': {'view': True, 'edit': True},
-            'presupuestos': {'view': True, 'edit': True},
-            'equipos': {'view': True, 'edit': False},
-            'inventario': {'view': True, 'edit': True},
-            'marketplaces': {'view': True, 'edit': True},
-            'reportes': {'view': True, 'edit': False}
-        },
-        'compras': {
-            'inventario': {'view': True, 'edit': True},
-            'marketplaces': {'view': True, 'edit': True},
-            'presupuestos': {'view': True, 'edit': False},
-            'reportes': {'view': True, 'edit': False}
-        }
-    }
+# Módulos del sistema y permisos por defecto de los 4 roles canónicos.
+# Reemplaza los nombres viejos ('administrador'/'jefe_obra'/'compras') que
+# no matcheaban Usuario.role. Ahora los permisos coinciden con el fallback
+# hardcodeado de Usuario.puede_acceder_modulo / puede_editar_modulo.
+_TODOS_LOS_MODULOS = [
+    'obras', 'presupuestos', 'equipos', 'inventario',
+    'marketplaces', 'reportes', 'asistente', 'cotizacion', 'seguridad',
+]
 
-    for role, modules in default_permissions.items():
-        for module, perms in modules.items():
-            existing = RoleModule.query.filter_by(role=role, module=module).first()
-            if not existing:
-                rm = RoleModule(
-                    role=role,
-                    module=module,
-                    can_view=perms['view'],
-                    can_edit=perms['edit']
-                )
-                db.session.add(rm)
+# {rol: {'view': [modulos...], 'edit': [modulos...]}}
+DEFAULT_ROLE_PERMISSIONS = {
+    'admin':    {'view': list(_TODOS_LOS_MODULOS), 'edit': list(_TODOS_LOS_MODULOS)},
+    'pm':       {'view': list(_TODOS_LOS_MODULOS), 'edit': list(_TODOS_LOS_MODULOS)},
+    'tecnico':  {
+        'view': ['obras', 'presupuestos', 'inventario', 'marketplaces',
+                 'reportes', 'asistente', 'cotizacion', 'seguridad'],
+        'edit': ['obras', 'presupuestos', 'inventario', 'marketplaces',
+                 'reportes', 'asistente', 'cotizacion', 'seguridad'],
+    },
+    'operario': {
+        'view': ['obras', 'inventario', 'marketplaces', 'asistente'],
+        'edit': [],
+    },
+}
+
+# Descripción de los 4 roles base (para custom_roles).
+DEFAULT_ROLE_LABELS = {
+    'admin': 'Administrador',
+    'pm': 'Project Manager',
+    'tecnico': 'Técnico',
+    'operario': 'Operario',
+}
+
+
+def seed_custom_roles_for_org(org_id):
+    """Crea los 4 roles base en custom_roles para una organización (idempotente)."""
+    for nombre, descripcion in DEFAULT_ROLE_LABELS.items():
+        existing = CustomRole.query.filter_by(org_id=org_id, nombre=nombre).first()
+        if not existing:
+            db.session.add(CustomRole(
+                org_id=org_id, nombre=nombre, descripcion=descripcion, activo=True,
+            ))
+
+
+def seed_default_role_permissions(org_id=None):
+    """Seed de permisos por rol POR ORGANIZACIÓN (idempotente).
+
+    Si `org_id` es None, seedea todas las organizaciones. Crea tanto los
+    custom_roles base como sus filas en role_modules (org-scoped).
+    """
+    from models.core import Organizacion
+
+    org_ids = [org_id] if org_id is not None else [o.id for o in Organizacion.query.all()]
+
+    for oid in org_ids:
+        seed_custom_roles_for_org(oid)
+        for role, perms in DEFAULT_ROLE_PERMISSIONS.items():
+            edit_set = set(perms['edit'])
+            for module in perms['view']:
+                existing = RoleModule.query.filter_by(
+                    org_id=oid, role=role, module=module
+                ).first()
+                if not existing:
+                    db.session.add(RoleModule(
+                        org_id=oid, role=role, module=module,
+                        can_view=True, can_edit=(module in edit_set),
+                    ))
 
     db.session.commit()
 
@@ -310,6 +328,7 @@ __all__ = [
     'BillingProfile',
     'RoleModule',
     'UserModule',
+    'CustomRole',
     'get_allowed_modules',
     'upsert_user_module',
     # Projects
@@ -417,4 +436,5 @@ __all__ = [
     'ActaEntrega',
     # Functions
     'seed_default_role_permissions',
+    'seed_custom_roles_for_org',
 ]

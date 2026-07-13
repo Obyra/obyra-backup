@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+{% block title %}Roles y permisos | OBYRA{% endblock %}
+
+{% block extra_head %}
+<style>
+  .roles-wrap { --rg-green:#1a9f5a; --rg-green-soft:#e3f4ea; --rg-gray:#e2e5ea; }
+  .roles-wrap .list-group-item.active { background: #eef4ff; color: inherit; border-color:#cdddff; }
+  .roles-wrap .list-group-item { cursor: pointer; }
+  .roles-wrap .role-name { text-transform: capitalize; font-weight: 600; }
+
+  /* Toggle de permiso: verde on / gris off */
+  .perm-toggle {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:46px; height:28px; border-radius:999px; border:none; cursor:pointer;
+    background: var(--rg-gray); color:#8b94a3; transition: all .15s ease;
+    position:relative;
+  }
+  .perm-toggle .knob {
+    width:20px; height:20px; border-radius:50%; background:#fff; position:absolute; left:4px;
+    transition: left .15s ease; box-shadow:0 1px 2px rgba(0,0,0,.2);
+    display:flex; align-items:center; justify-content:center; font-size:10px; color:#c0c6cf;
+  }
+  .perm-toggle.on { background: var(--rg-green); color:#fff; }
+  .perm-toggle.on .knob { left:22px; color: var(--rg-green); }
+  .perm-toggle:disabled { opacity:.55; cursor:not-allowed; }
+  .perm-toggle:focus-visible { outline:2px solid #4a86ff; outline-offset:2px; }
+
+  .matrix-table th, .matrix-table td { vertical-align: middle; }
+  .matrix-table td.perm-cell { text-align:center; }
+  .matrix-module { font-weight:500; }
+
+  /* Toasts */
+  .rg-toast-wrap { position:fixed; bottom:20px; right:20px; z-index:1080; display:flex; flex-direction:column; gap:8px; }
+  .rg-toast {
+    min-width:240px; max-width:340px; padding:11px 14px; border-radius:10px; color:#fff;
+    font-size:14px; box-shadow:0 6px 18px rgba(0,0,0,.18); display:flex; align-items:center; gap:9px;
+    animation: rg-in .2s ease;
+  }
+  .rg-toast.ok { background:#1a9f5a; }
+  .rg-toast.err { background:#c0392b; }
+  @keyframes rg-in { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+  @media (max-width:576px){ .rg-toast-wrap{ left:12px; right:12px; } .rg-toast{ max-width:none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 roles-wrap">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h3 class="mb-0"><i class="fas fa-user-shield me-2 text-primary"></i>Roles y permisos</h3>
+      <small class="text-muted">Definí roles a medida de tu organización y qué puede hacer cada uno.</small>
+    </div>
+    <button class="btn btn-primary" id="btnNuevoRol">
+      <i class="fas fa-plus me-1"></i>Nuevo rol
+    </button>
+  </div>
+
+  <div class="alert alert-info d-flex align-items-start" role="alert">
+    <i class="fas fa-circle-info me-2 mt-1"></i>
+    <div>OBYRA controla dos niveles por módulo: <strong>Ver</strong> (acceder al módulo) y
+      <strong>Editar</strong> (crear, modificar o borrar dentro de él). Activar "Editar" activa "Ver".</div>
+  </div>
+
+  <div class="row g-4">
+    {# ---------- Lista de roles ---------- #}
+    <div class="col-lg-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0 fw-semibold">Roles de la organización</div>
+        <div class="list-group list-group-flush" id="listaRoles">
+          {% for rol in roles %}
+          <div class="list-group-item d-flex justify-content-between align-items-center {{ 'active' if loop.first }}"
+               data-rid="{{ rol.id }}" data-nombre="{{ rol.nombre }}"
+               data-desc="{{ rol.descripcion or '' }}"
+               data-base="{{ '1' if rol.nombre in roles_base else '0' }}"
+               role="button" tabindex="0">
+            <div class="me-2">
+              <span class="role-name">{{ rol.nombre }}</span>
+              {% if rol.nombre in roles_base %}<span class="badge bg-secondary ms-1">base</span>{% endif %}
+              {% if not rol.activo %}<span class="badge bg-warning text-dark ms-1">inactivo</span>{% endif %}
+              {% if rol.descripcion %}<div class="text-muted small">{{ rol.descripcion }}</div>{% endif %}
+            </div>
+            {% if rol.nombre not in roles_base %}
+            <div class="btn-group btn-group-sm flex-shrink-0" data-noselect>
+              <button class="btn btn-outline-secondary btn-editar" title="Editar rol" aria-label="Editar rol">
+                <i class="fas fa-pen"></i>
+              </button>
+              <button class="btn btn-outline-danger btn-borrar" title="Borrar rol" aria-label="Borrar rol">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# ---------- Matriz de permisos ---------- #}
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+          <span class="fw-semibold">Permisos de <span id="rolActualNombre" class="text-primary role-name">—</span></span>
+          <span class="badge rounded-pill bg-light text-muted" id="permHint">se guarda al instante</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table matrix-table mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Módulo</th>
+                <th class="text-center" style="width:110px">Ver</th>
+                <th class="text-center" style="width:110px">Editar</th>
+              </tr>
+            </thead>
+            <tbody id="matrizPermisos">
+              <tr><td colspan="3" class="text-center text-muted py-5">Seleccioná un rol para ver sus permisos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ---------- Modales ---------- #}
+<div class="modal fade" id="modalRol" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalRolTitulo">Nuevo rol</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="rolId">
+        <div class="mb-3">
+          <label class="form-label">Nombre del rol <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="rolNombre" placeholder="Ej: Capataz" maxlength="50" autocomplete="off">
+          <div class="invalid-feedback" id="rolNombreErr">Ingresá un nombre.</div>
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Descripción <span class="text-muted">(opcional)</span></label>
+          <textarea class="form-control" id="rolDescripcion" rows="2" placeholder="Para qué sirve este rol"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnGuardarRol">
+          <span class="spinner-border spinner-border-sm d-none me-1" id="btnGuardarRolSpin"></span>Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalBorrar" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Borrar rol</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        ¿Seguro que querés borrar el rol <strong id="borrarNombre" class="role-name"></strong>?
+        Se eliminarán todos sus permisos. Esta acción no se puede deshacer.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btnConfirmarBorrar">
+          <span class="spinner-border spinner-border-sm d-none me-1" id="btnBorrarSpin"></span>Borrar rol
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="rg-toast-wrap" id="toastWrap"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  "use strict";
+  const modalRol = new bootstrap.Modal(document.getElementById('modalRol'));
+  const modalBorrar = new bootstrap.Modal(document.getElementById('modalBorrar'));
+  let rolActivo = null;      // id del rol seleccionado en la matriz
+  let borrarRid = null;
+
+  // ---------- helpers ----------
+  async function api(url, method='GET', body=null){
+    const opts = { method, headers: {'Content-Type':'application/json'} };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);                    // CSRF lo inyecta base.html
+    let data = {};
+    try { data = await r.json(); } catch(e){}
+    if (!r.ok || data.ok === false) throw new Error(data.error || 'Ocurrió un error.');
+    return data;
+  }
+  function toast(msg, ok=true){
+    const el = document.createElement('div');
+    el.className = 'rg-toast ' + (ok ? 'ok' : 'err');
+    el.innerHTML = `<i class="fas ${ok?'fa-check-circle':'fa-triangle-exclamation'}"></i><span>${msg}</span>`;
+    document.getElementById('toastWrap').appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 2600);
+  }
+  function spin(btnSpinId, on){ document.getElementById(btnSpinId).classList.toggle('d-none', !on); }
+
+  // ---------- matriz de permisos ----------
+  function toggleHtml(module, tipo, on, disabled){
+    return `<button type="button" class="perm-toggle ${on?'on':''}" data-module="${module}" data-tipo="${tipo}"
+              role="switch" aria-checked="${on}" aria-label="${tipo} ${module}" ${disabled?'disabled':''}>
+              <span class="knob"><i class="fas fa-check"></i></span>
+            </button>`;
+  }
+  async function cargarPermisos(rid){
+    rolActivo = rid;
+    const data = await api(`/equipos/api/roles/${rid}/permisos`);
+    document.getElementById('rolActualNombre').textContent = data.rol;
+    const tbody = document.getElementById('matrizPermisos');
+    tbody.innerHTML = data.permisos.map(p => `
+      <tr>
+        <td class="matrix-module">${p.label}</td>
+        <td class="perm-cell">${toggleHtml(p.module,'view', p.view, p.edit)}</td>
+        <td class="perm-cell">${toggleHtml(p.module,'edit', p.edit, false)}</td>
+      </tr>`).join('');
+  }
+  async function onToggle(btn){
+    const module = btn.dataset.module, tipo = btn.dataset.tipo;
+    const row = btn.closest('tr');
+    const vBtn = row.querySelector('.perm-toggle[data-tipo="view"]');
+    const eBtn = row.querySelector('.perm-toggle[data-tipo="edit"]');
+    let view = vBtn.classList.contains('on');
+    let edit = eBtn.classList.contains('on');
+    if (tipo === 'view') view = !view; else edit = !edit;
+    if (edit) view = true;               // editar implica ver
+    // reflejar en UI (optimista)
+    vBtn.classList.toggle('on', view); vBtn.setAttribute('aria-checked', view); vBtn.disabled = edit;
+    eBtn.classList.toggle('on', edit); eBtn.setAttribute('aria-checked', edit);
+    try {
+      await api(`/equipos/api/roles/${rolActivo}/permisos`, 'POST', { module, view, edit });
+      toast('Permiso actualizado');
+    } catch(err){
+      toast(err.message, false);
+      cargarPermisos(rolActivo);         // revertir desde el server
+    }
+  }
+  document.getElementById('matrizPermisos').addEventListener('click', e => {
+    const btn = e.target.closest('.perm-toggle');
+    if (btn && !btn.disabled) onToggle(btn);
+  });
+
+  // ---------- selección de rol en la lista ----------
+  document.getElementById('listaRoles').addEventListener('click', e => {
+    if (e.target.closest('[data-noselect]')) return;   // clicks en botones editar/borrar
+    const item = e.target.closest('.list-group-item');
+    if (!item) return;
+    document.querySelectorAll('#listaRoles .list-group-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    cargarPermisos(item.dataset.rid);
+  });
+  document.getElementById('listaRoles').addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('list-group-item')) {
+      e.preventDefault(); e.target.click();
+    }
+  });
+
+  // ---------- crear / editar rol ----------
+  function abrirModalRol(modo, item){
+    document.getElementById('rolNombre').classList.remove('is-invalid');
+    if (modo === 'crear'){
+      document.getElementById('modalRolTitulo').textContent = 'Nuevo rol';
+      document.getElementById('rolId').value = '';
+      document.getElementById('rolNombre').value = '';
+      document.getElementById('rolDescripcion').value = '';
+    } else {
+      document.getElementById('modalRolTitulo').textContent = 'Editar rol';
+      document.getElementById('rolId').value = item.dataset.rid;
+      document.getElementById('rolNombre').value = item.dataset.nombre;
+      document.getElementById('rolDescripcion').value = item.dataset.desc;
+    }
+    modalRol.show();
+    setTimeout(() => document.getElementById('rolNombre').focus(), 300);
+  }
+  document.getElementById('btnNuevoRol').addEventListener('click', () => abrirModalRol('crear'));
+  document.querySelectorAll('.btn-editar').forEach(b =>
+    b.addEventListener('click', () => abrirModalRol('editar', b.closest('.list-group-item'))));
+
+  document.getElementById('btnGuardarRol').addEventListener('click', async () => {
+    const id = document.getElementById('rolId').value;
+    const nombre = document.getElementById('rolNombre').value.trim();
+    const descripcion = document.getElementById('rolDescripcion').value.trim();
+    const nombreEl = document.getElementById('rolNombre');
+    if (!nombre){
+      nombreEl.classList.add('is-invalid');
+      document.getElementById('rolNombreErr').textContent = 'Ingresá un nombre para el rol.';
+      nombreEl.focus();
+      return;
+    }
+    nombreEl.classList.remove('is-invalid');
+    spin('btnGuardarRolSpin', true);
+    try {
+      if (id) {
+        await api(`/equipos/api/roles/${id}`, 'PUT', { nombre, descripcion });
+        toast('Rol actualizado');
+      } else {
+        await api('/equipos/api/roles', 'POST', { nombre, descripcion });
+        toast('Rol creado');
+      }
+      setTimeout(() => location.reload(), 500);
+    } catch(err){
+      spin('btnGuardarRolSpin', false);
+      nombreEl.classList.add('is-invalid');
+      document.getElementById('rolNombreErr').textContent = err.message;
+    }
+  });
+
+  // ---------- borrar rol ----------
+  document.querySelectorAll('.btn-borrar').forEach(b =>
+    b.addEventListener('click', () => {
+      const item = b.closest('.list-group-item');
+      borrarRid = item.dataset.rid;
+      document.getElementById('borrarNombre').textContent = item.dataset.nombre;
+      modalBorrar.show();
+    }));
+  document.getElementById('btnConfirmarBorrar').addEventListener('click', async () => {
+    spin('btnBorrarSpin', true);
+    try {
+      await api(`/equipos/api/roles/${borrarRid}`, 'DELETE');
+      toast('Rol borrado');
+      setTimeout(() => location.reload(), 500);
+    } catch(err){
+      spin('btnBorrarSpin', false);
+      modalBorrar.hide();
+      toast(err.message, false);   // ej: "El rol está asignado a N usuarios..."
+    }
+  });
+
+  // ---------- init: cargar el primer rol ----------
+  const first = document.querySelector('#listaRoles .list-group-item');
+  if (first) cargarPermisos(first.dataset.rid);
+})();
+</script>
+{% endblock %}
