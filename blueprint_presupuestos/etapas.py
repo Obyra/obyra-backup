@@ -9,7 +9,7 @@ Filosofia:
   denormalizado. Toda operacion que cambie la etapa de un item actualiza
   AMBOS: la FK `etapa_presupuesto_id` y el cache `etapa_nombre`.
 - Los endpoints solo permiten operar sobre presupuestos en estado
-  'borrador' o 'enviado'. En 'aprobado' / 'perdido' / 'eliminado' devuelven 400.
+  'borrador' o 'enviado'. En 'aprobado' / 'eliminado' devuelven 400.
 - Multi-tenant: scope por organizacion_id en cada query.
 """
 from datetime import datetime
