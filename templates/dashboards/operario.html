@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Mis tareas | OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="mb-4">
+    <h3 class="mb-0"><i class="fas fa-list-check me-2 text-primary"></i>Mis tareas</h3>
+    <small class="text-muted">Tareas pendientes y en progreso</small>
+  </div>
+
+  <div class="row g-4">
+    {# ---------- Mis tareas ---------- #}
+    <div class="col-lg-7">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-clipboard-list me-2 text-primary"></i>Tareas asignadas</strong>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for t in tareas %}
+          <a href="{{ url_for('obras.mis_tareas_detalle', tarea_id=t.id) }}"
+             class="list-group-item list-group-item-action">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold">{{ t.nombre }}</div>
+                <div class="text-muted small"><i class="fas fa-building me-1"></i>{{ t.obra }}</div>
+              </div>
+              <div class="text-end">
+                {% if t.estado == 'en_curso' %}
+                <span class="badge bg-primary">En progreso</span>
+                {% else %}
+                <span class="badge bg-secondary">Pendiente</span>
+                {% endif %}
+                {% if t.atrasada %}
+                <div class="small text-danger mt-1"><i class="fas fa-clock me-1"></i>Vencía {{ t.fecha_fin_plan }}</div>
+                {% elif t.fecha_fin_plan %}
+                <div class="small text-muted mt-1">Vence {{ t.fecha_fin_plan }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </a>
+          {% else %}
+          <div class="list-group-item text-muted text-center py-5">
+            <i class="fas fa-mug-hot fa-2x mb-2 d-block text-success"></i>
+            No tenés tareas pendientes
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# ---------- Material para mis tareas ---------- #}
+    <div class="col-lg-5">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-truck-ramp-box me-2 text-info"></i>Material recibido</strong>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for m in material %}
+          <div class="list-group-item">
+            <div class="d-flex justify-content-between">
+              <div>
+                <div class="fw-semibold small">Remito {{ m.numero }}</div>
+                <div class="text-muted small">{{ m.proveedor }}</div>
+              </div>
+              <div class="text-end">
+                <div class="small">{{ m.fecha }}</div>
+                {% if m.estado == 'recibido' %}
+                <span class="badge bg-success">Recibido</span>
+                {% elif m.estado == 'con_observaciones' %}
+                <span class="badge bg-warning text-dark">Con obs.</span>
+                {% else %}
+                <span class="badge bg-danger">{{ m.estado }}</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% else %}
+          <div class="list-group-item text-muted small text-center py-4">Sin material reciente</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

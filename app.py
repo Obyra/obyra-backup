@@ -596,13 +596,27 @@ def sitemap_xml():
     return app.send_static_file('sitemap.xml')
 
 
+def _redirect_dashboard(user):
+    """Redirige al dashboard que corresponde al rol del usuario.
+
+    Usa bp_dashboards.dashboard_endpoint_for; si el blueprint no esta
+    disponible, cae al comportamiento anterior (operario -> mis_tareas,
+    resto -> reportes.dashboard).
+    """
+    try:
+        from bp_dashboards import dashboard_endpoint_for
+        return redirect(url_for(dashboard_endpoint_for(user)))
+    except Exception:
+        if getattr(user, "role", None) == "operario":
+            return redirect(url_for("obras.mis_tareas"))
+        return redirect(url_for('reportes.dashboard'))
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     """Landing principal con acceso a inicio de sesión y portal de proveedores."""
     if current_user.is_authenticated:
-        if getattr(current_user, "role", None) == "operario":
-            return redirect(url_for("obras.mis_tareas"))
-        return redirect(url_for('reportes.dashboard'))
+        return _redirect_dashboard(current_user)
 
     next_page = request.values.get('next')
     # Validar que next_page sea una URL interna (prevenir open redirect)
@@ -638,9 +652,7 @@ def index():
                 usuario = payload
                 if next_page:
                     return redirect(next_page)
-                if getattr(usuario, "role", None) == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
+                return _redirect_dashboard(usuario)
             else:
                 message = ''
                 category = 'danger'
@@ -667,9 +679,7 @@ def legacy_login_redirect():
 @app.route('/dashboard')
 def dashboard():
     if current_user.is_authenticated:
-        if getattr(current_user, "role", None) == "operario":
-            return redirect(url_for("obras.mis_tareas"))
-        return redirect(url_for('reportes.dashboard'))
+        return _redirect_dashboard(current_user)
     return _login_redirect()
 
 # ---------------- Template helpers ----------------
@@ -852,7 +862,6 @@ def estado_badge_filter(estado):
         'enviado': 'bg-warning',
         'aprobado': 'bg-success',
         'rechazado': 'bg-danger',
-        'perdido': 'bg-dark',
         'vencido': 'bg-danger',
         'eliminado': 'bg-dark',
         'planificacion': 'bg-secondary',
@@ -1130,6 +1139,14 @@ except ImportError as e:
     print(f"[WARN] Documentos blueprint not available: {e}")
 
 _refresh_login_view()
+
+# --- Dashboards diferenciados por rol ----------------------------------
+try:
+    from bp_dashboards import dashboards_bp
+    app.register_blueprint(dashboards_bp)
+    print("[OK] Dashboards blueprint registered successfully")
+except Exception as exc:
+    app.logger.warning("bp_dashboards no disponible: %s", exc)
 
 # --- Public legal pages (Terminos, Privacidad, Cookies) ----------------
 try:

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Dashboard PM | OBYRA{% endblock %}
+
+{% set BADGE = {
+  'FINALIZADA': 'secondary', 'PARADA': 'dark', 'CRITICA': 'danger',
+  'ATRASADA': 'warning', 'EN_CURSO': 'success', 'CANCELADA': 'secondary'
+} %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="mb-4">
+    <h3 class="mb-0"><i class="fas fa-diagram-project me-2 text-primary"></i>Mis proyectos</h3>
+    <small class="text-muted">Obras que gestionás · {{ financiero.cantidad_obras }} activa(s)</small>
+  </div>
+
+  <div class="row g-4">
+    {# ---------- Alertas de mis obras ---------- #}
+    <div class="col-lg-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-bell me-2 text-danger"></i>Alertas de mis obras</strong>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for a in alertas %}
+          <a href="{{ a.url or '#' }}" class="list-group-item list-group-item-action">
+            <div class="d-flex align-items-start gap-2">
+              <i class="fas {{ a.icono or 'fa-circle-exclamation' }} text-{{ a.color or 'secondary' }} mt-1"></i>
+              <div>
+                <div class="fw-semibold small">{{ a.titulo }}</div>
+                <div class="text-muted small">{{ a.detalle }}</div>
+              </div>
+            </div>
+          </a>
+          {% else %}
+          <div class="list-group-item text-muted small text-center py-4">
+            <i class="fas fa-check-circle text-success me-1"></i> Todo en orden
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# ---------- Obras que gestiona ---------- #}
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0 d-flex justify-content-between">
+          <strong><i class="fas fa-building me-2 text-primary"></i>Obras que gestiono</strong>
+          <span class="text-muted small">Margen total: ${{ "{:,.0f}".format(financiero.margen) }} ({{ financiero.margen_pct }}%)</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Obra</th>
+                <th class="text-end">Presupuesto</th>
+                <th class="text-end">Costo real</th>
+                <th style="min-width:120px">Avance</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in obras %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('obras.detalle', id=o.id) }}" class="text-decoration-none fw-semibold">{{ o.nombre }}</a>
+                  <div class="text-muted small">{{ o.cliente }}</div>
+                </td>
+                <td class="text-end">${{ "{:,.0f}".format(o.presupuesto) }}</td>
+                <td class="text-end">
+                  ${{ "{:,.0f}".format(o.costo_real) }}
+                  <div class="small {{ 'text-danger' if o.consumo_pct > 100 else 'text-muted' }}">{{ o.consumo_pct }}%</div>
+                </td>
+                <td>
+                  <div class="progress" style="height:6px">
+                    <div class="progress-bar bg-{{ BADGE.get(o.estado_operativo, 'primary') }}" style="width: {{ o.avance }}%"></div>
+                  </div>
+                  <small class="text-muted">{{ o.avance }}%</small>
+                </td>
+                <td><span class="badge bg-{{ BADGE.get(o.estado_operativo, 'secondary') }}">{{ o.estado_operativo }}</span></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-center text-muted py-4">No gestionás obras activas</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    {# ---------- Entregas de mis obras ---------- #}
+    <div class="col-lg-7">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-truck me-2 text-info"></i>Entregas de mis obras</strong>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr><th>OC</th><th>Proveedor</th><th>Obra</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+              {% for e in entregas %}
+              <tr>
+                <td><a href="{{ e.url }}" class="text-decoration-none">{{ e.numero }}</a></td>
+                <td>{{ e.proveedor }}</td>
+                <td>{{ e.obra }}</td>
+                <td>
+                  {% if e.vencida %}<span class="badge bg-danger">Vencida ({{ -e.dias }}d)</span>
+                  {% else %}<span class="badge bg-info text-dark">En {{ e.dias }}d</span>{% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="text-center text-muted py-4">Sin entregas próximas</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {# ---------- Equipo asignado ---------- #}
+    <div class="col-lg-5">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-users me-2 text-secondary"></i>Equipo asignado</strong>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr><th>Persona</th><th>Rol</th><th>Obra</th></tr>
+            </thead>
+            <tbody>
+              {% for m in equipo %}
+              <tr>
+                <td class="fw-semibold">{{ m.usuario }}</td>
+                <td><span class="badge bg-light text-dark">{{ m.rol_en_obra }}</span></td>
+                <td class="text-muted small">{{ m.obra }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3" class="text-center text-muted py-4">Sin equipo asignado</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
