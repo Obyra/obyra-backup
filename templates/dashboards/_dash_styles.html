@@ -1,0 +1,66 @@
+<style>
+  .dash {
+    --dash-shadow: 0 1px 2px rgba(16,24,40,.05), 0 4px 16px rgba(16,24,40,.06);
+    --dash-shadow-hover: 0 2px 6px rgba(16,24,40,.08), 0 10px 28px rgba(16,24,40,.10);
+    --dash-muted: #667085;
+  }
+  .dash h3 { font-weight: 700; letter-spacing: -.02em; }
+  .dash .card {
+    border: 0; border-radius: 16px; box-shadow: var(--dash-shadow);
+    transition: box-shadow .18s ease, transform .18s ease;
+  }
+  .dash .card-header {
+    background: transparent; border-bottom: 1px solid rgba(16,24,40,.07);
+    font-weight: 600; padding: .9rem 1.1rem;
+  }
+  .dash .card-body { padding: 1.1rem; }
+
+  /* KPI cards */
+  .kpi .card-body { display: flex; align-items: center; gap: .9rem; }
+  .kpi:hover { transform: translateY(-2px); box-shadow: var(--dash-shadow-hover); }
+  .kpi-icon {
+    flex: 0 0 auto; width: 46px; height: 46px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
+  }
+  .kpi-body { flex: 1 1 auto; min-width: 0; }
+  .kpi-label {
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--dash-muted); font-weight: 700; margin-bottom: 2px;
+  }
+  .kpi-value {
+    font-size: clamp(1.35rem, 4.2vw, 1.85rem); font-weight: 750; line-height: 1.05;
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  }
+  .kpi-sub { font-size: .78rem; color: var(--dash-muted); margin-top: 1px; }
+
+  /* Tablas */
+  .dash table { --bs-table-border-color: rgba(16,24,40,.06); }
+  .dash thead th {
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--dash-muted); font-weight: 700; border-bottom-width: 1px;
+  }
+  .dash td, .dash th { padding-top: .7rem; padding-bottom: .7rem; }
+  .dash .num { font-variant-numeric: tabular-nums; }
+  .obra-name { font-weight: 650; text-decoration: none; }
+  .obra-name:hover { text-decoration: underline; }
+
+  /* Progreso */
+  .dash .progress { height: 9px; border-radius: 8px; background: #eef1f5; }
+  .dash .progress-bar { border-radius: 8px; }
+  .progress-wrap { min-width: 110px; }
+
+  /* Alertas: que NO se corten en movil */
+  .dash .list-group-item { border: 0; border-bottom: 1px solid rgba(16,24,40,.05); }
+  .dash .list-group-item:last-child { border-bottom: 0; }
+  .alert-title { font-weight: 650; font-size: .85rem; word-break: break-word; }
+  .alert-detail { font-size: .8rem; color: var(--dash-muted); word-break: break-word; }
+  .alert-min0 { min-width: 0; }
+
+  /* Responsive: en movil las cards se apilan y las tablas scrollean */
+  .dash .table-responsive { -webkit-overflow-scrolling: touch; }
+  @media (max-width: 575.98px) {
+    .dash .card-body { padding: .9rem; }
+    .kpi-icon { width: 40px; height: 40px; font-size: 1rem; }
+    .dash table { min-width: 460px; }  /* fuerza scroll horizontal, sin cortar columnas */
+  }
+</style>

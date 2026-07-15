@@ -100,13 +100,18 @@ def resumen_financiero(resumenes) -> dict:
     tot_pres = sum(r['presupuesto'] for r in resumenes)
     tot_costo = sum(r['costo_real'] for r in resumenes)
     margen = tot_pres - tot_costo
+    atrasadas = sum(1 for r in resumenes if r.get('estado_operativo') == 'ATRASADA')
     return {
         'presupuesto_total': tot_pres,
         'gastado_total': tot_costo,
+        # margen/margen_pct: se conservan por compatibilidad, pero NO son KPI de
+        # portada. Cuando la ejecucion es baja, margen_pct ~= 100% e informa poco
+        # (es casi el complemento de ejecucion_pct). Portada usa ejecucion + atrasadas.
         'margen': margen,
         'margen_pct': round(margen / tot_pres * 100, 1) if tot_pres > 0 else 0.0,
         'ejecucion_pct': round(tot_costo / tot_pres * 100, 1) if tot_pres > 0 else 0.0,
         'cantidad_obras': len(resumenes),
+        'obras_atrasadas': atrasadas,
     }
 
 
