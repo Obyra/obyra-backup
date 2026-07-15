@@ -224,12 +224,21 @@ def load_membership_into_context() -> None:
         if getattr(current_user, 'primary_org_id', None) is None:
             set_committed_value(current_user, 'primary_org_id', membership.org_id)
 
-        if membership.role == 'admin':
-            set_committed_value(current_user, 'rol', 'administrador')
-            set_committed_value(current_user, 'role', 'admin')
-        else:
-            set_committed_value(current_user, 'rol', 'operario')
-            set_committed_value(current_user, 'role', 'operario')
+        # Fase 2a: el rol de la membresia se pasa TAL CUAL a Usuario.role
+        # (su nombre coincide con custom_roles de la org). Antes esto colapsaba
+        # todo lo que no fuera admin a operario, borrando pm/tecnico y cualquier
+        # rol personalizado en cada request. Solo se normalizan los alias legacy
+        # conocidos para que 'administrador'/'project_manager' sigan mapeando a
+        # los canonicos.
+        from models.core import Usuario
+        _ALIAS_LEGACY = {
+            'administrador': 'admin', 'project_manager': 'pm',
+            'technical': 'tecnico', 'worker': 'operario',
+        }
+        raw_role = (membership.role or 'operario').strip()
+        canon = _ALIAS_LEGACY.get(raw_role.lower(), raw_role)
+        set_committed_value(current_user, 'role', canon)
+        set_committed_value(current_user, 'rol', Usuario._sync_rol_from_role(canon))
     except Exception:
         # En entornos donde current_user es proxy sin estos atributos, ignoramos el error.
         pass

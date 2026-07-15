@@ -1699,9 +1699,11 @@ def eliminar_obra(obra_id):
     nombre_obra = obra.nombre
 
     try:
-        # Soft delete: marcar como inactiva y cancelada (no borrar datos)
-        obra.activo = False
-        obra.estado = 'cancelada'
+        # Soft delete: setea deleted_at + estado='cancelada' (no borra datos).
+        # Antes seteaba obra.activo=False (columna inexistente en Obra -> atributo
+        # fantasma) y NO escribía deleted_at, por lo que query_active() seguía
+        # devolviendo la obra "cancelada". soft_delete() hace ambas cosas.
+        obra.soft_delete()
         db.session.commit()
 
         try:

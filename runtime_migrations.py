@@ -974,18 +974,58 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Cotizacion WhatsApp migration skipped: {e}")
 
-    # RBAC tables and seeding
+    # RBAC tables and seeding (Fase 1 roles personalizados: org-scoped)
     try:
-        from models import RoleModule, UserModule, seed_default_role_permissions
+        from models import (
+            RoleModule, UserModule, CustomRole, seed_default_role_permissions,
+        )
 
-        # Create RBAC tables if they don't exist
+        # Crear tablas RBAC si no existen. Si role_modules ya existía sin
+        # org_id, esto NO la altera -> el ALTER de abajo se encarga.
         RoleModule.__table__.create(db.engine, checkfirst=True)
         UserModule.__table__.create(db.engine, checkfirst=True)
+        CustomRole.__table__.create(db.engine, checkfirst=True)
 
-        # Seed default permissions
+        # Migrar role_modules a org-scoped de forma idempotente.
+        migrate_role_modules_sql = """
+            ALTER TABLE role_modules ADD COLUMN IF NOT EXISTS org_id INTEGER;
+
+            DO $$ BEGIN
+                ALTER TABLE role_modules
+                    ADD CONSTRAINT fk_role_modules_org
+                    FOREIGN KEY (org_id) REFERENCES organizaciones(id) ON DELETE CASCADE;
+            EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+            CREATE INDEX IF NOT EXISTS ix_role_modules_org_id ON role_modules(org_id);
+
+            ALTER TABLE role_modules DROP CONSTRAINT IF EXISTS unique_role_module;
+
+            -- Replicar filas globales (org_id NULL) a todas las orgs y borrar las globales.
+            INSERT INTO role_modules (role, module, can_view, can_edit, org_id)
+            SELECT rm.role, rm.module, rm.can_view, rm.can_edit, o.id
+            FROM role_modules rm
+            CROSS JOIN organizaciones o
+            WHERE rm.org_id IS NULL;
+
+            DELETE FROM role_modules WHERE org_id IS NULL;
+
+            DO $$ BEGIN
+                ALTER TABLE role_modules ALTER COLUMN org_id SET NOT NULL;
+            EXCEPTION WHEN others THEN NULL; END $$;
+
+            DO $$ BEGIN
+                ALTER TABLE role_modules
+                    ADD CONSTRAINT uq_role_module_org UNIQUE (org_id, role, module);
+            EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+        """
+        db.session.execute(text(migrate_role_modules_sql))
+        db.session.commit()
+
+        # Seed de custom_roles + role_modules por organización.
         seed_default_role_permissions()
-        print("[OK] RBAC permissions seeded successfully")
+        print("[OK] RBAC org-scoped: role_modules.org_id + custom_roles seeded")
     except Exception as e:
+        db.session.rollback()
         print(f"[WARN] RBAC seeding skipped: {e}")
 
     # Marketplace tables mínimas

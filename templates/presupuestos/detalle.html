@@ -59,23 +59,6 @@
                         {% endif %}
                     </div>
 
-                    {% if presupuesto.estado == 'perdido' %}
-                    <div class="alert alert-warning py-2 px-3 mt-2 text-start d-inline-block">
-                        <div class="d-flex align-items-start">
-                            <i class="fas fa-archive me-2 mt-1"></i>
-                            <div>
-                                <strong>Marcado como perdido</strong>
-                                {% if presupuesto.perdido_motivo %}
-                                <div class="small mt-1">{{ presupuesto.perdido_motivo }}</div>
-                                {% endif %}
-                                {% if presupuesto.perdido_fecha %}
-                                <div class="small text-muted mt-1">{{ presupuesto.perdido_fecha.strftime('%d/%m/%Y %H:%M') }}</div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-
                     {# ============================================================
                        BOTONERA DEL PRESUPUESTO
 
@@ -83,11 +66,8 @@
                        1. Volver (navegación, siempre primero)
                        2. Acciones del presupuesto (PDF, Email, Cotizar WA, Armar Ejecutivo,
                           Confirmar Obra) — visibles solo si hay items.
-                       3. Acciones administrativas (Restaurar, Eliminar) — separadas con
+                       3. Acciones administrativas (Eliminar) — separadas con
                           una línea vertical para diferenciarlas.
-
-                       "Marcar como perdido" se saca de esta vista porque ya está en la
-                       card de la lista — meterlo acá adentro duplicaba y confundía.
                        ============================================================ #}
                     <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
                         <!-- Navegación -->
@@ -156,20 +136,12 @@
                         {% endif %}
 
                         <!-- Acciones administrativas (separadas visualmente) -->
-                        {% set show_restaurar = current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'perdido' %}
-                        {% set show_eliminar = current_user.role == 'admin' and presupuesto.estado in ['borrador', 'perdido'] %}
-                        {% if show_restaurar or show_eliminar %}
+                        {% set show_eliminar = current_user.role == 'admin' and presupuesto.estado == 'borrador' %}
+                        {% if show_eliminar %}
                         <div class="btn-group ms-2" role="group">
-                            {% if show_restaurar %}
-                            <button class="btn btn-outline-secondary" onclick="restaurarPresupuesto({{ presupuesto.id }})">
-                                <i class="fas fa-undo me-1"></i>Restaurar
-                            </button>
-                            {% endif %}
-                            {% if show_eliminar %}
                             <button class="btn btn-outline-danger" onclick="eliminarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-trash me-1"></i>Eliminar
                             </button>
-                            {% endif %}
                         </div>
                         {% endif %}
                     </div>
@@ -570,9 +542,7 @@
                         </div>
 </div>
 
-{% include 'presupuestos/_perder_modal.html' %}
-
-{% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado not in ['aprobado', 'perdido', 'eliminado'] %}
+{% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado not in ['aprobado', 'eliminado'] %}
                     <hr>
                     <div class="d-grid">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#cambiarEstadoModal">
@@ -2259,93 +2229,8 @@ function toggleEtapa(prefix, idx) {
     }
 }
 
-const modalPerdidoEl = document.getElementById('modalMarcarPerdido');
-const modalPerdido = modalPerdidoEl ? new bootstrap.Modal(modalPerdidoEl) : null;
-let presupuestoSeleccionado = null;
-const botonConfirmarPerdido = document.getElementById('btnConfirmarPerdido');
-if (botonConfirmarPerdido) {
-    botonConfirmarPerdido.addEventListener('click', confirmarMarcarPerdido);
-}
-
 const initialObraId = {{ (obra.id if obra else None)|tojson }};
 let currentObraId = initialObraId;
-
-function abrirPerderModal(id, numero) {
-    if (!modalPerdido) return;
-    presupuestoSeleccionado = { id, numero };
-    const numeroSpan = document.getElementById('perderPresupuestoNumero');
-    if (numeroSpan) {
-        numeroSpan.textContent = numero;
-    }
-    const motivo = document.getElementById('motivoPerdido');
-    const detalle = document.getElementById('detallePerdido');
-    if (motivo) motivo.value = '';
-    if (detalle) detalle.value = '';
-    modalPerdido.show();
-}
-
-async function confirmarMarcarPerdido() {
-    if (!presupuestoSeleccionado) return;
-    const motivo = document.getElementById('motivoPerdido')?.value.trim() || '';
-    const detalle = document.getElementById('detallePerdido')?.value.trim() || '';
-
-    if (!motivo && !detalle) {
-        showAlert('Selecciona un motivo o agrega un detalle para registrar el motivo.', 'warning');
-        return;
-    }
-
-    try {
-        const response = await fetch(`/presupuestos/${presupuestoSeleccionado.id}/perder`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({ motivo, detalle })
-        });
-
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            showAlert(result.error || 'Error al marcar el presupuesto como perdido.', 'danger');
-            return;
-        }
-
-        modalPerdido?.hide();
-        showAlert(result.mensaje || 'Presupuesto marcado como perdido.', 'success');
-        setTimeout(() => window.location.reload(), 800);
-    } catch (error) {
-        console.error(error);
-        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
-    }
-}
-
-async function restaurarPresupuesto(id) {
-    if (!confirm('¿Restaurar este presupuesto a borrador?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/presupuestos/${id}/restaurar`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
-
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            showAlert(result.error || 'Error al restaurar el presupuesto.', 'danger');
-            return;
-        }
-
-        showAlert(result.mensaje || 'Presupuesto restaurado a borrador.', 'success');
-        setTimeout(() => window.location.reload(), 800);
-    } catch (error) {
-        console.error(error);
-        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
-    }
-}
 
 async function eliminarPresupuesto(id, numero) {
     if (!confirm(`¿Eliminar el presupuesto ${numero}? Esta acción lo archivará y podrás verlo solo desde el filtro de eliminados.`)) {

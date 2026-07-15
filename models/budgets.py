@@ -86,7 +86,7 @@ class Presupuesto(db.Model):
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)  # Cliente del presupuesto
     numero = db.Column(db.String(50), nullable=False)
     fecha = db.Column(db.Date, default=date.today)
-    estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado, perdido, eliminado
+    estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, confirmado, rechazado, vencido, eliminado
     confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtió en obra
     # Presupuesto Ejecutivo (APU): cuando se aprueba, el desglose interno queda
     # congelado y no se pueden agregar/editar composiciones sin revertir primero.
@@ -131,8 +131,6 @@ class Presupuesto(db.Model):
     total_con_iva = db.Column(db.Numeric(15, 2), default=0)
     observaciones = db.Column(db.Text)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
-    perdido_motivo = db.Column(db.Text)
-    perdido_fecha = db.Column(db.DateTime)
     deleted_at = db.Column(db.DateTime)
     vigencia_dias = db.Column(db.Integer, default=30)
     fecha_vigencia = db.Column(db.Date)

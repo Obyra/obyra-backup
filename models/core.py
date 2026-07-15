@@ -65,6 +65,12 @@ class Organizacion(db.Model):
         primaryjoin='Organizacion.id == Usuario.organizacion_id',
         lazy='dynamic'
     )
+    custom_roles = db.relationship(
+        'CustomRole',
+        backref='organizacion',
+        cascade='all, delete-orphan',
+        lazy='dynamic',
+    )
     usuarios_primarios = db.relationship(
         'Usuario',
         back_populates='primary_organizacion',
@@ -323,18 +329,17 @@ class Usuario(UserMixin, db.Model):
         # Usar role del usuario o el pasado como parámetro
         resolved_role = role or self.role or 'operario'
 
-        # Normalizar a roles válidos
+        # Fase 2: solo se normalizan los alias legacy conocidos. Cualquier otro
+        # rol (custom, ej 'Capataz') se guarda TAL CUAL — su nombre coincide con
+        # custom_roles de la org. Antes esto colapsaba todo a 'operario',
+        # borrando los roles personalizados al crear la membresía.
         role_mapping = {
             'administrador': 'admin',
             'administrador_general': 'admin',
             'jefe_obra': 'pm',
             'project_manager': 'pm',
         }
-        normalized_role = role_mapping.get(resolved_role.lower(), resolved_role.lower())
-
-        # Validar que sea un rol conocido
-        if normalized_role not in ('admin', 'pm', 'tecnico', 'operario'):
-            normalized_role = 'operario'
+        normalized_role = role_mapping.get(resolved_role.lower(), resolved_role)
 
         membership = OrgMembership(
             org_id=org_id,
@@ -445,7 +450,9 @@ class Usuario(UserMixin, db.Model):
             return user_override.can_view
 
         # Si no hay override, usar permisos del rol
-        role_perm = RoleModule.query.filter_by(role=self.role, module=modulo).first()
+        role_perm = RoleModule.query.filter_by(
+            org_id=self.organizacion_id, role=self.role, module=modulo
+        ).first()
         if role_perm:
             return role_perm.can_view
 
@@ -471,7 +478,9 @@ class Usuario(UserMixin, db.Model):
             return user_override.can_edit
 
         # Si no hay override, usar permisos del rol
-        role_perm = RoleModule.query.filter_by(role=self.role, module=modulo).first()
+        role_perm = RoleModule.query.filter_by(
+            org_id=self.organizacion_id, role=self.role, module=modulo
+        ).first()
         if role_perm:
             return role_perm.can_edit
 
@@ -685,19 +694,60 @@ class BillingProfile(db.Model):
 
 
 class RoleModule(db.Model):
-    """Permisos por defecto para cada rol en cada módulo"""
+    """Permisos por rol en cada módulo, POR ORGANIZACIÓN.
+
+    Desde Fase 1 de roles personalizados: `org_id` hace que los permisos
+    sean por-tenant (antes eran globales y compartidos entre todas las orgs).
+    """
     __tablename__ = 'role_modules'
 
     id = db.Column(db.Integer, primary_key=True)
+    org_id = db.Column(
+        db.Integer,
+        db.ForeignKey('organizaciones.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
     role = db.Column(db.String(50), nullable=False)
     module = db.Column(db.String(50), nullable=False)
     can_view = db.Column(db.Boolean, default=False)
     can_edit = db.Column(db.Boolean, default=False)
 
-    __table_args__ = (db.UniqueConstraint('role', 'module', name='unique_role_module'),)
+    __table_args__ = (
+        db.UniqueConstraint('org_id', 'role', 'module', name='uq_role_module_org'),
+    )
 
     def __repr__(self):
-        return f'<RoleModule {self.role}:{self.module} view={self.can_view} edit={self.can_edit}>'
+        return f'<RoleModule org={self.org_id} {self.role}:{self.module} view={self.can_view} edit={self.can_edit}>'
+
+
+class CustomRole(db.Model):
+    """Roles definibles por cada organización (Fase 1 roles personalizados).
+
+    Los 4 roles base (admin, pm, tecnico, operario) se seedean como
+    CustomRole en cada org, y el admin puede crear roles adicionales.
+    El nombre del rol se referencia desde Usuario.role / OrgMembership.role
+    y desde RoleModule.role.
+    """
+    __tablename__ = 'custom_roles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    org_id = db.Column(
+        db.Integer,
+        db.ForeignKey('organizaciones.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    nombre = db.Column(db.String(50), nullable=False)
+    descripcion = db.Column(db.Text)
+    activo = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('org_id', 'nombre', name='uq_custom_role_org_nombre'),
+    )
+
+    def __repr__(self):
+        return f'<CustomRole org={self.org_id} {self.nombre} activo={self.activo}>'
 
 
 class UserModule(db.Model):
@@ -724,7 +774,8 @@ class UserModule(db.Model):
 def get_allowed_modules(user):
     """Obtiene los módulos permitidos para un usuario"""
     role_map = {rm.module: {"view": rm.can_view, "edit": rm.can_edit}
-                for rm in RoleModule.query.filter_by(role=user.role)}
+                for rm in RoleModule.query.filter_by(
+                    org_id=getattr(user, 'organizacion_id', None), role=user.role)}
 
     # Overrides de usuario
     for um in UserModule.query.filter_by(user_id=user.id):

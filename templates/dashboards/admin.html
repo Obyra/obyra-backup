@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Admin | OBYRA{% endblock %}
+
+{% set BADGE = {
+  'FINALIZADA': 'secondary', 'PARADA': 'dark', 'CRITICA': 'danger',
+  'ATRASADA': 'warning', 'EN_CURSO': 'success', 'CANCELADA': 'secondary'
+} %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="mb-0"><i class="fas fa-gauge-high me-2 text-primary"></i>Dashboard</h3>
+      <small class="text-muted">Vista general de la organización</small>
+    </div>
+  </div>
+
+  {# ---------- Resumen financiero ---------- #}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="card h-100 shadow-sm border-0">
+        <div class="card-body">
+          <small class="text-muted text-uppercase">Presupuesto total</small>
+          <h4 class="mb-0">${{ "{:,.0f}".format(financiero.presupuesto_total) }}</h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100 shadow-sm border-0">
+        <div class="card-body">
+          <small class="text-muted text-uppercase">Gastado (real)</small>
+          <h4 class="mb-0">${{ "{:,.0f}".format(financiero.gastado_total) }}</h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100 shadow-sm border-0">
+        <div class="card-body">
+          <small class="text-muted text-uppercase">Margen</small>
+          <h4 class="mb-0 {{ 'text-danger' if financiero.margen < 0 else 'text-success' }}">
+            ${{ "{:,.0f}".format(financiero.margen) }}
+            <small class="fs-6">({{ financiero.margen_pct }}%)</small>
+          </h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100 shadow-sm border-0">
+        <div class="card-body">
+          <small class="text-muted text-uppercase">Ejecución</small>
+          <h4 class="mb-0">{{ financiero.ejecucion_pct }}%</h4>
+          <small class="text-muted">{{ financiero.cantidad_obras }} obra(s) activa(s)</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    {# ---------- Alertas críticas ---------- #}
+    <div class="col-lg-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-bell me-2 text-danger"></i>Alertas críticas</strong>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for a in alertas %}
+          <a href="{{ a.url or '#' }}" class="list-group-item list-group-item-action">
+            <div class="d-flex align-items-start gap-2">
+              <i class="fas {{ a.icono or 'fa-circle-exclamation' }} text-{{ a.color or 'secondary' }} mt-1"></i>
+              <div>
+                <div class="fw-semibold small">{{ a.titulo }}</div>
+                <div class="text-muted small">{{ a.detalle }}</div>
+              </div>
+            </div>
+          </a>
+          {% else %}
+          <div class="list-group-item text-muted small text-center py-4">
+            <i class="fas fa-check-circle text-success me-1"></i> Sin alertas
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# ---------- Obras activas ---------- #}
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-building me-2 text-primary"></i>Obras activas</strong>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Obra</th>
+                <th class="text-end">Presupuesto</th>
+                <th class="text-end">Costo real</th>
+                <th style="min-width:120px">Avance</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in obras %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('obras.detalle', id=o.id) }}" class="text-decoration-none fw-semibold">{{ o.nombre }}</a>
+                  <div class="text-muted small">{{ o.cliente }}</div>
+                </td>
+                <td class="text-end">${{ "{:,.0f}".format(o.presupuesto) }}</td>
+                <td class="text-end">
+                  ${{ "{:,.0f}".format(o.costo_real) }}
+                  <div class="small {{ 'text-danger' if o.consumo_pct > 100 else 'text-muted' }}">{{ o.consumo_pct }}%</div>
+                </td>
+                <td>
+                  <div class="progress" style="height:6px">
+                    <div class="progress-bar bg-{{ BADGE.get(o.estado_operativo, 'primary') }}" style="width: {{ o.avance }}%"></div>
+                  </div>
+                  <small class="text-muted">{{ o.avance }}%</small>
+                </td>
+                <td><span class="badge bg-{{ BADGE.get(o.estado_operativo, 'secondary') }}">{{ o.estado_operativo }}</span></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-center text-muted py-4">No hay obras activas</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ---------- Entregas próximas ---------- #}
+  <div class="row g-4 mt-1">
+    <div class="col-12">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-white border-0">
+          <strong><i class="fas fa-truck me-2 text-info"></i>Entregas próximas</strong>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr><th>OC</th><th>Proveedor</th><th>Obra</th><th>Fecha</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+              {% for e in entregas %}
+              <tr>
+                <td><a href="{{ e.url }}" class="text-decoration-none">{{ e.numero }}</a></td>
+                <td>{{ e.proveedor }}</td>
+                <td>{{ e.obra }}</td>
+                <td>{{ e.fecha }}</td>
+                <td>
+                  {% if e.vencida %}
+                  <span class="badge bg-danger">Vencida ({{ -e.dias }}d)</span>
+                  {% else %}
+                  <span class="badge bg-info text-dark">En {{ e.dias }}d</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-center text-muted py-4">Sin entregas próximas</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

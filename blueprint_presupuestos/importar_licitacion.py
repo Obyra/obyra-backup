@@ -750,8 +750,8 @@ def importar_licitacion():
         from datetime import timedelta
         umbral = datetime.utcnow() - timedelta(hours=24)
         # Buscar presupuestos del mismo dia con descripcion similar,
-        # excluyendo los eliminados/perdidos (no deben bloquear nueva creacion).
-        estados_excluidos = ('eliminado', 'perdido')
+        # excluyendo los eliminados (no deben bloquear nueva creacion).
+        estados_excluidos = ('eliminado',)
         if hasattr(Presupuesto, 'created_at'):
             recientes = Presupuesto.query.filter(
                 Presupuesto.organizacion_id == org_id,

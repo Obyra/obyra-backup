@@ -196,9 +196,17 @@ class ProjectService(BaseService[Obra]):
         for etapa in obra.etapas:
             total_tareas = etapa.tareas.count()
             porcentaje_etapa = Decimal('0')
+            tareas_completadas = 0
 
             if total_tareas > 0:
-                tareas_completadas = etapa.tareas.filter_by(estado='completada').count()
+                # FUENTE ÚNICA DE VERDAD: misma fórmula que
+                # Obra.calcular_progreso_automatico() -> cuenta 'completada' Y
+                # 'finalizada'. Antes excluía 'finalizada', dando un % menor que
+                # el resto de las pantallas (mismo bug de fórmula divergente).
+                # (También se elimina el doble .count() reutilizando este valor.)
+                tareas_completadas = etapa.tareas.filter(
+                    TareaEtapa.estado.in_(['completada', 'finalizada'])
+                ).count()
                 porcentaje_etapa = (
                     Decimal(str(tareas_completadas)) / Decimal(str(total_tareas))
                 ) * (Decimal('100') / Decimal(str(total_etapas)))
@@ -212,7 +220,7 @@ class ProjectService(BaseService[Obra]):
                 'etapa_id': etapa.id,
                 'nombre': etapa.nombre,
                 'total_tareas': total_tareas,
-                'tareas_completadas': etapa.tareas.filter_by(estado='completada').count() if total_tareas > 0 else 0,
+                'tareas_completadas': tareas_completadas,
                 'porcentaje': float(porcentaje_etapa),
                 'estado': etapa.estado
             })

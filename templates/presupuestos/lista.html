@@ -57,7 +57,6 @@
                         <option value="aprobado" {{ 'selected' if estado == 'aprobado' }}>Aprobado</option>
                         <option value="confirmado" {{ 'selected' if estado == 'confirmado' }}>Confirmado</option>
                         <option value="rechazado" {{ 'selected' if estado == 'rechazado' }}>Rechazado</option>
-                        <option value="perdido" {{ 'selected' if estado == 'perdido' }}>Perdido</option>
                         <option value="vencido" {{ 'selected' if estado == 'vencido' }}>Vencido</option>
                         {% if current_user.role == 'admin' %}
                         <option value="eliminado" {{ 'selected' if estado == 'eliminado' }}>Eliminado</option>
@@ -165,22 +164,6 @@
                             </div>
                         </div>
 
-                        {% if presupuesto.estado == 'perdido' %}
-                        <div class="alert alert-warning py-2">
-                            <div class="d-flex align-items-start">
-                                <i class="fas fa-archive me-2 mt-1"></i>
-                                <div>
-                                    <strong>Presupuesto perdido</strong>
-                                    {% if presupuesto.perdido_motivo %}
-                                    <div class="small mt-1">{{ presupuesto.perdido_motivo }}</div>
-                                    {% endif %}
-                                    {% if presupuesto.perdido_fecha %}
-                                    <div class="small text-muted mt-1">{{ presupuesto.perdido_fecha.strftime('%d/%m/%Y %H:%M') }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        {% endif %}
 
                     {% if presupuesto.items.count() > 0 %}
                     <div class="mb-3">
@@ -250,18 +233,6 @@
                             </a>
                             {% endif %}
                             {% endif %}
-                            {% endif %}
-
-                            {% if (es_admin or tiene_rol('tecnico')) and presupuesto.estado == 'borrador' %}
-                            <button class="btn btn-outline-warning btn-sm" onclick="abrirPerderModal({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
-                                <i class="fas fa-archive me-1"></i>Marcar como perdido
-                            </button>
-                            {% endif %}
-
-                            {% if (es_admin or tiene_rol('tecnico')) and presupuesto.estado == 'perdido' %}
-                            <button class="btn btn-outline-secondary btn-sm" onclick="restaurarPresupuesto({{ presupuesto.id }})">
-                                <i class="fas fa-undo me-1"></i>Restaurar a borrador
-                            </button>
                             {% endif %}
 
                             {% if es_admin and presupuesto.estado in ['enviado', 'aprobado', 'rechazado'] %}
@@ -500,7 +471,6 @@
     </div>
 </div>
 
-{% include 'presupuestos/_perder_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
@@ -892,88 +862,6 @@ function mostrarEmptyStateSiCorresponde() {
     if (wrappers.length === 0) {
         emptyState.classList.remove('d-none');
         emptyState.removeAttribute('aria-hidden');
-    }
-}
-
-let presupuestoSeleccionado = null;
-const modalPerdidoEl = document.getElementById('modalMarcarPerdido');
-const modalPerdido = modalPerdidoEl ? new bootstrap.Modal(modalPerdidoEl) : null;
-const botonConfirmarPerdido = document.getElementById('btnConfirmarPerdido');
-if (botonConfirmarPerdido) {
-    botonConfirmarPerdido.addEventListener('click', confirmarMarcarPerdido);
-}
-
-function abrirPerderModal(id, numero) {
-    if (!modalPerdido) return;
-    presupuestoSeleccionado = { id, numero };
-    document.getElementById('perderPresupuestoNumero').textContent = numero;
-    document.getElementById('motivoPerdido').value = '';
-    document.getElementById('detallePerdido').value = '';
-    modalPerdido.show();
-}
-
-async function confirmarMarcarPerdido() {
-    if (!presupuestoSeleccionado) return;
-    const motivo = document.getElementById('motivoPerdido').value.trim();
-    const detalle = document.getElementById('detallePerdido').value.trim();
-
-    if (!motivo && !detalle) {
-        showAlert('Selecciona un motivo o agrega un detalle para registrar el motivo.', 'warning');
-        return;
-    }
-
-    try {
-        const response = await fetch(`/presupuestos/${presupuestoSeleccionado.id}/perder`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({ motivo, detalle })
-        });
-
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            showAlert(result.error || 'Error al marcar el presupuesto como perdido.', 'danger');
-            return;
-        }
-
-        if (modalPerdido) {
-            modalPerdido.hide();
-        }
-        showAlert(result.mensaje || 'Presupuesto marcado como perdido.', 'success');
-        setTimeout(() => window.location.reload(), 800);
-    } catch (error) {
-        console.error(error);
-        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
-    }
-}
-
-async function restaurarPresupuesto(id) {
-    if (!confirm('¿Restaurar este presupuesto a borrador?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/presupuestos/${id}/restaurar`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
-
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            showAlert(result.error || 'Error al restaurar el presupuesto.', 'danger');
-            return;
-        }
-
-        showAlert(result.mensaje || 'Presupuesto restaurado a borrador.', 'success');
-        setTimeout(() => window.location.reload(), 800);
-    } catch (error) {
-        console.error(error);
-        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
     }
 }
 
