@@ -2195,6 +2195,28 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] provider_price_list: {e}")
 
+    # Fase 1 IA presupuestos: organizacion_id nullable (base global) + UNIQUE con
+    # COALESCE(organizacion_id, 0) para que las filas globales deduped entre si.
+    try:
+        db.session.execute(db.text("""
+            ALTER TABLE provider_price_list ALTER COLUMN organizacion_id DROP NOT NULL;
+            DROP INDEX IF EXISTS uq_ppl_org_prov_desc_un_zona_modalidad;
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_ppl_org_prov_desc_un_zona_modalidad
+                ON provider_price_list(
+                    COALESCE(organizacion_id, 0),
+                    COALESCE(proveedor_id, 0),
+                    descripcion_normalizada,
+                    unidad,
+                    COALESCE(zona, ''),
+                    COALESCE(modalidad, 'compra')
+                );
+        """))
+        db.session.commit()
+        print("[OK] provider_price_list: organizacion_id nullable + unique COALESCE (base global)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] provider_price_list base global: {e}")
+
     try:
         db.session.execute(db.text("""
         DO $$ BEGIN

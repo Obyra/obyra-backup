@@ -533,6 +533,7 @@ def importar_catalogo_base(
     organizacion_id: int,
     user_id: "Optional[int]" = None,
     perfil: str = 'lista_propia_obyra',
+    global_base: bool = False,
 ) -> "Dict[str, Any]":
     """Importa el catalogo COMPLETO (hoja 01 ~6.345 + hoja 02 zonas + MO) a
     provider_price_list de forma IDEMPOTENTE y eficiente.
@@ -546,6 +547,11 @@ def importar_catalogo_base(
 
     if not os.path.exists(xlsx_path):
         return {'ok': False, 'error': f'archivo no encontrado: {xlsx_path}'}
+
+    # global_base=True -> los precios se cargan como BASE GLOBAL (org NULL),
+    # accesibles por todas las orgs via el fallback de precio_recurso_service.
+    # El ImportBatch sigue bajo `organizacion_id` (solo trazabilidad).
+    org_precios = None if global_base else organizacion_id
 
     filename = os.path.basename(xlsx_path)
     checksum = _calcular_checksum(xlsx_path)
@@ -580,10 +586,12 @@ def importar_catalogo_base(
     except ValueError:  # 29-feb
         vigencia = date(hoy.year + 1, hoy.month, 28)
 
-    # Pre-cargar claves existentes de la org (proveedor NULL) -> UPSERT O(1).
+    # Pre-cargar claves existentes (proveedor NULL) del scope destino -> UPSERT O(1).
     existentes = {}
+    _org_filter = (ProviderPriceList.organizacion_id.is_(None) if org_precios is None
+                   else ProviderPriceList.organizacion_id == org_precios)
     for r in (ProviderPriceList.query
-              .filter(ProviderPriceList.organizacion_id == organizacion_id,
+              .filter(_org_filter,
                       ProviderPriceList.proveedor_id.is_(None))
               .all()):
         existentes[(r.descripcion_normalizada, r.unidad, r.zona)] = r
@@ -619,7 +627,7 @@ def importar_catalogo_base(
                 updated += 1
         else:
             row = ProviderPriceList(
-                organizacion_id=organizacion_id, proveedor_id=None,
+                organizacion_id=org_precios, proveedor_id=None,
                 descripcion=desc[:300], descripcion_normalizada=desc_norm, unidad=unidad,
                 precio_unitario=precio, moneda=moneda, fecha_actualizacion=hoy,
                 vigencia_hasta=vigencia, fuente=perfil[:30], zona=zona, modalidad='compra',
