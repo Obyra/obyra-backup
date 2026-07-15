@@ -109,11 +109,25 @@ def _match_precio(h_norm):
     return False
 
 
+def _match_total_linea(h_norm):
+    """Columna de importe/precio TOTAL de la linea (no de rubro/seccion).
+
+    Ej JMG: 'precio total item'. Excluye 'precio total rubro' (total de la
+    seccion, no de la fila). Se usa para validar/back-calcular el unitario.
+    """
+    if not h_norm:
+        return False
+    if 'rubro' in h_norm or 'seccion' in h_norm:
+        return False
+    return ('precio total' in h_norm) or ('importe' in h_norm) or ('total item' in h_norm)
+
+
 def _detectar_columnas(headers):
-    """Busca indices de columnas en el header. Retorna dict desc/unidad/cantidad/precio."""
-    idx = {'desc': None, 'unidad': None, 'cantidad': None, 'precio': None}
+    """Busca indices de columnas. Retorna dict desc/unidad/cantidad/precio/total."""
+    idx = {'desc': None, 'unidad': None, 'cantidad': None, 'precio': None, 'total': None}
     norms = [_norm_header(h) for h in headers]
 
+    precio_cands = []  # (score, i) para elegir la MEJOR columna de precio unitario
     for i, hn in enumerate(norms):
         if not hn:
             continue
@@ -123,9 +137,78 @@ def _detectar_columnas(headers):
             idx['unidad'] = i
         if idx['cantidad'] is None and _match_cantidad(hn):
             idx['cantidad'] = i
-        if idx['precio'] is None and _match_precio(hn):
-            idx['precio'] = i
+        if idx['total'] is None and _match_total_linea(hn):
+            idx['total'] = i
+        if _match_precio(hn):
+            # Penalizar sub-columnas de desglose APU (MO/MAT, suelen venir en $0);
+            # premiar 'total' (sub-total unitario del grupo) y 'unitario' explicito.
+            sc = 0
+            if 'mano de obra' in hn or 'materiales' in hn or hn.endswith(' mo') or hn.endswith('m.o'):
+                sc -= 5
+            if 'total' in hn:
+                sc += 2
+            if 'unitario' in hn:
+                sc += 1
+            precio_cands.append((sc, i))
+
+    if precio_cands:
+        precio_cands.sort(key=lambda x: (-x[0], x[1]))
+        idx['precio'] = precio_cands[0][1]
     return idx
+
+
+def _detectar_columna_precio_unitario(rows, start_data, idx):
+    """Detecta la columna de precio UNITARIO por validacion aritmetica:
+
+    es la columna X donde `X * cantidad ~= total_de_linea` en la mayoria de las
+    filas de muestra. Robusto ante layouts multi-columna (MANO DE OBRA |
+    MATERIALES | TOTAL) donde el header no distingue la sub-columna correcta y
+    el detector cae en una sub-columna en $0 (bug JMG).
+
+    Devuelve el indice de columna validado, o None si no puede validar.
+    """
+    col_cant = idx.get('cantidad')
+    col_total = idx.get('total')
+    if col_cant is None or col_total is None:
+        return None
+
+    ventana = rows[start_data:start_data + 40]
+    max_col = max((len(r) for r in ventana), default=0)
+    if not max_col:
+        return None
+
+    aciertos = {}
+    muestras = 0
+    for row in ventana:
+        if not row or col_cant >= len(row) or col_total >= len(row):
+            continue
+        try:
+            cant = _parse_decimal(row[col_cant])
+            total = _parse_decimal(row[col_total])
+        except Exception:
+            continue
+        if cant <= 0 or total <= 0:
+            continue
+        muestras += 1
+        for c in range(max_col):
+            if c in (col_cant, col_total) or c >= len(row):
+                continue
+            try:
+                val = _parse_decimal(row[c])
+            except Exception:
+                continue
+            if val <= 0:
+                continue
+            # tolerancia 1.5% (los totales suelen venir redondeados)
+            if abs(val * cant - total) <= (total * Decimal('0.015')):
+                aciertos[c] = aciertos.get(c, 0) + 1
+
+    if not aciertos or muestras == 0:
+        return None
+    mejor = max(aciertos, key=lambda c: aciertos[c])
+    if aciertos[mejor] >= max(2, muestras // 2):
+        return mejor
+    return None
 
 
 def _construir_header_combinado(rows, header_idx):
@@ -266,6 +349,13 @@ def _parsear_xlsx(file_stream):
         if idx['desc'] is None or idx['cantidad'] is None:
             continue
 
+        # Refinar la columna de precio UNITARIO por validacion aritmetica
+        # (X * cantidad ~= total_linea). Corrige planillas tipo JMG donde el
+        # header apunta a una sub-columna de desglose (MO/MAT) que viene en $0.
+        col_precio_val = _detectar_columna_precio_unitario(rows, start_data, idx)
+        if col_precio_val is not None:
+            idx['precio'] = col_precio_val
+
         # Saltar sub-header tipico solo si la fila siguiente parece extra ("$/un", "$/total")
         if start_data < len(rows):
             sub = rows[start_data]
@@ -353,12 +443,27 @@ def _parsear_xlsx(file_stream):
             except Exception:
                 precio_d = Decimal('0')
 
+            # Total de linea declarado por el header (si existe)
+            total_d = None
+            if idx.get('total') is not None and idx['total'] < len(row):
+                try:
+                    total_d = _parse_decimal(row[idx['total']])
+                except Exception:
+                    total_d = None
+
+            # Fallback: si el unitario quedo en 0 pero hay total de linea + cantidad,
+            # back-calcular el unitario (planillas con el precio en sub-columna).
+            if (precio_d is None or precio_d <= 0) and total_d and total_d > 0 and cantidad_d > 0:
+                precio_d = total_d / cantidad_d
+
+            total_final = total_d if (total_d and total_d > 0) else (cantidad_d * precio_d)
+
             items_total.append({
                 'descripcion': desc[:300],
                 'unidad': str(unidad).strip()[:20] if unidad else 'un',
                 'cantidad': cantidad_d,
                 'precio_unitario': precio_d,
-                'total': cantidad_d * precio_d,
+                'total': total_final,
                 'etapa_nombre': etapa_actual,
                 'codigo': codigo,
                 # Fase 6.A: trazabilidad de origen para multi-archivo
