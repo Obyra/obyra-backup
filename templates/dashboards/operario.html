@@ -1,81 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Mis tareas | OBYRA{% endblock %}
+{% block extra_head %}{% include 'dashboards/_dash_styles.html' %}{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
+<div class="container-fluid py-4 dash">
   <div class="mb-4">
-    <h3 class="mb-0"><i class="fas fa-list-check me-2 text-primary"></i>Mis tareas</h3>
-    <small class="text-muted">Tareas pendientes y en progreso</small>
+    <h3 class="mb-0"><i class="fas fa-clipboard-list me-2 text-primary"></i>Mis tareas</h3>
+    <span class="text-muted small">Tareas asignadas y material recibido</span>
   </div>
 
   <div class="row g-4">
     {# ---------- Mis tareas ---------- #}
-    <div class="col-lg-7">
-      <div class="card shadow-sm border-0 h-100">
-        <div class="card-header bg-white border-0">
-          <strong><i class="fas fa-clipboard-list me-2 text-primary"></i>Tareas asignadas</strong>
+    <div class="col-12 col-lg-7">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-list-check me-2 text-primary"></i>Tareas asignadas</span>
+          <span class="badge bg-primary-subtle text-primary-emphasis">{{ tareas|length }}</span>
         </div>
         <div class="list-group list-group-flush">
           {% for t in tareas %}
-          <a href="{{ url_for('obras.mis_tareas_detalle', tarea_id=t.id) }}"
-             class="list-group-item list-group-item-action">
-            <div class="d-flex justify-content-between align-items-start">
-              <div>
-                <div class="fw-semibold">{{ t.nombre }}</div>
-                <div class="text-muted small"><i class="fas fa-building me-1"></i>{{ t.obra }}</div>
-              </div>
-              <div class="text-end">
-                {% if t.estado == 'en_curso' %}
-                <span class="badge bg-primary">En progreso</span>
-                {% else %}
-                <span class="badge bg-secondary">Pendiente</span>
-                {% endif %}
+          <a href="{{ url_for('obras.mis_tareas_detalle', tarea_id=t.id) }}" class="list-group-item list-group-item-action">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="alert-min0">
+                <div class="alert-title">{{ t.nombre }}</div>
+                <div class="alert-detail"><i class="fas fa-building me-1"></i>{{ t.obra }}</div>
                 {% if t.atrasada %}
-                <div class="small text-danger mt-1"><i class="fas fa-clock me-1"></i>Vencía {{ t.fecha_fin_plan }}</div>
+                <div class="small text-danger mt-1"><i class="fas fa-triangle-exclamation me-1"></i>Atrasada · venció {{ t.fecha_fin_plan }}</div>
                 {% elif t.fecha_fin_plan %}
-                <div class="small text-muted mt-1">Vence {{ t.fecha_fin_plan }}</div>
+                <div class="small text-muted mt-1"><i class="fas fa-calendar me-1"></i>Vence {{ t.fecha_fin_plan }}</div>
                 {% endif %}
               </div>
+              <span class="badge {{ 'bg-primary-subtle text-primary-emphasis' if t.estado == 'en_curso' else 'bg-secondary-subtle text-secondary-emphasis' }} flex-shrink-0">
+                {{ 'En progreso' if t.estado == 'en_curso' else 'Pendiente' }}
+              </span>
             </div>
           </a>
           {% else %}
-          <div class="list-group-item text-muted text-center py-5">
-            <i class="fas fa-mug-hot fa-2x mb-2 d-block text-success"></i>
-            No tenés tareas pendientes
+          <div class="list-group-item text-center text-muted py-5">
+            <i class="fas fa-mug-hot fa-lg mb-2 d-block text-success"></i>No tenés tareas pendientes
           </div>
           {% endfor %}
         </div>
       </div>
     </div>
 
-    {# ---------- Material para mis tareas ---------- #}
-    <div class="col-lg-5">
-      <div class="card shadow-sm border-0 h-100">
-        <div class="card-header bg-white border-0">
-          <strong><i class="fas fa-truck-ramp-box me-2 text-info"></i>Material recibido</strong>
-        </div>
+    {# ---------- Material recibido ---------- #}
+    <div class="col-12 col-lg-5">
+      <div class="card h-100">
+        <div class="card-header"><i class="fas fa-truck-ramp-box me-2 text-info"></i>Material recibido</div>
         <div class="list-group list-group-flush">
           {% for m in material %}
           <div class="list-group-item">
-            <div class="d-flex justify-content-between">
-              <div>
-                <div class="fw-semibold small">Remito {{ m.numero }}</div>
-                <div class="text-muted small">{{ m.proveedor }}</div>
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="alert-min0">
+                <div class="alert-title">{{ m.proveedor }}</div>
+                <div class="alert-detail">Remito {{ m.numero }} · {{ m.fecha }}</div>
               </div>
-              <div class="text-end">
-                <div class="small">{{ m.fecha }}</div>
-                {% if m.estado == 'recibido' %}
-                <span class="badge bg-success">Recibido</span>
-                {% elif m.estado == 'con_observaciones' %}
-                <span class="badge bg-warning text-dark">Con obs.</span>
-                {% else %}
-                <span class="badge bg-danger">{{ m.estado }}</span>
-                {% endif %}
-              </div>
+              <span class="badge bg-success-subtle text-success-emphasis flex-shrink-0">{{ m.estado }}</span>
             </div>
           </div>
           {% else %}
-          <div class="list-group-item text-muted small text-center py-4">Sin material reciente</div>
+          <div class="list-group-item text-center text-muted py-4">Sin material reciente</div>
           {% endfor %}
         </div>
       </div>

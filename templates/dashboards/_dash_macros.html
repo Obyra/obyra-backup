@@ -1,0 +1,23 @@
+{# Macros compartidos por los 4 dashboards #}
+
+{# Formatea montos grandes de forma legible: $16.3B, $28.7M, $4.2K, $340 #}
+{% macro money(v) -%}
+{%- set n = (v or 0) | float -%}
+{%- if n < 0 -%}{% set sign = '-' %}{% set n = -n %}{%- else -%}{% set sign = '' %}{%- endif -%}
+{%- if n >= 1000000000 -%}{{ sign }}${{ '%.1f'|format(n/1000000000) }}B
+{%- elif n >= 1000000 -%}{{ sign }}${{ '%.1f'|format(n/1000000) }}M
+{%- elif n >= 1000 -%}{{ sign }}${{ '%.1f'|format(n/1000) }}K
+{%- else -%}{{ sign }}${{ '%.0f'|format(n) }}
+{%- endif -%}
+{%- endmacro %}
+
+{% set _ESTADO_COLOR = {
+  'FINALIZADA':'secondary', 'PARADA':'dark', 'CRITICA':'danger',
+  'ATRASADA':'warning', 'EN_CURSO':'success', 'CANCELADA':'secondary'
+} %}
+
+{% macro estado_color(eo) -%}{{ _ESTADO_COLOR.get(eo, 'secondary') }}{%- endmacro %}
+
+{% macro estado_badge(eo) -%}
+<span class="badge rounded-pill bg-{{ _ESTADO_COLOR.get(eo, 'secondary') }}-subtle text-{{ _ESTADO_COLOR.get(eo, 'secondary') }}-emphasis border border-{{ _ESTADO_COLOR.get(eo, 'secondary') }}-subtle">{{ eo|replace('_',' ')|title }}</span>
+{%- endmacro %}
