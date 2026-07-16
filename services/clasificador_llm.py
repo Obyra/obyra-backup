@@ -166,6 +166,41 @@ def _norm(s):
     return ''.join(ch for ch in s if not unicodedata.combining(ch))
 
 
+def candidatos_para(descripcion, unidad=None, n=3):
+    """Top-N reglas candidatas por keyword (para la pantalla de revision).
+    Devuelve datos HUMANOS (trabajo/rubro), sin ids tecnicos en primer plano."""
+    from services.base_tecnica_computos import REGLAS_TECNICAS
+    try:
+        from services.coeficientes_loader import tiene_coeficientes
+    except Exception:
+        tiene_coeficientes = lambda _r: False
+    t = _norm(descripcion)
+    scored = []
+    for r in REGLAS_TECNICAS:
+        if any(_norm(x) in t for x in r.get('palabras_excluyentes', [])):
+            continue
+        score = 0
+        for kw in r.get('palabras_clave_fuertes', []):
+            if _norm(kw) in t:
+                score += 3
+        for kw in r.get('palabras_clave_medias', []):
+            if _norm(kw) in t:
+                score += 2
+        for kw in r.get('palabras_clave_debiles', []):
+            if _norm(kw) in t:
+                score += 1
+        if score > 0:
+            scored.append((score, r))
+    scored.sort(key=lambda x: -x[0])
+    return [{
+        'regla_id': r['id'],
+        'trabajo': r.get('tarea') or r.get('id'),
+        'rubro': r.get('rubro', ''),
+        'unidad': r.get('unidad_esperada', ''),
+        'tiene_precio': bool(tiene_coeficientes(r['id'])),
+    } for _, r in scored[:n]]
+
+
 def _clasificar_keyword_item(desc, unidad):
     """Scoring simple contra REGLAS_TECNICAS: fuerte=3, media=2, debil=1;
     excluyentes descartan la regla. Devuelve (regla_id|None, confianza)."""

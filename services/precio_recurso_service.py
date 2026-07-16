@@ -540,6 +540,7 @@ def buscar_mejor_precio(
             info = {
                 'precio': float(mejor.precio_unitario),
                 'fuente': 'provider_price_list',
+                'fuente_lista': mejor.fuente,  # 'estimado' | proveedor | etc (Fase 2.5)
                 'estado': _calcular_estado(mejor.fecha_actualizacion),
                 'proveedor_id': mejor.proveedor_id,
                 'proveedor_nombre': mejor.proveedor.razon_social if mejor.proveedor else None,
@@ -603,6 +604,7 @@ def buscar_mejor_precio(
     return {
         'precio': float(precio_ars),
         'fuente': info['fuente'],
+        'fuente_lista': info.get('fuente_lista'),
         'estado': info['estado'],
         'proveedor_id': info.get('proveedor_id'),
         'proveedor_nombre': info.get('proveedor_nombre'),

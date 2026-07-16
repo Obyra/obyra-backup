@@ -3312,3 +3312,38 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Runtime Fase 2.0 costo MO: {e}")
+
+    # =====================================================
+    # 2026-07-16: Fase 2.5 IA presupuestos - aprendizaje por org.
+    #   mapeo_item_aprendido: texto del cliente -> resolucion (regla o manual).
+    # Idempotente. Postgres only.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS mapeo_item_aprendido (
+                id SERIAL PRIMARY KEY,
+                organizacion_id INTEGER NOT NULL
+                    REFERENCES organizaciones(id) ON DELETE CASCADE,
+                texto_normalizado VARCHAR(300) NOT NULL,
+                texto_original VARCHAR(400),
+                regla_id VARCHAR(80),
+                nivel VARCHAR(20) NOT NULL DEFAULT 'estandar',
+                tratamiento VARCHAR(20) NOT NULL DEFAULT 'apu',
+                veces_usado INTEGER NOT NULL DEFAULT 0,
+                created_by_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_mapeo_org_texto
+                ON mapeo_item_aprendido(organizacion_id, texto_normalizado);
+        """))
+        db.session.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_mapeo_org ON mapeo_item_aprendido(organizacion_id);"
+        ))
+        db.session.commit()
+        print("[OK] Runtime Fase 2.5 aprendizaje aplicado (mapeo_item_aprendido)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Runtime Fase 2.5 aprendizaje: {e}")

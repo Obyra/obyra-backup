@@ -239,6 +239,11 @@ from models.mano_obra import (
     GRUPOS_RECARGO, TIPOS_CALCULO,
 )
 
+# Fase 2.5 IA presupuestos: aprendizaje de correcciones por organizacion
+from models.mapeo_aprendido import (
+    MapeoItemAprendido, normalizar_texto_item, TRATAMIENTOS_MAPEO,
+)
+
 # Fase 6.A: archivos de licitacion (multiples Excel por presupuesto)
 from models.presupuesto_archivo import PresupuestoArchivo
 
@@ -375,6 +380,8 @@ __all__ = [
     'EstructuraRecargosMO',
     'RecargoMOLinea',
     'IndiceActualizacion',
+    # Aprendizaje por org (Fase 2.5)
+    'MapeoItemAprendido',
     'CuadrillaTipo',
     'MiembroCuadrilla',
     'EtapaInternaVinculo',

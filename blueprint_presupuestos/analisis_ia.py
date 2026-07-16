@@ -11,7 +11,7 @@ Reusa el servicio determinístico services/analisis_ia_presupuesto.py.
 from __future__ import annotations
 
 from datetime import datetime
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, render_template
 from flask_login import login_required, current_user
 
 from extensions import db
@@ -81,6 +81,67 @@ def pipeline_ia_analizar():
     except Exception as e:
         current_app.logger.exception('Error en pipeline IA de presupuesto')
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/pipeline-ia/corregir', methods=['POST'])
+@login_required
+def pipeline_ia_corregir():
+    """Guarda una correccion del usuario -> aprendizaje por org (Fase 2.5).
+
+    Body JSON:
+      - descripcion: str (el texto del item del cliente) [requerido]
+      - regla_id: str | null   (el tipo de trabajo elegido; null si es manual)
+      - nivel: 'economico'|'estandar'|'premium'  (default estandar)
+      - tratamiento: 'apu' | 'manual'  (default: manual si no hay regla_id)
+    """
+    if not _puede_gestionar():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    from services.aprendizaje_ia import guardar_correccion
+
+    org_id = get_current_org_id()
+    data = request.get_json(silent=True) or {}
+    descripcion = (data.get('descripcion') or '').strip()
+    if not descripcion:
+        return jsonify({'ok': False, 'error': 'descripcion requerida'}), 400
+    regla_id = data.get('regla_id') or None
+    nivel = (data.get('nivel') or 'estandar').strip().lower()
+    tratamiento = (data.get('tratamiento') or ('apu' if regla_id else 'manual')).strip().lower()
+
+    try:
+        m = guardar_correccion(org_id, descripcion, regla_id=regla_id, nivel=nivel,
+                               tratamiento=tratamiento, user_id=getattr(current_user, 'id', None))
+        return jsonify({'ok': True, 'mapeo': m.to_dict()})
+    except Exception as e:
+        current_app.logger.exception('Error guardando correccion IA')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/<int:id>/revision-ia')
+@login_required
+def revision_ia(id):
+    """Pantalla de revision: corre el pipeline sobre los items del presupuesto y
+    muestra SOLO los que necesitan atencion (rojos) + amarillos colapsados."""
+    if not _puede_gestionar():
+        from flask import flash, redirect, url_for
+        flash('No tenes permisos para esta seccion.', 'danger')
+        return redirect(url_for('presupuestos.listar'))
+
+    from models.budgets import Presupuesto, ItemPresupuesto
+    from services.pipeline_presupuesto_ia import procesar_items
+
+    pres = Presupuesto.query.get_or_404(id)
+    _verificar_acceso_presupuesto(pres)
+
+    filas = ItemPresupuesto.query.filter_by(presupuesto_id=id).all()
+    items = [{'descripcion': f.descripcion, 'unidad': f.unidad,
+              'cantidad': float(f.cantidad or 0)} for f in filas]
+    nivel = (request.args.get('nivel') or 'estandar').strip().lower()
+    forzar_kw = request.args.get('kw') == '1'
+
+    resultado = procesar_items(items, organizacion_id=get_current_org_id(), nivel=nivel,
+                               presupuesto=pres, forzar_keyword=forzar_kw)
+    return render_template('presupuestos/revision_ia.html', presupuesto=pres, resultado=resultado, nivel=nivel)
 
 
 @presupuestos_bp.route('/<int:id>/analizar-ia', methods=['POST'])
