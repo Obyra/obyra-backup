@@ -18,8 +18,7 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-VIGENCIA = date(2026, 8, 1)          # Escala salarial UOCRA firmada (UOCRA/CAC), Zona A
-VIGENCIA_RECARGOS = date(2026, 4, 1)  # Estructura de recargos (planilla): independiente del basico
+VIGENCIA = date(2026, 8, 1)   # Escala salarial UOCRA firmada (UOCRA/CAC), Zona A
 ZONA = 'CABA'
 HORAS_MES = 176               # para derivar hora convenio de sueldos mensuales
 
@@ -37,28 +36,43 @@ CATEGORIAS = [
 
 # Lineas de la estructura de recargos (planilla Brenda, abril 2026 CABA).
 # (concepto, grupo, tipo_calculo, valor, activo, notas)
-LINEAS = [
-    ('Presentismo',        'adicional_remunerativo',    'pct_hora_convenio', Decimal('20'),      True,
-     'Sobre hora convenio'),
-    ('hh50 (6hh/50hsem)',  'adicional_remunerativo',    'pct_hora_convenio', Decimal('2.27'),    False,
-     'Horas al 50%. INACTIVO: la planilla calcula el costo empresa sobre bruto sin hh50. Activar si se incluye OT en la base.'),
-    ('F.931',              'carga_social',              'pct_bruto',         Decimal('58.74'),   True,
-     'Contrib. seg. social 19,48 + aportes 14,69 + contrib. OS 6,58 + aportes OS 3,91 + LRT 14 + seguro vida 0,08'),
-    ('Fondo de desempleo', 'carga_social',              'pct_bruto',         Decimal('12'),      True, None),
-    ('SAC',                'carga_social',              'pct_bruto',         Decimal('8.33'),    True,
-     '1/12 de la remuneracion'),
-    ('Vacaciones',         'carga_social',              'pct_bruto',         Decimal('4.17'),    True,
-     'Proporcionales'),
-    ('UOCRA',              'carga_social',              'monto_dia',         Decimal('278.30'),  True,
-     'Aporte gremial (monto por dia)'),
-    ('IERIC',              'carga_social',              'monto_mes',         Decimal('15.90'),   True,
-     '2% (monto mensual)'),
-    ('Comida',             'adicional_no_remunerativo', 'monto_dia',         Decimal('911.11'),  True,
-     'Vianda por dia'),
-    ('EPP',                'adicional_no_remunerativo', 'monto_mes',         Decimal('130.91'),  True,
-     'Elementos de proteccion personal (monto mensual)'),
-    ('Bono anual',         'adicional_no_remunerativo', 'monto_mes',         Decimal('5000'),    True,
-     '$30.000/anio amortizado en 6 meses = $5.000/mes'),
+def _lineas(comida_dia, epp_mes, uocra_dia):
+    """Lineas de la estructura de recargos. Los % son estables; solo varian los
+    montos fijos (comida/EPP/UOCRA) segun la vigencia. Bono es acuerdo fijo."""
+    D = Decimal
+    return [
+        ('Presentismo',        'adicional_remunerativo',    'pct_hora_convenio', D('20'),        True,
+         'Sobre hora convenio'),
+        ('hh50 (6hh/50hsem)',  'adicional_remunerativo',    'pct_hora_convenio', D('2.27'),      False,
+         'Horas al 50%. INACTIVO: la planilla calcula el costo empresa sobre bruto sin hh50. Activar si se incluye OT en la base.'),
+        ('F.931',              'carga_social',              'pct_bruto',         D('58.74'),      True,
+         'Contrib. seg. social 19,48 + aportes 14,69 + contrib. OS 6,58 + aportes OS 3,91 + LRT 14 + seguro vida 0,08'),
+        ('Fondo de desempleo', 'carga_social',              'pct_bruto',         D('12'),         True, None),
+        ('SAC',                'carga_social',              'pct_bruto',         D('8.33'),       True,
+         '1/12 de la remuneracion'),
+        ('Vacaciones',         'carga_social',              'pct_bruto',         D('4.17'),       True,
+         'Proporcionales'),
+        ('UOCRA',              'carga_social',              'monto_dia',         D(str(uocra_dia)), True,
+         'Aporte gremial (monto por dia)'),
+        ('IERIC',              'carga_social',              'monto_mes',         D('15.90'),      True,
+         '2% (monto mensual)'),
+        ('Comida',             'adicional_no_remunerativo', 'monto_dia',         D(str(comida_dia)), True,
+         'Vianda por dia'),
+        ('EPP',                'adicional_no_remunerativo', 'monto_mes',         D(str(epp_mes)),   True,
+         'Elementos de proteccion personal (monto mensual)'),
+        ('Bono anual',         'adicional_no_remunerativo', 'monto_mes',         D('5000'),       True,
+         '$30.000/anio amortizado en 6 meses = $5.000/mes (acuerdo fijo, no se ajusta por inflacion)'),
+    ]
+
+
+# Versiones de la estructura de recargos (los % son estables; los montos fijos se
+# ajustan por inflacion acumulada abril->agosto = 6,7%; el bono queda fijo).
+# (vigencia_desde, vigencia_hasta, nombre, lineas)
+ESTRUCTURAS = [
+    (date(2026, 4, 1), date(2026, 7, 31), 'Recargos MO Zona A CABA - abril 2026',
+     _lineas(comida_dia='911.11', epp_mes='130.91', uocra_dia='278.30')),
+    (date(2026, 8, 1), None,             'Recargos MO Zona A CABA - agosto 2026 (montos +6,7%)',
+     _lineas(comida_dia='972.15', epp_mes='139.68', uocra_dia='296.95')),
 ]
 
 
@@ -102,35 +116,41 @@ def seed(db):
                 v.notas = ((v.notas or '').strip() + ' ' + marca).strip()
             historicos += 1
 
-    # Estructura de recargos global: es INDEPENDIENTE de la escala salarial
-    # (los % de F931/presentismo/etc. no cambian al actualizar el basico). Hay
-    # UNA sola global por zona; se actualiza in-place, no se duplica por vigencia.
-    est = EstructuraRecargosMO.query.filter(
-        EstructuraRecargosMO.organizacion_id.is_(None),
-        EstructuraRecargosMO.zona == ZONA,
-        EstructuraRecargosMO.activo.is_(True),
-    ).order_by(EstructuraRecargosMO.vigencia_desde.asc()).first()
-    if est is None:
-        est = EstructuraRecargosMO(
-            organizacion_id=None, nombre='Recargos MO Zona A CABA (planilla abril 2026)',
-            zona=ZONA, vigencia_desde=VIGENCIA_RECARGOS, horas_mensuales=176, horas_por_dia=8,
-            fuente='planilla_brenda', activo=True,
-        )
-        db.session.add(est)
-        db.session.flush()
-    else:
-        # Reemplazo limpio de las lineas (cascade delete-orphan)
-        est.lineas.clear()
-        db.session.flush()
-
-    for i, (concepto, grupo, tc, valor, activo, notas) in enumerate(LINEAS, start=1):
-        est.lineas.append(RecargoMOLinea(
-            orden=i, concepto=concepto, grupo=grupo, tipo_calculo=tc,
-            valor=valor, activo=activo, notas=notas,
-        ))
+    # Estructura de recargos global, VERSIONADA por vigencia. Los % son estables;
+    # los montos fijos se ajustan por inflacion. Cada version es idempotente por
+    # (org NULL, zona, vigencia_desde); la de agosto es la vigente hoy.
+    est_vigente = None
+    for vig_desde, vig_hasta, nombre, lineas in ESTRUCTURAS:
+        est = EstructuraRecargosMO.query.filter(
+            EstructuraRecargosMO.organizacion_id.is_(None),
+            EstructuraRecargosMO.zona == ZONA,
+            EstructuraRecargosMO.vigencia_desde == vig_desde,
+        ).first()
+        if est is None:
+            est = EstructuraRecargosMO(
+                organizacion_id=None, nombre=nombre, zona=ZONA,
+                vigencia_desde=vig_desde, horas_mensuales=176, horas_por_dia=8,
+                fuente='planilla_brenda', activo=True,
+            )
+            db.session.add(est)
+            db.session.flush()
+        else:
+            est.lineas.clear()  # reemplazo limpio (cascade delete-orphan)
+            db.session.flush()
+        est.nombre = nombre
+        est.vigencia_hasta = vig_hasta
+        est.activo = True
+        for i, (concepto, grupo, tc, valor, activo, notas) in enumerate(lineas, start=1):
+            est.lineas.append(RecargoMOLinea(
+                orden=i, concepto=concepto, grupo=grupo, tipo_calculo=tc,
+                valor=valor, activo=activo, notas=notas,
+            ))
+        if vig_hasta is None:
+            est_vigente = est
 
     db.session.commit()
-    return cats_touched, historicos, est.id, len([l for l in LINEAS if l[4]])
+    n_activas = len([l for l in ESTRUCTURAS[-1][3] if l[4]])
+    return cats_touched, historicos, est_vigente.id, n_activas
 
 
 def main():
