@@ -40,6 +40,49 @@ def _puede_gestionar():
     return rol in ('administrador', 'admin') or role in ('admin', 'pm', 'project_manager')
 
 
+@presupuestos_bp.route('/pipeline-ia/analizar', methods=['POST'])
+@login_required
+def pipeline_ia_analizar():
+    """Pipeline IA completo (Fase 2.4): clasifica -> descompone -> pricea -> scorea.
+
+    Body JSON:
+      - items: [{descripcion, unidad, cantidad}]  (requerido)
+      - nivel: 'economico' | 'estandar' | 'premium'  (default 'estandar')
+      - zona: str (default 'CABA')
+      - forzar_keyword: bool (opcional, salta el LLM)
+
+    Devuelve {ok, items:[...con color verde/amarillo/rojo...], resumen:{...}}.
+    """
+    if not _puede_gestionar():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    from services.pipeline_presupuesto_ia import procesar_items
+
+    org_id = get_current_org_id()
+    data = request.get_json(silent=True) or {}
+    items = data.get('items') or []
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'items requerido (lista no vacia)'}), 400
+    nivel = (data.get('nivel') or 'estandar').strip().lower()
+    zona = (data.get('zona') or 'CABA').strip()
+    forzar_keyword = bool(data.get('forzar_keyword'))
+
+    # Opcional: convertir con el TC de un presupuesto (para materiales en USD)
+    presupuesto = None
+    pres_id = data.get('presupuesto_id')
+    if pres_id:
+        from models.budgets import Presupuesto
+        presupuesto = Presupuesto.query.filter_by(id=pres_id).first()
+
+    try:
+        r = procesar_items(items, organizacion_id=org_id, nivel=nivel, zona=zona,
+                           presupuesto=presupuesto, forzar_keyword=forzar_keyword)
+        return jsonify({'ok': True, **r})
+    except Exception as e:
+        current_app.logger.exception('Error en pipeline IA de presupuesto')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @presupuestos_bp.route('/<int:id>/analizar-ia', methods=['POST'])
 @login_required
 def analizar_ia(id):
