@@ -18,16 +18,21 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-VIGENCIA = date(2026, 4, 1)
+VIGENCIA = date(2026, 8, 1)          # Escala salarial UOCRA firmada (UOCRA/CAC), Zona A
+VIGENCIA_RECARGOS = date(2026, 4, 1)  # Estructura de recargos (planilla): independiente del basico
 ZONA = 'CABA'
+HORAS_MES = 176               # para derivar hora convenio de sueldos mensuales
 
-# (codigo, nombre, valor_hora_convenio, confirmado)
+# Escala UOCRA Zona A ($/hora) vigente 01/08/2026 — valores OFICIALES firmados.
+# El sereno se paga MENSUAL: se deriva la hora convenio = sueldo_mes / HORAS_MES.
+# (codigo, nombre, valor_hora_convenio, nota)
 CATEGORIAS = [
-    ('oficial_esp',   'Oficial Especializado', Decimal('5470.00'), True),
-    ('oficial',       'Oficial',               Decimal('4679.20'), False),
-    ('medio_oficial', 'Medio Oficial',         Decimal('4324.30'), False),
-    ('ayudante',      'Ayudante',              Decimal('3980.40'), False),
-    ('sereno',        'Sereno',                Decimal('3782.00'), False),
+    ('oficial_esp',   'Oficial Especializado', Decimal('7420.00'), None),
+    ('oficial',       'Oficial',               Decimal('6348.00'), None),
+    ('medio_oficial', 'Medio Oficial',         Decimal('5866.00'), None),
+    ('ayudante',      'Ayudante',              Decimal('5399.00'), None),
+    ('sereno',        'Sereno',                (Decimal('980858') / Decimal(HORAS_MES)).quantize(Decimal('0.01')),
+     f'Sueldo mensual $980.858 / {HORAS_MES} hs (categoria mensual, no por jornal)'),
 ]
 
 # Lineas de la estructura de recargos (planilla Brenda, abril 2026 CABA).
@@ -62,34 +67,53 @@ def seed(db):
     from models.mano_obra import EstructuraRecargosMO, RecargoMOLinea
 
     cats_touched = 0
-    for codigo, nombre, hora, confirmado in CATEGORIAS:
+    historicos = 0
+    for codigo, nombre, hora, nota in CATEGORIAS:
+        # Fila vigente de la escala nueva (idempotente por org NULL + codigo + vigencia)
         cat = CategoriaJornal.query.filter(
             CategoriaJornal.organizacion_id.is_(None),
             CategoriaJornal.codigo == codigo,
+            CategoriaJornal.vigencia_desde == VIGENCIA,
         ).first()
-        nota_prop = None if confirmado else 'valor_hora_convenio PROPUESTO (escala UOCRA) - a validar'
         if cat is None:
             cat = CategoriaJornal(
                 organizacion_id=None, nombre=nombre, codigo=codigo, moneda='ARS',
-                fuente='uocra', vigencia_desde=VIGENCIA, activo=True, notas=nota_prop,
+                fuente='uocra', vigencia_desde=VIGENCIA, activo=True,
             )
             db.session.add(cat)
         cat.valor_hora_convenio = hora
         cat.precio_jornal = (hora * Decimal('8')).quantize(Decimal('0.01'))  # sync legacy
-        if cat.vigencia_desde is None:
-            cat.vigencia_desde = VIGENCIA
+        cat.fuente = 'uocra'
+        cat.activo = True
+        cat.notas = nota or 'Escala UOCRA Zona A firmada (UOCRA/CAC) - vigencia 01/08/2026'
         cats_touched += 1
 
-    # Estructura de recargos global (idempotente por org NULL + zona + vigencia)
+        # Filas anteriores de la misma categoria -> historico (inactivas)
+        viejas = CategoriaJornal.query.filter(
+            CategoriaJornal.organizacion_id.is_(None),
+            CategoriaJornal.codigo == codigo,
+            CategoriaJornal.activo.is_(True),
+            CategoriaJornal.vigencia_desde < VIGENCIA,
+        ).all()
+        for v in viejas:
+            v.activo = False
+            marca = '[historico - reemplazado por escala 01/08/2026]'
+            if marca not in (v.notas or ''):
+                v.notas = ((v.notas or '').strip() + ' ' + marca).strip()
+            historicos += 1
+
+    # Estructura de recargos global: es INDEPENDIENTE de la escala salarial
+    # (los % de F931/presentismo/etc. no cambian al actualizar el basico). Hay
+    # UNA sola global por zona; se actualiza in-place, no se duplica por vigencia.
     est = EstructuraRecargosMO.query.filter(
         EstructuraRecargosMO.organizacion_id.is_(None),
         EstructuraRecargosMO.zona == ZONA,
-        EstructuraRecargosMO.vigencia_desde == VIGENCIA,
-    ).first()
+        EstructuraRecargosMO.activo.is_(True),
+    ).order_by(EstructuraRecargosMO.vigencia_desde.asc()).first()
     if est is None:
         est = EstructuraRecargosMO(
-            organizacion_id=None, nombre='UOCRA Zona A CABA - abril 2026',
-            zona=ZONA, vigencia_desde=VIGENCIA, horas_mensuales=176, horas_por_dia=8,
+            organizacion_id=None, nombre='Recargos MO Zona A CABA (planilla abril 2026)',
+            zona=ZONA, vigencia_desde=VIGENCIA_RECARGOS, horas_mensuales=176, horas_por_dia=8,
             fuente='planilla_brenda', activo=True,
         )
         db.session.add(est)
@@ -106,23 +130,24 @@ def seed(db):
         ))
 
     db.session.commit()
-    return cats_touched, est.id, len([l for l in LINEAS if l[4]])
+    return cats_touched, historicos, est.id, len([l for l in LINEAS if l[4]])
 
 
 def main():
     import app as _app
     from extensions import db
     with _app.app.app_context():
-        cats, est_id, lineas_activas = seed(db)
-        print(f"[OK] categorias con hora convenio: {cats}")
+        cats_touched, historicos, est_id, lineas_activas = seed(db)
+        print(f"[OK] categorias escala 01/08/2026: {cats_touched}  |  filas de abril a historico: {historicos}")
         print(f"[OK] estructura recargos global id={est_id} ({lineas_activas} lineas activas)")
 
-        # Verificacion: costo/hh oficial especializado
+        # Verificacion: costo empresa/hh de cada categoria con los basicos nuevos
         from services.costo_mano_obra import desglose_categoria
-        d = desglose_categoria('oficial_esp', organizacion_id=None, zona=ZONA, fecha=VIGENCIA)
-        print(f"[VERIF] oficial_esp: basico={d['basico_hora']} bruto={d['bruto_hora']} "
-              f"costo/hora={d['costo_hora']} costo/jornal={d['costo_jornal']}")
-        print(f"        target planilla: $12.206,20 (con bono) / $12.177,79 (sin bono)")
+        print("[VERIF] costo empresa por categoria (escala 01/08/2026, recargos CABA):")
+        for codigo, nombre, _hora, _nota in CATEGORIAS:
+            d = desglose_categoria(codigo, organizacion_id=None, zona=ZONA, fecha=VIGENCIA)
+            print(f"        {nombre:<22} basico={d['basico_hora']:>9}  bruto={d['bruto_hora']:>9}  "
+                  f"costo/hora={d['costo_hora']:>10}  costo/jornal={d['costo_jornal']:>11}")
 
 
 if __name__ == '__main__':

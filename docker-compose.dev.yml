@@ -60,6 +60,10 @@ services:
       dockerfile: Dockerfile
       target: runtime
     container_name: obyra-app-dev
+    # Carga secretos locales (ANTHROPIC_API_KEY para el clasificador LLM, Fase 2.3).
+    # .env esta gitignoreado; menor precedencia que 'environment' de abajo.
+    env_file:
+      - .env
     environment:
       # Flask Development
       FLASK_APP: app.py
