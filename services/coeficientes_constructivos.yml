@@ -375,3 +375,352 @@ reglas:
         nombre: 'Ayudante pintor'
         unidad: jornal
         coeficiente: 0.05
+
+  # ===========================================================================
+  # OBYRA v1 - validado (Fase 2.2). Reglas del pliego JMG.
+  # Rendimientos validados por Brenda; materiales sin lista real -> estimados.
+  # ===========================================================================
+
+  mamposteria_ladrillo_hueco_8:
+    descripcion: 'Mamposteria ladrillo hueco 8 cm'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: ladrillo_hueco_8, tipo: material, nombre: 'Ladrillo hueco 8x18x33', unidad: u, coeficiente: 16}
+      - {clave: mortero_mh8, tipo: material, nombre: 'Mortero asentamiento 1:1/4:4', unidad: m3, coeficiente: 0.016}
+      - {clave: mo_oficial_mh8, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.30}
+      - {clave: mo_ayudante_mh8, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.30}
+
+  mamposteria_ladrillo_hueco_4:
+    descripcion: 'Mamposteria ladrillo hueco 4 cm (panderete)'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: ladrillo_hueco_4, tipo: material, nombre: 'Ladrillo hueco 4x18x33', unidad: u, coeficiente: 16}
+      - {clave: mortero_mh4, tipo: material, nombre: 'Mortero asentamiento 1:1/4:4', unidad: m3, coeficiente: 0.010}
+      - {clave: mo_oficial_mh4, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.25}
+      - {clave: mo_ayudante_mh4, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.25}
+
+  mamposteria_ladrillo_comun:
+    descripcion: 'Mamposteria ladrillo comun 12 cm'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: ladrillo_comun, tipo: material, nombre: 'Ladrillo comun 5.5x12.5x25', unidad: u, coeficiente: 50}
+      - {clave: mortero_mc, tipo: material, nombre: 'Mortero asentamiento 1:1/4:4', unidad: m3, coeficiente: 0.030}
+      - {clave: mo_oficial_mc, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.40}
+      - {clave: mo_ayudante_mc, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.40}
+
+  tabique_durlock:
+    descripcion: 'Tabique durlock 70mm, doble placa por cara'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: placa_yeso_125, tipo: material, nombre: 'Placa de yeso 12.5mm', unidad: m2, coeficiente: 4.2}
+      - {clave: montante_70, tipo: material, nombre: 'Perfil montante 70mm', unidad: ml, coeficiente: 2.5}
+      - {clave: solera_70, tipo: material, nombre: 'Perfil solera 70mm', unidad: ml, coeficiente: 0.8}
+      - {clave: tornillos_t2, tipo: material, nombre: 'Tornillos T2 punta aguja', unidad: u, coeficiente: 30}
+      - {clave: masilla_durlock, tipo: material, nombre: 'Masilla para juntas', unidad: kg, coeficiente: 1.2}
+      - {clave: cinta_papel, tipo: material, nombre: 'Cinta de papel para juntas', unidad: ml, coeficiente: 3}
+      - {clave: mo_oficial_durlock, tipo: mano_obra, nombre: 'Oficial montador', unidad: jornal, coeficiente: 0.35}
+      - {clave: mo_ayudante_durlock, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.20}
+
+  tabique_durlock_35:
+    descripcion: 'Tabique durlock 35mm, simple placa (cierre plenos)'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: placa_yeso_125_t35, tipo: material, nombre: 'Placa de yeso 12.5mm', unidad: m2, coeficiente: 2.1}
+      - {clave: perfil_35, tipo: material, nombre: 'Perfil montante 35mm', unidad: ml, coeficiente: 2.5}
+      - {clave: tornillos_t2_t35, tipo: material, nombre: 'Tornillos T2 punta aguja', unidad: u, coeficiente: 15}
+      - {clave: masilla_t35, tipo: material, nombre: 'Masilla para juntas', unidad: kg, coeficiente: 0.7}
+      - {clave: cinta_t35, tipo: material, nombre: 'Cinta de papel para juntas', unidad: ml, coeficiente: 1.6}
+      - {clave: mo_oficial_t35, tipo: mano_obra, nombre: 'Oficial montador', unidad: jornal, coeficiente: 0.25}
+      - {clave: mo_ayudante_t35, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.15}
+
+  cielorraso_durlock:
+    descripcion: 'Cielorraso suspendido de placa de yeso (Durlock)'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: placa_yeso_ciel, tipo: material, nombre: 'Placa de yeso 12.5mm', unidad: m2, coeficiente: 1.05}
+      - {clave: perfileria_ciel, tipo: material, nombre: 'Perfil montante/solera cielorraso', unidad: ml, coeficiente: 3.5}
+      - {clave: velas_ciel, tipo: material, nombre: 'Vela y regulador para cielorraso', unidad: u, coeficiente: 2}
+      - {clave: tornillos_ciel, tipo: material, nombre: 'Tornillos T2 punta aguja', unidad: u, coeficiente: 18}
+      - {clave: masilla_ciel, tipo: material, nombre: 'Masilla para juntas', unidad: kg, coeficiente: 1.0}
+      - {clave: cinta_ciel, tipo: material, nombre: 'Cinta de papel para juntas', unidad: ml, coeficiente: 2.5}
+      - {clave: mo_oficial_ciel, tipo: mano_obra, nombre: 'Oficial montador', unidad: jornal, coeficiente: 0.40}
+      - {clave: mo_ayudante_ciel, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.25}
+
+  revoque_fino:
+    descripcion: 'Revoque fino interior a la cal'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: mortero_fino_cal, tipo: material, nombre: 'Mortero fino a la cal (cal + arena fina)', unidad: m3, coeficiente: 0.008}
+      - {clave: mo_oficial_fino, tipo: mano_obra, nombre: 'Oficial revocador', unidad: jornal, coeficiente: 0.12}
+      - {clave: mo_ayudante_fino, tipo: mano_obra, nombre: 'Ayudante revocador', unidad: jornal, coeficiente: 0.08}
+
+  revoque_grueso_fino_exterior:
+    descripcion: 'Revoque grueso + fino exterior'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: mortero_grueso_ext, tipo: material, nombre: 'Mortero CPV 1:3 (cemento + arena)', unidad: m3, coeficiente: 0.020}
+      - {clave: mortero_fino_ext, tipo: material, nombre: 'Mortero fino a la cal (cal + arena fina)', unidad: m3, coeficiente: 0.008}
+      - {clave: mo_oficial_rge, tipo: mano_obra, nombre: 'Oficial revocador', unidad: jornal, coeficiente: 0.28}
+      - {clave: mo_ayudante_rge, tipo: mano_obra, nombre: 'Ayudante revocador', unidad: jornal, coeficiente: 0.22}
+
+  azotado_hidrofugo:
+    descripcion: 'Azotado hidrofugo bajo revestimientos'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: mortero_hidrofugo, tipo: material, nombre: 'Mortero cemento 1:3', unidad: m3, coeficiente: 0.008}
+      - {clave: hidrofugo_sika1, tipo: material, nombre: 'Hidrofugo en pasta (Sika 1 o equivalente)', unidad: kg, coeficiente: 0.3}
+      - {clave: mo_oficial_azot, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.10}
+      - {clave: mo_ayudante_azot, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.08}
+
+  contrapiso_alivianado:
+    descripcion: 'Contrapiso alivianado (con poliestireno/perlita)'
+    unidad_item: m3
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: cemento_ca, tipo: material, nombre: 'Cemento portland (bolsa 50 kg)', unidad: bolsa, coeficiente: 4}
+      - {clave: arena_ca, tipo: material, nombre: 'Arena', unidad: m3, coeficiente: 0.5}
+      - {clave: poliestireno_ca, tipo: material, nombre: 'Poliestireno expandido / perlita', unidad: m3, coeficiente: 0.9}
+      - {clave: mo_oficial_ca, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.6}
+      - {clave: mo_ayudante_ca, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 1.2}
+
+  contrapiso_hormigon:
+    descripcion: 'Contrapiso de hormigon pobre (por m3)'
+    unidad_item: m3
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: cemento_ch, tipo: material, nombre: 'Cemento portland (bolsa 50 kg)', unidad: bolsa, coeficiente: 5}
+      - {clave: arena_ch, tipo: material, nombre: 'Arena', unidad: m3, coeficiente: 0.5}
+      - {clave: piedra_ch, tipo: material, nombre: 'Piedra partida / canto rodado', unidad: m3, coeficiente: 0.7}
+      - {clave: mo_oficial_ch, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.5}
+      - {clave: mo_ayudante_ch, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 1.5}
+
+  carpeta_nivelacion:
+    descripcion: 'Carpeta de cemento alisado esp 3cm'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: mortero_carpeta, tipo: material, nombre: 'Mortero CPV 1:3 (cemento + arena)', unidad: m3, coeficiente: 0.035}
+      - {clave: mo_oficial_carp, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.15}
+      - {clave: mo_ayudante_carp, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.12}
+
+  piso_porcelanato:
+    descripcion: 'Colocacion de porcelanato en piso (sin pieza)'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: adhesivo_pp, tipo: material, nombre: 'Adhesivo cementicio (cemento cola)', unidad: kg, coeficiente: 5}
+      - {clave: pastina_pp, tipo: material, nombre: 'Pastina para juntas', unidad: kg, coeficiente: 0.5}
+      - {clave: mo_oficial_pp, tipo: mano_obra, nombre: 'Oficial colocador', unidad: jornal, coeficiente: 0.25}
+      - {clave: mo_ayudante_pp, tipo: mano_obra, nombre: 'Ayudante colocador', unidad: jornal, coeficiente: 0.15}
+
+  revestimiento_azulejo:
+    descripcion: 'Revestimiento de azulejo (con pieza)'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: azulejo_pieza, tipo: material, nombre: 'Azulejo 15x15', unidad: u, coeficiente: 35, notas: '~35 piezas/m2 (a validar segun tamaño de pieza).'}
+      - {clave: adhesivo_rev, tipo: material, nombre: 'Adhesivo cementicio (cemento cola)', unidad: kg, coeficiente: 6}
+      - {clave: pastina_rev, tipo: material, nombre: 'Pastina para juntas', unidad: kg, coeficiente: 0.5}
+      - {clave: mo_oficial_rev, tipo: mano_obra, nombre: 'Oficial colocador', unidad: jornal, coeficiente: 0.15, notas: '1.2 h/m2.'}
+      - {clave: mo_ayudante_rev, tipo: mano_obra, nombre: 'Ayudante colocador', unidad: jornal, coeficiente: 0.10, notas: '0.8 h/m2.'}
+
+  piso_ceramico:
+    descripcion: 'Colocacion de ceramico / mosaico (sin pieza)'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: adhesivo_pc, tipo: material, nombre: 'Adhesivo cementicio (cemento cola)', unidad: kg, coeficiente: 5}
+      - {clave: pastina_pc, tipo: material, nombre: 'Pastina para juntas', unidad: kg, coeficiente: 0.4}
+      - {clave: mo_oficial_pc, tipo: mano_obra, nombre: 'Oficial colocador', unidad: jornal, coeficiente: 0.22}
+      - {clave: mo_ayudante_pc, tipo: mano_obra, nombre: 'Ayudante colocador', unidad: jornal, coeficiente: 0.14}
+
+  dintel_hormigon:
+    descripcion: 'Dintel de hormigon armado sobre vano'
+    unidad_item: ml
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: hormigon_dintel, tipo: material, nombre: 'Hormigon H21 elaborado', unidad: m3, coeficiente: 0.02}
+      - {clave: hierro_dintel, tipo: material, nombre: 'Hierro construccion 8mm', unidad: kg, coeficiente: 3}
+      - {clave: encofrado_dintel, tipo: material, nombre: 'Madera para encofrado', unidad: m2, coeficiente: 0.5}
+      - {clave: mo_oficial_dintel, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.20}
+      - {clave: mo_ayudante_dintel, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.20}
+
+  umbral_ladrillo:
+    descripcion: 'Umbral / antepecho de ladrillo comun'
+    unidad_item: ml
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: mortero_umbral, tipo: material, nombre: 'Mortero CPV 1:3 (cemento + arena)', unidad: m3, coeficiente: 0.008}
+      - {clave: ladrillo_umbral, tipo: material, nombre: 'Ladrillo comun 5.5x12.5x25', unidad: u, coeficiente: 8}
+      - {clave: mo_oficial_umbral, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.15}
+      - {clave: mo_ayudante_umbral, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.12}
+
+  membrana_asfaltica:
+    descripcion: 'Aislacion con membrana asfaltica'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: membrana_4mm, tipo: material, nombre: 'Membrana asfaltica 4mm con aluminio', unidad: m2, coeficiente: 1.1}
+      - {clave: imprimacion_asf, tipo: material, nombre: 'Imprimacion asfaltica (pintura asfaltica)', unidad: l, coeficiente: 0.3}
+      - {clave: mo_oficial_memb, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.12}
+      - {clave: mo_ayudante_memb, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.08}
+
+  yeso_proyectado:
+    descripcion: 'Yeso proyectado sobre muros/tabiques'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: yeso_proyeccion, tipo: material, nombre: 'Yeso de proyeccion', unidad: kg, coeficiente: 10}
+      - {clave: mo_oficial_yeso, tipo: mano_obra, nombre: 'Oficial yesero', unidad: jornal, coeficiente: 0.10}
+      - {clave: mo_ayudante_yeso, tipo: mano_obra, nombre: 'Ayudante yesero', unidad: jornal, coeficiente: 0.08}
+
+  zocalo:
+    descripcion: 'Colocacion de zocalo (ceramico/porcelanato)'
+    unidad_item: ml
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: zocalo_pieza, tipo: material, nombre: 'Zocalo ceramico/porcelanato', unidad: ml, coeficiente: 1.05}
+      - {clave: adhesivo_zoc, tipo: material, nombre: 'Adhesivo cementicio (cemento cola)', unidad: kg, coeficiente: 0.5}
+      - {clave: mo_oficial_zoc, tipo: mano_obra, nombre: 'Oficial colocador', unidad: jornal, coeficiente: 0.08}
+      - {clave: mo_ayudante_zoc, tipo: mano_obra, nombre: 'Ayudante colocador', unidad: jornal, coeficiente: 0.05}
+
+  # ===========================================================================
+  # Encofrado en 3 NIVELES (OBYRA v1 - validado, Fase 2.2b). Formato por niveles:
+  # get_recursos('encofrado', nivel) hace merge de recursos_base + niveles[nivel].
+  # Default del presupuesto: 'estandar'. Medido por m2 de contacto.
+  # Variacion superficie material por estructura: losas 2.50 / vigas 1.25-1.50 /
+  # columnas 2.00-3.00 m2/m2 (valores base para losa; ajustar por tipo).
+  # ===========================================================================
+  encofrado:
+    descripcion: 'Encofrado (por m2 de contacto)'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    niveles:
+      economico:
+        recursos:
+          - {clave: madera_pino_enc, tipo: material, nombre: 'Madera de pino para encofrado', unidad: m2, coeficiente: 0.83, notas: '2.50 m2/m2 amortizado ~3 usos (a validar).'}
+          - {clave: clavos_enc, tipo: material, nombre: 'Clavos de punta', unidad: kg, coeficiente: 0.40}
+          - {clave: mo_carpintero, tipo: mano_obra, nombre: 'Oficial carpintero', unidad: jornal, coeficiente: 0.875, notas: '7 h/m2 (madera artesanal): armado + desarmado + limpieza.'}
+      estandar:
+        recursos:
+          - {clave: fenolico_18_enc, tipo: material, nombre: 'Fenolico 18mm para encofrado', unidad: m2, coeficiente: 0.31, notas: '2.50 m2/m2 amortizado ~8 usos (a validar).'}
+          - {clave: puntal_metalico_enc, tipo: material, nombre: 'Puntal metalico (amortizacion)', unidad: u, coeficiente: 0.15, notas: 'a validar.'}
+          - {clave: clavos_enc, tipo: material, nombre: 'Clavos de punta', unidad: kg, coeficiente: 0.40}
+          - {clave: mo_carpintero, tipo: mano_obra, nombre: 'Oficial carpintero', unidad: jornal, coeficiente: 0.5, notas: '4 h/m2 (fenolico + puntales, mas agil).'}
+      premium:
+        recursos:
+          - {clave: flex_alquiler, tipo: material, nombre: 'Sistema encofrado modular Flex (alquiler mensual)', unidad: mes, coeficiente: 1, notas: '1 mes/m2 sin prorrateo, USD (lista Flex ago-2026).'}
+          - {clave: mo_montador_prem, tipo: mano_obra, nombre: 'Oficial montador', unidad: jornal, coeficiente: 0.25, notas: 'a validar: sistema modular ~2 h/m2.'}
+
+  # ===========================================================================
+  # 11 rubros nuevos (OBYRA v1 - validado, Fase 2.2b).
+  # MO convertida de horas a jornales (h/8). Materiales menores marcados 'a validar'.
+  # ===========================================================================
+  excavacion_general:
+    descripcion: 'Excavacion manual de zanjas / bases'
+    unidad_item: m3
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: mo_ayudante_exc, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.4375, notas: '3.5 h/m3. Ajustes a mano: tierra dura +40%, suelta -50%, entibacion sencilla +10%.'}
+
+  excavacion_pozos:
+    descripcion: 'Excavacion de pozos profundos / estrechos'
+    unidad_item: m3
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: mo_ayudante_pozo, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.8125, notas: '6-7 h/m3 (promedio 6.5).'}
+
+  relleno_compactado:
+    descripcion: 'Relleno y compactacion'
+    unidad_item: m3
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: tosca_aporte, tipo: material, nombre: 'Tosca / tierra de aporte', unidad: m3, coeficiente: 1.0, notas: 'a validar: material de aporte segun caso (tierra/tosca).'}
+      - {clave: mo_ayudante_relleno, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.3125, notas: '2.5 h/m3.'}
+
+  armadura_hierro:
+    descripcion: 'Armadura de hierro (elaboracion y colocacion)'
+    unidad_item: tn
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: alambre_atar, tipo: material, nombre: 'Alambre de atar N16', unidad: kg, coeficiente: 10}
+      - {clave: mo_armador, tipo: mano_obra, nombre: 'Oficial armador', unidad: jornal, coeficiente: 3.75, notas: '30 h/tn.'}
+      - {clave: mo_ayudante_arm, tipo: mano_obra, nombre: 'Ayudante armador', unidad: jornal, coeficiente: 5.0, notas: '40 h/tn. El hierro es material aparte (segun diametros).'}
+
+  cubierta_chapa:
+    descripcion: 'Cubierta de chapa'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: chapa_acanalada, tipo: material, nombre: 'Chapa acanalada galvanizada', unidad: m2, coeficiente: 1.2, notas: 'x1.2 por solapes y desperdicio.'}
+      - {clave: clavaderas, tipo: material, nombre: 'Clavaderas / tirantillos de madera', unidad: ml, coeficiente: 2.5, notas: 'a validar.'}
+      - {clave: aislacion_base_chapa, tipo: material, nombre: 'Aislacion base bajo chapa (film/membrana)', unidad: m2, coeficiente: 1.05, notas: 'a validar.'}
+      - {clave: tornillos_chapa, tipo: material, nombre: 'Tornillos autoperforantes', unidad: u, coeficiente: 12, notas: 'a validar.'}
+      - {clave: mo_oficial_chapa, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.1625, notas: '1.3 h/m2.'}
+      - {clave: mo_ayudante_chapa, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.125, notas: '1.0 h/m2.'}
+
+  aislacion_termica:
+    descripcion: 'Aislacion termica en placas'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: placa_aislacion, tipo: material, nombre: 'Placa aislante termica (EPS/lana)', unidad: m2, coeficiente: 1.05, notas: 'x1.05 desperdicio.'}
+      - {clave: mo_oficial_aisl, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.04375, notas: '0.35 h/m2.'}
+      - {clave: mo_ayudante_aisl, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.03125, notas: '0.25 h/m2.'}
+
+  boca_electrica:
+    descripcion: 'Boca electrica (punto completo)'
+    unidad_item: u
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: cano_corrugado, tipo: material, nombre: 'Cano corrugado electrico', unidad: ml, coeficiente: 3}
+      - {clave: cable_unipolar, tipo: material, nombre: 'Cable unipolar 2.5mm2', unidad: ml, coeficiente: 9}
+      - {clave: caja_electrica, tipo: material, nombre: 'Caja rectangular PVC', unidad: u, coeficiente: 1}
+      - {clave: mo_electricista_boca, tipo: mano_obra, nombre: 'Oficial electricista', unidad: jornal, coeficiente: 0.05, notas: '0.4 h/boca.'}
+
+  cañeria_agua_fria:
+    descripcion: 'Cañeria de agua fria'
+    unidad_item: ml
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: cano_agua, tipo: material, nombre: 'Cano agua PPR/termofusion 1/2', unidad: ml, coeficiente: 1.05}
+      - {clave: accesorios_agua, tipo: material, nombre: 'Accesorios agua (codos, tes, llaves)', unidad: u, coeficiente: 0.3, notas: 'a validar: promedio por ml.'}
+      - {clave: mo_plomero_agua, tipo: mano_obra, nombre: 'Oficial plomero', unidad: jornal, coeficiente: 0.015, notas: '0.12 h/ml.'}
+      - {clave: mo_ayudante_agua, tipo: mano_obra, nombre: 'Ayudante plomero', unidad: jornal, coeficiente: 0.0075, notas: '0.06 h/ml.'}
+
+  desague_cloacal:
+    descripcion: 'Desague cloacal'
+    unidad_item: ml
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: cano_cloacal, tipo: material, nombre: 'Cano PVC cloacal 110mm', unidad: ml, coeficiente: 1.05}
+      - {clave: accesorios_cloacal, tipo: material, nombre: 'Accesorios cloacales (codos 45, registros, sifones)', unidad: u, coeficiente: 0.25, notas: 'a validar: promedio por ml.'}
+      - {clave: mo_plomero_cloacal, tipo: mano_obra, nombre: 'Oficial plomero', unidad: jornal, coeficiente: 0.02125, notas: '0.17 h/ml.'}
+      - {clave: mo_ayudante_cloacal, tipo: mano_obra, nombre: 'Ayudante plomero', unidad: jornal, coeficiente: 0.0125, notas: '0.10 h/ml.'}
+
+  pintura_exterior:
+    descripcion: 'Pintura exterior latex, 2 manos'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: latex_exterior, tipo: material, nombre: 'Pintura latex exterior', unidad: l, coeficiente: 0.2, notas: '0.1 l/m2 x 2 manos.'}
+      - {clave: fijador_ext, tipo: material, nombre: 'Fijador al agua', unidad: l, coeficiente: 0.1, notas: 'a validar.'}
+      - {clave: mo_pintor_ext, tipo: mano_obra, nombre: 'Oficial pintor', unidad: jornal, coeficiente: 0.04375, notas: '0.2 h pintura + 0.15 h preparacion (si la superficie lo requiere) = 0.35 h/m2.'}
+
+  esmalte_sintetico:
+    descripcion: 'Esmalte sintetico sobre madera, 2 manos'
+    unidad_item: m2
+    origen: 'OBYRA v1 - validado'
+    recursos:
+      - {clave: esmalte_sint, tipo: material, nombre: 'Esmalte sintetico', unidad: l, coeficiente: 0.25, notas: '2 manos.'}
+      - {clave: imprimante_madera, tipo: material, nombre: 'Imprimante/fondo para madera', unidad: l, coeficiente: 0.15}
+      - {clave: mo_pintor_esmalte, tipo: mano_obra, nombre: 'Oficial pintor', unidad: jornal, coeficiente: 0.06875, notas: '0.3 h pintura + 0.25 h preparacion/lijado = 0.55 h/m2.'}

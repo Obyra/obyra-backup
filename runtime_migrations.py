@@ -3228,3 +3228,122 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Runtime fallback Lock Manual: {e}")
+
+    # =====================================================
+    # 2026-07-15: Fase 2.0 IA presupuestos - costo MO normalizado.
+    #   - CategoriaJornal.valor_hora_convenio (input canonico paritaria)
+    #   - estructura_recargos_mo + recargo_mo_linea (recargos parametrizados)
+    #   - indice_actualizacion (ICAC/ICP para reindexar presupuestos viejos)
+    # Idempotente. Postgres only.
+    # =====================================================
+    try:
+        db.session.execute(db.text(
+            "ALTER TABLE categorias_jornal ADD COLUMN IF NOT EXISTS valor_hora_convenio NUMERIC(15,2);"
+        ))
+
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS estructura_recargos_mo (
+                id SERIAL PRIMARY KEY,
+                organizacion_id INTEGER REFERENCES organizaciones(id) ON DELETE CASCADE,
+                nombre VARCHAR(120) NOT NULL DEFAULT 'Estructura de recargos',
+                zona VARCHAR(40) NOT NULL DEFAULT 'CABA',
+                vigencia_desde DATE NOT NULL DEFAULT CURRENT_DATE,
+                vigencia_hasta DATE,
+                horas_mensuales INTEGER NOT NULL DEFAULT 176,
+                horas_por_dia INTEGER NOT NULL DEFAULT 8,
+                fuente VARCHAR(60) NOT NULL DEFAULT 'manual',
+                notas TEXT,
+                activo BOOLEAN NOT NULL DEFAULT TRUE,
+                created_by_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        for ddl in [
+            "CREATE INDEX IF NOT EXISTS ix_erm_org_zona ON estructura_recargos_mo(organizacion_id, zona);",
+            "CREATE INDEX IF NOT EXISTS ix_erm_vigencia ON estructura_recargos_mo(vigencia_desde, vigencia_hasta);",
+            "CREATE INDEX IF NOT EXISTS ix_erm_activo ON estructura_recargos_mo(activo);",
+        ]:
+            db.session.execute(db.text(ddl))
+
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS recargo_mo_linea (
+                id SERIAL PRIMARY KEY,
+                estructura_id INTEGER NOT NULL
+                    REFERENCES estructura_recargos_mo(id) ON DELETE CASCADE,
+                orden INTEGER NOT NULL DEFAULT 0,
+                concepto VARCHAR(80) NOT NULL,
+                grupo VARCHAR(30) NOT NULL,
+                tipo_calculo VARCHAR(20) NOT NULL,
+                valor NUMERIC(14,4) NOT NULL DEFAULT 0,
+                notas VARCHAR(200),
+                activo BOOLEAN NOT NULL DEFAULT TRUE
+            );
+        """))
+        db.session.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_rml_estructura ON recargo_mo_linea(estructura_id);"
+        ))
+
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS indice_actualizacion (
+                id SERIAL PRIMARY KEY,
+                organizacion_id INTEGER REFERENCES organizaciones(id) ON DELETE CASCADE,
+                tipo VARCHAR(10) NOT NULL,
+                capitulo VARCHAR(30) NOT NULL DEFAULT 'general',
+                periodo VARCHAR(7) NOT NULL,
+                valor_indice NUMERIC(16,4) NOT NULL,
+                fuente VARCHAR(60) NOT NULL DEFAULT 'manual',
+                notas TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_indice_org_tipo_cap_periodo
+                ON indice_actualizacion(
+                    COALESCE(organizacion_id, 0), tipo, capitulo, periodo
+                );
+        """))
+        db.session.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_indice_tipo_cap ON indice_actualizacion(tipo, capitulo);"
+        ))
+        db.session.commit()
+        print("[OK] Runtime Fase 2.0 costo MO aplicado (valor_hora_convenio + estructura_recargos_mo + indice_actualizacion)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Runtime Fase 2.0 costo MO: {e}")
+
+    # =====================================================
+    # 2026-07-16: Fase 2.5 IA presupuestos - aprendizaje por org.
+    #   mapeo_item_aprendido: texto del cliente -> resolucion (regla o manual).
+    # Idempotente. Postgres only.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS mapeo_item_aprendido (
+                id SERIAL PRIMARY KEY,
+                organizacion_id INTEGER NOT NULL
+                    REFERENCES organizaciones(id) ON DELETE CASCADE,
+                texto_normalizado VARCHAR(300) NOT NULL,
+                texto_original VARCHAR(400),
+                regla_id VARCHAR(80),
+                nivel VARCHAR(20) NOT NULL DEFAULT 'estandar',
+                tratamiento VARCHAR(20) NOT NULL DEFAULT 'apu',
+                veces_usado INTEGER NOT NULL DEFAULT 0,
+                created_by_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_mapeo_org_texto
+                ON mapeo_item_aprendido(organizacion_id, texto_normalizado);
+        """))
+        db.session.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_mapeo_org ON mapeo_item_aprendido(organizacion_id);"
+        ))
+        db.session.commit()
+        print("[OK] Runtime Fase 2.5 aprendizaje aplicado (mapeo_item_aprendido)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Runtime Fase 2.5 aprendizaje: {e}")

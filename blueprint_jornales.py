@@ -54,6 +54,40 @@ def _query_visible(org_id):
     ))
 
 
+ZONA_DEFAULT = 'CABA'
+
+
+def _recargos_context(org_id, cats):
+    """Arma el contexto de la estructura de recargos MO activa + el costo empresa
+    calculado por categoria (para el card de costo laboral)."""
+    from decimal import Decimal
+    from services.costo_mano_obra import resolver_estructura, desglose_costo_hora
+    from models.mano_obra import GRUPOS_RECARGO, TIPOS_CALCULO
+
+    est = resolver_estructura(org_id, zona=ZONA_DEFAULT)
+    costos = {}
+    for c in cats:
+        if c.valor_hora_convenio is not None:
+            basico = Decimal(str(c.valor_hora_convenio))
+        elif c.precio_jornal:
+            basico = Decimal(str(c.precio_jornal)) / Decimal('8')
+        else:
+            basico = Decimal('0')
+        d = desglose_costo_hora(basico, est)
+        costos[c.id] = {
+            'basico_hora': float(d['basico_hora']),
+            'costo_hora': float(d['costo_hora']),
+            'costo_jornal': float(d['costo_hora']) * (est.horas_por_dia if est else 8),
+        }
+    return {
+        'estructura': est,
+        'estructura_dict': est.to_dict() if est else None,
+        'costos': costos,
+        'grupos': list(GRUPOS_RECARGO),
+        'tipos_calculo': list(TIPOS_CALCULO),
+    }
+
+
 @jornales_bp.route('/')
 @login_required
 def lista():
@@ -75,11 +109,14 @@ def lista():
             VariacionCacPendiente.periodo.desc()
         ).limit(5).all()
 
+    recargos = _recargos_context(org_id, cats)
+
     return render_template('jornales/lista.html',
                            jornales=cats,
                            es_super_admin=_es_super_admin(),
                            org_id=org_id,
-                           variaciones_pendientes=pendientes)
+                           variaciones_pendientes=pendientes,
+                           recargos=recargos)
 
 
 @jornales_bp.route('/api')
@@ -177,6 +214,105 @@ def editar(id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error editando categoria jornal')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@jornales_bp.route('/recargos', methods=['POST'])
+@login_required
+def guardar_recargos():
+    """Guarda las lineas de la estructura de recargos MO (reemplazo completo).
+
+    Body JSON:
+      - global: bool (solo superadmin; edita la estructura global de OBYRA)
+      - zona: str (default 'CABA')
+      - horas_mensuales: int, horas_por_dia: int
+      - lineas: [{concepto, grupo, tipo_calculo, valor, activo}]
+
+    Si no es global, edita/crea la estructura PROPIA de la org (pisa la global).
+    """
+    if not _tiene_permiso():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    from datetime import date
+    from decimal import Decimal, InvalidOperation
+    from models.mano_obra import EstructuraRecargosMO, RecargoMOLinea, GRUPOS_RECARGO, TIPOS_CALCULO
+
+    org_id = get_current_org_id()
+    data = request.get_json(silent=True) or {}
+
+    es_global = bool(data.get('global'))
+    if es_global and not _es_super_admin():
+        return jsonify({'ok': False, 'error': 'Solo OBYRA (superadmin) edita la estructura global.'}), 403
+    target_org = None if es_global else org_id
+
+    zona = (data.get('zona') or ZONA_DEFAULT).strip()[:40] or ZONA_DEFAULT
+    try:
+        horas_mensuales = int(data.get('horas_mensuales') or 176)
+        horas_por_dia = int(data.get('horas_por_dia') or 8)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'horas_mensuales / horas_por_dia invalidos'}), 400
+    if horas_mensuales <= 0 or horas_por_dia <= 0:
+        return jsonify({'ok': False, 'error': 'Las horas deben ser positivas'}), 400
+
+    lineas_in = data.get('lineas') or []
+    if not isinstance(lineas_in, list):
+        return jsonify({'ok': False, 'error': 'lineas debe ser una lista'}), 400
+
+    # Validar y normalizar lineas
+    lineas_norm = []
+    for i, l in enumerate(lineas_in, start=1):
+        concepto = (l.get('concepto') or '').strip()[:80]
+        grupo = (l.get('grupo') or '').strip()
+        tipo = (l.get('tipo_calculo') or '').strip()
+        if not concepto:
+            return jsonify({'ok': False, 'error': f'Linea {i}: falta concepto'}), 400
+        if grupo not in GRUPOS_RECARGO:
+            return jsonify({'ok': False, 'error': f'Linea {i}: grupo invalido ({grupo})'}), 400
+        if tipo not in TIPOS_CALCULO:
+            return jsonify({'ok': False, 'error': f'Linea {i}: tipo_calculo invalido ({tipo})'}), 400
+        try:
+            valor = Decimal(str(l.get('valor') if l.get('valor') not in (None, '') else 0))
+        except (InvalidOperation, TypeError, ValueError):
+            return jsonify({'ok': False, 'error': f'Linea {i}: valor invalido'}), 400
+        lineas_norm.append({
+            'orden': i, 'concepto': concepto, 'grupo': grupo, 'tipo_calculo': tipo,
+            'valor': valor, 'activo': bool(l.get('activo', True)),
+            'notas': (l.get('notas') or None),
+        })
+
+    # Resolver/crear la estructura destino (misma zona, activa, la mas reciente)
+    est = EstructuraRecargosMO.query.filter(
+        EstructuraRecargosMO.organizacion_id.is_(None) if target_org is None
+        else EstructuraRecargosMO.organizacion_id == target_org,
+        EstructuraRecargosMO.zona == zona,
+        EstructuraRecargosMO.activo.is_(True),
+    ).order_by(EstructuraRecargosMO.vigencia_desde.desc()).first()
+
+    if est is None:
+        est = EstructuraRecargosMO(
+            organizacion_id=target_org,
+            nombre=('OBYRA global' if target_org is None else 'Estructura propia'),
+            zona=zona, vigencia_desde=date.today(),
+            horas_mensuales=horas_mensuales, horas_por_dia=horas_por_dia,
+            fuente='manual', activo=True,
+            created_by_id=getattr(current_user, 'id', None),
+        )
+        db.session.add(est)
+    else:
+        est.horas_mensuales = horas_mensuales
+        est.horas_por_dia = horas_por_dia
+        est.lineas.clear()
+    db.session.flush()
+
+    for ln in lineas_norm:
+        est.lineas.append(RecargoMOLinea(**ln))
+
+    try:
+        db.session.commit()
+        return jsonify({'ok': True, 'estructura': est.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error guardando estructura de recargos MO')
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 

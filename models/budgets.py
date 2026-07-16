@@ -491,6 +491,10 @@ class CategoriaJornal(db.Model):
     nombre = db.Column(db.String(120), nullable=False)        # ej "Oficial Albañil"
     codigo = db.Column(db.String(40))                          # opcional: 'oficial', 'medio_oficial', 'ayudante'
     precio_jornal = db.Column(db.Numeric(15, 2), nullable=False, default=0)
+    # Input canonico de la paritaria: hora convenio (el convenio publica $/hora).
+    # El servicio de costo MO prefiere este valor; si es NULL cae a precio_jornal/8.
+    # Se mantiene precio_jornal sincronizado (= hora*8) para los consumidores viejos.
+    valor_hora_convenio = db.Column(db.Numeric(15, 2), nullable=True)
     moneda = db.Column(db.String(3), nullable=False, default='ARS')
 
     # Trazabilidad de la fuente (para futuro scraper Camarco/UOCRA)
@@ -520,6 +524,7 @@ class CategoriaJornal(db.Model):
             'nombre': self.nombre,
             'codigo': self.codigo,
             'precio_jornal': float(self.precio_jornal or 0),
+            'valor_hora_convenio': float(self.valor_hora_convenio) if self.valor_hora_convenio is not None else None,
             'moneda': self.moneda,
             'fuente': self.fuente,
             'vigencia_desde': self.vigencia_desde.isoformat() if self.vigencia_desde else None,
