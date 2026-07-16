@@ -594,39 +594,32 @@ reglas:
       - {clave: mo_ayudante_zoc, tipo: mano_obra, nombre: 'Ayudante colocador', unidad: jornal, coeficiente: 0.05}
 
   # ===========================================================================
-  # Encofrados en 3 niveles (OBYRA v1 - validado, Fase 2.2b).
-  # Medido por m2 de encofrado (superficie de contacto). Material amortizado por
-  # cantidad de usos (marcada 'a validar'). El hormigon va en las reglas de
-  # losa/viga/columna, no aca.
+  # Encofrado en 3 NIVELES (OBYRA v1 - validado, Fase 2.2b). Formato por niveles:
+  # get_recursos('encofrado', nivel) hace merge de recursos_base + niveles[nivel].
+  # Default del presupuesto: 'estandar'. Medido por m2 de contacto.
   # Variacion superficie material por estructura: losas 2.50 / vigas 1.25-1.50 /
   # columnas 2.00-3.00 m2/m2 (valores base para losa; ajustar por tipo).
   # ===========================================================================
-  encofrado_economico:
-    descripcion: 'Encofrado economico (madera de pino, pocos reusos)'
+  encofrado:
+    descripcion: 'Encofrado (por m2 de contacto)'
     unidad_item: m2
     origen: 'OBYRA v1 - validado'
-    recursos:
-      - {clave: madera_pino_enc, tipo: material, nombre: 'Madera de pino para encofrado', unidad: m2, coeficiente: 0.83, notas: '2.50 m2/m2 amortizado en ~3 usos (a validar). Incluye tablas + tirantes + rotura 15-20%.'}
-      - {clave: clavos_enc_eco, tipo: material, nombre: 'Clavos de punta', unidad: kg, coeficiente: 0.40}
-      - {clave: mo_carpintero_eco, tipo: mano_obra, nombre: 'Oficial carpintero', unidad: jornal, coeficiente: 0.875, notas: '7 h/m2: armado + desarmado + limpieza.'}
-
-  encofrado_estandar:
-    descripcion: 'Encofrado estandar (fenolico 18mm + puntales metalicos, ~8 usos)'
-    unidad_item: m2
-    origen: 'OBYRA v1 - validado'
-    recursos:
-      - {clave: fenolico_18_enc, tipo: material, nombre: 'Fenolico 18mm para encofrado', unidad: m2, coeficiente: 0.31, notas: '2.50 m2/m2 amortizado en ~8 usos (a validar).'}
-      - {clave: puntal_metalico_enc, tipo: material, nombre: 'Puntal metalico (amortizacion)', unidad: u, coeficiente: 0.15, notas: 'a validar: amortizacion de puntales reutilizables.'}
-      - {clave: clavos_enc_std, tipo: material, nombre: 'Clavos/tornillos', unidad: kg, coeficiente: 0.40}
-      - {clave: mo_carpintero_std, tipo: mano_obra, nombre: 'Oficial carpintero', unidad: jornal, coeficiente: 0.875, notas: '7 h/m2 (fenolico mejor terminacion; podria bajar, a validar).'}
-
-  encofrado_premium:
-    descripcion: 'Encofrado premium (sistema modular Flex, alquiler)'
-    unidad_item: m2
-    origen: 'OBYRA v1 - validado'
-    recursos:
-      - {clave: flex_alquiler, tipo: material, nombre: 'Sistema encofrado modular Flex (alquiler mensual)', unidad: mes, coeficiente: 1, notas: '1 mes de alquiler por m2 de losa, SIN prorrateo (ciclo armado+fraguado+desencofre ~1 mes, se factura por mes cerrado). Precio en USD (lista Flex ago-2026).'}
-      - {clave: mo_montador_prem, tipo: mano_obra, nombre: 'Oficial montador', unidad: jornal, coeficiente: 0.25, notas: 'a validar: sistema modular, ~2 h/m2, bastante menor que los 7h de madera.'}
+    niveles:
+      economico:
+        recursos:
+          - {clave: madera_pino_enc, tipo: material, nombre: 'Madera de pino para encofrado', unidad: m2, coeficiente: 0.83, notas: '2.50 m2/m2 amortizado ~3 usos (a validar).'}
+          - {clave: clavos_enc, tipo: material, nombre: 'Clavos de punta', unidad: kg, coeficiente: 0.40}
+          - {clave: mo_carpintero, tipo: mano_obra, nombre: 'Oficial carpintero', unidad: jornal, coeficiente: 0.875, notas: '7 h/m2 (madera artesanal): armado + desarmado + limpieza.'}
+      estandar:
+        recursos:
+          - {clave: fenolico_18_enc, tipo: material, nombre: 'Fenolico 18mm para encofrado', unidad: m2, coeficiente: 0.31, notas: '2.50 m2/m2 amortizado ~8 usos (a validar).'}
+          - {clave: puntal_metalico_enc, tipo: material, nombre: 'Puntal metalico (amortizacion)', unidad: u, coeficiente: 0.15, notas: 'a validar.'}
+          - {clave: clavos_enc, tipo: material, nombre: 'Clavos de punta', unidad: kg, coeficiente: 0.40}
+          - {clave: mo_carpintero, tipo: mano_obra, nombre: 'Oficial carpintero', unidad: jornal, coeficiente: 0.5, notas: '4 h/m2 (fenolico + puntales, mas agil).'}
+      premium:
+        recursos:
+          - {clave: flex_alquiler, tipo: material, nombre: 'Sistema encofrado modular Flex (alquiler mensual)', unidad: mes, coeficiente: 1, notas: '1 mes/m2 sin prorrateo, USD (lista Flex ago-2026).'}
+          - {clave: mo_montador_prem, tipo: mano_obra, nombre: 'Oficial montador', unidad: jornal, coeficiente: 0.25, notas: 'a validar: sistema modular ~2 h/m2.'}
 
   # ===========================================================================
   # 11 rubros nuevos (OBYRA v1 - validado, Fase 2.2b).

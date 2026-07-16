@@ -34,11 +34,25 @@ def _cargar_yaml() -> Dict[str, Any]:
     return data
 
 
-def get_recursos(regla_id: str) -> List[Dict[str, Any]]:
-    """Devuelve la lista de recursos del YAML para una regla.
+NIVEL_DEFAULT = 'estandar'
+
+
+def _regla_tiene_coef(regla) -> bool:
+    if not regla:
+        return False
+    return bool(regla.get('recursos') or regla.get('niveles'))
+
+
+def get_recursos(regla_id: str, nivel: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Devuelve la lista de recursos del YAML para una regla y nivel.
+
+    Dos formatos de regla:
+      1. Plano: `recursos: [...]` (el `nivel` se ignora).
+      2. Por niveles: `recursos_base: [...]` + `niveles: {economico/estandar/premium:
+         {recursos: [...]}}`. Se hace merge base + nivel POR `clave` (el recurso del
+         nivel pisa/agrega al base). Si el nivel no existe, cae a estandar.
 
     Cada recurso es un dict {clave, tipo, nombre, unidad, coeficiente, notas}.
-    Si la regla no tiene entrada o no tiene 'recursos', devuelve [].
     """
     if not regla_id:
         return []
@@ -46,21 +60,47 @@ def get_recursos(regla_id: str) -> List[Dict[str, Any]]:
     regla = (data.get('reglas') or {}).get(regla_id)
     if not regla:
         return []
-    recursos = regla.get('recursos') or []
-    return [r for r in recursos if isinstance(r, dict)]
+
+    # Formato plano
+    if regla.get('recursos'):
+        return [r for r in regla['recursos'] if isinstance(r, dict)]
+
+    # Formato por niveles
+    niveles = regla.get('niveles') or {}
+    if niveles:
+        nivel = nivel or NIVEL_DEFAULT
+        base = [r for r in (regla.get('recursos_base') or []) if isinstance(r, dict)]
+        cfg = niveles.get(nivel) or niveles.get(NIVEL_DEFAULT) or {}
+        nivel_recs = cfg.get('recursos') if isinstance(cfg, dict) else cfg
+        nivel_recs = [r for r in (nivel_recs or []) if isinstance(r, dict)]
+        # merge por clave: nivel pisa base
+        por_clave = {}
+        for r in base + nivel_recs:
+            por_clave[r.get('clave')] = r
+        return list(por_clave.values())
+
+    return []
+
+
+def niveles_disponibles(regla_id: str) -> List[str]:
+    """Lista de niveles definidos para la regla (vacia si es plana)."""
+    data = _cargar_yaml()
+    regla = (data.get('reglas') or {}).get(regla_id) or {}
+    return list((regla.get('niveles') or {}).keys())
 
 
 def tiene_coeficientes(regla_id: str) -> bool:
-    """True si la regla tiene al menos 1 recurso definido en el YAML."""
-    return len(get_recursos(regla_id)) > 0
+    """True si la regla tiene recursos (planos o por niveles)."""
+    data = _cargar_yaml()
+    return _regla_tiene_coef((data.get('reglas') or {}).get(regla_id))
 
 
 def reglas_con_coeficientes() -> Set[str]:
-    """Set de regla_id que estan cubiertas por el YAML."""
+    """Set de regla_id que estan cubiertas por el YAML (planas o por niveles)."""
     data = _cargar_yaml()
     return {
         rid for rid, regla in (data.get('reglas') or {}).items()
-        if regla and (regla.get('recursos') or [])
+        if _regla_tiene_coef(regla)
     }
 
 
