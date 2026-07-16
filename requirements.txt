@@ -32,6 +32,9 @@ xlsxwriter~=3.2.5
 sentry-sdk[flask]~=2.19.0
 boto3~=1.35.0
 
+# IA - Clasificador LLM de presupuestos (Fase 2.3)
+anthropic~=0.40
+
 # Testing dependencies
 pytest~=8.0.0
 pytest-flask~=1.3.0
