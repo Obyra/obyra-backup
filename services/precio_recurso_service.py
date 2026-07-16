@@ -280,31 +280,41 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
     """
     from models.provider_price_list import ProviderPriceList
 
+    # Fase 1 IA: buscar en los precios de la ORG y en la BASE GLOBAL (org NULL).
+    # Los precios propios de la org PISAN la base global -> se ordena poniendo
+    # primero las filas de la org (_org_first) y en fuzzy se les da un bonus.
+    _scope = db.or_(ProviderPriceList.organizacion_id == organizacion_id,
+                    ProviderPriceList.organizacion_id.is_(None))
+    # org propio (0) antes que global (1). CASE, no boolean.desc(): para las
+    # filas globales `org == X` da NULL y en Postgres NULL ordena primero en
+    # DESC, lo que dejaba ganar a la global sobre el precio propio de la org.
+    _org_first = db.case((ProviderPriceList.organizacion_id == organizacion_id, 0), else_=1)
+
     # Prioridad 0: matching por item_inventario_id (mas fuerte)
     if item_inventario_id:
         candidatos = (ProviderPriceList.query
-                      .filter(ProviderPriceList.organizacion_id == organizacion_id,
+                      .filter(_scope,
                               ProviderPriceList.item_inventario_id == item_inventario_id)
-                      .order_by(ProviderPriceList.fecha_actualizacion.desc())
+                      .order_by(_org_first, ProviderPriceList.fecha_actualizacion.desc())
                       .all())
         if candidatos:
             return candidatos[0], candidatos[1:6]
 
     # Prioridad 1: descripcion_normalizada exacto + unidad exacta
     candidatos = (ProviderPriceList.query
-                  .filter(ProviderPriceList.organizacion_id == organizacion_id,
+                  .filter(_scope,
                           ProviderPriceList.unidad == unidad,
                           ProviderPriceList.descripcion_normalizada == descripcion_norm)
-                  .order_by(ProviderPriceList.fecha_actualizacion.desc())
+                  .order_by(_org_first, ProviderPriceList.fecha_actualizacion.desc())
                   .all())
     if candidatos:
         return candidatos[0], candidatos[1:6]
 
     # Prioridad 2: descripcion exacta con unidad compatible (sinónimos)
     candidatos_desc_exacta = (ProviderPriceList.query
-                              .filter(ProviderPriceList.organizacion_id == organizacion_id,
+                              .filter(_scope,
                                       ProviderPriceList.descripcion_normalizada == descripcion_norm)
-                              .order_by(ProviderPriceList.fecha_actualizacion.desc())
+                              .order_by(_org_first, ProviderPriceList.fecha_actualizacion.desc())
                               .all())
     matches_compatibles = [c for c in candidatos_desc_exacta if _unidades_compatibles(c.unidad, unidad)]
     if matches_compatibles:
@@ -316,14 +326,13 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
     if not tokens_item:
         return None, []
 
-    # Traer todos los precios del org (limitado a 500 para no explotar memoria).
-    # En producción real con miles de filas habría que filtrar antes por
-    # prefijo o algún heurístico. Para demo y JMG (≤200 items, lista propia
-    # ≤300 filas), 500 alcanza sin problema.
+    # Traer precios de la org + base global. Con la base OBYRA (~6.3k recursos)
+    # el cap se sube; el orden pone primero las filas de la org. (Optimizacion
+    # futura: pre-filtrar por token/prefijo antes del scan en Python.)
     todos = (ProviderPriceList.query
-             .filter(ProviderPriceList.organizacion_id == organizacion_id)
-             .order_by(ProviderPriceList.fecha_actualizacion.desc())
-             .limit(500)
+             .filter(_scope)
+             .order_by(_org_first, ProviderPriceList.fecha_actualizacion.desc())
+             .limit(8000)
              .all())
 
     scored = []
@@ -339,7 +348,9 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
             continue
         # Bonus si la unidad es compatible
         unidad_bonus = 0.2 if _unidades_compatibles(c.unidad, unidad) else 0.0
-        score = jaccard + unidad_bonus
+        # Bonus si es precio propio de la org (pisa la base global en empates)
+        org_bonus = 0.5 if c.organizacion_id == organizacion_id else 0.0
+        score = jaccard + unidad_bonus + org_bonus
         scored.append((score, c))
 
     if not scored:

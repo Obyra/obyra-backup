@@ -449,3 +449,210 @@ def deshacer_batch(*, db, batch_id: int, motivo: str = '',
         'rows_ppl_borradas': rows_ppl,
         'rows_po_borradas': rows_po,
     }
+
+
+# ============================================================================
+# Fase 1 IA presupuestos: carga del CATALOGO COMPLETO (hoja 01, ~6.345 filas)
+# ============================================================================
+
+def _parse_hoja_01_catalogo(xlsx_path: str) -> "List[Dict[str, Any]]":
+    """Parsea la hoja '01_Catalogo_OBYRA' del OBYRA_base_precios_recursos_v1.
+
+    Es el catalogo normalizado (~6.345 filas). Header en fila 1:
+      fuente | proveedor | categoria | tipo_recurso | recurso | descripcion |
+      unidad | precio_min | precio_max | precio_unitario
+
+    La hoja 01 NO trae zona (zona=None). Si `unidad` esta vacia se infiere de
+    la descripcion. Si `precio_unitario` esta vacio se usa el promedio de
+    precio_min/precio_max.
+    """
+    import openpyxl
+    if not os.path.exists(xlsx_path):
+        return []
+    wb = openpyxl.load_workbook(xlsx_path, data_only=True, read_only=True)
+    if '01_Catalogo_OBYRA' not in wb.sheetnames:
+        wb.close()
+        return []
+    ws = wb['01_Catalogo_OBYRA']
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if len(rows) < 2:
+        return []
+
+    header = [(_normalizar_unidad_str(str(c)) if c else '') for c in rows[0]]
+    col_idx = {h: i for i, h in enumerate(header)}
+
+    def _g(row, key, default=None):
+        i = col_idx.get(key)
+        if i is None or i >= len(row):
+            return default
+        return row[i]
+
+    salida = []
+    for row in rows[1:]:
+        if not row or all(c is None for c in row):
+            continue
+        recurso = _g(row, 'recurso')
+        descripcion = _g(row, 'descripcion') or recurso
+        if not recurso and not descripcion:
+            continue
+        unidad_raw = _g(row, 'unidad')
+        unidad = _normalizar_unidad_str(unidad_raw) if unidad_raw else ''
+        if not unidad:
+            unidad = _inferir_unidad_de_descripcion(str(recurso or descripcion or ''))
+        precio_unit = _decimal_safe(_g(row, 'precio_unitario'))
+        if not precio_unit:
+            pmin = _decimal_safe(_g(row, 'precio_min'))
+            pmax = _decimal_safe(_g(row, 'precio_max'))
+            if pmin and pmax:
+                precio_unit = (pmin + pmax) / Decimal('2')
+            elif pmin:
+                precio_unit = pmin
+            elif pmax:
+                precio_unit = pmax
+        if not precio_unit:
+            continue
+        salida.append({
+            'descripcion': str(descripcion).strip()[:300],
+            'recurso': str(recurso).strip()[:300] if recurso else None,
+            'unidad': unidad[:20] or 'un',
+            'zona': None,  # hoja 01 no trae zona
+            'moneda': 'ARS',
+            'precio_unitario': precio_unit,
+            'tipo_recurso': (str(_g(row, 'tipo_recurso') or 'material')).strip().lower()[:20],
+            'categoria': (str(_g(row, 'categoria') or '')).strip()[:120] or None,
+            'fuente_excel': (str(_g(row, 'fuente') or 'OBYRA_base_v1.01_Catalogo'))[:80],
+        })
+    return salida
+
+
+def importar_catalogo_base(
+    *,
+    db,
+    xlsx_path: str,
+    organizacion_id: int,
+    user_id: "Optional[int]" = None,
+    perfil: str = 'lista_propia_obyra',
+    global_base: bool = False,
+) -> "Dict[str, Any]":
+    """Importa el catalogo COMPLETO (hoja 01 ~6.345 + hoja 02 zonas + MO) a
+    provider_price_list de forma IDEMPOTENTE y eficiente.
+
+    Idempotente: clave de unicidad (org, proveedor=NULL, desc_norm, unidad,
+    zona). Correr 2 veces ACTUALIZA precio, no duplica. Se pre-cargan las claves
+    existentes en memoria para hacer el UPSERT sin N+1.
+    """
+    from models.import_batch import ImportBatch
+    from models.provider_price_list import ProviderPriceList, normalizar_descripcion_precio
+
+    if not os.path.exists(xlsx_path):
+        return {'ok': False, 'error': f'archivo no encontrado: {xlsx_path}'}
+
+    # global_base=True -> los precios se cargan como BASE GLOBAL (org NULL),
+    # accesibles por todas las orgs via el fallback de precio_recurso_service.
+    # El ImportBatch sigue bajo `organizacion_id` (solo trazabilidad).
+    org_precios = None if global_base else organizacion_id
+
+    filename = os.path.basename(xlsx_path)
+    checksum = _calcular_checksum(xlsx_path)
+    # Idempotencia a nivel batch: ImportBatch tiene UNIQUE(org, checksum). Si ya
+    # se importo este mismo archivo para esta org, se REUTILIZA el batch.
+    batch = (ImportBatch.query
+             .filter_by(organizacion_id=organizacion_id, checksum_sha256=checksum)
+             .first())
+    if batch is not None:
+        batch.perfil = perfil
+        batch.estado = 'en_curso'
+        batch.started_at = datetime.utcnow()
+        batch.user_id = user_id or batch.user_id
+    else:
+        batch = ImportBatch(
+            organizacion_id=organizacion_id, perfil=perfil, filename=filename[:255],
+            checksum_sha256=checksum, user_id=user_id,
+            estado='en_curso', started_at=datetime.utcnow(),
+        )
+        db.session.add(batch)
+    db.session.flush()
+
+    filas = (
+        _parse_hoja_01_catalogo(xlsx_path)
+        + _parse_hoja_02_materiales(xlsx_path)
+        + _parse_hoja_import_obyra_mano_obra(xlsx_path)
+    )
+
+    hoy = date.today()
+    try:
+        vigencia = date(hoy.year + 1, hoy.month, hoy.day)
+    except ValueError:  # 29-feb
+        vigencia = date(hoy.year + 1, hoy.month, 28)
+
+    # Pre-cargar claves existentes (proveedor NULL) del scope destino -> UPSERT O(1).
+    existentes = {}
+    _org_filter = (ProviderPriceList.organizacion_id.is_(None) if org_precios is None
+                   else ProviderPriceList.organizacion_id == org_precios)
+    for r in (ProviderPriceList.query
+              .filter(_org_filter,
+                      ProviderPriceList.proveedor_id.is_(None))
+              .all()):
+        existentes[(r.descripcion_normalizada, r.unidad, r.zona)] = r
+
+    inserted = updated = invalid = 0
+    vistas = set()
+    for fila in filas:
+        desc = fila['descripcion']
+        desc_norm = normalizar_descripcion_precio(desc)
+        unidad = fila['unidad']
+        zona = fila.get('zona')
+        precio = fila['precio_unitario']
+        moneda = (fila.get('moneda') or 'ARS')[:3]
+        if not desc_norm or not precio or precio <= 0:
+            invalid += 1
+            continue
+        key = (desc_norm, unidad, zona)
+        notas = (f"Base precios OBYRA. Cat: {fila.get('categoria') or '-'} · "
+                 f"tipo: {fila.get('tipo_recurso') or '-'} · "
+                 f"Excel: {fila.get('fuente_excel') or '-'}")[:1000]
+
+        row = existentes.get(key)
+        if row is not None:
+            row.precio_unitario = precio
+            row.moneda = moneda
+            row.fecha_actualizacion = hoy
+            row.vigencia_hasta = vigencia
+            row.fuente = perfil[:30]
+            row.import_batch_id = batch.id
+            row.modalidad = 'compra'
+            row.notas = notas
+            if key not in vistas:
+                updated += 1
+        else:
+            row = ProviderPriceList(
+                organizacion_id=org_precios, proveedor_id=None,
+                descripcion=desc[:300], descripcion_normalizada=desc_norm, unidad=unidad,
+                precio_unitario=precio, moneda=moneda, fecha_actualizacion=hoy,
+                vigencia_hasta=vigencia, fuente=perfil[:30], zona=zona, modalidad='compra',
+                import_batch_id=batch.id, created_by_user_id=user_id, notas=notas,
+            )
+            db.session.add(row)
+            existentes[key] = row
+            inserted += 1
+        vistas.add(key)
+
+    batch.total_input = len(filas)
+    batch.total_inserted = inserted
+    batch.total_updated = updated
+    batch.total_invalid = invalid
+    batch.estado = 'completado'
+    batch.completed_at = datetime.utcnow()
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {'ok': False, 'error': f'{type(e).__name__}: {e}'}
+
+    return {
+        'ok': True, 'batch_id': batch.id, 'total_input': len(filas),
+        'inserted': inserted, 'updated': updated, 'invalid': invalid,
+        'unicos_en_run': len(vistas),
+    }

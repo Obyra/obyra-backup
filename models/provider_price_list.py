@@ -57,8 +57,12 @@ class ProviderPriceList(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    # nullable=True: organizacion_id NULL = BASE GLOBAL de precios OBYRA (Fase 1
+    # IA presupuestos). Los precios de una org (organizacion_id = X) pisan la
+    # base global en _buscar_provider_price_list. La unicidad usa
+    # COALESCE(organizacion_id, 0) para que las filas globales deduped entre si.
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id', ondelete='CASCADE'),
-                                nullable=False, index=True)
+                                nullable=True, index=True)
     proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id', ondelete='SET NULL'),
                              nullable=True)
     descripcion = db.Column(db.String(300), nullable=False)
