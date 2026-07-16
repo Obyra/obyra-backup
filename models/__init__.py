@@ -233,6 +233,12 @@ from models.mano_obra_costo_referencia import (
     ManoObraCostoReferencia, CATEGORIAS_BASE, categoria_canonica_para,
 )
 
+# Fase 2.0 IA presupuestos: costo empresa de MO normalizado (recargos parametrizados)
+from models.mano_obra import (
+    EstructuraRecargosMO, RecargoMOLinea, IndiceActualizacion,
+    GRUPOS_RECARGO, TIPOS_CALCULO,
+)
+
 # Fase 6.A: archivos de licitacion (multiples Excel por presupuesto)
 from models.presupuesto_archivo import PresupuestoArchivo
 
@@ -365,6 +371,10 @@ __all__ = [
     'EscalaSalarialUOCRA',
     'CategoriaJornal',
     'VariacionCacPendiente',
+    # Costo MO normalizado (Fase 2.0)
+    'EstructuraRecargosMO',
+    'RecargoMOLinea',
+    'IndiceActualizacion',
     'CuadrillaTipo',
     'MiembroCuadrilla',
     'EtapaInternaVinculo',
