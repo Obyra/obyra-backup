@@ -52,35 +52,77 @@ MATERIALES = [
     ('Imprimacion asfaltica (pintura asfaltica)',    'l',    6500),
     ('Yeso de proyeccion',                           'kg',    680),
     ('Zocalo ceramico/porcelanato',                  'ml',   3900),
+    # --- Fase 2.2b: encofrados + 11 rubros ---
+    ('Madera de pino para encofrado',                'm2',   7500),
+    ('Clavos de punta',                              'kg',   2200),
+    ('Fenolico 18mm para encofrado',                 'm2',  28000),
+    ('Puntal metalico (amortizacion)',               'u',    4500),
+    ('Clavos/tornillos',                             'kg',   2500),
+    ('Alambre de atar N16',                          'kg',   2800),
+    ('Tosca / tierra de aporte',                     'm3',  18000),
+    ('Chapa acanalada galvanizada',                  'm2',  16500),
+    ('Clavaderas / tirantillos de madera',           'ml',   2400),
+    ('Aislacion base bajo chapa (film/membrana)',    'm2',   3200),
+    ('Tornillos autoperforantes',                    'u',      90),
+    ('Placa aislante termica (EPS/lana)',            'm2',   8900),
+    ('Cano corrugado electrico',                     'ml',    650),
+    ('Cable unipolar 2.5mm2',                        'ml',    980),
+    ('Caja rectangular PVC',                         'u',     780),
+    ('Cano agua PPR/termofusion 1/2',                'ml',   2900),
+    ('Accesorios agua (codos, tes, llaves)',         'u',    1500),
+    ('Cano PVC cloacal 110mm',                       'ml',   6800),
+    ('Accesorios cloacales (codos 45, registros, sifones)', 'u', 3500),
+    ('Pintura latex exterior',                       'l',    7800),
+    ('Fijador al agua',                              'l',    4200),
+    ('Esmalte sintetico',                            'l',    9500),
+    ('Imprimante/fondo para madera',                 'l',    8200),
+    ('Azulejo 15x15',                                'u',     320),
+]
+
+# Materiales con moneda/fuente propia. (desc, unidad, precio, moneda, fuente)
+# El sistema convierte USD->ARS con el TC del presupuesto (doble moneda).
+MATERIALES_ESPECIALES = [
+    ('Sistema encofrado modular Flex (alquiler mensual)', 'mes', 6.81, 'USD',
+     'lista proveedor Flex ago-2026'),
 ]
 
 
-def seed(db):
+def _upsert(db, desc, unidad, precio, moneda, fuente, nota):
     from models.provider_price_list import ProviderPriceList, normalizar_descripcion_precio
+    dn = normalizar_descripcion_precio(desc)
+    row = ProviderPriceList.query.filter(
+        ProviderPriceList.organizacion_id.is_(None),
+        ProviderPriceList.proveedor_id.is_(None),
+        ProviderPriceList.descripcion_normalizada == dn,
+        ProviderPriceList.unidad == unidad,
+    ).first()
+    creado = False
+    if row is None:
+        row = ProviderPriceList(
+            organizacion_id=None, proveedor_id=None,
+            descripcion=desc, descripcion_normalizada=dn, unidad=unidad, notas=nota,
+        )
+        db.session.add(row)
+        creado = True
+    row.precio_unitario = Decimal(str(precio))
+    row.moneda = moneda
+    row.fuente = fuente
+    row.fecha_actualizacion = date(2026, 8, 1)
+    return creado
 
+
+def seed(db):
     ins = upd = 0
+    nota_est = 'Precio orientativo estimado (mercado AR ~ago 2026). Reemplazar con lista real.'
     for desc, unidad, precio in MATERIALES:
-        dn = normalizar_descripcion_precio(desc)
-        row = ProviderPriceList.query.filter(
-            ProviderPriceList.organizacion_id.is_(None),
-            ProviderPriceList.proveedor_id.is_(None),
-            ProviderPriceList.descripcion_normalizada == dn,
-            ProviderPriceList.unidad == unidad,
-        ).first()
-        if row is None:
-            row = ProviderPriceList(
-                organizacion_id=None, proveedor_id=None,
-                descripcion=desc, descripcion_normalizada=dn, unidad=unidad,
-                moneda='ARS', fuente=FUENTE,
-                notas='Precio orientativo estimado (mercado AR ~ago 2026). Reemplazar con lista real.',
-            )
-            db.session.add(row)
-            ins += 1
-        else:
-            upd += 1
-        row.precio_unitario = Decimal(str(precio))
-        row.fecha_actualizacion = date(2026, 8, 1)
-        row.fuente = FUENTE
+        creado = _upsert(db, desc, unidad, precio, 'ARS', FUENTE, nota_est)
+        ins += creado
+        upd += (not creado)
+    for desc, unidad, precio, moneda, fuente in MATERIALES_ESPECIALES:
+        creado = _upsert(db, desc, unidad, precio, moneda,
+                         fuente, f'Precio {moneda} de lista de proveedor. Se convierte con el TC del presupuesto.')
+        ins += creado
+        upd += (not creado)
     db.session.commit()
     return ins, upd
 
@@ -90,7 +132,8 @@ def main():
     from extensions import db
     with _app.app.app_context():
         ins, upd = seed(db)
-        print(f"[OK] materiales estimados: {ins} insertados, {upd} actualizados ({len(MATERIALES)} total)")
+        total = len(MATERIALES) + len(MATERIALES_ESPECIALES)
+        print(f"[OK] materiales estimados: {ins} insertados, {upd} actualizados ({total} total)")
 
 
 if __name__ == '__main__':
