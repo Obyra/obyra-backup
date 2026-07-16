@@ -151,6 +151,56 @@ def _buscar_mo_costo_referencia(organizacion_id, descripcion, unidad, categoria_
     }
 
 
+# categoria_canonica_para() devuelve 'oficial_especializado' pero categorias_jornal
+# usa el codigo 'oficial_esp'. Alias para reconciliar (Fase 2.1).
+_ALIAS_CODIGO_JORNAL = {'oficial_especializado': 'oficial_esp'}
+
+
+def _buscar_costo_mo_v2(organizacion_id, descripcion, unidad, zona='CABA', fecha=None):
+    """Costo empresa de MO (Fase 2.1): resuelve contra categorias_jornal +
+    EstructuraRecargosMO via services.costo_mano_obra. Es la fuente PRINCIPAL de
+    MO (reemplaza el uso de ManoObraCostoReferencia, que quedo vacia)."""
+    from models.mano_obra_costo_referencia import categoria_canonica_para
+    from services import costo_mano_obra
+
+    cat = categoria_canonica_para(descripcion)
+    if not cat:
+        return None
+    codigo = _ALIAS_CODIGO_JORNAL.get(cat, cat)
+
+    basico, catrow = costo_mano_obra.resolver_basico_hora(codigo, organizacion_id, fecha)
+    if catrow is None or basico <= 0:
+        return None
+    est = costo_mano_obra.resolver_estructura(organizacion_id, zona=zona, fecha=fecha)
+    d = costo_mano_obra.desglose_costo_hora(basico, est)
+    costo_hora = d['costo_hora']
+
+    unidad_lower = (unidad or '').strip().lower()
+    if unidad_lower in ('hora', 'h', 'hr', 'hs', 'hrs', 'horas'):
+        precio = costo_hora
+        unidad_txt = 'hora'
+    else:  # default: jornal (8h)
+        hpd = est.horas_por_dia if est else 8
+        precio = costo_hora * Decimal(str(hpd))
+        unidad_txt = 'jornal'
+    if precio <= 0:
+        return None
+
+    est_nota = f" · recargos {est.nombre}" if est else " · sin recargos (basico liso)"
+    return {
+        'precio': float(precio),
+        'fuente': 'costo_mano_obra',
+        'estado': 'actualizado',
+        'proveedor_id': None,
+        'proveedor_nombre': None,
+        'fecha': catrow.vigencia_desde,
+        'moneda': 'ARS',
+        'notas': f'Costo empresa MO {codigo} ({zona}, {unidad_txt}){est_nota}',
+        'referencia_id': catrow.id,
+        'categoria_matcheada': codigo,
+    }
+
+
 def _buscar_categoria_jornal(organizacion_id, descripcion, unidad):
     """Fallback: usa CategoriaJornal con precio_jornal liso."""
     from models.budgets import CategoriaJornal
@@ -340,17 +390,22 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
         tokens_c = _tokens_significativos(c.descripcion_normalizada or c.descripcion or '')
         if not tokens_c:
             continue
-        # Jaccard de tokens
         inter = tokens_item & tokens_c
-        union = tokens_item | tokens_c
-        jaccard = len(inter) / len(union) if union else 0
-        if jaccard < 0.4:  # threshold permisivo para demo
+        if not inter:
             continue
-        # Bonus si la unidad es compatible
+        union = tokens_item | tokens_c
+        jaccard = len(inter) / len(union)
+        # Cobertura de la QUERY: cuanto del concepto buscado esta en el candidato.
+        # Fixea "cemento" (1 token) vs "Bolsa de Cemento Loma Negra 50 kg" (Jaccard
+        # 0.17 pero cov_item 1.0). Fase 2.1: sube fuerte la cobertura de recursos.
+        cov_item = len(inter) / len(tokens_item)
+        cov_cand = len(inter) / len(tokens_c)  # especificidad (desempata hacia el menos verboso)
+        # Aceptar si la query esta mayormente cubierta O el Jaccard clasico es alto.
+        if cov_item < 0.65 and jaccard < 0.4:
+            continue
         unidad_bonus = 0.2 if _unidades_compatibles(c.unidad, unidad) else 0.0
-        # Bonus si es precio propio de la org (pisa la base global en empates)
         org_bonus = 0.5 if c.organizacion_id == organizacion_id else 0.0
-        score = jaccard + unidad_bonus + org_bonus
+        score = 0.55 * cov_item + 0.30 * jaccard + 0.15 * cov_cand + unidad_bonus + org_bonus
         scored.append((score, c))
 
     if not scored:
@@ -469,7 +524,10 @@ def buscar_mejor_precio(
 
     # ----- MANO DE OBRA -----
     if tipo == 'mano_obra':
-        info = _buscar_mo_costo_referencia(organizacion_id, descripcion, unidad, zona)
+        # Fase 2.1: fuente principal = costo empresa via categorias_jornal + recargos.
+        info = _buscar_costo_mo_v2(organizacion_id, descripcion, unidad, zona)
+        if not info:
+            info = _buscar_mo_costo_referencia(organizacion_id, descripcion, unidad, zona)
         if not info:
             info = _buscar_categoria_jornal(organizacion_id, descripcion, unidad)
 
