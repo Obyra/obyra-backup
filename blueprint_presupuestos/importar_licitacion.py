@@ -1050,7 +1050,9 @@ def importar_licitacion():
             'niveles generados.'
         )
     flash(' '.join(msg_partes), 'success' if n_err == 0 else 'warning')
-    return redirect(url_for('presupuestos.ejecutivo_vista', id=presu.id))
+    # Fase 2.6: al importar, aterrizar en la REVISION IA (item + cantidad + precio,
+    # sin jerga) en vez del Ejecutivo (desglose APU tecnico, ahora opcion avanzada).
+    return redirect(url_for('presupuestos.revision_ia', id=presu.id))
 
 
 @presupuestos_bp.route('/importar-licitacion/mapear/<token>', methods=['GET', 'POST'])

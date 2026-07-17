@@ -120,28 +120,26 @@ def pipeline_ia_corregir():
 @presupuestos_bp.route('/<int:id>/revision-ia')
 @login_required
 def revision_ia(id):
-    """Pantalla de revision: corre el pipeline sobre los items del presupuesto y
-    muestra SOLO los que necesitan atencion (rojos) + amarillos colapsados."""
+    """Pantalla de revision. NO corre el pipeline inline (192 items x LLM tardaba
+    minutos -> timeout/500). Entrega los items al front, que los analiza EN LOTES
+    contra /pipeline-ia/analizar mostrando progreso (sin pagina en blanco)."""
     if not _puede_gestionar():
         from flask import flash, redirect, url_for
         flash('No tenes permisos para esta seccion.', 'danger')
-        return redirect(url_for('presupuestos.listar'))
+        return redirect(url_for('presupuestos.lista'))
 
     from models.budgets import Presupuesto, ItemPresupuesto
-    from services.pipeline_presupuesto_ia import procesar_items
 
     pres = Presupuesto.query.get_or_404(id)
     _verificar_acceso_presupuesto(pres)
 
-    filas = ItemPresupuesto.query.filter_by(presupuesto_id=id).all()
+    filas = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(ItemPresupuesto.id).all()
     items = [{'descripcion': f.descripcion, 'unidad': f.unidad,
               'cantidad': float(f.cantidad or 0)} for f in filas]
     nivel = (request.args.get('nivel') or 'estandar').strip().lower()
-    forzar_kw = request.args.get('kw') == '1'
 
-    resultado = procesar_items(items, organizacion_id=get_current_org_id(), nivel=nivel,
-                               presupuesto=pres, forzar_keyword=forzar_kw)
-    return render_template('presupuestos/revision_ia.html', presupuesto=pres, resultado=resultado, nivel=nivel)
+    return render_template('presupuestos/revision_ia.html',
+                           presupuesto=pres, items=items, nivel=nivel)
 
 
 @presupuestos_bp.route('/<int:id>/analizar-ia', methods=['POST'])

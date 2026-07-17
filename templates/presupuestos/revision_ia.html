@@ -1,128 +1,49 @@
 {% extends "base.html" %}
 {% block title %}Revisión de presupuesto - OBYRA{% endblock %}
 
-{% set r = resultado.resumen %}
-{% set rojos = resultado.items | selectattr('color', 'equalto', 'rojo') | list %}
-{% set amarillos = resultado.items | selectattr('color', 'equalto', 'amarillo') | list %}
-{% set verdes = resultado.items | selectattr('color', 'equalto', 'verde') | list %}
-{% set total_precio = resultado.items | sum(attribute='costo_total') %}
-
 {% block content %}
 <div class="container-fluid py-4" style="max-width: 1100px;">
 
   <div class="d-flex justify-content-between align-items-start mb-3">
     <div>
       <h2 class="mb-1"><i class="fas fa-clipboard-check me-2"></i>Revisión del presupuesto</h2>
-      <p class="text-muted mb-0">{{ presupuesto.nombre if presupuesto else 'Presupuesto' }}</p>
+      <p class="text-muted mb-0">{{ presupuesto.nombre if presupuesto else 'Presupuesto' }} · {{ items|length }} ítems</p>
     </div>
     <div class="text-end">
       <div class="small text-muted">Total estimado</div>
-      <div class="h3 mb-0 text-success">${{ '{:,.0f}'.format(total_precio) }}</div>
+      <div class="h3 mb-0 text-success" id="totalPrecio">—</div>
     </div>
   </div>
 
-  <!-- Resumen -->
-  <div class="row g-2 mb-4">
-    <div class="col-4">
-      <div class="card border-success h-100"><div class="card-body text-center py-3">
-        <div class="h3 mb-0 text-success">{{ verdes|length }}</div>
-        <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Listos</div>
-      </div></div>
-    </div>
-    <div class="col-4">
-      <div class="card border-warning h-100"><div class="card-body text-center py-3">
-        <div class="h3 mb-0 text-warning">{{ amarillos|length }}</div>
-        <div class="small text-muted"><i class="fas fa-eye text-warning me-1"></i>Para revisar</div>
-      </div></div>
-    </div>
-    <div class="col-4">
-      <div class="card border-danger h-100"><div class="card-body text-center py-3">
-        <div class="h3 mb-0 text-danger">{{ rojos|length }}</div>
-        <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Necesitan tu ayuda</div>
-      </div></div>
-    </div>
-  </div>
-
-  {% if rojos %}
-  <h5 class="mb-3"><i class="fas fa-hand-paper text-danger me-2"></i>Necesitan tu ayuda ({{ rojos|length }})</h5>
-  <p class="text-muted small">No pudimos calcular el precio de estos ítems. Elegí el tipo de trabajo o cargá el precio a mano. <strong>La próxima vez lo vamos a reconocer solo.</strong></p>
-
-  <div class="d-flex flex-column gap-3 mb-4">
-    {% for it in rojos %}
-    <div class="card border-danger-subtle" data-desc="{{ it.descripcion|e }}">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start">
-          <div>
-            <div class="fw-bold">{{ it.descripcion }}</div>
-            <div class="small text-muted">{{ '{:g}'.format(it.cantidad) }} {{ it.unidad }}</div>
-          </div>
-          <span class="badge bg-danger-subtle text-danger border border-danger">Sin precio</span>
-        </div>
-        <div class="mt-3">
-          {% if it.candidatos %}
-          <div class="small text-muted mb-2">¿Es alguno de estos?</div>
-          <div class="d-flex flex-wrap gap-2">
-            {% for c in it.candidatos %}
-            <button class="btn btn-sm btn-outline-success btn-resolver"
-                    data-regla="{{ c.regla_id }}">
-              {{ c.trabajo }} <small class="text-muted">· {{ c.unidad }}</small>
-            </button>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="small text-muted mb-2">No encontramos un tipo de trabajo parecido.</div>
-          {% endif %}
-          <button class="btn btn-sm btn-outline-secondary mt-2 btn-manual">
-            <i class="fas fa-pen me-1"></i>Cargar precio a mano
-          </button>
-          <span class="resultado-fila small ms-2"></span>
-        </div>
+  <!-- Progreso -->
+  <div id="progresoBox" class="card mb-4">
+    <div class="card-body text-center py-4">
+      <div class="spinner-border text-primary mb-3" role="status"></div>
+      <h5 class="mb-2">Analizando tu presupuesto…</h5>
+      <p class="text-muted small mb-3" id="progresoTexto">Preparando…</p>
+      <div class="progress mx-auto" style="max-width: 460px; height: 10px;">
+        <div id="progresoBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
       </div>
+      <div class="small text-muted mt-2" id="progresoDetalle"></div>
     </div>
-    {% endfor %}
   </div>
-  {% else %}
-  <div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>¡No hay ítems pendientes! Todos tienen precio.</div>
-  {% endif %}
 
-  {% if amarillos %}
-  <div class="card mb-4">
-    <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccionAmarillos">
-      <i class="fas fa-eye text-warning me-2"></i>Para revisar ({{ amarillos|length }})
-      <small class="text-muted ms-1">— tienen precio, pero conviene confirmarlos</small>
-      <i class="fas fa-chevron-down float-end mt-1"></i>
-    </div>
-    <div id="seccionAmarillos" class="collapse">
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cantidad</th><th class="text-end">Precio</th><th></th></tr></thead>
-          <tbody>
-            {% for it in amarillos %}
-            <tr data-desc="{{ it.descripcion|e }}">
-              <td>{{ it.descripcion }}</td>
-              <td class="text-end">{{ '{:g}'.format(it.cantidad) }} {{ it.unidad }}</td>
-              <td class="text-end fw-bold">${{ '{:,.0f}'.format(it.costo_total) }}</td>
-              <td class="text-end">
-                <button class="btn btn-sm btn-outline-secondary btn-manual" title="Corregir a mano">
-                  <i class="fas fa-pen"></i>
-                </button>
-                <span class="resultado-fila small"></span>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
+  <!-- Resumen (oculto hasta terminar) -->
+  <div id="resumenBox" class="row g-2 mb-4 d-none">
+    <div class="col-4"><div class="card border-success h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-success" id="cntVerde">0</div>
+      <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Listos</div></div></div></div>
+    <div class="col-4"><div class="card border-warning h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-warning" id="cntAmarillo">0</div>
+      <div class="small text-muted"><i class="fas fa-eye text-warning me-1"></i>Para revisar</div></div></div></div>
+    <div class="col-4"><div class="card border-danger h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-danger" id="cntRojo">0</div>
+      <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Necesitan tu ayuda</div></div></div></div>
   </div>
-  {% endif %}
 
-  {% if verdes %}
-  <div class="text-center text-muted small">
-    <i class="fas fa-check-circle text-success me-1"></i>{{ verdes|length }} ítems listos, con precio calculado.
-    {% if r.items_estimados %}<br><span class="text-warning">{{ r.items_estimados }} usan precios estimados de mercado (cambialos cuando tengas listas de proveedor).</span>{% endif %}
-  </div>
-  {% endif %}
+  <div id="rojosBox" class="mb-4"></div>
+  <div id="amarillosBox" class="mb-4"></div>
+  <div id="verdesBox" class="text-center text-muted small"></div>
 </div>
 
 <!-- Modal cargar precio manual -->
@@ -133,7 +54,6 @@
     <div class="modal-body">
       <p class="small text-muted mb-2" id="manualItemDesc"></p>
       <p class="small">Este ítem se va a cargar como un precio único (sin desglose). Lo vas a poder editar en el presupuesto.</p>
-      <input type="hidden" id="manualDesc">
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -143,57 +63,141 @@
 </div>
 
 <script>
-function _csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.getAttribute('content') : ''; }
+const ITEMS = {{ items | tojson }};
+const NIVEL = {{ nivel | tojson }};
+const BATCH = 25;
+const _res = [];  // resultados acumulados
 
-async function _corregir(descripcion, reglaId, tratamiento) {
-  const resp = await fetch('/presupuestos/pipeline-ia/corregir', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
-    body: JSON.stringify({ descripcion: descripcion, regla_id: reglaId, tratamiento: tratamiento, nivel: '{{ nivel }}' }),
+function _csrf(){ const m=document.querySelector('meta[name="csrf-token"]'); return m?m.getAttribute('content'):''; }
+function _money(n){ return '$' + (Number(n)||0).toLocaleString('es-AR',{maximumFractionDigits:0}); }
+function _esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+
+async function _analizarLote(slice){
+  const r = await fetch('/presupuestos/pipeline-ia/analizar', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':_csrf()},
+    body: JSON.stringify({ items: slice, nivel: NIVEL }),
   });
-  return resp.json();
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const d = await r.json();
+  if(!d.ok) throw new Error(d.error||'Error');
+  return d.items || [];
 }
 
-function _marcarResuelto(fila, texto) {
-  const span = fila.querySelector('.resultado-fila');
-  if (span) span.innerHTML = '<span class="text-success"><i class="fas fa-check me-1"></i>' + texto + '</span>';
-  fila.querySelectorAll('button').forEach(b => b.disabled = true);
+async function _correr(){
+  const bar=document.getElementById('progresoBar');
+  const txt=document.getElementById('progresoTexto');
+  const det=document.getElementById('progresoDetalle');
+  const total=ITEMS.length;
+  if(!total){ txt.textContent='Este presupuesto no tiene ítems.'; document.querySelector('.spinner-border').classList.add('d-none'); return; }
+  for(let i=0;i<total;i+=BATCH){
+    const slice=ITEMS.slice(i,i+BATCH);
+    txt.textContent='Analizando ítems '+(i+1)+'–'+Math.min(i+BATCH,total)+' de '+total;
+    try{
+      const res=await _analizarLote(slice);
+      res.forEach(x=>_res.push(x));
+    }catch(e){
+      // marcar el lote como rojo "sin analizar" para no perderlos
+      slice.forEach(it=>_res.push({descripcion:it.descripcion,unidad:it.unidad,cantidad:it.cantidad,color:'rojo',costo_total:0,candidatos:[],_error:true}));
+    }
+    const pct=Math.round(Math.min(i+BATCH,total)/total*100);
+    bar.style.width=pct+'%';
+    det.textContent=pct+'%';
+  }
+  _render();
+}
+
+function _render(){
+  document.getElementById('progresoBox').classList.add('d-none');
+  document.getElementById('resumenBox').classList.remove('d-none');
+  const rojos=_res.filter(x=>x.color==='rojo');
+  const amar=_res.filter(x=>x.color==='amarillo');
+  const verdes=_res.filter(x=>x.color==='verde');
+  document.getElementById('cntVerde').textContent=verdes.length;
+  document.getElementById('cntAmarillo').textContent=amar.length;
+  document.getElementById('cntRojo').textContent=rojos.length;
+  const total=_res.reduce((a,x)=>a+(x.costo_total||0),0);
+  document.getElementById('totalPrecio').textContent=_money(total);
+
+  // Rojos
+  const rb=document.getElementById('rojosBox');
+  if(rojos.length){
+    let h='<h5 class="mb-3"><i class="fas fa-hand-paper text-danger me-2"></i>Necesitan tu ayuda ('+rojos.length+')</h5>';
+    h+='<p class="text-muted small">No pudimos calcular el precio de estos ítems. Elegí el tipo de trabajo o cargá el precio a mano. <strong>La próxima vez lo reconocemos solo.</strong></p>';
+    h+='<div class="d-flex flex-column gap-3">';
+    rojos.forEach(it=>{
+      h+='<div class="card border-danger-subtle" data-desc="'+_esc(it.descripcion)+'"><div class="card-body">';
+      h+='<div class="d-flex justify-content-between align-items-start"><div><div class="fw-bold">'+_esc(it.descripcion)+'</div>';
+      h+='<div class="small text-muted">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</div></div>';
+      h+='<span class="badge bg-danger-subtle text-danger border border-danger">Sin precio</span></div><div class="mt-3">';
+      const cands=it.candidatos||[];
+      if(cands.length){
+        h+='<div class="small text-muted mb-2">¿Es alguno de estos?</div><div class="d-flex flex-wrap gap-2">';
+        cands.forEach(c=>{ h+='<button class="btn btn-sm btn-outline-success btn-resolver" data-regla="'+_esc(c.regla_id)+'">'+_esc(c.trabajo)+' <small class="text-muted">· '+_esc(c.unidad||'')+'</small></button>'; });
+        h+='</div>';
+      } else { h+='<div class="small text-muted mb-2">No encontramos un tipo de trabajo parecido.</div>'; }
+      h+='<button class="btn btn-sm btn-outline-secondary mt-2 btn-manual"><i class="fas fa-pen me-1"></i>Cargar precio a mano</button>';
+      h+='<span class="resultado-fila small ms-2"></span></div></div></div>';
+    });
+    h+='</div>'; rb.innerHTML=h;
+  }
+
+  // Amarillos (colapsados)
+  const ab=document.getElementById('amarillosBox');
+  if(amar.length){
+    let h='<div class="card"><div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccAmar">';
+    h+='<i class="fas fa-eye text-warning me-2"></i>Para revisar ('+amar.length+') <small class="text-muted ms-1">— tienen precio, conviene confirmarlos</small><i class="fas fa-chevron-down float-end mt-1"></i></div>';
+    h+='<div id="seccAmar" class="collapse"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio</th><th></th></tr></thead><tbody>';
+    amar.forEach(it=>{
+      h+='<tr data-desc="'+_esc(it.descripcion)+'"><td>'+_esc(it.descripcion)+'</td><td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td>';
+      h+='<td class="text-end fw-bold">'+_money(it.costo_total)+'</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary btn-manual"><i class="fas fa-pen"></i></button><span class="resultado-fila small"></span></td></tr>';
+    });
+    h+='</tbody></table></div></div></div>'; ab.innerHTML=h;
+  }
+
+  // Verdes
+  const vb=document.getElementById('verdesBox');
+  if(verdes.length){
+    const est=verdes.filter(x=>x.precio_estimado).length;
+    vb.innerHTML='<i class="fas fa-check-circle text-success me-1"></i>'+verdes.length+' ítems listos, con precio calculado.'+
+      (est?'<br><span class="text-warning">'+est+' usan precios estimados de mercado (cambialos cuando tengas listas de proveedor).</span>':'');
+  }
+  _wireHandlers();
+}
+
+async function _corregir(desc, reglaId, tratamiento){
+  const r=await fetch('/presupuestos/pipeline-ia/corregir',{method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':_csrf()},
+    body:JSON.stringify({descripcion:desc,regla_id:reglaId,tratamiento:tratamiento,nivel:NIVEL})});
+  return r.json();
+}
+function _marcarResuelto(fila,texto){
+  const span=fila.querySelector('.resultado-fila');
+  if(span) span.innerHTML='<span class="text-success"><i class="fas fa-check me-1"></i>'+texto+'</span>';
+  fila.querySelectorAll('button').forEach(b=>b.disabled=true);
   fila.classList.add('opacity-75');
 }
-
-// Resolver con un candidato (un click)
-document.querySelectorAll('.btn-resolver').forEach(btn => {
-  btn.addEventListener('click', async function() {
-    const card = this.closest('[data-desc]');
-    const desc = card.getAttribute('data-desc');
-    const regla = this.getAttribute('data-regla');
-    this.disabled = true;
-    const d = await _corregir(desc, regla, 'apu');
-    if (d.ok) _marcarResuelto(card, 'Guardado. La próxima vez lo reconocemos solo.');
-    else { this.disabled = false; alert(d.error || 'Error'); }
-  });
-});
-
-// Cargar manual (abre modal)
-let _filaManual = null;
-document.querySelectorAll('.btn-manual').forEach(btn => {
-  btn.addEventListener('click', function() {
-    _filaManual = this.closest('[data-desc]');
-    const desc = _filaManual.getAttribute('data-desc');
-    document.getElementById('manualDesc').value = desc;
-    document.getElementById('manualItemDesc').textContent = desc;
+let _filaManual=null;
+function _wireHandlers(){
+  document.querySelectorAll('.btn-resolver').forEach(btn=>btn.addEventListener('click',async function(){
+    const card=this.closest('[data-desc]'); this.disabled=true;
+    const d=await _corregir(card.getAttribute('data-desc'), this.getAttribute('data-regla'), 'apu');
+    if(d.ok) _marcarResuelto(card,'Guardado. La próxima vez lo reconocemos solo.'); else{ this.disabled=false; alert(d.error||'Error'); }
+  }));
+  document.querySelectorAll('.btn-manual').forEach(btn=>btn.addEventListener('click',function(){
+    _filaManual=this.closest('[data-desc]');
+    document.getElementById('manualItemDesc').textContent=_filaManual.getAttribute('data-desc');
     new bootstrap.Modal(document.getElementById('modalManual')).show();
-  });
+  }));
+}
+document.getElementById('btnConfirmarManual').addEventListener('click',async function(){
+  if(!_filaManual) return; this.disabled=true;
+  const d=await _corregir(_filaManual.getAttribute('data-desc'), null, 'manual');
+  this.disabled=false;
+  bootstrap.Modal.getInstance(document.getElementById('modalManual')).hide();
+  if(d.ok) _marcarResuelto(_filaManual,'Se cargará como precio manual.'); else alert(d.error||'Error');
 });
 
-document.getElementById('btnConfirmarManual').addEventListener('click', async function() {
-  const desc = document.getElementById('manualDesc').value;
-  this.disabled = true;
-  const d = await _corregir(desc, null, 'manual');
-  this.disabled = false;
-  bootstrap.Modal.getInstance(document.getElementById('modalManual')).hide();
-  if (d.ok && _filaManual) _marcarResuelto(_filaManual, 'Se cargará como precio manual.');
-  else if (!d.ok) alert(d.error || 'Error');
-});
+document.addEventListener('DOMContentLoaded', _correr);
 </script>
 {% endblock %}

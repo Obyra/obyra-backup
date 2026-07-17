@@ -49,6 +49,13 @@ def _redirect_a_mi_dashboard():
 # Rutas
 # ---------------------------------------------------------------------------
 
+@dashboards_bp.route('/')
+@login_required
+def index():
+    """Dispatcher por rol: redirige al dashboard que corresponde al usuario."""
+    return _redirect_a_mi_dashboard()
+
+
 @dashboards_bp.route('/admin')
 @login_required
 def admin():

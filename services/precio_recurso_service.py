@@ -376,13 +376,21 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
     if not tokens_item:
         return None, []
 
-    # Traer precios de la org + base global. Con la base OBYRA (~6.3k recursos)
-    # el cap se sube; el orden pone primero las filas de la org. (Optimizacion
-    # futura: pre-filtrar por token/prefijo antes del scan en Python.)
-    todos = (ProviderPriceList.query
-             .filter(_scope)
-             .order_by(_org_first, ProviderPriceList.fecha_actualizacion.desc())
-             .limit(8000)
+    # Pre-filtro SQL (perf): traer solo candidatos que comparten al menos un
+    # token significativo con la query. Sin esto se cargaban/tokenizaban ~8000
+    # filas en Python POR CADA recurso -> minutos en un pliego de 192 items.
+    # Es seguro: un candidato sin ningun token en comun tiene interseccion 0 y
+    # nunca pasaria el umbral, asi que no se pierde ningun match posible.
+    toks_filtro = [t for t in tokens_item if len(t) >= 4]
+    if not toks_filtro:
+        toks_filtro = [t for t in tokens_item if len(t) >= 3]
+    q = ProviderPriceList.query.filter(_scope)
+    if toks_filtro:
+        like = [ProviderPriceList.descripcion_normalizada.ilike('%' + t + '%')
+                for t in sorted(toks_filtro, key=len, reverse=True)[:8]]
+        q = q.filter(db.or_(*like))
+    todos = (q.order_by(_org_first, ProviderPriceList.fecha_actualizacion.desc())
+             .limit(2000)
              .all())
 
     scored = []
