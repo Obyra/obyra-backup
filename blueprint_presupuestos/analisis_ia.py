@@ -117,6 +117,53 @@ def pipeline_ia_corregir():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@presupuestos_bp.route('/pipeline-ia/corregir-bulk', methods=['POST'])
+@login_required
+def pipeline_ia_corregir_bulk():
+    """Guarda una correccion para VARIOS items en un paso (Fase 2.6).
+
+    Uso principal: agrupar los rojos no-APU (honorarios/servicios) y cargarlos
+    todos como monto global (tratamiento='manual') con un solo click.
+
+    Body JSON:
+      - descripciones: [str, ...]  (requerido)
+      - regla_id: str | null       (default null -> manual)
+      - tratamiento: 'apu' | 'manual'  (default 'manual')
+      - nivel: str (default 'estandar')
+    """
+    if not _puede_gestionar():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    from services.aprendizaje_ia import guardar_correccion
+
+    org_id = get_current_org_id()
+    data = request.get_json(silent=True) or {}
+    descripciones = data.get('descripciones') or []
+    if not isinstance(descripciones, list) or not descripciones:
+        return jsonify({'ok': False, 'error': 'descripciones requerido (lista no vacia)'}), 400
+    regla_id = data.get('regla_id') or None
+    nivel = (data.get('nivel') or 'estandar').strip().lower()
+    tratamiento = (data.get('tratamiento') or ('apu' if regla_id else 'manual')).strip().lower()
+
+    guardadas, errores = 0, []
+    for desc in descripciones:
+        d = (desc or '').strip()
+        if not d:
+            continue
+        try:
+            guardar_correccion(org_id, d, regla_id=regla_id, nivel=nivel,
+                               tratamiento=tratamiento,
+                               user_id=getattr(current_user, 'id', None))
+            guardadas += 1
+        except Exception as e:
+            errores.append({'descripcion': d[:80], 'error': str(e)})
+
+    if errores and not guardadas:
+        current_app.logger.error('corregir-bulk fallo entero: %s', errores[:3])
+        return jsonify({'ok': False, 'error': 'No se pudo guardar ninguna', 'errores': errores}), 500
+    return jsonify({'ok': True, 'guardadas': guardadas, 'errores': errores})
+
+
 @presupuestos_bp.route('/<int:id>/revision-ia')
 @login_required
 def revision_ia(id):

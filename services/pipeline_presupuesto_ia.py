@@ -59,6 +59,37 @@ def _precios_recursos(recursos, organizacion_id, zona, fecha, presupuesto, cache
     return detalle, costo
 
 
+# Deteccion de items NO-APU (honorarios, servicios, gastos generales): no son
+# trabajo constructivo desglosable, van como monto global. Sirven para agrupar
+# los rojos "legitimos" en un solo paso en la pantalla de revision (Fase 2.6).
+_NO_APU_UNIDADES = {
+    'gl', 'global', 'mes', 'meses', 'dia', 'dias', 'jornada',
+    'hora', 'horas', 'hs', 'hh', 'semana', 'viaje', 'flete', '%', 'porcentaje',
+}
+_NO_APU_KEYWORDS = (
+    'honorario', 'personal', 'servicio', 'administracion', 'direccion de obra',
+    'direccion tecnica', 'representante tecnico', 'seguro', 'poliza', 'aseguradora',
+    'art ', 'gestion', 'tramite', 'tasa', 'derecho de', 'impuesto de sellos', 'impuesto',
+    'alquiler', 'movilidad', 'viatico', 'flete', 'acarreo', 'cartel de obra',
+    'obrador', 'sereno', 'vigilancia', 'gastos generales', 'gasto general',
+    'imprevisto', 'contingencia', 'ayuda de gremio', 'limpieza final',
+    'ensayo', 'estudio de suelo', 'relevamiento', 'plano', 'documentacion',
+)
+
+
+def _es_no_apu(descripcion, unidad):
+    """True si el item parece honorario/servicio/gasto general (monto global),
+    no trabajo constructivo. Se usa solo para AGRUPAR rojos en revision."""
+    import unicodedata
+    u = (unidad or '').strip().lower()
+    if u in _NO_APU_UNIDADES:
+        return True
+    d = (descripcion or '').lower()
+    d = ''.join(ch for ch in unicodedata.normalize('NFD', d)
+                if not unicodedata.combining(ch))
+    return any(k in d for k in _NO_APU_KEYWORDS)
+
+
 def _color(confianza, tiene_coef, recursos_detalle):
     if not tiene_coef or confianza < UMBRAL_ROJO:
         return 'rojo'
@@ -108,13 +139,43 @@ def _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword):
     return out
 
 
+# Grupos de unidades equivalentes (para el guard item<->regla).
+_UNID_GRUPOS = [
+    {'m2', 'm²', 'mts2', 'mt2'}, {'m3', 'm³', 'mts3', 'mt3'},
+    {'ml', 'm', 'mts', 'mtrs'}, {'kg', 'kilo', 'kilos'},
+    {'un', 'u', 'ud', 'und', 'unidad', 'unidades', 'gl', 'global', 'gbl'},
+    {'tn', 'tonelada', 'toneladas'}, {'l', 'lt', 'litro', 'litros'},
+    {'mes', 'meses'}, {'jornal', 'dia', 'día'}, {'hora', 'hr', 'hs', 'h'},
+]
+
+
+def _norm_unidad(u):
+    import re
+    return re.sub(r'[^a-z0-9²³]', '', (u or '').lower())
+
+
+def _unidad_item_compatible(u_item, u_regla):
+    """True si la unidad del item del cliente es compatible con la de la regla.
+    Si alguna falta, no bloquea (return True). Normaliza notacion ('Un.', 'm2 ')."""
+    b = _norm_unidad(u_regla)
+    if not b:
+        return True
+    a = _norm_unidad(u_item)
+    if not a or a == b:
+        return True
+    for g in _UNID_GRUPOS:
+        if a in g and b in g:
+            return True
+    return False
+
+
 def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
                    presupuesto=None, forzar_keyword=False):
     """Corre el pipeline completo sobre una lista de items {descripcion, unidad, cantidad}.
 
     Orden: aprendizaje por org -> clasificacion LLM -> descomposicion -> pricing -> score.
     """
-    from services.coeficientes_loader import get_recursos
+    from services.coeficientes_loader import get_recursos, unidad_item_esperada
     from services.clasificador_llm import candidatos_para
 
     clasifs = _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword)
@@ -122,7 +183,8 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     precio_cache = {}  # (nombre, unidad, tipo) -> info (perf: dedup de recursos)
     salida = []
     resumen = {'verde': 0, 'amarillo': 0, 'rojo': 0, 'total': len(items),
-               'fuente_clasificacion': 'aprendido', 'items_estimados': 0, 'aprendidos': 0}
+               'fuente_clasificacion': 'aprendido', 'items_estimados': 0, 'aprendidos': 0,
+               'rojos_no_apu': 0, 'rojos_constructivo': 0}
     hubo_llm = False
     for it, cl in zip(items, clasifs):
         rid = cl['regla_id']
@@ -136,12 +198,23 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             resumen['aprendidos'] += 1
 
         recursos = get_recursos(rid, nivel) if (rid and tiene_coef) else []
+        regla_unidad = unidad_item_esperada(rid) if (rid and tiene_coef) else None
+        unidad_ok = _unidad_item_compatible(it.get('unidad'), regla_unidad)
         detalle, costo_unit = (_precios_recursos(recursos, organizacion_id, zona, None, presupuesto, precio_cache)
                                if recursos else ([], Decimal('0')))
+
+        # Guard de unidad: si el item viene en una unidad INCOMPATIBLE con la regla
+        # (ej. item en m2 clasificado a una regla por tn/m3), el precio auto no es
+        # confiable y produce totales absurdos -> a revision, y NO se cuenta su costo.
+        unidad_incompatible = bool(recursos) and not unidad_ok
+        if unidad_incompatible:
+            costo_unit = Decimal('0')
 
         # Scoring. Un item aprendido como 'manual' (lump-sum) queda RESUELTO (verde).
         if fuente == 'aprendido' and tratamiento == 'manual':
             color = 'verde'
+        elif unidad_incompatible:
+            color = 'rojo'
         else:
             color = _color(conf, tiene_coef, detalle)
         resumen[color] += 1
@@ -164,15 +237,24 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'tratamiento': tratamiento,
             'color': color,
             'costo_unitario': float(costo_unit),
+            'precio_unitario': float(costo_unit),  # alias explicito para la UI (PASO 3)
             'costo_total': float(costo_unit * cantidad),
             'recursos_total': len(detalle),
             'recursos_sin_precio': sum(1 for r in detalle if r['precio'] <= 0 and not r['requiere_tc']),
             'precio_estimado': estimado,
             'requiere_tc': any(r['requiere_tc'] for r in detalle),
+            'unidad_incompatible': unidad_incompatible,
+            'unidad_regla': regla_unidad,
         }
         # Candidatos (para la pantalla de revision) solo en los que hay que revisar.
         if color in ('rojo', 'amarillo'):
             fila['candidatos'] = candidatos_para(it.get('descripcion'), it.get('unidad'), n=3)
+        # Agrupacion de rojos: los no-APU (honorarios/servicios) se cargan como
+        # monto global en un solo paso; los constructivos se revisan uno a uno.
+        if color == 'rojo':
+            es_no_apu = _es_no_apu(it.get('descripcion'), it.get('unidad'))
+            fila['grupo_ayuda'] = 'no_apu' if es_no_apu else 'constructivo'
+            resumen['rojos_no_apu' if es_no_apu else 'rojos_constructivo'] += 1
         salida.append(fila)
 
     if hubo_llm:
