@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 20mm 16mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; color: #1c2733; font-size: 11px; margin: 0; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start;
+         border-bottom: 2.5px solid #1c2733; padding-bottom: 12px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { max-height: 52px; max-width: 180px; }
+  .brand .name { font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+  .doc { text-align: right; }
+  .doc .tag { font-size: 11px; letter-spacing: .18em; color: #7a889a; font-weight: 700; }
+  .meta { margin-top: 4px; font-size: 11px; color: #45525f; line-height: 1.7; }
+  .meta b { color: #1c2733; }
+  h1 { font-size: 15px; margin: 22px 0 10px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #6b7888;
+             text-align: left; border-bottom: 1.5px solid #cfd8e3; padding: 7px 8px; }
+  tbody td { padding: 7px 8px; border-bottom: 1px solid #edf1f6; vertical-align: top; }
+  th.r, td.r { text-align: right; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
+  .tot { width: 46%; margin-left: auto; margin-top: 14px; }
+  .tot .row { display: flex; justify-content: space-between; padding: 5px 8px; font-size: 12px; }
+  .tot .row.sub { border-top: 1px solid #cfd8e3; }
+  .tot .row.grand { border-top: 2px solid #1c2733; margin-top: 4px; padding-top: 9px;
+                    font-size: 16px; font-weight: 800; }
+  .foot { margin-top: 26px; border-top: 1px dashed #c7d0db; padding-top: 10px;
+          font-size: 10px; color: #6b7888; line-height: 1.6; }
+  .madeby { margin-top: 6px; font-size: 8.5px; color: #9aa6b4; letter-spacing: .04em; }
+</style></head>
+<body>
+  <div class="top">
+    <div class="brand">
+      {% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="logo">{% endif %}
+      <span class="name">{{ organizacion.nombre if organizacion else 'Presupuesto' }}</span>
+    </div>
+    <div class="doc">
+      <div class="tag">PRESUPUESTO</div>
+      <div class="meta">
+        <div><b>N°</b> {{ presupuesto.numero }}</div>
+        <div><b>Obra</b> {{ obra_nombre }}</div>
+        <div><b>Fecha</b> {{ (presupuesto.fecha or now).strftime('%d/%m/%Y') }}</div>
+        {% if presupuesto.cliente %}<div><b>Cliente</b> {{ presupuesto.cliente.nombre }}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <h1>Detalle del presupuesto</h1>
+  <table>
+    <thead><tr>
+      <th>Descripción</th><th class="r">Cantidad</th><th class="r">Precio Unit.</th><th class="r">Total</th>
+    </tr></thead>
+    <tbody>
+    {% for f in filas %}
+      <tr>
+        <td>{{ f.descripcion }}</td>
+        <td class="r">{{ '%g'|format(f.cantidad) }} {{ f.unidad }}</td>
+        <td class="r">{{ f.precio_fmt }}</td>
+        <td class="r">{{ f.total_fmt }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="tot">
+    <div class="row sub"><span>SUBTOTAL</span><span>{{ subtotal_fmt }}</span></div>
+    <div class="row"><span>IVA {{ iva_pct }}%</span><span>{{ iva_fmt }}</span></div>
+    <div class="row grand"><span>TOTAL</span><span>{{ total_fmt }}</span></div>
+  </div>
+
+  <div class="foot">
+    Precios válidos por {{ vig_dias }} días{% if fecha_vig %} (hasta el {{ fecha_vig.strftime('%d/%m/%Y') }}){% endif %}.
+    Moneda: pesos argentinos (ARS).{% if omitidos %} No incluye {{ omitidos }} ítem{{ 's' if omitidos != 1 else '' }} pendiente{{ 's' if omitidos != 1 else '' }} de definición de precio.{% endif %}
+    <div class="madeby">Generado con OBYRA</div>
+  </div>
+</body></html>

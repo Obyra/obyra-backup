@@ -42,6 +42,11 @@
 
   <div id="rojosBox" class="mb-4"></div>
   <div id="calculadosBox" class="mb-4"></div>
+
+  <div id="pdfBox" class="text-center mb-4 d-none">
+    <a href="{{ url_for('presupuestos.pdf_cliente', id=presupuesto.id) }}" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+      <i class="fas fa-file-pdf me-2"></i>Descargar PDF para el cliente</a>
+  </div>
 </div>
 
 <!-- Modal cargar precio manual -->
@@ -224,6 +229,8 @@ function _render(){
     if(est) h+='<div class="small text-muted mt-2">El puntito '+DOT+' marca precios estimados de mercado. No frenan nada: ajustalos cuando cargues listas de proveedor.</div>';
     cb.innerHTML=h;
   }
+  // Boton PDF cliente: visible cuando hay al menos un item con precio.
+  if(calculados.length) document.getElementById('pdfBox').classList.remove('d-none');
   _wireHandlers();
 }
 

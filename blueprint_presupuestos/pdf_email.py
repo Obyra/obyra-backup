@@ -193,6 +193,109 @@ def generar_pdf(id):
         return redirect(url_for('presupuestos.detalle', id=id))
 
 
+def _money_ar(n):
+    """Formato pesos AR: $1.234.567 (miles con punto, sin decimales)."""
+    try:
+        v = float(n)
+    except Exception:
+        v = 0.0
+    return '$' + f'{v:,.0f}'.replace(',', '.')
+
+
+@presupuestos_bp.route('/<int:id>/pdf-cliente')
+@login_required
+def pdf_cliente(id):
+    """PASO 4 del flujo: PDF limpio para el CLIENTE con los precios CALCULADOS por
+    la IA (pipeline_ia_cache). Numero, Obra, Fecha, tabla (Descripcion | Cantidad |
+    Precio Unit. | Total), Subtotal, IVA, Total, Vigencia. Solo items con precio;
+    los que quedaron sin calcular (rojos) se omiten. Sin jerga tecnica."""
+    from sqlalchemy.orm import joinedload
+    from datetime import timedelta
+
+    org_id = get_current_org_id()
+    if not org_id:
+        flash('No tenes una organizacion activa', 'warning')
+        return redirect(url_for('index'))
+    presupuesto = Presupuesto.query.options(
+        joinedload(Presupuesto.cliente), joinedload(Presupuesto.obra)
+    ).filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+    cache = presupuesto.pipeline_ia_cache if isinstance(presupuesto.pipeline_ia_cache, dict) else {}
+    items_cache = cache.get('items') or []
+    if not items_cache:
+        flash('Primero calcula el presupuesto con IA.', 'warning')
+        return redirect(url_for('presupuestos.calcular_ia', id=id))
+
+    filas = []
+    subtotal = Decimal('0')
+    omitidos = 0
+    for it in items_cache:
+        total = Decimal(str(it.get('costo_total') or 0))
+        if it.get('color') == 'rojo' or total <= 0:
+            omitidos += 1
+            continue
+        pu_raw = it.get('precio_unitario')
+        if pu_raw is None:
+            pu_raw = it.get('costo_unitario') or 0
+        pu = Decimal(str(pu_raw))
+        filas.append({
+            'descripcion': it.get('descripcion') or '',
+            'cantidad': it.get('cantidad') or 0,
+            'unidad': it.get('unidad') or '',
+            'precio_fmt': _money_ar(pu),
+            'total_fmt': _money_ar(total),
+        })
+        subtotal += total
+
+    iva_pct = Decimal(str(presupuesto.iva_porcentaje if presupuesto.iva_porcentaje is not None else 21))
+    iva_monto = (subtotal * iva_pct / Decimal('100')).quantize(Decimal('1'))
+    total_con_iva = subtotal + iva_monto
+
+    vig_dias = presupuesto.vigencia_dias or 30
+    fecha_vig = presupuesto.fecha_vigencia
+    if not fecha_vig:
+        base = presupuesto.fecha or datetime.now().date()
+        try:
+            fecha_vig = base + timedelta(days=int(vig_dias))
+        except Exception:
+            fecha_vig = None
+
+    organizacion = Organizacion.query.get(org_id)
+    logo_base64 = None
+    if organizacion and organizacion.logo_url:
+        try:
+            import base64
+            from services.storage_service import storage
+            content = storage.read(organizacion.logo_url)
+            if content:
+                logo_base64 = base64.b64encode(content).decode('utf-8')
+        except Exception as e:
+            current_app.logger.warning(f'No se pudo cargar logo para PDF cliente: {e}')
+
+    obra_nombre = presupuesto.obra.nombre if presupuesto.obra else f'Presupuesto {presupuesto.numero}'
+
+    try:
+        html_string = render_template(
+            'presupuestos/pdf_cliente.html',
+            presupuesto=presupuesto, organizacion=organizacion, obra_nombre=obra_nombre,
+            filas=filas, omitidos=omitidos,
+            subtotal_fmt=_money_ar(subtotal), iva_pct=int(iva_pct) if iva_pct == iva_pct.to_integral() else float(iva_pct),
+            iva_fmt=_money_ar(iva_monto), total_fmt=_money_ar(total_con_iva),
+            vig_dias=vig_dias, fecha_vig=fecha_vig, logo_base64=logo_base64, now=datetime.now(),
+        )
+        pdf_raw = io.BytesIO()
+        HTML(string=html_string).write_pdf(pdf_raw, presentational_hints=True)
+        pdf_raw.seek(0)
+        pdf_buffer = _limpiar_metadata_pdf(pdf_raw, presupuesto, organizacion)
+    except Exception as e:
+        current_app.logger.error(f'Error en pdf_cliente: {e}', exc_info=True)
+        flash('No se pudo generar el PDF del cliente.', 'danger')
+        return redirect(url_for('presupuestos.revision_ia', id=id))
+
+    return send_file(pdf_buffer, mimetype='application/pdf', as_attachment=True,
+                     download_name=f'presupuesto_{presupuesto.numero}.pdf')
+
+
 @presupuestos_bp.route('/<int:id>/enviar-email', methods=['GET', 'POST'])
 @login_required
 def enviar_email(id):
