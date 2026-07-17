@@ -23,18 +23,29 @@ UMBRAL_VERDE = 0.85
 UMBRAL_ROJO = 0.5
 
 
-def _precios_recursos(recursos, organizacion_id, zona, fecha, presupuesto):
-    """Precio de cada recurso del APU. Devuelve (detalle, costo_unitario)."""
+def _precios_recursos(recursos, organizacion_id, zona, fecha, presupuesto, cache=None):
+    """Precio de cada recurso del APU. Devuelve (detalle, costo_unitario).
+
+    `cache` (dict) memoiza por (nombre, unidad, tipo) para no repricear el mismo
+    recurso en cada item del pliego (perf: 'Oficial albañil', 'Mortero', etc.)."""
     from services.precio_recurso_service import buscar_mejor_precio
 
+    if cache is None:
+        cache = {}
     detalle = []
     costo = Decimal('0')
     for r in recursos:
         tipo = 'mano_obra' if r.get('tipo') == 'mano_obra' else 'material'
-        info = buscar_mejor_precio(
-            organizacion_id=organizacion_id, descripcion=r.get('nombre', ''),
-            unidad=r.get('unidad', ''), tipo_recurso=tipo, zona=zona, presupuesto=presupuesto,
-        )
+        nombre = r.get('nombre', '')
+        unidad = r.get('unidad', '')
+        ckey = (nombre, unidad, tipo)
+        info = cache.get(ckey)
+        if info is None:
+            info = buscar_mejor_precio(
+                organizacion_id=organizacion_id, descripcion=nombre,
+                unidad=unidad, tipo_recurso=tipo, zona=zona, presupuesto=presupuesto,
+            )
+            cache[ckey] = info
         precio = Decimal(str(info.get('precio') or 0))
         coef = Decimal(str(r.get('coeficiente') or 0))
         costo += coef * precio
@@ -108,6 +119,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
 
     clasifs = _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword)
 
+    precio_cache = {}  # (nombre, unidad, tipo) -> info (perf: dedup de recursos)
     salida = []
     resumen = {'verde': 0, 'amarillo': 0, 'rojo': 0, 'total': len(items),
                'fuente_clasificacion': 'aprendido', 'items_estimados': 0, 'aprendidos': 0}
@@ -124,7 +136,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             resumen['aprendidos'] += 1
 
         recursos = get_recursos(rid, nivel) if (rid and tiene_coef) else []
-        detalle, costo_unit = (_precios_recursos(recursos, organizacion_id, zona, None, presupuesto)
+        detalle, costo_unit = (_precios_recursos(recursos, organizacion_id, zona, None, presupuesto, precio_cache)
                                if recursos else ([], Decimal('0')))
 
         # Scoring. Un item aprendido como 'manual' (lump-sum) queda RESUELTO (verde).

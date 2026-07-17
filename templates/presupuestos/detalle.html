@@ -122,9 +122,13 @@
                             </button>
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado', 'aprobado'] %}
-                            <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-primary"
-                               title="Vista interna del APU: composiciones detalladas, mano de obra, materiales por ítem.">
-                                <i class="fas fa-calculator me-1"></i>Ver detalle ejecutivo (APU)
+                            <a href="{{ url_for('presupuestos.revision_ia', id=presupuesto.id) }}" class="btn btn-primary"
+                               title="Revisá los ítems con precio calculado y resolvé los que necesitan tu ayuda.">
+                                <i class="fas fa-clipboard-check me-1"></i>Revisar con IA
+                            </a>
+                            <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-outline-secondary"
+                               title="Vista avanzada: desglose técnico (APU) con materiales y mano de obra por ítem.">
+                                <i class="fas fa-calculator me-1"></i>Detalle ejecutivo <small class="text-muted">(avanzado)</small>
                             </a>
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}

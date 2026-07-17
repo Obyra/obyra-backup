@@ -120,10 +120,10 @@
                     {% else %}
                     {# ===== NAVBAR NORMAL: admin, pm, tecnico ===== #}
 
-                    {# 1. Dashboard - solo para admin/pm #}
+                    {# 1. Dashboard - dispatcher por rol #}
                     {% if current_user.is_authenticated and current_user.role in ['admin','administrador','pm','project_manager'] %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('reportes.dashboard') }}">
+                        <a class="nav-link" href="{{ url_for('dashboard.index') }}">
                             <i class="fas fa-tachometer-alt me-1"></i>Dashboard
                         </a>
                     </li>
@@ -142,6 +142,12 @@
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and has_endpoint('presupuestos.crear') %}
                             <li><a class="dropdown-item" href="{{ url_for('presupuestos.lista') }}">
                                 <i class="fas fa-plus me-2"></i>Nuevo Presupuesto
+                            </a></li>
+                            {% endif %}
+                            {# Jornales (costos de mano de obra que alimentan el pricing) - admin/pm #}
+                            {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and has_endpoint('jornales.lista') %}
+                            <li><a class="dropdown-item" href="{{ url_for('jornales.lista') }}">
+                                <i class="fas fa-hard-hat me-2"></i>Jornales y costo de MO
                             </a></li>
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
