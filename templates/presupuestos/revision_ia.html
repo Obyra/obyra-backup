@@ -7,7 +7,8 @@
   <div class="d-flex justify-content-between align-items-start mb-3">
     <div>
       <h2 class="mb-1"><i class="fas fa-clipboard-check me-2"></i>Revisión del presupuesto</h2>
-      <p class="text-muted mb-0">{{ presupuesto.nombre if presupuesto else 'Presupuesto' }} · {{ items|length }} ítems</p>
+      <p class="text-muted mb-0">{{ presupuesto.numero if presupuesto else 'Presupuesto' }} · {{ items|length }} ítems</p>
+      <div class="small mt-1" id="recalcBar"></div>
     </div>
     <div class="text-end">
       <div class="small text-muted">Total estimado</div>
@@ -62,6 +63,9 @@
 <script>
 const ITEMS = {{ items | tojson }};
 const NIVEL = {{ nivel | tojson }};
+const CACHE = {{ cache | tojson }};   // resultado guardado (o null -> recalcular)
+const PRES_ID = {{ presupuesto.id | tojson }};
+const FECHA_CALC = {{ (fecha_calculo.strftime('%d/%m/%Y %H:%M') if fecha_calculo else '') | tojson }};
 const BATCH = 25;
 const _res = [];  // resultados acumulados
 
@@ -108,6 +112,35 @@ async function _correr(){
     det.textContent=pct+'%';
   }
   _render();
+  _guardarCache();   // persistir para no re-analizar en cada carga
+}
+
+// Guarda el resultado calculado en el presupuesto (Fase 2.6: calcula 1 vez).
+async function _guardarCache(){
+  try{
+    await fetch('/presupuestos/'+PRES_ID+'/pipeline-ia/guardar-cache',{
+      method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':_csrf()},
+      body:JSON.stringify({items:_res,nivel:NIVEL})});
+  }catch(e){/* no bloquea la UI si falla el guardado */}
+}
+
+// Render desde cache: sin progreso, sin costo LLM. Muestra "calculado el ..."
+function _desdeCache(){
+  document.getElementById('progresoBox').classList.add('d-none');
+  CACHE.items.forEach(x=>_res.push(x));
+  _render();
+  const bar=document.getElementById('recalcBar');
+  if(bar){
+    bar.innerHTML='<span class="text-muted"><i class="fas fa-clock me-1"></i>Calculado'+
+      (FECHA_CALC?(' el '+FECHA_CALC):'')+'</span> · '+
+      '<a href="?recalcular=1" onclick="return confirm(\'Recalcular vuelve a analizar todo con IA (~1 min). ¿Seguir?\')">'+
+      '<i class="fas fa-rotate me-1"></i>Recalcular</a>';
+  }
+}
+
+function _init(){
+  if(CACHE && CACHE.items && CACHE.items.length){ _desdeCache(); }
+  else { _correr(); }
 }
 
 function _render(){
@@ -253,6 +286,6 @@ document.getElementById('btnConfirmarManual').addEventListener('click',async fun
   if(d.ok) _marcarResuelto(_filaManual,'Se cargará como precio manual.'); else alert(d.error||'Error');
 });
 
-document.addEventListener('DOMContentLoaded', _correr);
+document.addEventListener('DOMContentLoaded', _init);
 </script>
 {% endblock %}

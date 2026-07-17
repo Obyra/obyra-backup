@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Calcular presupuesto - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 820px;">
+
+  <div class="card">
+    <div class="card-body p-4">
+      <div class="text-uppercase text-muted fw-bold" style="font-size:.72rem;letter-spacing:.12em">Presupuesto importado</div>
+      <h2 class="mb-1">{{ presupuesto.obra.nombre if presupuesto.obra else 'Presupuesto ' ~ presupuesto.numero }}</h2>
+      <div class="text-muted small">{{ presupuesto.numero }}{% if presupuesto.cliente %} · Cliente: {{ presupuesto.cliente.nombre }}{% endif %}</div>
+
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 my-4 p-3 rounded"
+           style="background:var(--bs-light,#f6f8fc);border:1px solid #e6ecf4">
+        <div class="d-flex align-items-center gap-2">
+          <i class="fas fa-check-circle text-success"></i>
+          <div><strong>Importamos {{ n_items }} ítem{{ 's' if n_items != 1 else '' }}</strong> del pliego.</div>
+        </div>
+        {% if muestra %}
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#muestraItems">
+          Ver ítems importados</button>
+        {% endif %}
+      </div>
+      {% if muestra %}
+      <div class="collapse mb-3" id="muestraItems">
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+          <thead class="table-light"><tr><th>Descripción</th><th class="text-end">Cantidad</th><th>Rubro</th></tr></thead>
+          <tbody>
+          {% for it in muestra %}
+            <tr><td>{{ it.descripcion }}</td>
+                <td class="text-end">{{ (it.cantidad or 0)|round(2) }} {{ it.unidad or '' }}</td>
+                <td class="text-muted small">{{ it.etapa_nombre or '—' }}</td></tr>
+          {% endfor %}
+          {% if n_items > muestra|length %}
+            <tr><td colspan="3" class="text-muted small">… y {{ n_items - muestra|length }} ítems más</td></tr>
+          {% endif %}
+          </tbody></table></div>
+      </div>
+      {% endif %}
+
+      {% if ya_calculado %}
+      <div class="text-center my-4">
+        <div class="text-muted small mb-3">
+          <i class="fas fa-clock me-1"></i>Ya calculado{% if fecha_calculo %} el {{ fecha_calculo.strftime('%d/%m/%Y %H:%M') }}{% endif %}.
+        </div>
+        <a href="{{ url_for('presupuestos.revision_ia', id=presupuesto.id) }}" class="btn btn-primary btn-lg px-4">
+          <i class="fas fa-clipboard-check me-2"></i>Ver revisión</a>
+        <div class="mt-3">
+          <a href="{{ url_for('presupuestos.revision_ia', id=presupuesto.id, recalcular=1) }}"
+             class="text-decoration-none small text-muted"
+             onclick="return confirm('Recalcular vuelve a analizar los {{ n_items }} ítems con IA (tarda ~1 min). ¿Seguir?')">
+            <i class="fas fa-rotate me-1"></i>Recalcular con IA</a>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-center my-4">
+        <a href="{{ url_for('presupuestos.revision_ia', id=presupuesto.id) }}" class="btn btn-primary btn-lg px-4 py-3"
+           style="font-size:1.1rem">
+          <i class="fas fa-bolt me-2"></i>Calcular presupuesto con IA</a>
+        <div class="text-muted small mt-2">La IA clasifica cada ítem, arma el cómputo y le pone precio. Tarda ~1 minuto.</div>
+      </div>
+      {% endif %}
+
+      <details class="mt-3 pt-3" style="border-top:1px dashed #d9e1ec">
+        <summary class="text-muted small" style="cursor:pointer">Opciones avanzadas</summary>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-outline-secondary btn-sm">Detalle ejecutivo (APU)</a>
+          <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-outline-secondary btn-sm">Editar ítems a mano</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+{% endblock %}
