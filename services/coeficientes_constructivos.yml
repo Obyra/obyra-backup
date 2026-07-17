@@ -724,3 +724,98 @@ reglas:
       - {clave: esmalte_sint, tipo: material, nombre: 'Esmalte sintetico', unidad: l, coeficiente: 0.25, notas: '2 manos.'}
       - {clave: imprimante_madera, tipo: material, nombre: 'Imprimante/fondo para madera', unidad: l, coeficiente: 0.15}
       - {clave: mo_pintor_esmalte, tipo: mano_obra, nombre: 'Oficial pintor', unidad: jornal, coeficiente: 0.06875, notas: '0.3 h pintura + 0.25 h preparacion/lijado = 0.55 h/m2.'}
+
+  # ===========================================================================
+  # Detalles de terminacion (OBYRA v1 - a validar). Rendimientos y materiales
+  # menores a confirmar con Brenda. MO en jornal (h/8). Materiales sin lista real
+  # caen a estimado (esperado).
+  # ===========================================================================
+
+  buna_corte:
+    descripcion: 'Buna / corte perimetral en revoque o encuentro'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: disco_corte_buna, tipo: material, nombre: 'Disco de corte diamantado (amortizacion)', unidad: u, coeficiente: 0.02, notas: 'a validar'}
+      - {clave: mo_oficial_buna, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.0375, notas: 'a validar'}
+
+  cantonera_guardacanto:
+    descripcion: 'Cantonera guardacanto PVC en aristas de revoque'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: perfil_cantonera, tipo: material, nombre: 'Perfil cantonera guardacanto PVC/galvanizado', unidad: ml, coeficiente: 1.05, notas: 'a validar'}
+      - {clave: mo_oficial_cantonera, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.01875, notas: 'a validar'}
+
+  sellado_poliuretanico:
+    descripcion: 'Sellado elastico de juntas (poliuretanico tipo Sikaflex)'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: sellador_pu, tipo: material, nombre: 'Sellador poliuretanico (cartucho 300ml)', unidad: u, coeficiente: 0.17, notas: 'a validar'}
+      - {clave: fondo_junta, tipo: material, nombre: 'Fondo de junta (espuma backer rod)', unidad: ml, coeficiente: 1.05, notas: 'a validar'}
+      - {clave: mo_oficial_sellado, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.025, notas: 'a validar'}
+
+  cajon_hidrofugo:
+    descripcion: 'Cajon hidrofugo (3 caras) en base de muro'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: mortero_cajon, tipo: material, nombre: 'Mortero cemento 1:3', unidad: m3, coeficiente: 0.006, notas: 'a validar'}
+      - {clave: hidrofugo_cajon, tipo: material, nombre: 'Hidrofugo en pasta (Sika 1 o equivalente)', unidad: kg, coeficiente: 0.2, notas: 'a validar'}
+      - {clave: mo_oficial_cajon, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.025, notas: 'a validar'}
+      - {clave: mo_ayudante_cajon, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.01875, notas: 'a validar'}
+
+  babeta_zingueria:
+    descripcion: 'Babeta / zingueria de chapa plegada en encuentros de cubierta'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: babeta_chapa, tipo: material, nombre: 'Babeta de chapa galvanizada plegada', unidad: ml, coeficiente: 1.05, notas: 'a validar'}
+      - {clave: sellador_babeta, tipo: material, nombre: 'Sellador poliuretanico (cartucho 300ml)', unidad: u, coeficiente: 0.1, notas: 'a validar'}
+      - {clave: mo_oficial_babeta, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.05, notas: 'a validar'}
+      - {clave: mo_ayudante_babeta, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.0375, notas: 'a validar'}
+
+  goteron:
+    descripcion: 'Goteron en aleros / dinteles / balcones'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: perfil_goteron, tipo: material, nombre: 'Perfil goteron PVC/aluminio', unidad: ml, coeficiente: 1.05, notas: 'a validar'}
+      - {clave: mo_oficial_goteron, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.01875, notas: 'a validar'}
+
+  junta_dilatacion:
+    descripcion: 'Junta de dilatacion con perfil y sellador elastico'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: perfil_junta_dilat, tipo: material, nombre: 'Perfil de junta de dilatacion (PVC/aluminio)', unidad: ml, coeficiente: 1.05, notas: 'a validar'}
+      - {clave: sellador_junta_dilat, tipo: material, nombre: 'Sellador poliuretanico (cartucho 300ml)', unidad: u, coeficiente: 0.2, notas: 'a validar'}
+      - {clave: mo_oficial_junta_dilat, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.03125, notas: 'a validar'}
+
+  cenefa_perimetral:
+    descripcion: 'Cenefa perimetral de cubierta'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: chapa_cenefa, tipo: material, nombre: 'Chapa/placa plegada para cenefa', unidad: ml, coeficiente: 1.1, notas: 'a validar'}
+      - {clave: perfileria_cenefa, tipo: material, nombre: 'Perfileria de soporte cenefa', unidad: ml, coeficiente: 1.05, notas: 'a validar'}
+      - {clave: mo_oficial_cenefa, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.0375, notas: 'a validar'}
+      - {clave: mo_ayudante_cenefa, tipo: mano_obra, nombre: 'Ayudante', unidad: jornal, coeficiente: 0.03125, notas: 'a validar'}
+
+  tapajuntas:
+    descripcion: 'Tapajuntas de aberturas (perimetro de marcos)'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: perfil_tapajuntas, tipo: material, nombre: 'Tapajuntas (perfil madera/aluminio)', unidad: ml, coeficiente: 1.05, notas: 'a validar'}
+      - {clave: tornilleria_tapajuntas, tipo: material, nombre: 'Tornilleria / clavos de fijacion', unidad: u, coeficiente: 4, notas: 'a validar'}
+      - {clave: mo_oficial_tapajuntas, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.025, notas: 'a validar'}
+
+  malla_antifisura:
+    descripcion: 'Banda de malla antifisura en encuentros de materiales'
+    unidad_item: ml
+    origen: 'OBYRA v1 - a validar'
+    recursos:
+      - {clave: malla_fibra_vidrio, tipo: material, nombre: 'Malla de fibra de vidrio antifisura', unidad: m2, coeficiente: 0.35, notas: 'a validar'}
+      - {clave: mo_oficial_malla, tipo: mano_obra, nombre: 'Oficial', unidad: jornal, coeficiente: 0.0125, notas: 'a validar'}
