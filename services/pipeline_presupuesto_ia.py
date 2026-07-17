@@ -108,13 +108,43 @@ def _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword):
     return out
 
 
+# Grupos de unidades equivalentes (para el guard item<->regla).
+_UNID_GRUPOS = [
+    {'m2', 'm²', 'mts2', 'mt2'}, {'m3', 'm³', 'mts3', 'mt3'},
+    {'ml', 'm', 'mts', 'mtrs'}, {'kg', 'kilo', 'kilos'},
+    {'un', 'u', 'ud', 'und', 'unidad', 'unidades', 'gl', 'global', 'gbl'},
+    {'tn', 'tonelada', 'toneladas'}, {'l', 'lt', 'litro', 'litros'},
+    {'mes', 'meses'}, {'jornal', 'dia', 'día'}, {'hora', 'hr', 'hs', 'h'},
+]
+
+
+def _norm_unidad(u):
+    import re
+    return re.sub(r'[^a-z0-9²³]', '', (u or '').lower())
+
+
+def _unidad_item_compatible(u_item, u_regla):
+    """True si la unidad del item del cliente es compatible con la de la regla.
+    Si alguna falta, no bloquea (return True). Normaliza notacion ('Un.', 'm2 ')."""
+    b = _norm_unidad(u_regla)
+    if not b:
+        return True
+    a = _norm_unidad(u_item)
+    if not a or a == b:
+        return True
+    for g in _UNID_GRUPOS:
+        if a in g and b in g:
+            return True
+    return False
+
+
 def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
                    presupuesto=None, forzar_keyword=False):
     """Corre el pipeline completo sobre una lista de items {descripcion, unidad, cantidad}.
 
     Orden: aprendizaje por org -> clasificacion LLM -> descomposicion -> pricing -> score.
     """
-    from services.coeficientes_loader import get_recursos
+    from services.coeficientes_loader import get_recursos, unidad_item_esperada
     from services.clasificador_llm import candidatos_para
 
     clasifs = _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword)
@@ -136,12 +166,23 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             resumen['aprendidos'] += 1
 
         recursos = get_recursos(rid, nivel) if (rid and tiene_coef) else []
+        regla_unidad = unidad_item_esperada(rid) if (rid and tiene_coef) else None
+        unidad_ok = _unidad_item_compatible(it.get('unidad'), regla_unidad)
         detalle, costo_unit = (_precios_recursos(recursos, organizacion_id, zona, None, presupuesto, precio_cache)
                                if recursos else ([], Decimal('0')))
+
+        # Guard de unidad: si el item viene en una unidad INCOMPATIBLE con la regla
+        # (ej. item en m2 clasificado a una regla por tn/m3), el precio auto no es
+        # confiable y produce totales absurdos -> a revision, y NO se cuenta su costo.
+        unidad_incompatible = bool(recursos) and not unidad_ok
+        if unidad_incompatible:
+            costo_unit = Decimal('0')
 
         # Scoring. Un item aprendido como 'manual' (lump-sum) queda RESUELTO (verde).
         if fuente == 'aprendido' and tratamiento == 'manual':
             color = 'verde'
+        elif unidad_incompatible:
+            color = 'rojo'
         else:
             color = _color(conf, tiene_coef, detalle)
         resumen[color] += 1
@@ -169,6 +210,8 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'recursos_sin_precio': sum(1 for r in detalle if r['precio'] <= 0 and not r['requiere_tc']),
             'precio_estimado': estimado,
             'requiere_tc': any(r['requiere_tc'] for r in detalle),
+            'unidad_incompatible': unidad_incompatible,
+            'unidad_regla': regla_unidad,
         }
         # Candidatos (para la pantalla de revision) solo en los que hay que revisar.
         if color in ('rojo', 'amarillo'):
