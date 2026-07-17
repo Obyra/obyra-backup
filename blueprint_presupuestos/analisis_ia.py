@@ -164,12 +164,36 @@ def pipeline_ia_corregir_bulk():
     return jsonify({'ok': True, 'guardadas': guardadas, 'errores': errores})
 
 
+@presupuestos_bp.route('/<int:id>/calcular-ia')
+@login_required
+def calcular_ia(id):
+    """PASO 1 del flujo simplificado: pantalla limpia post-import. Muestra el
+    presupuesto + cantidad de items + UN boton 'Calcular presupuesto con IA'.
+    Si ya hay un calculo guardado, ofrece ver la revision o recalcular."""
+    if not _puede_gestionar():
+        from flask import flash, redirect, url_for
+        flash('No tenes permisos para esta seccion.', 'danger')
+        return redirect(url_for('presupuestos.lista'))
+
+    from models.budgets import Presupuesto, ItemPresupuesto
+
+    pres = Presupuesto.query.get_or_404(id)
+    _verificar_acceso_presupuesto(pres)
+    n_items = ItemPresupuesto.query.filter_by(presupuesto_id=id).count()
+    muestra = (ItemPresupuesto.query.filter_by(presupuesto_id=id)
+               .order_by(ItemPresupuesto.id).limit(6).all())
+    ya_calculado = bool(pres.pipeline_ia_cache and (pres.pipeline_ia_cache or {}).get('items'))
+    return render_template('presupuestos/calcular_ia.html',
+                           presupuesto=pres, n_items=n_items, muestra=muestra,
+                           ya_calculado=ya_calculado, fecha_calculo=pres.pipeline_ia_fecha)
+
+
 @presupuestos_bp.route('/<int:id>/revision-ia')
 @login_required
 def revision_ia(id):
-    """Pantalla de revision. NO corre el pipeline inline (192 items x LLM tardaba
-    minutos -> timeout/500). Entrega los items al front, que los analiza EN LOTES
-    contra /pipeline-ia/analizar mostrando progreso (sin pagina en blanco)."""
+    """Pantalla de revision. Lee el resultado GUARDADO del pipeline (calculado 1
+    vez, no re-analiza en cada carga). Si no hay cache -o ?recalcular=1-, el front
+    lo analiza EN LOTES contra /pipeline-ia/analizar (con progreso) y lo guarda."""
     if not _puede_gestionar():
         from flask import flash, redirect, url_for
         flash('No tenes permisos para esta seccion.', 'danger')
@@ -183,10 +207,47 @@ def revision_ia(id):
     filas = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(ItemPresupuesto.id).all()
     items = [{'descripcion': f.descripcion, 'unidad': f.unidad,
               'cantidad': float(f.cantidad or 0)} for f in filas]
-    nivel = (request.args.get('nivel') or 'estandar').strip().lower()
+
+    recalcular = request.args.get('recalcular') in ('1', 'true', 'yes')
+    cache = pres.pipeline_ia_cache if not recalcular else None
+    if not (isinstance(cache, dict) and cache.get('items')):
+        cache = None
+    nivel = (request.args.get('nivel')
+             or (cache or {}).get('nivel') or 'estandar').strip().lower()
 
     return render_template('presupuestos/revision_ia.html',
-                           presupuesto=pres, items=items, nivel=nivel)
+                           presupuesto=pres, items=items, nivel=nivel,
+                           cache=cache, fecha_calculo=pres.pipeline_ia_fecha)
+
+
+@presupuestos_bp.route('/<int:id>/pipeline-ia/guardar-cache', methods=['POST'])
+@login_required
+def pipeline_ia_guardar_cache(id):
+    """Persiste el resultado del pipeline (items ya analizados por el front) en el
+    presupuesto, para que la revision no re-analice en cada carga (Fase 2.6)."""
+    if not _puede_gestionar():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+    from models.budgets import Presupuesto
+
+    pres = Presupuesto.query.get_or_404(id)
+    if not _verificar_acceso_presupuesto(pres):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+
+    data = request.get_json(silent=True) or {}
+    items = data.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'items requerido'}), 400
+    nivel = (data.get('nivel') or 'estandar').strip().lower()
+
+    pres.pipeline_ia_cache = {'items': items, 'nivel': nivel}
+    pres.pipeline_ia_fecha = datetime.utcnow()
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error guardando cache pipeline IA')
+        return jsonify({'ok': False, 'error': f'{type(e).__name__}'}), 500
+    return jsonify({'ok': True, 'fecha': pres.pipeline_ia_fecha.isoformat()})
 
 
 @presupuestos_bp.route('/<int:id>/analizar-ia', methods=['POST'])

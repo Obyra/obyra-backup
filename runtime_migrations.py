@@ -1856,6 +1856,23 @@ def run_runtime_migrations(db, app):
             print(f"[WARN] items_presupuesto.{col}: {e}")
     print("[OK] Migracion runtime: columnas analisis IA en items_presupuesto")
 
+    # 2026-07-17: Fase 2.6 - cache del resultado del pipeline IA en presupuestos.
+    # Calcula 1 vez y guarda; la revision lee esto (no re-analiza en cada carga).
+    columnas_presu_ia = [
+        ("pipeline_ia_cache", "JSONB"),
+        ("pipeline_ia_fecha", "TIMESTAMP"),
+    ]
+    for col, ddl in columnas_presu_ia:
+        try:
+            db.session.execute(db.text(
+                f"ALTER TABLE presupuestos ADD COLUMN IF NOT EXISTS {col} {ddl};"
+            ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] presupuestos.{col}: {e}")
+    print("[OK] Migracion runtime: cache pipeline IA en presupuestos")
+
     # =====================================================
     # 2026-05-03: Capa legal Fase A - LegalDocument + UserConsent
     # `db.create_all()` (Railway) crea las tablas via modelo, pero hacemos

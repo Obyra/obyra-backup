@@ -96,6 +96,12 @@ class Presupuesto(db.Model):
     # documento contractual descargable en la obra).
     archivo_pliego_path = db.Column(db.String(500), nullable=True)
     archivo_pliego_nombre = db.Column(db.String(255), nullable=True)
+    # Fase 2.6: cache del resultado del pipeline IA. El calculo (clasificar +
+    # pricear + scorear, ~40s + costo LLM) corre UNA vez y se guarda aca; la
+    # pantalla de revision lee esto y solo recalcula si el usuario aprieta
+    # "Recalcular". Evita re-analizar en cada carga y que los numeros bailen.
+    pipeline_ia_cache = db.Column(db.JSON, nullable=True)   # {items:[...], nivel:str}
+    pipeline_ia_fecha = db.Column(db.DateTime, nullable=True)
     # 2026-05-11: origen del presupuesto. Marca el camino por el que se creo y
     # gobierna que CTAs/banners se muestran en detalle.html. Valores:
     #   'manual'  -> el usuario carga items uno por uno
