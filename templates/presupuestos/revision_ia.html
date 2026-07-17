@@ -28,22 +28,19 @@
     </div>
   </div>
 
-  <!-- Resumen (oculto hasta terminar) -->
+  <!-- Resumen (oculto hasta terminar). 2 categorias: calculados vs necesitan ayuda.
+       Todo lo que tiene precio esta "listo"; el usuario solo actua sobre lo imposible de calcular. -->
   <div id="resumenBox" class="row g-2 mb-4 d-none">
-    <div class="col-4"><div class="card border-success h-100"><div class="card-body text-center py-3">
-      <div class="h3 mb-0 text-success" id="cntVerde">0</div>
-      <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Listos</div></div></div></div>
-    <div class="col-4"><div class="card border-warning h-100"><div class="card-body text-center py-3">
-      <div class="h3 mb-0 text-warning" id="cntAmarillo">0</div>
-      <div class="small text-muted"><i class="fas fa-eye text-warning me-1"></i>Para revisar</div></div></div></div>
-    <div class="col-4"><div class="card border-danger h-100"><div class="card-body text-center py-3">
+    <div class="col-6"><div class="card border-success h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-success" id="cntCalc">0</div>
+      <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Ítems calculados</div></div></div></div>
+    <div class="col-6"><div class="card border-danger h-100"><div class="card-body text-center py-3">
       <div class="h3 mb-0 text-danger" id="cntRojo">0</div>
       <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Necesitan tu ayuda</div></div></div></div>
   </div>
 
   <div id="rojosBox" class="mb-4"></div>
-  <div id="amarillosBox" class="mb-4"></div>
-  <div id="verdesBox" class="mb-4"></div>
+  <div id="calculadosBox" class="mb-4"></div>
 </div>
 
 <!-- Modal cargar precio manual -->
@@ -117,10 +114,10 @@ function _render(){
   document.getElementById('progresoBox').classList.add('d-none');
   document.getElementById('resumenBox').classList.remove('d-none');
   const rojos=_res.filter(x=>x.color==='rojo');
-  const amar=_res.filter(x=>x.color==='amarillo');
-  const verdes=_res.filter(x=>x.color==='verde');
-  document.getElementById('cntVerde').textContent=verdes.length;
-  document.getElementById('cntAmarillo').textContent=amar.length;
+  // 2 categorias: "calculados" = todo lo que tiene precio (verde + amarillo, sin
+  // distincion ni accion). El usuario solo actua sobre los rojos.
+  const calculados=_res.filter(x=>x.color!=='rojo');
+  document.getElementById('cntCalc').textContent=calculados.length;
   document.getElementById('cntRojo').textContent=rojos.length;
   const total=_res.reduce((a,x)=>a+(x.costo_total||0),0);
   document.getElementById('totalPrecio').textContent=_money(total);
@@ -173,37 +170,26 @@ function _render(){
     rb.innerHTML=h;
   }
 
-  // Amarillos (colapsados) — con precio unitario ($/u) visible.
-  const ab=document.getElementById('amarillosBox');
-  if(amar.length){
-    let h='<div class="card"><div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccAmar">';
-    h+='<i class="fas fa-eye text-warning me-2"></i>Para revisar ('+amar.length+') <small class="text-muted ms-1">— tienen precio, conviene confirmarlos</small><i class="fas fa-chevron-down float-end mt-1"></i></div>';
-    h+='<div id="seccAmar" class="collapse"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th><th></th></tr></thead><tbody>';
-    amar.forEach(it=>{
-      h+='<tr data-desc="'+_esc(it.descripcion)+'"><td>'+_esc(it.descripcion)+'</td><td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td>';
-      h+='<td class="text-end">'+_unit(it)+'</td>';
-      h+='<td class="text-end fw-bold">'+_money(it.costo_total)+'</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary btn-manual"><i class="fas fa-pen"></i></button><span class="resultado-fila small"></span></td></tr>';
-    });
-    h+='</tbody></table></div></div></div>'; ab.innerHTML=h;
-  }
-
-  // Verdes — lista final (ítem + cantidad + precio unit. + total), colapsable.
-  const vb=document.getElementById('verdesBox');
-  if(verdes.length){
-    const est=verdes.filter(x=>x.precio_estimado).length;
-    const totalVerdes=verdes.reduce((a,x)=>a+(x.costo_total||0),0);
-    let h='<div class="card text-start"><div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccVerde">';
-    h+='<i class="fas fa-check-circle text-success me-2"></i>Listos ('+verdes.length+') <small class="text-muted ms-1">— precio calculado</small>';
-    h+='<span class="float-end fw-bold text-success">'+_money(totalVerdes)+' <i class="fas fa-chevron-down ms-2"></i></span></div>';
-    h+='<div id="seccVerde" class="collapse"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th></tr></thead><tbody>';
-    verdes.forEach(it=>{
-      h+='<tr><td>'+_esc(it.descripcion)+(it.precio_estimado?' <span class="badge bg-warning-subtle text-warning border border-warning">estimado</span>':'')+'</td>';
+  // Ítems calculados (verde + amarillo, sin distincion) — lista final abierta:
+  // ítem + cantidad + precio unit. + total. No requieren accion. El puntito gris
+  // marca precios estimados (sin bloquear nada).
+  const DOT='<span title="Precio estimado — podés ajustarlo si querés" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#6c757d;opacity:.5;margin-left:6px;vertical-align:middle"></span>';
+  const cb=document.getElementById('calculadosBox');
+  if(calculados.length){
+    const est=calculados.filter(x=>x.precio_estimado).length;
+    const totalCalc=calculados.reduce((a,x)=>a+(x.costo_total||0),0);
+    let h='<div class="card"><div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccCalc">';
+    h+='<i class="fas fa-check-circle text-success me-2"></i>Ítems calculados ('+calculados.length+') <small class="text-muted ms-1">— tienen precio, no requieren acción</small>';
+    h+='<span class="float-end fw-bold text-success">'+_money(totalCalc)+' <i class="fas fa-chevron-down ms-2"></i></span></div>';
+    h+='<div id="seccCalc" class="collapse show"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th></tr></thead><tbody>';
+    calculados.forEach(it=>{
+      h+='<tr><td>'+_esc(it.descripcion)+(it.precio_estimado?' '+DOT:'')+'</td>';
       h+='<td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td><td class="text-end">'+_unit(it)+'</td>';
       h+='<td class="text-end fw-bold">'+_money(it.costo_total)+'</td></tr>';
     });
     h+='</tbody></table></div></div></div>';
-    if(est) h+='<div class="small text-warning mt-2"><i class="fas fa-info-circle me-1"></i>'+est+' usan precios estimados de mercado (cambialos cuando tengas listas de proveedor).</div>';
-    vb.innerHTML=h;
+    if(est) h+='<div class="small text-muted mt-2">El puntito '+DOT+' marca precios estimados de mercado. No frenan nada: ajustalos cuando cargues listas de proveedor.</div>';
+    cb.innerHTML=h;
   }
   _wireHandlers();
 }
