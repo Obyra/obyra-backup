@@ -144,11 +144,8 @@
                         <!-- Configuración Edificio por Niveles -->
                         <div id="seccion_edificio_niveles" style="display: none;" class="mb-4">
                             <div class="card border-primary">
-                                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+                                <div class="card-header bg-primary text-white py-2">
                                     <h6 class="mb-0"><i class="fas fa-layer-group"></i> Estructura por Niveles</h6>
-                                    <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalConfigurarNiveles">
-                                        <i class="fas fa-cog"></i> Configurar Niveles
-                                    </button>
                                 </div>
                                 <div class="card-body py-2">
                                     <div class="row mb-2">
@@ -2233,47 +2230,11 @@ window.actualizarSelectorCliente = function(clienteData) {
 };
 </script>
 
-<!-- Modal Configurar Niveles del Edificio -->
-<div class="modal fade" id="modalConfigurarNiveles" tabindex="-1" aria-labelledby="modalConfigurarNivelesLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white py-2">
-                <h5 class="modal-title" id="modalConfigurarNivelesLabel">
-                    <i class="fas fa-layer-group me-2"></i>Configurar Niveles del Edificio
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info py-2 small mb-3">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Configura el <strong>área m²</strong>, <strong>hormigón (m³)</strong> y <strong>albañilería (m²)</strong> de cada nivel.
-                    Puedes completar ambos para el mismo nivel. El botón <i class="fas fa-cog"></i> expande opciones avanzadas.
-                </div>
-                <div id="nivelesModalContainer">
-                </div>
-                <div class="bg-dark text-white rounded p-2 mt-2 d-flex justify-content-between">
-                    <span class="fw-bold">TOTAL SUPERFICIE</span>
-                    <span class="fw-bold" id="totalSuperficieNiveles">0.00 m²</span>
-                </div>
-            </div>
-            <div class="modal-footer py-2">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
-                    <i class="fas fa-times"></i> Cancelar
-                </button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="aplicarConfigNiveles()">
-                    <i class="fas fa-check"></i> Aplicar Configuración
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Render tabla al abrir el modal -->
-<script>
-document.getElementById('modalConfigurarNiveles').addEventListener('show.bs.modal', function() {
-    renderTablaModalNiveles();
-});
-</script>
+<!-- Modal "Configurar Niveles" (area/hormigon/albanileria por planta) removido:
+     confundia (76 campos que casi nadie usa) y esos valores no alimentan el
+     pipeline IA. El alta captura solo la estructura simple (subsuelos/PB/pisos
+     tipo/terraza). El detalle geometrico por planta, si se necesita, va dentro
+     del flujo de la Calculadora IA por m2, no en el alta. -->
 
 <!-- Modal para Crear Cliente -->
 <div class="modal fade" id="modalCrearCliente" tabindex="-1">
