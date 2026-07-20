@@ -253,6 +253,15 @@ def _motivo_descarte(descripcion, unidad, cantidad, etapa_nombre=None):
     return None
 
 
+# APU de estructura de H°A° por m3. Su MO guardada es DE-BUNDLED (hierro+colado+
+# vibrado+curado, sin encofrado). El encofrado NO se guarda como coeficiente aparte:
+# en modo 'bundle' se foldea = contacto(m2/m3) x APU 'encofrado' (fuente unica). Asi
+# el precio de un elemento es identico en 'bundle' y 'separado' (el modelo solo cambia
+# si el encofrado se muestra en una linea o en dos).
+_ESTRUCTURA_HORMIGON = {'losa_hormigon', 'viga_hormigon', 'columna_hormigon',
+                        'zapata_corrida', 'platea_fundacion'}
+
+
 def _pliego_tiene_encofrado(items):
     """True si el pliego lista el encofrado como item PROPIO (por m2/ml). Es una
     decision a nivel PLIEGO (los pliegos son internamente consistentes), autodetectada
@@ -275,7 +284,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     descartan solas (no se clasifican ni cuentan); los "incluido en otro item" van a
     un estado propio (no rojos, no pendientes).
     """
-    from services.coeficientes_loader import get_recursos, unidad_item_esperada
+    from services.coeficientes_loader import get_recursos, unidad_item_esperada, contacto_encofrado
     from services.clasificador_llm import candidatos_para, rescatar_candidato
 
     # 1. Filtrado automatico (sin preguntar): separar basura e "incluido en otro item".
@@ -351,6 +360,20 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             resumen['aprendidos'] += 1
 
         recursos = get_recursos(rid, nivel) if (rid and tiene_coef) else []
+        # Fold de encofrado (fuente unica = APU 'encofrado'): en modo bundle la
+        # estructura m3 incluye el encofrado = contacto(m2/m3) x recursos del APU
+        # encofrado. En modo separado NO se folda (lo cobra la linea de encofrado del
+        # pliego, por sus propios m2) -> precio invariante al modelo.
+        if recursos and rid in _ESTRUCTURA_HORMIGON and modelo_encofrado != 'separado':
+            _contacto = contacto_encofrado(rid)
+            if _contacto > 0:
+                _enc = list(recursos)
+                for _er in get_recursos('encofrado', nivel):
+                    _fr = dict(_er)
+                    _fr['clave'] = 'fold_enc_' + str(_er.get('clave') or '')
+                    _fr['coeficiente'] = float(_er.get('coeficiente') or 0) * _contacto
+                    _enc.append(_fr)
+                recursos = _enc
         regla_unidad = unidad_item_esperada(rid) if (rid and tiene_coef) else None
         unidad_ok = _unidad_item_compatible(it.get('unidad'), regla_unidad)
         detalle, costo_unit = (_precios_recursos(recursos, organizacion_id, zona, None, presupuesto, precio_cache)
