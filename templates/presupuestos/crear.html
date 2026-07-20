@@ -95,11 +95,21 @@
                                        placeholder="Ej: Casa Familiar Rodriguez">
                                 <div class="form-text">Nombre descriptivo del proyecto</div>
                             </div>
+                        </div>
+
+                        <!-- Datos tecnicos (opcional) - colapsados. No los usa el pipeline IA;
+                             solo la Calculadora IA por m2. -->
+                        <details class="mb-4 p-3 border rounded">
+                            <summary class="fw-bold text-primary" style="cursor:pointer">
+                                <i class="fas fa-sliders-h me-1"></i>Datos técnicos
+                                <span class="text-muted fw-normal">(opcional — solo si vas a usar la Calculadora IA por m²)</span>
+                            </summary>
+                            <div class="row mb-3 mt-3">
                             <div class="col-md-6">
                                 <label for="tipo_obra" class="form-label fw-bold">
-                                    <i class="fas fa-home text-warning"></i> Tipo de Obra *
+                                    <i class="fas fa-home text-warning"></i> Tipo de Obra <span class="text-muted fw-normal">(opcional)</span>
                                 </label>
-                                <select class="form-select form-select-lg" id="tipo_obra" name="tipo_obra" required>
+                                <select class="form-select form-select-lg" id="tipo_obra" name="tipo_obra">
                                     <option value="">Seleccionar tipo...</option>
                                     <optgroup label="Casa">
                                         <option value="casa_1_planta">Casa - 1 Planta</option>
@@ -122,13 +132,12 @@
                             </div>
                             <div class="col-md-6" id="campo_cantidad_pisos" style="display: none;">
                                 <label for="cantidad_pisos" class="form-label fw-bold">
-                                    <i class="fas fa-building text-primary"></i> Cantidad de Pisos *
+                                    <i class="fas fa-layer-group text-primary"></i> Total de niveles (automático)
                                 </label>
-                                <input type="number" class="form-control form-control-lg"
+                                <input type="number" class="form-control form-control-lg bg-light"
                                        id="cantidad_pisos" name="cantidad_pisos"
-                                       min="1" max="50" step="1"
-                                       placeholder="Ej: 4">
-                                <div class="form-text" id="rango_pisos_text">Especifica la cantidad exacta de pisos</div>
+                                       step="1" value="0" readonly tabindex="-1">
+                                <div class="form-text" id="rango_pisos_text">Se calcula solo: subsuelos + PB + pisos tipo + terraza.</div>
                             </div>
                         </div>
 
@@ -156,7 +165,7 @@
                                         </div>
                                         <div class="col-3">
                                             <label class="form-label fw-bold small mb-1">Pisos Tipo</label>
-                                            <input type="number" class="form-control form-control-sm bg-light" id="cant_pisos_tipo" min="0" value="0" readonly>
+                                            <input type="number" class="form-control form-control-sm" id="cant_pisos_tipo" min="0" value="0" onchange="generarNivelesDefault()">
                                         </div>
                                         <div class="col-3">
                                             <label class="form-label fw-bold small mb-1">Terraza</label>
@@ -174,9 +183,46 @@
                             </div>
                         </div>
 
-                        <!-- Segunda fila: Ubicación y Tipo de Construcción -->
+                            <div class="row mb-1">
+                                <div class="col-md-6">
+                                    <label for="tipo_construccion" class="form-label fw-bold">
+                                        <i class="fas fa-star text-warning"></i> Tipo de Construcción <span class="text-muted fw-normal">(opcional)</span>
+                                    </label>
+                                    <select class="form-select form-select-lg" id="tipo_construccion" name="tipo_construccion">
+                                        <option value="">Seleccionar nivel...</option>
+                                        <option value="economica">Económica</option>
+                                        <option value="estandar">Estándar</option>
+                                        <option value="premium">Premium</option>
+                                    </select>
+                                    <div class="form-text"><small>
+                                        <span class="badge bg-light text-dark">Económica: 1.0x</span>
+                                        <span class="badge bg-primary">Estándar: 1.3x</span>
+                                        <span class="badge bg-warning text-dark">Premium: 1.8x</span>
+                                    </small></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="superficie_m2" class="form-label fw-bold">
+                                        <i class="fas fa-ruler-combined text-success"></i> Superficie (m²) <span class="text-muted fw-normal">(opcional)</span>
+                                    </label>
+                                    <input type="number" class="form-control form-control-lg" id="superficie_m2" name="superficie_m2" step="0.01" min="1" placeholder="120.50">
+                                    <div class="form-text">Metros cuadrados totales</div>
+                                    {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="aplicar_desperdicio" checked>
+                                        <label class="form-check-label" for="aplicar_desperdicio">
+                                            <i class="fas fa-percent text-warning"></i> Aplicar 10% de desperdicio en materiales
+                                        </label>
+                                    </div>
+                                    {% else %}
+                                    <input type="hidden" id="aplicar_desperdicio" value="true">
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </details>
+
+                        <!-- Segunda fila: Ubicación -->
                         <div class="row mb-4">
-                            <div class="col-md-6">
+                            <div class="col-md-12">
                                 <label for="ubicacion" class="form-label fw-bold">
                                     <i class="fas fa-map-marker-alt text-muted"></i> Ubicación (opcional)
                                 </label>
@@ -202,51 +248,10 @@
                                 <input type="hidden" id="ubicacion_provider" name="ubicacion_provider">
                                 <input type="hidden" id="ubicacion_geocode_status" name="ubicacion_geocode_status">
                             </div>
-                            <div class="col-md-6">
-                                <label for="tipo_construccion" class="form-label fw-bold">
-                                    <i class="fas fa-star text-warning"></i> Tipo de Construcción *
-                                </label>
-                                <select class="form-select form-select-lg" id="tipo_construccion" name="tipo_construccion" required>
-                                    <option value="">Seleccionar nivel...</option>
-                                    <option value="economica">Económica</option>
-                                    <option value="estandar">Estándar</option>
-                                    <option value="premium">Premium</option>
-                                </select>
-                                <div class="form-text">
-                                    <small>
-                                        <span class="badge bg-light text-dark">Económica: 1.0x</span>
-                                        <span class="badge bg-primary">Estándar: 1.3x</span>
-                                        <span class="badge bg-warning text-dark">Premium: 1.8x</span>
-                                    </small>
-                                </div>
-                            </div>
                         </div>
 
-                        <!-- Tercera fila: Superficie y Fechas -->
+                        <!-- Tercera fila: Fechas -->
                         <div class="row mb-4">
-                            <div class="col-md-4">
-                                <label for="superficie_m2" class="form-label fw-bold">
-                                    <i class="fas fa-ruler-combined text-success"></i> Superficie (m²) *
-                                </label>
-                                <input type="number" class="form-control form-control-lg"
-                                       id="superficie_m2" name="superficie_m2"
-                                       step="0.01" min="1" required
-                                       placeholder="120.50">
-                                <div class="form-text">Metros cuadrados totales</div>
-                                {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
-                                <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" id="aplicar_desperdicio" checked>
-                                    <label class="form-check-label" for="aplicar_desperdicio">
-                                        <i class="fas fa-percent text-warning"></i> Aplicar 10% de desperdicio en materiales
-                                    </label>
-                                    <div class="form-text text-muted small">
-                                        <i class="fas fa-info-circle"></i> Suma 10% adicional a las cantidades calculadas para cubrir desperdicios
-                                    </div>
-                                </div>
-                                {% else %}
-                                <input type="hidden" id="aplicar_desperdicio" value="true">
-                                {% endif %}
-                            </div>
                             <div class="col-md-4">
                                 <label for="fecha_inicio" class="form-label fw-bold">
                                     <i class="fas fa-calendar-alt text-info"></i> Fecha Inicio
@@ -674,47 +679,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (tipoObraSelect && campoCantidadPisos) {
         tipoObraSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const minPisos = selectedOption.dataset.minPisos;
-            const maxPisos = selectedOption.dataset.maxPisos;
             const val = this.value;
             const esEdificio = val.startsWith('edificio_');
 
-            if (minPisos && maxPisos) {
-                campoCantidadPisos.style.display = 'block';
-                cantidadPisosInput.min = minPisos;
-                cantidadPisosInput.max = maxPisos;
-                cantidadPisosInput.required = true;
-                const valorMedio = Math.round((parseInt(minPisos) + parseInt(maxPisos)) / 2);
-                cantidadPisosInput.value = valorMedio;
-                cantidadPisosInput.placeholder = `Entre ${minPisos} y ${maxPisos} pisos`;
-                rangoPisosText.textContent = `Rango permitido: ${minPisos} a ${maxPisos} pisos`;
-            } else {
-                campoCantidadPisos.style.display = 'none';
-                cantidadPisosInput.required = false;
-                cantidadPisosInput.value = '';
-            }
+            // El total de niveles es READONLY (se calcula desde la estructura). Ya
+            // no hay rango obligatorio por bucket: se muestra la estructura y listo.
+            campoCantidadPisos.style.display = esEdificio ? 'block' : 'none';
 
-            // Mostrar/ocultar sección de niveles para edificios
             if (seccionEdificioNiveles) {
                 seccionEdificioNiveles.style.display = esEdificio ? 'block' : 'none';
                 if (esEdificio) {
-                    actualizarPisosTipo();
                     generarNivelesDefault();
                 } else {
                     window.nivelesConfig = [];
+                    if (cantidadPisosInput) cantidadPisosInput.value = '';
                     actualizarChipsNiveles();
                 }
             }
         });
-
-        // Cuando cambia cantidad de pisos, recalcular pisos tipo y regenerar niveles
-        if (cantidadPisosInput) {
-            cantidadPisosInput.addEventListener('change', function() {
-                actualizarPisosTipo();
-                generarNivelesDefault();
-            });
-        }
     }
 });
 
@@ -1896,13 +1878,12 @@ document.getElementById('nuevoPresupuestoForm').addEventListener('submit', funct
     e.preventDefault();
 
     const nombre = document.getElementById('nombre_obra').value.trim();
-    const tipo = document.getElementById('tipo_obra').value;
-    const ubicacion = document.getElementById('ubicacion').value.trim();
-    const tipoConst = document.getElementById('tipo_construccion').value;
-    const superficie = document.getElementById('superficie_m2').value;
 
-    if (!nombre || !tipo || !ubicacion || !tipoConst || !superficie) {
-        alert('Por favor, completa todos los campos obligatorios marcados con *');
+    // Datos tecnicos (tipo de obra, construccion, superficie, ubicacion) son
+    // OPCIONALES: no los usa el pipeline IA y el server solo exige el numero.
+    // Solo pedimos el nombre de la obra para poder identificar el presupuesto.
+    if (!nombre) {
+        alert('Poné al menos el nombre de la obra.');
         return;
     }
 
@@ -1952,13 +1933,17 @@ document.getElementById('nuevoPresupuestoForm').addEventListener('submit', funct
 
 window.nivelesConfig = [];
 
+// "Pisos tipo" es ahora un input editable (fuente de verdad). Este helper NO lo
+// pisa: recalcula el TOTAL DE NIVELES (readonly) = subsuelos + PB + pisos tipo +
+// terraza y lo muestra en #cantidad_pisos. Devuelve pisos tipo para armar niveles.
 function actualizarPisosTipo() {
-    const cantPisos = parseInt(document.getElementById('cantidad_pisos').value || '0');
+    const pisosTipo = Math.max(0, parseInt(document.getElementById('cant_pisos_tipo').value || '0'));
     const tienePB = parseInt(document.getElementById('tiene_pb').value || '1');
     const tieneTerraza = parseInt(document.getElementById('tiene_terraza').value || '1');
-    const cantSubsuelos = parseInt(document.getElementById('cant_subsuelos').value || '0');
-    const pisosTipo = Math.max(0, cantPisos - (tienePB ? 1 : 0) - (tieneTerraza ? 1 : 0));
-    document.getElementById('cant_pisos_tipo').value = pisosTipo;
+    const cantSubsuelos = Math.max(0, parseInt(document.getElementById('cant_subsuelos').value || '0'));
+    const totalNiveles = cantSubsuelos + (tienePB ? 1 : 0) + pisosTipo + (tieneTerraza ? 1 : 0);
+    const totalInput = document.getElementById('cantidad_pisos');
+    if (totalInput) totalInput.value = totalNiveles;
     return pisosTipo;
 }
 
