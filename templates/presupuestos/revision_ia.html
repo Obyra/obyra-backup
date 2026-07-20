@@ -40,6 +40,7 @@
       <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Necesitan tu ayuda</div></div></div></div>
   </div>
 
+  <div id="descartesBox" class="mb-3"></div>
   <div id="rojosBox" class="mb-4"></div>
   <div id="calculadosBox" class="mb-4"></div>
 
@@ -148,17 +149,50 @@ function _init(){
   else { _correr(); }
 }
 
+// Una sola linea, colapsable: filas que la IA descarto sola (no son items) + los
+// "incluido en otro item". Sin frenar el flujo, sin pedir permiso.
+const _MOTIVO_DESC={subtotal:'subtotal/total', no_computable:'rubro no computable',
+  dato_obra:'dato de obra', sin_unidad:'sin unidad', sin_descripcion:'sin descripción'};
+function _renderDescartes(descartados, incluidos){
+  const box=document.getElementById('descartesBox');
+  if(!box) return;
+  let h='';
+  if(descartados.length){
+    h+='<div class="small text-muted"><i class="fas fa-filter me-1"></i>'+
+      'Descartamos <strong>'+descartados.length+'</strong> fila'+(descartados.length!=1?'s':'')+' que no son ítems '+
+      '<a data-bs-toggle="collapse" href="#listaDescartes" role="button">(ver cuáles →)</a>'+
+      '<div id="listaDescartes" class="collapse mt-2"><ul class="mb-0 ps-3">';
+    descartados.forEach(x=>{ h+='<li>'+_esc(x.descripcion||'(sin descripción)')+' <span class="text-muted">— '+_esc(_MOTIVO_DESC[x.motivo_descarte]||'no es un ítem')+'</span></li>'; });
+    h+='</ul></div></div>';
+  }
+  if(incluidos.length){
+    h+='<div class="small text-muted mt-1"><i class="fas fa-link me-1"></i>'+
+      '<strong>'+incluidos.length+'</strong> ítem'+(incluidos.length!=1?'s':'')+' incluido'+(incluidos.length!=1?'s':'')+' en otro (no se cotizan) '+
+      '<a data-bs-toggle="collapse" href="#listaIncluidos" role="button">(ver cuáles →)</a>'+
+      '<div id="listaIncluidos" class="collapse mt-2"><ul class="mb-0 ps-3">';
+    incluidos.forEach(x=>{ h+='<li>'+_esc(x.descripcion||'')+'</li>'; });
+    h+='</ul></div></div>';
+  }
+  box.innerHTML=h;
+}
+
 function _render(){
   document.getElementById('progresoBox').classList.add('d-none');
   document.getElementById('resumenBox').classList.remove('d-none');
-  const rojos=_res.filter(x=>x.color==='rojo');
+  // La IA ya descarto la basura (subtotales, rubros no computables, datos de obra)
+  // y marco los "incluido en otro item". Aca solo trabajamos los items reales.
+  const items=_res.filter(x=>(x.estado||'item')==='item');
+  const descartados=_res.filter(x=>x.estado==='descartado');
+  const incluidos=_res.filter(x=>x.estado==='incluido');
+  const rojos=items.filter(x=>x.color==='rojo');
   // 2 categorias: "calculados" = todo lo que tiene precio (verde + amarillo, sin
   // distincion ni accion). El usuario solo actua sobre los rojos.
-  const calculados=_res.filter(x=>x.color!=='rojo');
+  const calculados=items.filter(x=>x.color!=='rojo');
   document.getElementById('cntCalc').textContent=calculados.length;
   document.getElementById('cntRojo').textContent=rojos.length;
-  const total=_res.reduce((a,x)=>a+(x.costo_total||0),0);
+  const total=items.reduce((a,x)=>a+(x.costo_total||0),0);
   document.getElementById('totalPrecio').textContent=_money(total);
+  _renderDescartes(descartados,incluidos);
 
   // Rojos — separo no-APU (honorarios/servicios -> monto global en 1 paso)
   // de los constructivos (se revisan uno a uno).

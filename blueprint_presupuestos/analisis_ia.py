@@ -206,7 +206,8 @@ def revision_ia(id):
 
     filas = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(ItemPresupuesto.id).all()
     items = [{'descripcion': f.descripcion, 'unidad': f.unidad,
-              'cantidad': float(f.cantidad or 0)} for f in filas]
+              'cantidad': float(f.cantidad or 0), 'etapa_nombre': f.etapa_nombre}
+             for f in filas]
 
     recalcular = request.args.get('recalcular') in ('1', 'true', 'yes')
     cache = pres.pipeline_ia_cache if not recalcular else None

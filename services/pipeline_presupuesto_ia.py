@@ -169,24 +169,143 @@ def _unidad_item_compatible(u_item, u_regla):
     return False
 
 
+def _norm_txt(s):
+    import re, unicodedata
+    s = (s or '').lower().strip()
+    s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+    return re.sub(r'\s+', ' ', s)
+
+
+# Frases que marcan un item "incluido en otro" (no se cotiza, no es pendiente/rojo).
+_INCLUIDO_PATS = (
+    'incluido en', 'incluida en', 'incluidos en', 'incluidas en', 'incl. en',
+    'incl en', 'se incluye en', 'incluido item', 'incluido rubro', 'incluido etapa',
+    'forma parte del item', 'forma parte de la', 'ver item',
+)
+
+
+def _es_incluido(descripcion):
+    dn = _norm_txt(descripcion)
+    return bool(dn) and any(p in dn for p in _INCLUIDO_PATS)
+
+
+# Marcadores de rubros/filas que NO son items cotizables (para el descarte automatico).
+_NO_COMPUTABLE = (
+    'no suma', 'no computable', 'no computa', 'valores de referencia',
+    'no cotizar', 'no se cotiza', 'no forma parte', 'solo referencia',
+    'a titulo informativo', 'titulo informativo', 'referencial',
+)
+_DATOS_OBRA = (
+    'plazo de obra', 'plazo:', 'sup. cubierta', 'superficie cubierta',
+    'sup cubierta', 'sup. total', 'superficie total', 'sup. terreno',
+    'superficie terreno', 'fecha de inicio', 'comitente', 'ubicacion de obra',
+)
+
+
+def _motivo_descarte(descripcion, unidad, cantidad, etapa_nombre=None):
+    """Motivo (str) por el que una fila NO es un item cotizable, o None si lo es.
+    Filtra sin preguntar: subtotales/totales, rubros no computables, datos de obra
+    (tablas laterales) y encabezados/filas sin descripcion o sin unidad."""
+    import re
+    d = (descripcion or '').strip()
+    if not d:
+        return 'sin_descripcion'
+    dn = _norm_txt(d)
+    en = _norm_txt(etapa_nombre)
+    u = _norm_unidad(unidad)
+    unidad_real = bool(u) and u not in ('pesos', 'ars', 'usd', 'peso')
+
+    # Rubro / fila marcada como no computable (en la descripcion o en el rubro).
+    if any(k in dn for k in _NO_COMPUTABLE) or any(k in en for k in _NO_COMPUTABLE):
+        return 'no_computable'
+
+    # Fila de subtotal / total (sin unidad de medida real; "Total station u" NO cae).
+    es_total = (re.match(r'^(sub\s*)?total\b', dn) is not None
+                or 'precio total' in dn or 'importe total' in dn
+                or 'monto total' in dn or 'total general' in dn
+                or 'total rubro' in dn or 'total del rubro' in dn
+                or dn.startswith('son pesos'))
+    if es_total and not unidad_real:
+        return 'subtotal'
+
+    # Datos de obra en tabla lateral (plazo, superficie cubierta, comitente...).
+    if any(k in dn for k in _DATOS_OBRA) and not unidad_real:
+        return 'dato_obra'
+
+    # Encabezado / nota: sin unidad y sin cantidad valida.
+    try:
+        cant = float(cantidad or 0)
+    except Exception:
+        cant = 0.0
+    if not unidad_real and cant <= 0:
+        return 'sin_unidad'
+
+    return None
+
+
 def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
                    presupuesto=None, forzar_keyword=False):
     """Corre el pipeline completo sobre una lista de items {descripcion, unidad, cantidad}.
 
-    Orden: aprendizaje por org -> clasificacion LLM -> descomposicion -> pricing -> score.
+    Orden: filtrado automatico de basura -> aprendizaje por org -> clasificacion LLM
+    -> descomposicion -> pricing -> score. Las filas que no son items cotizables se
+    descartan solas (no se clasifican ni cuentan); los "incluido en otro item" van a
+    un estado propio (no rojos, no pendientes).
     """
     from services.coeficientes_loader import get_recursos, unidad_item_esperada
     from services.clasificador_llm import candidatos_para
 
-    clasifs = _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword)
+    # 1. Filtrado automatico (sin preguntar): separar basura e "incluido en otro item".
+    estados = []  # por item: ('item'|'descartado'|'incluido', motivo|None)
+    for it in items:
+        if _es_incluido(it.get('descripcion')):
+            estados.append(('incluido', None))
+        else:
+            motivo = _motivo_descarte(it.get('descripcion'), it.get('unidad'),
+                                      it.get('cantidad'), it.get('etapa_nombre'))
+            estados.append(('descartado', motivo) if motivo else ('item', None))
+
+    # 2. Clasificar SOLO los items reales (no gastar LLM en la basura).
+    idx_reales = [i for i, e in enumerate(estados) if e[0] == 'item']
+    items_reales = [items[i] for i in idx_reales]
+    clasifs_reales = (_clasificar_con_aprendizaje(items_reales, organizacion_id, forzar_keyword)
+                      if items_reales else [])
+    clasif_idx = {i: clasifs_reales[k] for k, i in enumerate(idx_reales)}
 
     precio_cache = {}  # (nombre, unidad, tipo) -> info (perf: dedup de recursos)
     salida = []
     resumen = {'verde': 0, 'amarillo': 0, 'rojo': 0, 'total': len(items),
-               'fuente_clasificacion': 'aprendido', 'items_estimados': 0, 'aprendidos': 0,
-               'rojos_no_apu': 0, 'rojos_constructivo': 0}
+               'reales': len(items_reales), 'fuente_clasificacion': 'aprendido',
+               'items_estimados': 0, 'aprendidos': 0,
+               'rojos_no_apu': 0, 'rojos_constructivo': 0,
+               'descartados': 0, 'incluidos': 0, 'descartados_detalle': []}
     hubo_llm = False
-    for it, cl in zip(items, clasifs):
+    for i, it in enumerate(items):
+        estado = estados[i][0]
+        try:
+            _cant = Decimal(str(it.get('cantidad') or 0))
+        except Exception:
+            _cant = Decimal('0')
+
+        # Basura / "incluido en otro item": fila minima, no se clasifica ni cuenta
+        # en verde/amarillo/rojo ni en el total.
+        if estado != 'item':
+            if estado == 'descartado':
+                resumen['descartados'] += 1
+                resumen['descartados_detalle'].append({
+                    'descripcion': it.get('descripcion'), 'unidad': it.get('unidad'),
+                    'cantidad': float(_cant), 'motivo': estados[i][1]})
+            else:
+                resumen['incluidos'] += 1
+            salida.append({
+                'descripcion': it.get('descripcion'), 'unidad': it.get('unidad'),
+                'cantidad': float(_cant), 'estado': estado, 'color': estado,
+                'motivo_descarte': estados[i][1],
+                'costo_unitario': 0.0, 'precio_unitario': 0.0, 'costo_total': 0.0,
+            })
+            continue
+
+        cl = clasif_idx[i]
         rid = cl['regla_id']
         conf = cl['confianza']
         tiene_coef = cl['tiene_coeficientes']
@@ -231,6 +350,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'descripcion': it.get('descripcion'),
             'unidad': it.get('unidad'),
             'cantidad': float(cantidad),
+            'estado': 'item',
             'regla_id': rid,
             'confianza': round(conf, 2),
             'fuente_clasificacion': fuente,
@@ -262,7 +382,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     elif resumen['aprendidos'] < resumen['total']:
         resumen['fuente_clasificacion'] = 'keyword'
 
-    tot = resumen['total'] or 1
+    tot = resumen['reales'] or 1  # pcts sobre items reales (sin la basura descartada)
     resumen['pct_verde'] = round(100 * resumen['verde'] / tot, 1)
     resumen['pct_amarillo'] = round(100 * resumen['amarillo'] / tot, 1)
     resumen['pct_rojo'] = round(100 * resumen['rojo'] / tot, 1)
