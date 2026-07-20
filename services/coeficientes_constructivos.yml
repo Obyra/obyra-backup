@@ -293,12 +293,12 @@ reglas:
         tipo: mano_obra
         nombre: 'Oficial albañil'
         unidad: jornal
-        coeficiente: 0.40
+        coeficiente: 0.1625   # 2026-07-20: 2.6 hh/m2 (era 6.4). Escala x espesor vs hueco12.
       - clave: mo_ayudante_mh18
         tipo: mano_obra
         nombre: 'Ayudante albañil'
         unidad: jornal
-        coeficiente: 0.40
+        coeficiente: 0.1625
 
   # ===========================================================================
   # Revoques
@@ -388,8 +388,8 @@ reglas:
     recursos:
       - {clave: ladrillo_hueco_8, tipo: material, nombre: 'Ladrillo hueco 8x18x33', unidad: u, coeficiente: 16}
       - {clave: mortero_mh8, tipo: material, nombre: 'Mortero asentamiento 1:1/4:4', unidad: m3, coeficiente: 0.016}
-      - {clave: mo_oficial_mh8, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.30}
-      - {clave: mo_ayudante_mh8, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.30}
+      - {clave: mo_oficial_mh8, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.125}   # 2026-07-20: 2.0 hh/m2 (era 4.8)
+      - {clave: mo_ayudante_mh8, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.125}
 
   mamposteria_ladrillo_hueco_4:
     descripcion: 'Mamposteria ladrillo hueco 4 cm (panderete)'
@@ -398,8 +398,8 @@ reglas:
     recursos:
       - {clave: ladrillo_hueco_4, tipo: material, nombre: 'Ladrillo hueco 4x18x33', unidad: u, coeficiente: 16}
       - {clave: mortero_mh4, tipo: material, nombre: 'Mortero asentamiento 1:1/4:4', unidad: m3, coeficiente: 0.010}
-      - {clave: mo_oficial_mh4, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.25}
-      - {clave: mo_ayudante_mh4, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.25}
+      - {clave: mo_oficial_mh4, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.1125}   # 2026-07-20: 1.8 hh/m2 (era 4.0)
+      - {clave: mo_ayudante_mh4, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.1125}
 
   mamposteria_ladrillo_comun:
     descripcion: 'Mamposteria ladrillo comun 12 cm'

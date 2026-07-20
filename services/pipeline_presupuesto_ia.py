@@ -253,8 +253,21 @@ def _motivo_descarte(descripcion, unidad, cantidad, etapa_nombre=None):
     return None
 
 
+def _pliego_tiene_encofrado(items):
+    """True si el pliego lista el encofrado como item PROPIO (por m2/ml). Es una
+    decision a nivel PLIEGO (los pliegos son internamente consistentes), autodetectada
+    y sin que el usuario declare nada: si aparece cualquier linea "encofrado ..." por
+    superficie -> modelo SEPARADO (hay que des-bundlear el encofrado de la estructura
+    m3 para no cobrarlo dos veces). Si no hay ninguna -> se mantiene el bundle."""
+    for it in items:
+        d = _norm_txt(it.get('descripcion'))
+        if 'encofrado' in d and _norm_unidad(it.get('unidad')) in ('m2', 'ml', 'm'):
+            return True
+    return False
+
+
 def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
-                   presupuesto=None, forzar_keyword=False):
+                   presupuesto=None, forzar_keyword=False, modelo_encofrado='bundle'):
     """Corre el pipeline completo sobre una lista de items {descripcion, unidad, cantidad}.
 
     Orden: filtrado automatico de basura -> aprendizaje por org -> clasificacion LLM
@@ -288,7 +301,8 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
                'reales': len(items_reales), 'fuente_clasificacion': 'aprendido',
                'items_estimados': 0, 'aprendidos': 0, 'auto_aplicados': 0,
                'rojos_no_apu': 0, 'rojos_constructivo': 0,
-               'descartados': 0, 'incluidos': 0, 'descartados_detalle': []}
+               'descartados': 0, 'incluidos': 0, 'descartados_detalle': [],
+               'modelo_encofrado': modelo_encofrado}
     hubo_llm = False
     for i, it in enumerate(items):
         estado = estados[i][0]
