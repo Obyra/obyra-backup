@@ -1873,6 +1873,21 @@ def run_runtime_migrations(db, app):
             print(f"[WARN] presupuestos.{col}: {e}")
     print("[OK] Migracion runtime: cache pipeline IA en presupuestos")
 
+    # 2026-07-20: corregir precio del acero (bug: barra de 12m cargada como $/kg,
+    # $10.495 -> ~$2.200/kg) y seedear los hierros/malla que las APU de estructura
+    # referencian pero no estaban (hacian fuzzy match ruidoso contra el 8mm).
+    # Global (org NULL), idempotente. La fuente de verdad es scripts/seed_materiales_estimados.py.
+    try:
+        from scripts.seed_materiales_estimados import ACERO_MATERIALES, _upsert
+        for _desc, _uni, _precio in ACERO_MATERIALES:
+            _upsert(db, _desc, _uni, _precio, 'ARS', 'estimado',
+                    'Acero estimado (mercado AR). Parametro ACERO_KG. Reemplazar con lista real.')
+        db.session.commit()
+        print(f"[OK] Acero: precio corregido + {len(ACERO_MATERIALES)} hierros/malla (global)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Seed acero corregido skipped: {e}")
+
     # =====================================================
     # 2026-05-03: Capa legal Fase A - LegalDocument + UserConsent
     # `db.create_all()` (Railway) crea las tablas via modelo, pero hacemos
