@@ -127,3 +127,15 @@ def unidad_item_esperada(regla_id: str) -> Optional[str]:
     data = _cargar_yaml()
     regla = (data.get('reglas') or {}).get(regla_id) or {}
     return regla.get('unidad_item')
+
+
+def contacto_encofrado(regla_id: str) -> float:
+    """m2 de contacto de encofrado por m3 de hormigon, para reglas de estructura.
+    Fuente unica del fold de encofrado: en modo 'bundle', bundled = de-bundled +
+    contacto x (APU 'encofrado'). 0 si la regla no lleva encofrado (ej. zapata)."""
+    data = _cargar_yaml()
+    regla = (data.get('reglas') or {}).get(regla_id) or {}
+    try:
+        return float(regla.get('encofrado_contacto_m2_m3') or 0)
+    except (TypeError, ValueError):
+        return 0.0
