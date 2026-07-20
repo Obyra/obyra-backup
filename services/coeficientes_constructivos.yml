@@ -268,12 +268,12 @@ reglas:
         tipo: mano_obra
         nombre: 'Oficial albañil'
         unidad: jornal
-        coeficiente: 0.35
+        coeficiente: 0.15   # 2026-07-20: rendimiento validado Brenda 2.4 hh/m2 (era 5.6)
       - clave: mo_ayudante_mh12
         tipo: mano_obra
         nombre: 'Ayudante albañil'
         unidad: jornal
-        coeficiente: 0.35
+        coeficiente: 0.15
 
   mamposteria_ladrillo_hueco_18:
     descripcion: 'Mamposteria ladrillo hueco 18 cm'
@@ -316,12 +316,12 @@ reglas:
         tipo: mano_obra
         nombre: 'Oficial revoquero'
         unidad: jornal
-        coeficiente: 0.20
+        coeficiente: 0.10   # 2026-07-20: validado Brenda 1.6 hh/m2 (era 3.2)
       - clave: mo_ayudante_revoque
         tipo: mano_obra
         nombre: 'Ayudante revoquero'
         unidad: jornal
-        coeficiente: 0.20
+        coeficiente: 0.10
 
   # ===========================================================================
   # Contrapisos
@@ -408,8 +408,8 @@ reglas:
     recursos:
       - {clave: ladrillo_comun, tipo: material, nombre: 'Ladrillo comun 5.5x12.5x25', unidad: u, coeficiente: 50}
       - {clave: mortero_mc, tipo: material, nombre: 'Mortero asentamiento 1:1/4:4', unidad: m3, coeficiente: 0.030}
-      - {clave: mo_oficial_mc, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.40}
-      - {clave: mo_ayudante_mc, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.40}
+      - {clave: mo_oficial_mc, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.20}   # 2026-07-20: validado Brenda 3.2 hh/m2 (era 6.4)
+      - {clave: mo_ayudante_mc, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.20}
 
   tabique_durlock:
     descripcion: 'Tabique durlock 70mm, doble placa por cara'
@@ -458,8 +458,8 @@ reglas:
     origen: 'OBYRA v1 - validado'
     recursos:
       - {clave: mortero_fino_cal, tipo: material, nombre: 'Mortero fino a la cal (cal + arena fina)', unidad: m3, coeficiente: 0.008}
-      - {clave: mo_oficial_fino, tipo: mano_obra, nombre: 'Oficial revocador', unidad: jornal, coeficiente: 0.12}
-      - {clave: mo_ayudante_fino, tipo: mano_obra, nombre: 'Ayudante revocador', unidad: jornal, coeficiente: 0.08}
+      - {clave: mo_oficial_fino, tipo: mano_obra, nombre: 'Oficial revocador', unidad: jornal, coeficiente: 0.075}   # 2026-07-20: validado Brenda 1.0 hh/m2 (era 1.6)
+      - {clave: mo_ayudante_fino, tipo: mano_obra, nombre: 'Ayudante revocador', unidad: jornal, coeficiente: 0.05}
 
   revoque_grueso_fino_exterior:
     descripcion: 'Revoque grueso + fino exterior'
@@ -468,8 +468,8 @@ reglas:
     recursos:
       - {clave: mortero_grueso_ext, tipo: material, nombre: 'Mortero CPV 1:3 (cemento + arena)', unidad: m3, coeficiente: 0.020}
       - {clave: mortero_fino_ext, tipo: material, nombre: 'Mortero fino a la cal (cal + arena fina)', unidad: m3, coeficiente: 0.008}
-      - {clave: mo_oficial_rge, tipo: mano_obra, nombre: 'Oficial revocador', unidad: jornal, coeficiente: 0.28}
-      - {clave: mo_ayudante_rge, tipo: mano_obra, nombre: 'Ayudante revocador', unidad: jornal, coeficiente: 0.22}
+      - {clave: mo_oficial_rge, tipo: mano_obra, nombre: 'Oficial revocador', unidad: jornal, coeficiente: 0.17}   # 2026-07-20: validado Brenda 2.4 hh/m2 (era 4.0)
+      - {clave: mo_ayudante_rge, tipo: mano_obra, nombre: 'Ayudante revocador', unidad: jornal, coeficiente: 0.13}
 
   azotado_hidrofugo:
     descripcion: 'Azotado hidrofugo bajo revestimientos'
