@@ -66,6 +66,9 @@ def pipeline_ia_analizar():
     nivel = (data.get('nivel') or 'estandar').strip().lower()
     zona = (data.get('zona') or 'CABA').strip()
     forzar_keyword = bool(data.get('forzar_keyword'))
+    # Modelo de encofrado del pliego (bundle | separado). Se decide a nivel pliego
+    # sobre TODOS los items (en la ruta revision_ia) y viaja en cada lote.
+    modelo_encofrado = (data.get('modelo_encofrado') or 'bundle').strip().lower()
 
     # Opcional: convertir con el TC de un presupuesto (para materiales en USD)
     presupuesto = None
@@ -76,7 +79,8 @@ def pipeline_ia_analizar():
 
     try:
         r = procesar_items(items, organizacion_id=org_id, nivel=nivel, zona=zona,
-                           presupuesto=presupuesto, forzar_keyword=forzar_keyword)
+                           presupuesto=presupuesto, forzar_keyword=forzar_keyword,
+                           modelo_encofrado=modelo_encofrado)
         return jsonify({'ok': True, **r})
     except Exception as e:
         current_app.logger.exception('Error en pipeline IA de presupuesto')
@@ -216,9 +220,14 @@ def revision_ia(id):
     nivel = (request.args.get('nivel')
              or (cache or {}).get('nivel') or 'estandar').strip().lower()
 
+    # Modelo de encofrado del pliego (autodetectado sobre TODOS los items).
+    from services.pipeline_presupuesto_ia import _pliego_tiene_encofrado
+    modelo_encofrado = 'separado' if _pliego_tiene_encofrado(items) else 'bundle'
+
     return render_template('presupuestos/revision_ia.html',
                            presupuesto=pres, items=items, nivel=nivel,
-                           cache=cache, fecha_calculo=pres.pipeline_ia_fecha)
+                           cache=cache, fecha_calculo=pres.pipeline_ia_fecha,
+                           modelo_encofrado=modelo_encofrado)
 
 
 @presupuestos_bp.route('/<int:id>/pipeline-ia/guardar-cache', methods=['POST'])

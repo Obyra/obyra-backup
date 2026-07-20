@@ -70,6 +70,7 @@
 const ITEMS = {{ items | tojson }};
 const NIVEL = {{ nivel | tojson }};
 const CACHE = {{ cache | tojson }};   // resultado guardado (o null -> recalcular)
+const MODELO_ENC = {{ modelo_encofrado | tojson }};   // bundle | separado (autodetectado)
 const PRES_ID = {{ presupuesto.id | tojson }};
 const FECHA_CALC = {{ (fecha_calculo.strftime('%d/%m/%Y %H:%M') if fecha_calculo else '') | tojson }};
 const BATCH = 25;
@@ -89,7 +90,7 @@ async function _analizarLote(slice){
   const r = await fetch('/presupuestos/pipeline-ia/analizar', {
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':_csrf()},
-    body: JSON.stringify({ items: slice, nivel: NIVEL }),
+    body: JSON.stringify({ items: slice, nivel: NIVEL, modelo_encofrado: MODELO_ENC }),
   });
   if(!r.ok) throw new Error('HTTP '+r.status);
   const d = await r.json();
