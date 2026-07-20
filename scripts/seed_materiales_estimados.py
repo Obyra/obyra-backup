@@ -20,6 +20,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 FUENTE = 'estimado'
 
+# --- ACERO: parametro unico y facil de cambiar (se reemplaza con lista real) ---
+# BUG CORREGIDO: 'Hierro construccion 8mm' estaba cargado a $10.495/kg, que en
+# realidad es el precio de una BARRA de 12m (~4.74 kg) => barra cargada como $/kg.
+# Correcto a mercado AR ~ago-2026: ~$2.200/kg.
+ACERO_KG = 2200        # $/kg de barra de construccion (cualquier diametro)
+MALLA_Q188_KG = 2600   # malla soldada: acero + premium de fabricacion
+
+# Hierros y malla que las APU de ESTRUCTURA referencian (nombre == YAML). Antes solo
+# estaba el 8mm; los demas caian a fuzzy match ruidoso contra el.
+ACERO_MATERIALES = [
+    ('Hierro construccion 8mm',                      'kg', ACERO_KG),
+    ('Hierro construccion 12mm (longitudinal)',      'kg', ACERO_KG),
+    ('Hierro 6mm para estribos',                     'kg', ACERO_KG),
+    ('Hierro construccion 12-16mm',                  'kg', ACERO_KG),
+    ('Hierro construccion 8-12mm',                   'kg', ACERO_KG),
+    ('Malla soldada Q188',                           'kg', MALLA_Q188_KG),
+]
+
 # (descripcion == nombre YAML, unidad, precio_unitario ARS orientativo ago-2026)
 MATERIALES = [
     ('Ladrillo hueco 8x18x33',                       'u',     450),
@@ -46,7 +64,7 @@ MATERIALES = [
     ('Adhesivo cementicio (cemento cola)',           'kg',    850),
     ('Pastina para juntas',                          'kg',   1600),
     ('Hormigon H21 elaborado',                       'm3', 174000),
-    ('Hierro construccion 8mm',                      'kg',  10495),
+    # Hierros/malla movidos a ACERO_MATERIALES (arriba), con precio parametrizado.
     ('Madera para encofrado',                        'm2',   8500),
     ('Membrana asfaltica 4mm con aluminio',          'm2',  14000),
     ('Imprimacion asfaltica (pintura asfaltica)',    'l',    6500),
@@ -114,7 +132,7 @@ def _upsert(db, desc, unidad, precio, moneda, fuente, nota):
 def seed(db):
     ins = upd = 0
     nota_est = 'Precio orientativo estimado (mercado AR ~ago 2026). Reemplazar con lista real.'
-    for desc, unidad, precio in MATERIALES:
+    for desc, unidad, precio in MATERIALES + ACERO_MATERIALES:
         creado = _upsert(db, desc, unidad, precio, 'ARS', FUENTE, nota_est)
         ins += creado
         upd += (not creado)
@@ -132,7 +150,7 @@ def main():
     from extensions import db
     with _app.app.app_context():
         ins, upd = seed(db)
-        total = len(MATERIALES) + len(MATERIALES_ESPECIALES)
+        total = len(MATERIALES) + len(ACERO_MATERIALES) + len(MATERIALES_ESPECIALES)
         print(f"[OK] materiales estimados: {ins} insertados, {upd} actualizados ({total} total)")
 
 
