@@ -66,6 +66,13 @@ _NO_APU_UNIDADES = {
     'gl', 'global', 'mes', 'meses', 'dia', 'dias', 'jornada',
     'hora', 'horas', 'hs', 'hh', 'semana', 'viaje', 'flete', '%', 'porcentaje',
 }
+# Unidades FISICAS medibles: un item asi es trabajo constructivo (se cotiza por
+# cantidad), NO un honorario/monto global -> nunca va al balde de "monto global"
+# aunque la descripcion tenga un keyword suelto (ej. "aislacion hidrofuga" en m2).
+_UNID_FISICAS = {
+    'm2', 'm3', 'ml', 'm', 'mts', 'mtrs', 'mts2', 'mts3',
+    'kg', 'kilo', 'kilos', 'tn', 'l', 'lt', 'litro', 'litros',
+}
 _NO_APU_KEYWORDS = (
     'honorario', 'personal', 'servicio', 'administracion', 'direccion de obra',
     'direccion tecnica', 'representante tecnico', 'seguro', 'poliza', 'aseguradora',
@@ -82,6 +89,9 @@ def _es_no_apu(descripcion, unidad):
     no trabajo constructivo. Se usa solo para AGRUPAR rojos en revision."""
     import unicodedata
     u = (unidad or '').strip().lower()
+    # Guard: unidad fisica -> trabajo constructivo, NO honorario (no va a monto global).
+    if _norm_unidad(u) in _UNID_FISICAS:
+        return False
     if u in _NO_APU_UNIDADES:
         return True
     d = (descripcion or '').lower()
