@@ -230,6 +230,10 @@ def pdf_cliente(id):
     subtotal = Decimal('0')
     omitidos = 0
     for it in items_cache:
+        # Basura descartada por la IA / items "incluidos en otro": ni se cotizan ni
+        # cuentan como pendientes (no van al pie "no incluye N pendientes").
+        if it.get('estado') in ('descartado', 'incluido'):
+            continue
         total = Decimal(str(it.get('costo_total') or 0))
         if it.get('color') == 'rojo' or total <= 0:
             omitidos += 1
