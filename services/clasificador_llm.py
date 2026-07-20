@@ -201,6 +201,48 @@ def candidatos_para(descripcion, unidad=None, n=3):
     } for _, r in scored[:n]]
 
 
+def rescatar_candidato(descripcion, unidad):
+    """Rescate de rojos 'obvios': si hay un candidato keyword CLARO cuya unidad
+    coincide con la del item y con ventaja neta sobre el #2, lo devolvemos para
+    auto-aplicarlo (en vez de mandar el item a rojo sin razon). (regla_id, conf) o
+    (None, 0.0). Conservador: exige unidad compatible + al menos un match fuerte +
+    ventaja >=2 sobre el segundo + que la regla tenga coeficientes (se pueda pricear)."""
+    from services.base_tecnica_computos import REGLAS_TECNICAS
+    try:
+        from services.coeficientes_loader import tiene_coeficientes
+    except Exception:
+        return None, 0.0
+    t = _norm(descripcion)
+    if not t:
+        return None, 0.0
+    u = _norm(unidad)
+    scored = []
+    for r in REGLAS_TECNICAS:
+        if any(_norm(x) in t for x in r.get('palabras_excluyentes', [])):
+            continue
+        score = 0
+        for kw in r.get('palabras_clave_fuertes', []):
+            if _norm(kw) in t:
+                score += 3
+        for kw in r.get('palabras_clave_medias', []):
+            if _norm(kw) in t:
+                score += 2
+        for kw in r.get('palabras_clave_debiles', []):
+            if _norm(kw) in t:
+                score += 1
+        if score > 0:
+            unit_ok = bool(u) and u in [_norm(x) for x in r.get('unidades_validas', [])]
+            scored.append((score, unit_ok, r))
+    if not scored:
+        return None, 0.0
+    scored.sort(key=lambda x: (-x[0], not x[1]))  # score desc; en empate, la de unidad ok
+    s1, u1, r1 = scored[0]
+    s2 = scored[1][0] if len(scored) > 1 else 0
+    if u1 and s1 >= 3 and (s1 - s2) >= 2 and tiene_coeficientes(r1['id']):
+        return r1['id'], min(0.8, 0.55 + 0.05 * s1)
+    return None, 0.0
+
+
 def _clasificar_keyword_item(desc, unidad):
     """Scoring simple contra REGLAS_TECNICAS: fuerte=3, media=2, debil=1;
     excluyentes descartan la regla. Devuelve (regla_id|None, confianza)."""

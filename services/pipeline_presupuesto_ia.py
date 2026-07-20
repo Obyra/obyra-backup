@@ -253,7 +253,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     un estado propio (no rojos, no pendientes).
     """
     from services.coeficientes_loader import get_recursos, unidad_item_esperada
-    from services.clasificador_llm import candidatos_para
+    from services.clasificador_llm import candidatos_para, rescatar_candidato
 
     # 1. Filtrado automatico (sin preguntar): separar basura e "incluido en otro item".
     estados = []  # por item: ('item'|'descartado'|'incluido', motivo|None)
@@ -276,7 +276,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     salida = []
     resumen = {'verde': 0, 'amarillo': 0, 'rojo': 0, 'total': len(items),
                'reales': len(items_reales), 'fuente_clasificacion': 'aprendido',
-               'items_estimados': 0, 'aprendidos': 0,
+               'items_estimados': 0, 'aprendidos': 0, 'auto_aplicados': 0,
                'rojos_no_apu': 0, 'rojos_constructivo': 0,
                'descartados': 0, 'incluidos': 0, 'descartados_detalle': []}
     hubo_llm = False
@@ -311,6 +311,16 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
         tiene_coef = cl['tiene_coeficientes']
         fuente = cl['fuente']
         tratamiento = cl.get('tratamiento', 'apu')
+
+        # Rescate de rojos "obvios": si no clasifico con confianza pero hay un
+        # candidato CLARO cuya unidad coincide, lo auto-aplicamos -> baja los rojos
+        # sin que el usuario toque nada. (No pisa lo aprendido por la org.)
+        if fuente != 'aprendido' and (not rid or not tiene_coef or conf < UMBRAL_ROJO):
+            r_rid, r_conf = rescatar_candidato(it.get('descripcion'), it.get('unidad'))
+            if r_rid:
+                rid, conf, tiene_coef, fuente = r_rid, r_conf, True, 'auto_candidato'
+                resumen['auto_aplicados'] = resumen.get('auto_aplicados', 0) + 1
+
         if fuente == 'llm':
             hubo_llm = True
         if fuente == 'aprendido':
