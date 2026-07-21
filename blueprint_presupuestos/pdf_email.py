@@ -226,6 +226,10 @@ def pdf_cliente(id):
         flash('Primero calcula el presupuesto con IA.', 'warning')
         return redirect(url_for('presupuestos.calcular_ia', id=id))
 
+    # El PDF al cliente muestra SOLO precio de VENTA (costo + margen). Nunca costo
+    # directo ni el % de margen: el comitente no ve la estructura de costos.
+    from services.margen_comercial import precio_venta
+
     filas = []
     subtotal = Decimal('0')
     omitidos = 0
@@ -234,14 +238,16 @@ def pdf_cliente(id):
         # cuentan como pendientes (no van al pie "no incluye N pendientes").
         if it.get('estado') in ('descartado', 'incluido'):
             continue
-        total = Decimal(str(it.get('costo_total') or 0))
-        if it.get('color') == 'rojo' or total <= 0:
+        costo_total = Decimal(str(it.get('costo_total') or 0))
+        if it.get('color') == 'rojo' or costo_total <= 0:
             omitidos += 1
             continue
-        pu_raw = it.get('precio_unitario')
-        if pu_raw is None:
-            pu_raw = it.get('costo_unitario') or 0
-        pu = Decimal(str(pu_raw))
+        pu_costo = it.get('precio_unitario')
+        if pu_costo is None:
+            pu_costo = it.get('costo_unitario') or 0
+        # Costo directo -> precio de venta (markup sobre el costo).
+        total = precio_venta(costo_total, presupuesto)
+        pu = precio_venta(pu_costo, presupuesto)
         filas.append({
             'descripcion': it.get('descripcion') or '',
             'cantidad': it.get('cantidad') or 0,

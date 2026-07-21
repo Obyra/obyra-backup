@@ -224,10 +224,15 @@ def revision_ia(id):
     from services.pipeline_presupuesto_ia import _pliego_tiene_encofrado
     modelo_encofrado = 'separado' if _pliego_tiene_encofrado(items) else 'bundle'
 
+    # Margen comercial vigente (override > org default > 25%). El front lo usa para
+    # mostrar precio de venta = costo x (1+margen/100), recalculando sin pegar a la IA.
+    from services.margen_comercial import resolver_margen
+    margen = float(resolver_margen(pres))
+
     return render_template('presupuestos/revision_ia.html',
                            presupuesto=pres, items=items, nivel=nivel,
                            cache=cache, fecha_calculo=pres.pipeline_ia_fecha,
-                           modelo_encofrado=modelo_encofrado)
+                           modelo_encofrado=modelo_encofrado, margen=margen)
 
 
 @presupuestos_bp.route('/<int:id>/pipeline-ia/guardar-cache', methods=['POST'])
@@ -258,6 +263,42 @@ def pipeline_ia_guardar_cache(id):
         current_app.logger.exception('Error guardando cache pipeline IA')
         return jsonify({'ok': False, 'error': f'{type(e).__name__}'}), 500
     return jsonify({'ok': True, 'fecha': pres.pipeline_ia_fecha.isoformat()})
+
+
+@presupuestos_bp.route('/<int:id>/margen', methods=['POST'])
+@login_required
+def guardar_margen(id):
+    """Persiste el margen comercial del presupuesto (override). Vacio/null -> NULL,
+    hereda el default de la organizacion. Es presentacion: NO recalcula la IA."""
+    from decimal import Decimal
+    if not _puede_gestionar():
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+    from models.budgets import Presupuesto
+
+    pres = Presupuesto.query.get_or_404(id)
+    if not _verificar_acceso_presupuesto(pres):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+
+    data = request.get_json(silent=True) or {}
+    raw = data.get('margen')
+    if raw in (None, '', 'null'):
+        pres.margen_comercial_override = None
+    else:
+        try:
+            m = Decimal(str(raw))
+        except Exception:
+            return jsonify({'ok': False, 'error': 'margen invalido'}), 400
+        if m < 0 or m > 1000:
+            return jsonify({'ok': False, 'error': 'margen fuera de rango'}), 400
+        pres.margen_comercial_override = m
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error guardando margen')
+        return jsonify({'ok': False, 'error': type(e).__name__}), 500
+    from services.margen_comercial import resolver_margen
+    return jsonify({'ok': True, 'margen': float(resolver_margen(pres))})
 
 
 @presupuestos_bp.route('/<int:id>/analizar-ia', methods=['POST'])

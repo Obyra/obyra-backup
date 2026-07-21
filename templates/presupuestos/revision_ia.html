@@ -11,8 +11,16 @@
       <div class="small mt-1" id="recalcBar"></div>
     </div>
     <div class="text-end">
-      <div class="small text-muted">Total estimado</div>
+      <div class="small text-muted">Precio de venta total</div>
       <div class="h3 mb-0 text-success" id="totalPrecio">—</div>
+      <div class="mt-2 d-flex align-items-center justify-content-end gap-2">
+        <label class="small text-muted mb-0" for="margenInput">Margen</label>
+        <div class="input-group input-group-sm" style="width:110px">
+          <input type="number" class="form-control text-end" id="margenInput" min="0" max="1000" step="1" value="{{ margen|round(0)|int }}">
+          <span class="input-group-text">%</span>
+        </div>
+      </div>
+      <div class="small text-muted mt-1">se agrega sobre el costo <span id="margenMsg" class="ms-1"></span></div>
     </div>
   </div>
 
@@ -74,15 +82,22 @@ const MODELO_ENC = {{ modelo_encofrado | tojson }};   // bundle | separado (auto
 const PRES_ID = {{ presupuesto.id | tojson }};
 const FECHA_CALC = {{ (fecha_calculo.strftime('%d/%m/%Y %H:%M') if fecha_calculo else '') | tojson }};
 const BATCH = 25;
-const _res = [];  // resultados acumulados
+// Margen = markup SOBRE EL COSTO: precio_venta = costo x (1 + MARGEN/100). El cache
+// guarda costo directo; el margen se aplica SOLO en presentacion (front + PDF), asi
+// cambiarlo no obliga a recalcular la IA.
+let MARGEN = {{ margen | tojson }};
+const _res = [];  // resultados acumulados (costo directo puro)
 
 function _csrf(){ const m=document.querySelector('meta[name="csrf-token"]'); return m?m.getAttribute('content'):''; }
 function _money(n){ return '$' + (Number(n)||0).toLocaleString('es-AR',{maximumFractionDigits:0}); }
-function _unit(it){ // precio unitario + unidad, ej "$60.667/m2"
-  const pu = it.precio_unitario!=null ? it.precio_unitario : it.costo_unitario;
-  if(!pu) return '<span class="text-muted">—</span>';
+function _venta(costo){ return (Number(costo)||0) * (1 + MARGEN/100); }
+function _unit(it){ // precio de VENTA unitario (principal) + costo directo chico (referencia)
+  const costoU = it.precio_unitario!=null ? it.precio_unitario : it.costo_unitario;
+  if(!costoU) return '<span class="text-muted">—</span>';
   const u = (it.unidad||'').trim();
-  return _money(pu) + (u ? '<small class="text-muted">/'+_esc(u)+'</small>' : '');
+  const uu = u ? '<small class="text-muted">/'+_esc(u)+'</small>' : '';
+  return '<span class="fw-semibold">'+_money(_venta(costoU))+'</span>'+uu+
+         '<div class="text-muted" style="font-size:.72rem">costo '+_money(costoU)+'</div>';
 }
 function _esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
 
@@ -146,6 +161,8 @@ function _desdeCache(){
 }
 
 function _init(){
+  const mi=document.getElementById('margenInput');
+  if(mi) mi.addEventListener('change', _onMargen);
   if(CACHE && CACHE.items && CACHE.items.length){ _desdeCache(); }
   else { _correr(); }
 }
@@ -191,7 +208,7 @@ function _render(){
   const calculados=items.filter(x=>x.color!=='rojo');
   document.getElementById('cntCalc').textContent=calculados.length;
   document.getElementById('cntRojo').textContent=rojos.length;
-  const total=items.reduce((a,x)=>a+(x.costo_total||0),0);
+  const total=items.reduce((a,x)=>a+_venta(x.costo_total),0);   // precio de venta
   document.getElementById('totalPrecio').textContent=_money(total);
   _renderDescartes(descartados,incluidos);
 
@@ -243,30 +260,55 @@ function _render(){
     rb.innerHTML=h;
   }
 
-  // Ítems calculados (verde + amarillo, sin distincion) — lista final abierta:
-  // ítem + cantidad + precio unit. + total. No requieren accion. El puntito gris
-  // marca precios estimados (sin bloquear nada).
-  const DOT='<span title="Precio estimado — podés ajustarlo si querés" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#6c757d;opacity:.5;margin-left:6px;vertical-align:middle"></span>';
-  const cb=document.getElementById('calculadosBox');
-  if(calculados.length){
-    const est=calculados.filter(x=>x.precio_estimado).length;
-    const totalCalc=calculados.reduce((a,x)=>a+(x.costo_total||0),0);
-    let h='<div class="card"><div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccCalc">';
-    h+='<i class="fas fa-check-circle text-success me-2"></i>Ítems calculados ('+calculados.length+') <small class="text-muted ms-1">— tienen precio, no requieren acción</small>';
-    h+='<span class="float-end fw-bold text-success">'+_money(totalCalc)+' <i class="fas fa-chevron-down ms-2"></i></span></div>';
-    h+='<div id="seccCalc" class="collapse show"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th></tr></thead><tbody>';
-    calculados.forEach(it=>{
-      h+='<tr><td>'+_esc(it.descripcion)+(it.precio_estimado?' '+DOT:'')+'</td>';
-      h+='<td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td><td class="text-end">'+_unit(it)+'</td>';
-      h+='<td class="text-end fw-bold">'+_money(it.costo_total)+'</td></tr>';
-    });
-    h+='</tbody></table></div></div></div>';
-    if(est) h+='<div class="small text-muted mt-2">El puntito '+DOT+' marca precios estimados de mercado. No frenan nada: ajustalos cuando cargues listas de proveedor.</div>';
-    cb.innerHTML=h;
-  }
+  // Ítems calculados: precio de venta (principal) + costo (referencia chica).
+  _pintarCalculados(calculados);
   // Boton PDF cliente: visible cuando hay al menos un item con precio.
   if(calculados.length) document.getElementById('pdfBox').classList.remove('d-none');
   _wireHandlers();
+}
+
+const _DOT_EST='<span title="Precio estimado — podés ajustarlo si querés" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#6c757d;opacity:.5;margin-left:6px;vertical-align:middle"></span>';
+function _pintarCalculados(calculados){
+  const cb=document.getElementById('calculadosBox');
+  if(!cb) return;
+  if(!calculados.length){ cb.innerHTML=''; return; }
+  const est=calculados.filter(x=>x.precio_estimado).length;
+  const totalCalc=calculados.reduce((a,x)=>a+_venta(x.costo_total),0);   // precio de venta
+  let h='<div class="card"><div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccCalc">';
+  h+='<i class="fas fa-check-circle text-success me-2"></i>Ítems calculados ('+calculados.length+') <small class="text-muted ms-1">— tienen precio, no requieren acción</small>';
+  h+='<span class="float-end fw-bold text-success">'+_money(totalCalc)+' <i class="fas fa-chevron-down ms-2"></i></span></div>';
+  h+='<div id="seccCalc" class="collapse show"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th></tr></thead><tbody>';
+  calculados.forEach(it=>{
+    h+='<tr><td>'+_esc(it.descripcion)+(it.precio_estimado?' '+_DOT_EST:'')+'</td>';
+    h+='<td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td><td class="text-end">'+_unit(it)+'</td>';
+    h+='<td class="text-end fw-bold">'+_money(_venta(it.costo_total))+'</td></tr>';   // precio de venta
+  });
+  h+='</tbody></table></div></div></div>';
+  if(est) h+='<div class="small text-muted mt-2">El puntito '+_DOT_EST+' marca precios estimados de mercado. No frenan nada: ajustalos cuando cargues listas de proveedor.</div>';
+  cb.innerHTML=h;
+}
+
+// Al cambiar el margen: recalcula la venta EN EL FRONT (sobre el costo ya cargado),
+// sin pegar a la IA, y persiste el override en el presupuesto.
+function _recalcularVenta(){
+  const items=_res.filter(x=>(x.estado||'item')==='item');
+  const calculados=items.filter(x=>x.color!=='rojo');
+  document.getElementById('totalPrecio').textContent=_money(items.reduce((a,x)=>a+_venta(x.costo_total),0));
+  _pintarCalculados(calculados);
+}
+function _guardarMargen(m){
+  const el=document.getElementById('margenMsg');
+  fetch('/presupuestos/'+PRES_ID+'/margen',{method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':_csrf()},
+    body:JSON.stringify({margen:m})}).then(r=>r.json()).then(d=>{
+      if(el) el.innerHTML=d.ok?'<i class="fas fa-check text-success"></i>':'';
+    }).catch(()=>{ if(el) el.innerHTML=''; });
+}
+function _onMargen(){
+  const v=parseFloat(document.getElementById('margenInput').value);
+  MARGEN=(isNaN(v)||v<0)?0:v;
+  _recalcularVenta();
+  _guardarMargen(MARGEN);
 }
 
 async function _corregir(desc, reglaId, tratamiento){
