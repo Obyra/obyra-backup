@@ -11,7 +11,7 @@ Reusa el servicio determinístico services/analisis_ia_presupuesto.py.
 from __future__ import annotations
 
 from datetime import datetime
-from flask import request, jsonify, current_app, render_template
+from flask import request, jsonify, current_app, render_template, abort
 from flask_login import login_required, current_user
 
 from extensions import db
@@ -299,6 +299,63 @@ def guardar_margen(id):
         return jsonify({'ok': False, 'error': type(e).__name__}), 500
     from services.margen_comercial import resolver_margen
     return jsonify({'ok': True, 'margen': float(resolver_margen(pres))})
+
+
+@presupuestos_bp.route('/<int:id>/diagnostico-montos')
+@login_required
+def diagnostico_montos(id):
+    """Vista INTERNA (solo super admin): Pareto de montos del pipeline_ia_cache.
+    Read-only, fea a proposito. Sirve para ver quE items concentran el costo directo."""
+    if not _es_super_admin():
+        abort(403)
+    from collections import defaultdict
+    from models.budgets import Presupuesto, ItemPresupuesto
+
+    pres = Presupuesto.query.get_or_404(id)
+    cache = pres.pipeline_ia_cache if isinstance(pres.pipeline_ia_cache, dict) else {}
+    items = cache.get('items') or []
+    # etapa_nombre (rubro) por indice: el cache conserva el orden de items_presupuesto.
+    filas_bd = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(ItemPresupuesto.id).all()
+    etapa_por_idx = {i: (f.etapa_nombre or '(sin rubro)') for i, f in enumerate(filas_bd)}
+
+    rows = []
+    for i, it in enumerate(items):
+        rows.append({
+            'descripcion': (it.get('descripcion') or '')[:80],
+            'cantidad': it.get('cantidad') or 0,
+            'unidad': it.get('unidad') or '',
+            'apu': it.get('regla_id') or '—',
+            'color': it.get('color') or '',
+            'estado': it.get('estado') or 'item',
+            'costo_unit': float(it.get('costo_unitario') or 0),
+            'costo_total': float(it.get('costo_total') or 0),
+            'rubro': etapa_por_idx.get(i, '(sin rubro)'),
+        })
+    rows.sort(key=lambda r: r['costo_total'], reverse=True)
+    total = sum(r['costo_total'] for r in rows)
+    tot = total or 1
+    acum = 0.0
+    n50 = n80 = None
+    for k, r in enumerate(rows, start=1):
+        r['pct'] = round(100 * r['costo_total'] / tot, 2)
+        acum += r['costo_total']
+        r['pct_acum'] = round(100 * acum / tot, 2)
+        if n50 is None and acum >= 0.5 * tot:
+            n50 = k
+        if n80 is None and acum >= 0.8 * tot:
+            n80 = k
+
+    rub = defaultdict(float)
+    for r in rows:
+        rub[r['rubro']] += r['costo_total']
+    rubros = sorted(
+        [{'rubro': k, 'total': v, 'pct': round(100 * v / tot, 1)} for k, v in rub.items()],
+        key=lambda x: -x['total'])
+
+    return render_template('presupuestos/diagnostico_montos.html',
+                           presupuesto=pres, rows=rows, total=total, n_items=len(rows),
+                           n50=n50, n80=n80, rubros=rubros,
+                           modelo_encofrado=cache.get('modelo_encofrado'))
 
 
 @presupuestos_bp.route('/<int:id>/analizar-ia', methods=['POST'])
