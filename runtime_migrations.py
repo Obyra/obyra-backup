@@ -3345,6 +3345,17 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Runtime Fase 2.0 costo MO: {e}")
 
+    # 2026-07-21: F.931 depurado a la parte patronal (se sacan los aportes del
+    # trabajador, 18,60% s/bruto). Re-seed de recargos + categorias (global org NULL,
+    # idempotente, clean-replace de lineas). Fuente de verdad: scripts/seed_mano_obra.py.
+    try:
+        from scripts.seed_mano_obra import seed as _seed_mo
+        _seed_mo(db)
+        print("[OK] Recargos MO re-seedeados (F.931 -> parte patronal, sin aportes del trabajador)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Re-seed recargos MO skipped: {e}")
+
     # =====================================================
     # 2026-07-16: Fase 2.5 IA presupuestos - aprendizaje por org.
     #   mapeo_item_aprendido: texto del cliente -> resolucion (regla o manual).

@@ -40,8 +40,10 @@ ACERO_MATERIALES = [
 
 # (descripcion == nombre YAML, unidad, precio_unitario ARS orientativo ago-2026)
 MATERIALES = [
+    ('Ladrillo hueco 12x18x33',                      'u',     520),   # faltaba: caia por fuzzy al hueco 8 (precio errado)
     ('Ladrillo hueco 8x18x33',                       'u',     450),
     ('Ladrillo hueco 4x18x33',                       'u',     380),
+    ('Disco de corte diamantado (amortizacion)',     'u',    9000),   # faltaba: la buña salia sin_precio ($0)
     ('Ladrillo comun 5.5x12.5x25',                   'u',     180),
     ('Mortero asentamiento 1:1/4:4',                 'm3',  95000),
     ('Mortero CPV 1:3 (cemento + arena)',            'm3', 110000),
