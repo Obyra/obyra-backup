@@ -45,8 +45,25 @@ def _lineas(comida_dia, epp_mes, uocra_dia):
          'Sobre hora convenio'),
         ('hh50 (6hh/50hsem)',  'adicional_remunerativo',    'pct_hora_convenio', D('2.27'),      False,
          'Horas al 50%. INACTIVO: la planilla calcula el costo empresa sobre bruto sin hh50. Activar si se incluye OT en la base.'),
-        ('F.931',              'carga_social',              'pct_bruto',         D('58.74'),      True,
-         'Contrib. seg. social 19,48 + aportes 14,69 + contrib. OS 6,58 + aportes OS 3,91 + LRT 14 + seguro vida 0,08'),
+        # F.931 depurado a la parte PATRONAL (2026-07-21). Se QUITAN los aportes del
+        # TRABAJADOR (jubilacion 14,69 + OS 3,91 = 18,60% s/bruto): se descuentan del
+        # bruto del empleado, NO son costo del empleador. Desglose auditable linea x
+        # linea. Las 4 lineas de seg. social suman 19,48% (el patronal ya validado);
+        # OS patronal 6,58; ART 14 (NO se baja); seguro de vida 0,08. Total 40,14%.
+        ('Jubilacion (contrib. patronal SIPA)', 'carga_social', 'pct_bruto', D('12.35'), True,
+         'Contribucion patronal jubilatoria (SIPA, Ley 24.241). Alicuota patronal.'),
+        ('INSSJP (PAMI, contrib. patronal)',    'carga_social', 'pct_bruto', D('1.57'),  True,
+         'Contribucion patronal (Ley 19.032).'),
+        ('Asignaciones Familiares',             'carga_social', 'pct_bruto', D('4.67'),  True,
+         'Contribucion patronal (Ley 24.714).'),
+        ('Fondo Nacional de Empleo',            'carga_social', 'pct_bruto', D('0.89'),  True,
+         'Contribucion patronal (Ley 24.013).'),
+        ('Obra Social (contrib. patronal)',     'carga_social', 'pct_bruto', D('6.58'),  True,
+         'Contribucion patronal a obra social (sin el aporte del trabajador de 3,91%).'),
+        ('ART / LRT (construccion)',            'carga_social', 'pct_bruto', D('14'),    True,
+         'Riesgos del trabajo. Construccion = alicuota mas alta del sistema. NO bajar.'),
+        ('Seguro de vida obligatorio',          'carga_social', 'pct_bruto', D('0.08'),  True,
+         'Decreto 1567/74.'),
         ('Fondo de desempleo', 'carga_social',              'pct_bruto',         D('12'),         True, None),
         ('SAC',                'carga_social',              'pct_bruto',         D('8.33'),       True,
          '1/12 de la remuneracion'),

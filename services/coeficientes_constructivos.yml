@@ -538,8 +538,8 @@ reglas:
       - {clave: hormigon_dintel, tipo: material, nombre: 'Hormigon H21 elaborado', unidad: m3, coeficiente: 0.02}
       - {clave: hierro_dintel, tipo: material, nombre: 'Hierro construccion 8mm', unidad: kg, coeficiente: 3}
       - {clave: encofrado_dintel, tipo: material, nombre: 'Madera para encofrado', unidad: m2, coeficiente: 0.5}
-      - {clave: mo_oficial_dintel, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.20}
-      - {clave: mo_ayudante_dintel, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.20}
+      - {clave: mo_oficial_dintel, tipo: mano_obra, nombre: 'Oficial albañil', unidad: jornal, coeficiente: 0.125}   # 2026-07-21: 2.0 hh/ml (era 0.20 = 3.2 hh/ml, conservador)
+      - {clave: mo_ayudante_dintel, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.125}
 
   umbral_ladrillo:
     descripcion: 'Umbral / antepecho de ladrillo comun'
