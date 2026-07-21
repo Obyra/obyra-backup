@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Diagnóstico de montos - OBYRA{% endblock %}
+{% macro money(n) %}${{ '{:,.0f}'.format((n or 0)|float).replace(',', '.') }}{% endmacro %}
+
+{% block content %}
+<div class="container-fluid py-3" style="max-width: 1200px;">
+  <h4 class="mb-1">Diagnóstico de montos <span class="badge bg-dark">interno · super admin</span></h4>
+  <p class="text-muted small mb-3">
+    {{ presupuesto.numero }} · {{ n_items }} ítems · fuente: <code>pipeline_ia_cache</code> (costo directo, sin margen)
+    {% if modelo_encofrado %}· encofrado: <strong>{{ modelo_encofrado }}</strong>{% endif %}
+  </p>
+
+  <!-- Resumen -->
+  <div class="row g-2 mb-3">
+    <div class="col-md-3"><div class="card"><div class="card-body py-2">
+      <div class="small text-muted">Total costo directo</div>
+      <div class="h5 mb-0">{{ money(total) }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-2">
+      <div class="small text-muted">Ítems que explican el 50%</div>
+      <div class="h5 mb-0">{{ n50 if n50 else '—' }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-2">
+      <div class="small text-muted">Ítems que explican el 80%</div>
+      <div class="h5 mb-0">{{ n80 if n80 else '—' }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-2">
+      <div class="small text-muted">Rubros</div>
+      <div class="h5 mb-0">{{ rubros|length }}</div></div></div></div>
+  </div>
+
+  <!-- Por rubro -->
+  <h6 class="mt-3">Por rubro / capítulo</h6>
+  <div class="table-responsive mb-4">
+    <table class="table table-sm table-bordered">
+      <thead class="table-light"><tr><th>Rubro</th><th class="text-end">Subtotal</th><th class="text-end">%</th></tr></thead>
+      <tbody>
+        {% for g in rubros %}
+        <tr><td>{{ g.rubro }}</td><td class="text-end">{{ money(g.total) }}</td>
+            <td class="text-end">{{ g.pct }}%</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pareto de ítems -->
+  <h6>Ítems por costo total (desc)</h6>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light"><tr>
+        <th>#</th><th>Descripción</th><th class="text-end">Cant.</th><th>Unid.</th>
+        <th>APU</th><th class="text-end">Costo unit.</th><th class="text-end">Costo total</th>
+        <th class="text-end">%</th><th class="text-end">% acum.</th><th>Rubro</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr {% if r.pct_acum <= 50 %}class="table-warning"{% elif r.pct_acum <= 80 %}class="table-light"{% endif %}>
+          <td>{{ loop.index }}</td>
+          <td class="small">{{ r.descripcion }}{% if r.color and r.color != 'verde' and r.color != 'amarillo' %} <span class="badge bg-secondary">{{ r.color }}</span>{% endif %}</td>
+          <td class="text-end">{{ '{:g}'.format(r.cantidad|float) }}</td>
+          <td class="small">{{ r.unidad }}</td>
+          <td class="small"><code>{{ r.apu }}</code></td>
+          <td class="text-end">{{ money(r.costo_unit) }}</td>
+          <td class="text-end fw-bold">{{ money(r.costo_total) }}</td>
+          <td class="text-end">{{ r.pct }}%</td>
+          <td class="text-end">{{ r.pct_acum }}%</td>
+          <td class="small text-muted">{{ r.rubro }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-muted small">Filas resaltadas = las que acumulan hasta el 50% (amarillo) y hasta el 80% del total.</p>
+</div>
+{% endblock %}
