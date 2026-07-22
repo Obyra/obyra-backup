@@ -90,22 +90,8 @@
                             <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}" class="btn btn-info">
                                 <i class="fas fa-envelope me-1"></i>Correo
                             </a>
-                            {% set _primer_archivo_pa = presupuesto.archivos.filter_by(deleted_at=None).first() if presupuesto.archivos else None %}
-                            {% if _primer_archivo_pa %}
-                            <a href="{{ url_for('presupuestos.descargar_archivo_pa', pid=presupuesto.id, aid=_primer_archivo_pa.id) }}"
-                               class="btn btn-outline-secondary"
-                               title="Descargar pliego original. Si hay varios, podés ver todos en el panel 'Archivos de licitación'.">
-                                <i class="fas fa-file-excel me-1"></i>Pliego
-                            </a>
-                            {% elif presupuesto.archivo_pliego_path %}
-                            {# Fallback legacy (archivo en static/ pre-Fase 6.A) #}
-                            <a href="{{ url_for('static', filename=presupuesto.archivo_pliego_path) }}"
-                               class="btn btn-outline-secondary"
-                               download="{{ presupuesto.archivo_pliego_nombre or 'pliego.xlsx' }}"
-                               title="Descargar Excel original del pliego importado">
-                                <i class="fas fa-file-excel me-1"></i>Pliego
-                            </a>
-                            {% endif %}
+                            {# 2026-07-22: boton 'Pliego' removido del header (duplicado con el
+                               panel 'Archivos de licitación', desde donde se descarga el original). #}
                             {# UX 2026-05-07: 'Analizar con IA' eliminado del header.
                                El acceso unico al analisis avanzado esta como link
                                secundario debajo del CTA principal en la card de
@@ -123,13 +109,11 @@
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado in ['borrador', 'enviado', 'aprobado'] %}
                             <a href="{{ url_for('presupuestos.revision_ia', id=presupuesto.id) }}" class="btn btn-primary"
-                               title="Revisá los ítems con precio calculado y resolvé los que necesitan tu ayuda.">
-                                <i class="fas fa-clipboard-check me-1"></i>Revisar con IA
+                               title="Validá los ítems calculados y resolvé los que necesitan tu input.">
+                                <i class="fas fa-clipboard-check me-1"></i>Validación de presupuesto
                             </a>
-                            <a href="{{ url_for('presupuestos.ejecutivo_vista', id=presupuesto.id) }}" class="btn btn-outline-secondary"
-                               title="Vista avanzada: desglose técnico (APU) con materiales y mano de obra por ítem.">
-                                <i class="fas fa-calculator me-1"></i>Detalle ejecutivo <small class="text-muted">(avanzado)</small>
-                            </a>
+                            {# 2026-07-22: 'Detalle ejecutivo' removido del header. Codigo preservado
+                               en la rama feature/detalle-ejecutivo-v2 (la ruta ejecutivo_vista sigue viva). #}
                             {% endif %}
                             {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] and presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
                             <button type="button" class="btn btn-primary" onclick="confirmarComoObra({{ presupuesto.id }})">
