@@ -107,11 +107,33 @@ function _money(n){ return '$' + (Number(n)||0).toLocaleString('es-AR',{maximumF
 function _venta(costo){ return (Number(costo)||0) * (1 + MARGEN/100); }
 function _unit(it){ // precio de VENTA unitario (principal) + costo directo chico (referencia)
   const costoU = it.precio_unitario!=null ? it.precio_unitario : it.costo_unitario;
-  if(!costoU) return '<span class="text-muted">—</span>';
+  if(!costoU) return '<span class="text-muted">—</span>'+_lapiz(it);
   const u = (it.unidad||'').trim();
   const uu = u ? '<small class="text-muted">/'+_esc(u)+'</small>' : '';
-  return '<span class="fw-semibold">'+_money(_venta(costoU))+'</span>'+uu+
-         '<div class="text-muted" style="font-size:.72rem">costo '+_money(costoU)+'</div>';
+  return '<span class="fw-semibold">'+_money(_venta(costoU))+'</span>'+uu+_lapiz(it)+
+         '<div class="text-muted" style="font-size:.72rem">costo '+_money(costoU)+'</div>'+
+         _fuenteBadge(it);
+}
+// Lapiz para editar el costo unitario a mano (queda confirmado por el usuario -> crowdsource).
+function _lapiz(it){
+  return ' <a href="#" class="edit-precio text-muted" data-desc="'+_esc(it.descripcion)+'" title="Editar el costo unitario (queda confirmado por vos y mejora los precios futuros)"><i class="fas fa-pen" style="font-size:.68rem"></i></a>';
+}
+// FASE 1 (PASO 5) - badge chico con la fuente del precio: real confirmado / lista / estimado.
+function _fuenteBadge(it){
+  const f = it.fuente_precio || (it.precio_estimado ? 'estimado' : 'lista');
+  let txt, cls;
+  if(f==='confirmado'){
+    const n = it.precio_confirmaciones||0;
+    txt = 'Fuente: precios reales ('+n+' cliente'+(n!=1?'s':'')+', últimos 30 días)';
+    cls = 'bg-success text-white';
+  } else if(f==='lista'){
+    txt = 'Fuente: lista de proveedor';
+    cls = 'bg-secondary text-light';
+  } else {
+    txt = 'Fuente: precio estimado';
+    cls = 'bg-secondary text-light';
+  }
+  return '<div class="mt-1"><span class="badge '+cls+'" style="font-size:.6rem;font-weight:500">'+txt+'</span></div>';
 }
 function _esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
 
@@ -324,15 +346,37 @@ function _pintarCalculados(calculados){
   cb.innerHTML=h;
   // Editable: al tocar un "Auto", queda confirmado por el usuario -> auto_clasificado=false.
   cb.querySelectorAll('.auto-badge').forEach(b=>b.addEventListener('click', _confirmarAuto));
+  // Lapiz: editar el costo unitario a mano (FASE 1 - precio confirmado por el cliente).
+  cb.querySelectorAll('.edit-precio').forEach(a=>a.addEventListener('click', function(e){
+    e.preventDefault(); _editarPrecio(this.getAttribute('data-desc'));
+  }));
 }
 
 async function _confirmarAuto(){
   const desc=this.getAttribute('data-desc'), regla=this.getAttribute('data-regla');
   this.style.pointerEvents='none';
   try{ await _corregir(desc, regla, 'apu'); }catch(e){/* igual marcamos confirmado */}
-  _res.forEach(x=>{ if(x.descripcion===desc){ x.auto_clasificado=false; x.completado_candidato=false; } });
+  // confirmado_por_usuario -> el precio se registra como precio real del cliente (crowdsource).
+  _res.forEach(x=>{ if(x.descripcion===desc){ x.auto_clasificado=false; x.completado_candidato=false; x.confirmado_por_usuario=true; } });
   _guardarCache();
   this.className='badge bg-success'; this.innerHTML='<i class="fas fa-check me-1"></i>Confirmado';
+}
+
+// FASE 1 (PASO 2) - editar el costo unitario a mano. Queda confirmado por el usuario:
+// se registra en presupuesto_precio_confirmado y alimenta el promedio para futuros
+// presupuestos. Se edita el COSTO directo (sin margen); la venta se recalcula sola.
+async function _editarPrecio(desc){
+  const it=_res.find(x=>x.descripcion===desc); if(!it) return;
+  const actual = it.precio_unitario!=null ? it.precio_unitario : (it.costo_unitario||0);
+  const raw = prompt('Costo unitario SIN margen para:\n'+desc+'\n(unidad: '+(it.unidad||'—')+')', Math.round(actual)||'');
+  if(raw==null) return;  // cancelado
+  const val = Number(String(raw).replace(/[^\d.,-]/g,'').replace(/\./g,'').replace(',','.'));
+  if(!(val>0)){ alert('Ingresá un número mayor a 0.'); return; }
+  it.costo_unitario=val; it.precio_unitario=val;
+  it.costo_total=val*(Number(it.cantidad)||0);
+  it.confirmado_por_usuario=true; it.fuente_precio='confirmado'; it.color='verde';
+  _render();
+  _guardarCache();
 }
 
 // Al cambiar el margen: recalcula la venta EN EL FRONT (sobre el costo ya cargado),

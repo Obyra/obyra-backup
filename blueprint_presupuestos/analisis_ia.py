@@ -262,7 +262,19 @@ def pipeline_ia_guardar_cache(id):
         db.session.rollback()
         current_app.logger.exception('Error guardando cache pipeline IA')
         return jsonify({'ok': False, 'error': f'{type(e).__name__}'}), 500
-    return jsonify({'ok': True, 'fecha': pres.pipeline_ia_fecha.isoformat()})
+
+    # FASE 1 - Precios crowdsourced: registrar los precios que el usuario confirmo/edito
+    # en este presupuesto (uno por material). No critico: si falla, el cache ya se guardo.
+    confirmados = 0
+    try:
+        from services.precio_recurso_service import registrar_precios_confirmados
+        confirmados = registrar_precios_confirmados(pres, items)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('No se pudieron registrar precios confirmados (no critico)')
+
+    return jsonify({'ok': True, 'fecha': pres.pipeline_ia_fecha.isoformat(),
+                    'precios_confirmados': confirmados})
 
 
 @presupuestos_bp.route('/<int:id>/margen', methods=['POST'])

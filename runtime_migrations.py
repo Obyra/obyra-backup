@@ -226,6 +226,42 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         print(f"[WARN] Niveles presupuesto migration skipped: {e}")
 
+    # FASE 1 - Precios crowdsourced: tabla presupuesto_precio_confirmado.
+    # Guarda el precio de cada item CONFIRMADO por un cliente para que el pipeline
+    # promedie por (material, zona) y use precios reales por encima del estimado.
+    try:
+        ppc_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='presupuesto_precio_confirmado') THEN
+                CREATE TABLE presupuesto_precio_confirmado (
+                    id SERIAL PRIMARY KEY,
+                    presupuesto_id INTEGER NOT NULL
+                        REFERENCES presupuestos(id) ON DELETE CASCADE,
+                    material VARCHAR(255) NOT NULL,
+                    precio_unitario NUMERIC(12,2) NOT NULL,
+                    unidad VARCHAR(50),
+                    cantidad NUMERIC(12,4),
+                    fecha TIMESTAMP NOT NULL DEFAULT NOW(),
+                    organizacion_id INTEGER REFERENCES organizaciones(id),
+                    zona VARCHAR(100),
+                    fuente VARCHAR(30) NOT NULL DEFAULT 'confirmado_cliente'
+                );
+                CREATE INDEX ix_ppc_presupuesto_id ON presupuesto_precio_confirmado(presupuesto_id);
+                CREATE INDEX ix_ppc_org_id ON presupuesto_precio_confirmado(organizacion_id);
+                CREATE INDEX ix_ppc_material_zona_fecha
+                    ON presupuesto_precio_confirmado(material, zona, fecha);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(ppc_sql))
+        db.session.commit()
+        print("[OK] presupuesto_precio_confirmado migration applied")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] presupuesto_precio_confirmado migration skipped: {e}")
+
     # Fichadas table + radio_fichada_metros column
     try:
         fichadas_sql = """

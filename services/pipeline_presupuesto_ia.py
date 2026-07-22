@@ -22,6 +22,10 @@ from decimal import Decimal
 UMBRAL_VERDE = 0.85
 UMBRAL_ROJO = 0.5
 
+# FASE 1 - Precios crowdsourced: zona por defecto para el lookup de precios
+# confirmados por clientes (matchea el default de registrar_precios_confirmados).
+_ZONA_CROWD = 'Buenos Aires'
+
 
 def _precios_recursos(recursos, organizacion_id, zona, fecha, presupuesto, cache=None):
     """Precio de cada recurso del APU. Devuelve (detalle, costo_unitario).
@@ -186,6 +190,21 @@ def _norm_txt(s):
     return re.sub(r'\s+', ' ', s)
 
 
+def _norm_material(descripcion):
+    """CLAVE de material estable para crowdsourcing (FASE 1).
+
+    Ademas de _norm_txt (minusculas, sin acentos, espacios colapsados): estandariza
+    superindices (m2/m3) y une numero+unidad para que '12 cm' == '12cm' y
+    'Ladrillo comun 12cm' == 'ladrillo comun 12 cm'. Se aplica IGUAL al guardar y al
+    buscar -> la consistencia importa mas que la precision del parseo.
+    """
+    import re
+    s = _norm_txt(descripcion).replace('²', '2').replace('³', '3')
+    # unir numero + unidad/letra: "12 cm" -> "12cm", "5 kg" -> "5kg"
+    s = re.sub(r'(\d)\s+(?=[a-z])', r'\1', s)
+    return s
+
+
 # Frases que marcan un item "incluido en otro" (no se cotiza, no es pendiente/rojo).
 _INCLUIDO_PATS = (
     'incluido en', 'incluida en', 'incluidos en', 'incluidas en', 'incl. en',
@@ -321,6 +340,8 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     """
     from services.coeficientes_loader import get_recursos, unidad_item_esperada, contacto_encofrado
     from services.clasificador_llm import candidatos_para
+    from services.precio_recurso_service import (
+        obtener_precio_promedio, existe_precio_confirmado)  # FASE 1 crowdsourced
 
     # 1. Filtrado automatico (sin preguntar): separar basura e "incluido en otro item".
     estados = []  # por item: ('item'|'descartado'|'incluido', motivo|None)
@@ -340,6 +361,9 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     clasif_idx = {i: clasifs_reales[k] for k, i in enumerate(idx_reales)}
 
     precio_cache = {}  # (nombre, unidad, tipo) -> info (perf: dedup de recursos)
+    precio_conf_cache = {}  # material_norm -> (prom, n, fecha) crowdsourced (FASE 1)
+    # Perf: 1 sola query por lote. Si no hay confirmaciones, no consultamos por item.
+    hay_confirmados = existe_precio_confirmado(_ZONA_CROWD)
     salida = []
     resumen = {'verde': 0, 'amarillo': 0, 'rojo': 0, 'total': len(items),
                'reales': len(items_reales), 'fuente_clasificacion': 'aprendido',
@@ -431,15 +455,38 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
         detalle, costo_unit = (_precios_recursos(recursos, organizacion_id, zona, None, presupuesto, precio_cache)
                                if recursos else ([], Decimal('0')))
 
+        # FASE 1 - Cascada de fuentes de precio (crowdsourced):
+        #  1) precio REAL confirmado por clientes (promedio ultimos 30 dias) -> alta conf.
+        #  2) composicion APU (buscar_mejor_precio, ya calculado arriba en costo_unit).
+        #  3) seed estimado (marcado en 'precio_estimado').
+        # El precio confirmado es del ITEM (su $/unidad), asi que overridea el costo
+        # del APU: es el precio real que un cliente valido para ese mismo trabajo.
+        _mat = _norm_material(it.get('descripcion'))
+        if not hay_confirmados:
+            _conf = (None, 0, None)
+        else:
+            _conf = precio_conf_cache.get(_mat)
+            if _conf is None:
+                _conf = obtener_precio_promedio(_mat, _ZONA_CROWD)
+                precio_conf_cache[_mat] = _conf
+        _prom, _n_conf, _fecha_conf = _conf
+        precio_confirmado = bool(_prom and _prom > 0)
+        if precio_confirmado:
+            costo_unit = Decimal(str(_prom))
+
         # Guard de unidad: si el item viene en una unidad INCOMPATIBLE con la regla
         # (ej. item en m2 clasificado a una regla por tn/m3), el precio auto no es
         # confiable y produce totales absurdos -> a revision, y NO se cuenta su costo.
-        unidad_incompatible = bool(recursos) and not unidad_ok
+        # No aplica a precios confirmados (son el precio real del item, no del APU).
+        unidad_incompatible = bool(recursos) and not unidad_ok and not precio_confirmado
         if unidad_incompatible:
             costo_unit = Decimal('0')
 
-        # Scoring. Un item aprendido como 'manual' (lump-sum) queda RESUELTO (verde).
-        if fuente == 'aprendido' and tratamiento == 'manual':
+        # Scoring. Un precio confirmado por clientes es ALTA confianza -> verde.
+        # Un item aprendido como 'manual' (lump-sum) tambien queda RESUELTO (verde).
+        if precio_confirmado:
+            color = 'verde'
+        elif fuente == 'aprendido' and tratamiento == 'manual':
             color = 'verde'
         elif unidad_incompatible:
             color = 'rojo'
@@ -447,9 +494,17 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             color = _color(conf, tiene_coef, detalle)
         resumen[color] += 1
 
-        estimado = any(r['estimado'] for r in detalle)
+        estimado = (not precio_confirmado) and any(r['estimado'] for r in detalle)
         if estimado:
             resumen['items_estimados'] += 1
+        # Fuente del precio para la UI (PASO 5): confirmado > lista real > estimado.
+        if precio_confirmado:
+            fuente_precio = 'confirmado'
+            resumen['precio_confirmado'] = resumen.get('precio_confirmado', 0) + 1
+        elif estimado:
+            fuente_precio = 'estimado'
+        else:
+            fuente_precio = 'lista'
         try:
             cantidad = Decimal(str(it.get('cantidad') or 0))
         except Exception:
@@ -471,6 +526,9 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'recursos_total': len(detalle),
             'recursos_sin_precio': sum(1 for r in detalle if r['precio'] <= 0 and not r['requiere_tc']),
             'precio_estimado': estimado,
+            'fuente_precio': fuente_precio,                     # FASE 1: confirmado|lista|estimado
+            'precio_confirmaciones': _n_conf if precio_confirmado else 0,
+            'precio_confirmado_fecha': (_fecha_conf.isoformat() if (precio_confirmado and _fecha_conf) else None),
             'requiere_tc': any(r['requiere_tc'] for r in detalle),
             'unidad_incompatible': unidad_incompatible,
             'unidad_regla': regla_unidad,

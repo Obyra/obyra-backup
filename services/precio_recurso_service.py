@@ -869,3 +869,110 @@ def estimar_precios_presupuesto(presupuesto, *, user_id=None):
         'precio_sugerido_cliente': float(precio_sugerido),
         'cobertura_pct': cobertura_pct,
     }
+
+
+# ============================================================================
+# FASE 1 - Precios crowdsourced de clientes (aprendizaje de OBYRA)
+# ============================================================================
+
+ZONA_DEFAULT = 'Buenos Aires'
+
+
+def obtener_precio_promedio(material, zona=ZONA_DEFAULT, ultimos_dias=30):
+    """Promedio de precio CONFIRMADO por clientes para un material (FASE 1).
+
+    Devuelve (precio_promedio: Decimal|None, cantidad_confirmaciones: int,
+    fecha_mas_reciente: datetime|None). Filtra por material (ya normalizado) exacto,
+    zona, y confirmaciones de los ultimos `ultimos_dias` dias. None si no hay datos.
+    """
+    from sqlalchemy import func
+    from models.budgets import PresupuestoPrecioConfirmado
+
+    mat = (material or '').strip()
+    if not mat:
+        return (None, 0, None)
+    desde = datetime.utcnow() - timedelta(days=ultimos_dias)
+    prom, n, fecha = db.session.query(
+        func.avg(PresupuestoPrecioConfirmado.precio_unitario),
+        func.count(PresupuestoPrecioConfirmado.id),
+        func.max(PresupuestoPrecioConfirmado.fecha),
+    ).filter(
+        PresupuestoPrecioConfirmado.material == mat,
+        PresupuestoPrecioConfirmado.zona == zona,
+        PresupuestoPrecioConfirmado.fecha >= desde,
+        PresupuestoPrecioConfirmado.fuente == 'confirmado_cliente',
+    ).one()
+    if not n or prom is None:
+        return (None, 0, None)
+    return (Decimal(str(prom)), int(n), fecha)
+
+
+def existe_precio_confirmado(zona=ZONA_DEFAULT, ultimos_dias=30):
+    """True si hay AL MENOS una confirmacion vigente para la zona (perf: permite
+    saltear el lookup por item cuando la tabla esta vacia -> evita N+1 en pliegos
+    grandes recien migrados, sin confirmaciones todavia)."""
+    from sqlalchemy import exists
+    from models.budgets import PresupuestoPrecioConfirmado
+
+    desde = datetime.utcnow() - timedelta(days=ultimos_dias)
+    return bool(db.session.query(exists().where(
+        (PresupuestoPrecioConfirmado.zona == zona) &
+        (PresupuestoPrecioConfirmado.fecha >= desde) &
+        (PresupuestoPrecioConfirmado.fuente == 'confirmado_cliente')
+    )).scalar())
+
+
+def registrar_precios_confirmados(presupuesto, items):
+    """Registra los precios que el cliente CONFIRMO en un presupuesto (FASE 1).
+
+    Toma los items del cache del pipeline que el usuario marco como confirmados
+    (flag `confirmado_por_usuario`, seteado al aceptar/editar un precio en la
+    pantalla de validacion) y guarda uno por (presupuesto, material).
+
+    Idempotente: borra las confirmaciones previas de este presupuesto y reinserta,
+    para que re-guardar el cache no infle el conteo de 'confirmaciones' (cada
+    presupuesto cuenta como 1 cliente por material). No guarda si precio<=0 o
+    cantidad<=0. `material` = descripcion del item normalizada (== clave de lookup).
+
+    Devuelve la cantidad de materiales registrados.
+    """
+    from decimal import InvalidOperation
+    from models.budgets import PresupuestoPrecioConfirmado
+    from services.pipeline_presupuesto_ia import _norm_material
+
+    if not presupuesto or not isinstance(items, list):
+        return 0
+    zona = (getattr(presupuesto, 'zona', None) or ZONA_DEFAULT)
+    org_id = getattr(presupuesto, 'organizacion_id', None)
+
+    # Uno por material dentro del presupuesto (el ultimo gana). Solo items que el
+    # usuario confirmo/edito -> senal real de mercado (no el estimado del pipeline).
+    por_material = {}
+    for it in (items or []):
+        if not isinstance(it, dict) or not it.get('confirmado_por_usuario'):
+            continue
+        if (it.get('estado') or 'item') != 'item':
+            continue
+        try:
+            precio = Decimal(str(it.get('precio_unitario') or it.get('costo_unitario') or 0))
+            cant = Decimal(str(it.get('cantidad') or 0))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        if precio <= 0 or cant <= 0:
+            continue
+        mat = _norm_material(it.get('descripcion'))
+        if not mat:
+            continue
+        por_material[mat[:255]] = {
+            'precio': precio, 'cant': cant, 'unidad': (it.get('unidad') or '')[:50],
+        }
+
+    PresupuestoPrecioConfirmado.query.filter_by(
+        presupuesto_id=presupuesto.id, fuente='confirmado_cliente').delete()
+    for mat, d in por_material.items():
+        db.session.add(PresupuestoPrecioConfirmado(
+            presupuesto_id=presupuesto.id, material=mat,
+            precio_unitario=d['precio'], unidad=d['unidad'], cantidad=d['cant'],
+            organizacion_id=org_id, zona=zona, fuente='confirmado_cliente'))
+    db.session.commit()
+    return len(por_material)

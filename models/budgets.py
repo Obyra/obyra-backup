@@ -430,6 +430,37 @@ class ItemPresupuesto(db.Model):
         return float(self.dias) if self.dias is not None else None
 
 
+class PresupuestoPrecioConfirmado(db.Model):
+    """Precios de items CONFIRMADOS por clientes (crowdsourced, FASE 1).
+
+    Cada vez que un usuario acepta/edita el precio de un item en la pantalla de
+    validacion, se registra aca (uno por presupuesto+material). El pipeline luego
+    promedia los precios de los ultimos N dias por (material, zona) y usa ese
+    precio real como fuente de ALTA confianza, por encima del estimado APU/seed.
+
+    `material` es la descripcion del item NORMALIZADA (minusculas, sin acentos,
+    espacios colapsados) para que 'Ladrillo comun 12cm' == 'ladrillo comun 12 cm'.
+    `fuente`: 'confirmado_cliente' (FASE 1) | 'scraping' (FASE 2, aun sin usar).
+    """
+    __tablename__ = 'presupuesto_precio_confirmado'
+    __table_args__ = (
+        db.Index('ix_ppc_material_zona_fecha', 'material', 'zona', 'fecha'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    presupuesto_id = db.Column(
+        db.Integer, db.ForeignKey('presupuestos.id', ondelete='CASCADE'),
+        nullable=False, index=True)
+    material = db.Column(db.String(255), nullable=False)
+    precio_unitario = db.Column(db.Numeric(12, 2), nullable=False)
+    unidad = db.Column(db.String(50))
+    cantidad = db.Column(db.Numeric(12, 4))
+    fecha = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), index=True)
+    zona = db.Column(db.String(100))
+    fuente = db.Column(db.String(30), nullable=False, default='confirmado_cliente')
+
+
 class VariacionCacPendiente(db.Model):
     """Variacion de costos detectada en el Indicador Camarco mensual.
 
