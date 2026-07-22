@@ -38,17 +38,29 @@
     </div>
   </div>
 
-  <!-- Resumen (oculto hasta terminar). 2 categorias: calculados vs necesitan ayuda.
-       Todo lo que tiene precio esta "listo"; el usuario solo actua sobre lo imposible de calcular. -->
-  <div id="resumenBox" class="row g-2 mb-4 d-none">
-    <div class="col-6"><div class="card border-success h-100"><div class="card-body text-center py-3">
+  <!-- Resumen rapido (oculto hasta terminar): 3 categorias. -->
+  <div id="resumenBox" class="row g-2 mb-3 d-none">
+    <div class="col-4"><div class="card border-success h-100"><div class="card-body text-center py-3">
       <div class="h3 mb-0 text-success" id="cntCalc">0</div>
-      <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Ítems calculados</div></div></div></div>
-    <div class="col-6"><div class="card border-danger h-100"><div class="card-body text-center py-3">
+      <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Calculados</div></div></div></div>
+    <div class="col-4"><div class="card border-warning h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-warning" id="cntCand">0</div>
+      <div class="small text-muted"><i class="fas fa-wand-magic-sparkles text-warning me-1"></i>Completados con candidatos</div></div></div></div>
+    <div class="col-4"><div class="card border-danger h-100"><div class="card-body text-center py-3">
       <div class="h3 mb-0 text-danger" id="cntRojo">0</div>
       <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Necesitan tu ayuda</div></div></div></div>
   </div>
 
+  <!-- Fork: descargar directo o revisar antes de enviar -->
+  <div id="quickActions" class="text-center mb-4 d-none">
+    <a href="{{ url_for('presupuestos.pdf_cliente', id=presupuesto.id) }}" class="btn btn-primary btn-lg me-2 mb-2" target="_blank" rel="noopener">
+      <i class="fas fa-file-pdf me-2"></i>Descargar PDF</a>
+    <button type="button" class="btn btn-outline-secondary btn-lg mb-2" id="btnRevisar">
+      <i class="fas fa-pen me-2"></i>Revisar antes de enviar</button>
+  </div>
+
+  <!-- Detalle (oculto hasta "Revisar antes de enviar") -->
+  <div id="detalleBox" class="d-none">
   <div id="descartesBox" class="mb-3"></div>
   <div id="rojosBox" class="mb-4"></div>
   <div id="calculadosBox" class="mb-4"></div>
@@ -57,6 +69,7 @@
     <a href="{{ url_for('presupuestos.pdf_cliente', id=presupuesto.id) }}" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
       <i class="fas fa-file-pdf me-2"></i>Descargar PDF para el cliente</a>
   </div>
+  </div><!-- /detalleBox -->
 </div>
 
 <!-- Modal cargar precio manual -->
@@ -164,6 +177,12 @@ function _desdeCache(){
 function _init(){
   const mi=document.getElementById('margenInput');
   if(mi) mi.addEventListener('change', _onMargen);
+  const br=document.getElementById('btnRevisar');
+  if(br) br.addEventListener('click', function(){
+    document.getElementById('detalleBox').classList.remove('d-none');
+    this.closest('#quickActions').classList.add('d-none');
+    document.getElementById('detalleBox').scrollIntoView({behavior:'smooth'});
+  });
   if(CACHE && CACHE.items && CACHE.items.length){ _desdeCache(); }
   else { _correr(); }
 }
@@ -204,16 +223,23 @@ function _render(){
   const descartados=_res.filter(x=>x.estado==='descartado');
   const incluidos=_res.filter(x=>x.estado==='incluido');
   const rojos=items.filter(x=>x.color==='rojo');
-  // 2 categorias: "calculados" = todo lo que tiene precio (verde + amarillo, sin
-  // distincion ni accion). El usuario solo actua sobre los rojos.
-  const calculados=items.filter(x=>x.color!=='rojo');
-  document.getElementById('cntCalc').textContent=calculados.length;
+  // 3 categorias: calculados (confiable) / completados con candidatos (rescatados,
+  // menor confianza) / necesitan ayuda (rojos). Todos los con precio van a la tabla.
+  const _esRescatado=x=>x.auto_clasificado||x.completado_candidato||x.fuente_clasificacion==='auto_candidato'||x.fuente_clasificacion==='candidato';
+  const calculados=items.filter(x=>x.color!=='rojo');   // detalle: todos los con precio
+  const rescatados=calculados.filter(_esRescatado);
+  const nConf=calculados.length-rescatados.length;
+  document.getElementById('cntCalc').textContent=nConf;
+  document.getElementById('cntCand').textContent=rescatados.length;
   document.getElementById('cntRojo').textContent=rojos.length;
   const _vc=document.getElementById('validacionCopy');
   if(_vc){
-    if(rojos.length) _vc.innerHTML='El presupuesto está listo. <strong>'+calculados.length+'</strong> ítems calculados automáticamente, <strong>'+rojos.length+'</strong> requieren tu input.';
-    else _vc.innerHTML='El presupuesto está listo. <strong>'+calculados.length+'</strong> ítems calculados automáticamente.';
+    let p='El presupuesto está listo. <strong>'+nConf+'</strong> ítems calculados';
+    if(rescatados.length) p+=', <strong>'+rescatados.length+'</strong> completados con candidatos';
+    if(rojos.length) p+=', <strong>'+rojos.length+'</strong> requieren tu input';
+    _vc.innerHTML=p+'.';
   }
+  document.getElementById('quickActions').classList.remove('d-none');
   const total=items.reduce((a,x)=>a+_venta(x.costo_total),0);   // precio de venta
   document.getElementById('totalPrecio').textContent=_money(total);
   _renderDescartes(descartados,incluidos);
@@ -286,7 +312,8 @@ function _pintarCalculados(calculados){
   h+='<div id="seccCalc" class="collapse show"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th></tr></thead><tbody>';
   calculados.forEach(it=>{
     const auto = it.auto_clasificado ? ' <span class="badge bg-info text-dark auto-badge" role="button" data-desc="'+_esc(it.descripcion)+'" data-regla="'+_esc(it.regla_id||'')+'" title="Clasificado automáticamente por la IA — click para confirmar (queda como revisado por vos)"><i class="fas fa-robot me-1"></i>Auto</span>' : '';
-    h+='<tr><td>'+_esc(it.descripcion)+auto+(it.precio_estimado?' '+_DOT_EST:'')+'</td>';
+    const cand = (it.completado_candidato && !it.auto_clasificado) ? ' <span class="badge bg-warning text-dark auto-badge" role="button" data-desc="'+_esc(it.descripcion)+'" data-regla="'+_esc(it.regla_id||'')+'" title="Completado con el candidato más parecido — revisá y confirmá si está bien"><i class="fas fa-wand-magic-sparkles me-1"></i>Candidato</span>' : '';
+    h+='<tr><td>'+_esc(it.descripcion)+auto+cand+(it.precio_estimado?' '+_DOT_EST:'')+'</td>';
     h+='<td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td><td class="text-end">'+_unit(it)+'</td>';
     h+='<td class="text-end fw-bold">'+_money(_venta(it.costo_total))+'</td></tr>';   // precio de venta
   });
@@ -303,7 +330,7 @@ async function _confirmarAuto(){
   const desc=this.getAttribute('data-desc'), regla=this.getAttribute('data-regla');
   this.style.pointerEvents='none';
   try{ await _corregir(desc, regla, 'apu'); }catch(e){/* igual marcamos confirmado */}
-  _res.forEach(x=>{ if(x.descripcion===desc) x.auto_clasificado=false; });
+  _res.forEach(x=>{ if(x.descripcion===desc){ x.auto_clasificado=false; x.completado_candidato=false; } });
   _guardarCache();
   this.className='badge bg-success'; this.innerHTML='<i class="fas fa-check me-1"></i>Confirmado';
 }
