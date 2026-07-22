@@ -1888,6 +1888,28 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] Seed acero corregido skipped: {e}")
 
+    # 2026-07-22: BUG del adhesivo. En prod habia una fila 'Adhesivo cementicio' a
+    # ~$146.834/kg (precio por bolsa/pallet cargado como $/kg, 173x el correcto) que
+    # el fuzzy-match enganchaba en pisos/revestimientos/contrapisos -> inflaba x173.
+    # Se corrige a $850/kg y se seedea el porcelanato (pieza) que faltaba en el APU.
+    try:
+        db.session.execute(db.text(
+            "UPDATE provider_price_list SET precio_unitario = 850 "
+            "WHERE unidad ILIKE 'kg' AND precio_unitario > 10000 "
+            "  AND (descripcion_normalizada ILIKE '%adhesivo%' OR descripcion ILIKE '%adhesivo%');"
+        ))
+        db.session.commit()
+        from scripts.seed_materiales_estimados import _upsert, ADHESIVO_KG, PORCELANATO_M2
+        _upsert(db, 'Adhesivo cementicio (cemento cola)', 'kg', ADHESIVO_KG, 'ARS', 'estimado',
+                'Adhesivo estimado (mercado AR). Parametro ADHESIVO_KG.')
+        _upsert(db, 'Porcelanato (pieza colocada)', 'm2', PORCELANATO_M2, 'ARS', 'estimado',
+                'Porcelanato estimado (mercado AR). Parametro PORCELANATO_M2.')
+        db.session.commit()
+        print("[OK] Adhesivo corregido a $850/kg (filas absurdas) + porcelanato seedeado")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Fix adhesivo/porcelanato skipped: {e}")
+
     # =====================================================
     # 2026-05-03: Capa legal Fase A - LegalDocument + UserConsent
     # `db.create_all()` (Railway) crea las tablas via modelo, pero hacemos

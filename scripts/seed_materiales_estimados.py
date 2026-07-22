@@ -26,6 +26,13 @@ FUENTE = 'estimado'
 # Correcto a mercado AR ~ago-2026: ~$2.200/kg.
 ACERO_KG = 2200        # $/kg de barra de construccion (cualquier diametro)
 MALLA_Q188_KG = 2600   # malla soldada: acero + premium de fabricacion
+# Adhesivo: parametro unico. BUG (2026-07-22): en prod habia una fila a ~$146.834/kg
+# (precio por bolsa/pallet cargado como $/kg, 173x el correcto) que el fuzzy-match
+# enganchaba en pisos/revestimientos/contrapisos -> inflaba x173. Correcto ~$850/kg.
+ADHESIVO_KG = 850
+# Porcelanato gran formato (120x60) colocado, precio/m2. Faltaba en el APU
+# piso_porcelanato (solo tenia adhesivo+pastina+MO). Calibrado para venta ~$120-140k/m2.
+PORCELANATO_M2 = 50000
 
 # Hierros y malla que las APU de ESTRUCTURA referencian (nombre == YAML). Antes solo
 # estaba el 8mm; los demas caian a fuzzy match ruidoso contra el.
@@ -63,7 +70,8 @@ MATERIALES = [
     ('Arena',                                        'm3',  36500),
     ('Poliestireno expandido / perlita',             'm3',  52000),
     ('Piedra partida / canto rodado',                'm3',  42000),
-    ('Adhesivo cementicio (cemento cola)',           'kg',    850),
+    ('Adhesivo cementicio (cemento cola)',           'kg', ADHESIVO_KG),
+    ('Porcelanato (pieza colocada)',                 'm2', PORCELANATO_M2),
     ('Pastina para juntas',                          'kg',   1600),
     ('Hormigon H21 elaborado',                       'm3', 174000),
     # Hierros/malla movidos a ACERO_MATERIALES (arriba), con precio parametrizado.

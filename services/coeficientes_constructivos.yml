@@ -500,10 +500,11 @@ reglas:
       - {clave: mo_ayudante_carp, tipo: mano_obra, nombre: 'Ayudante albañil', unidad: jornal, coeficiente: 0.12}
 
   piso_porcelanato:
-    descripcion: 'Colocacion de porcelanato en piso (sin pieza)'
+    descripcion: 'Colocacion de porcelanato en piso (con pieza)'
     unidad_item: m2
     origen: 'OBYRA v1 - validado'
     recursos:
+      - {clave: porcelanato_pp, tipo: material, nombre: 'Porcelanato (pieza colocada)', unidad: m2, coeficiente: 1.08, notas: '2026-07-22: pieza AGREGADA (antes el APU no la tenia -> subestimaba). x1.08 desperdicio gran formato 120x60.'}
       - {clave: adhesivo_pp, tipo: material, nombre: 'Adhesivo cementicio (cemento cola)', unidad: kg, coeficiente: 5}
       - {clave: pastina_pp, tipo: material, nombre: 'Pastina para juntas', unidad: kg, coeficiente: 0.5}
       - {clave: mo_oficial_pp, tipo: mano_obra, nombre: 'Oficial colocador', unidad: jornal, coeficiente: 0.25}
