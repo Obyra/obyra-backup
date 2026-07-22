@@ -31,8 +31,8 @@ MALLA_Q188_KG = 2600   # malla soldada: acero + premium de fabricacion
 # enganchaba en pisos/revestimientos/contrapisos -> inflaba x173. Correcto ~$850/kg.
 ADHESIVO_KG = 850
 # Porcelanato gran formato (120x60) colocado, precio/m2. Faltaba en el APU
-# piso_porcelanato (solo tenia adhesivo+pastina+MO). Calibrado para venta ~$120-140k/m2.
-PORCELANATO_M2 = 50000
+# piso_porcelanato (solo tenia adhesivo+pastina+MO).
+PORCELANATO_M2 = 40000
 
 # Hierros y malla que las APU de ESTRUCTURA referencian (nombre == YAML). Antes solo
 # estaba el 8mm; los demas caian a fuzzy match ruidoso contra el.
