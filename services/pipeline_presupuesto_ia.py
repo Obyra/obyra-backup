@@ -344,6 +344,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     resumen = {'verde': 0, 'amarillo': 0, 'rojo': 0, 'total': len(items),
                'reales': len(items_reales), 'fuente_clasificacion': 'aprendido',
                'items_estimados': 0, 'aprendidos': 0, 'auto_aplicados': 0,
+               'completados_candidato': 0,
                'rojos_no_apu': 0, 'rojos_constructivo': 0,
                'descartados': 0, 'incluidos': 0, 'descartados_detalle': [],
                'modelo_encofrado': modelo_encofrado}
@@ -380,12 +381,15 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
         fuente = cl['fuente']
         tratamiento = cl.get('tratamiento', 'apu')
         auto_clasificado = False
+        completado_candidato = False
         _cands = None   # candidatos keyword: se computan una vez y se reusan
 
-        # Auto-aplicacion de candidatos OBVIOS: si el item iria a rojo pero el
-        # candidato #1 cumple la regla margen+unidad (unidad identica, score >= 0.75,
-        # gap > 0.15), lo aplicamos solo y lo marcamos auto_clasificado (editable en
-        # revision). No pisa lo aprendido por la org.
+        # Si el item iria a rojo pero hay candidatos, lo completamos en 2 niveles para
+        # que NINGUN item quede sin precio mientras tenga un candidato usable:
+        #  1) AUTO (obvio): unidad identica + score >= 0.75 + gap > 0.15 -> auto_clasificado
+        #     (alta confianza, badge "Auto").
+        #  2) Best-guess: candidato #1 con precio + unidad compatible + score >= 2
+        #     -> completado_candidato (menor confianza, badge "⚠", revisable).
         if fuente != 'aprendido' and (not rid or not tiene_coef or conf < UMBRAL_ROJO):
             _cands = candidatos_para(it.get('descripcion'), it.get('unidad'), n=3)
             a_rid, a_score, a_auto, _a_motivo = clasificar_con_margen(it, _cands)
@@ -393,6 +397,14 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
                 rid, conf, tiene_coef, fuente = a_rid, max(conf, a_score), True, 'auto_candidato'
                 auto_clasificado = True
                 resumen['auto_aplicados'] = resumen.get('auto_aplicados', 0) + 1
+            elif _cands:
+                c1 = _cands[0]
+                if (c1.get('regla_id') and c1.get('tiene_precio')
+                        and (c1.get('score_raw') or 0) >= 2
+                        and _unidad_item_compatible(it.get('unidad'), c1.get('unidad'))):
+                    rid, conf, tiene_coef, fuente = c1['regla_id'], max(conf, 0.55), True, 'candidato'
+                    completado_candidato = True
+                    resumen['completados_candidato'] = resumen.get('completados_candidato', 0) + 1
 
         if fuente == 'llm':
             hubo_llm = True
@@ -463,6 +475,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'unidad_incompatible': unidad_incompatible,
             'unidad_regla': regla_unidad,
             'auto_clasificado': auto_clasificado,
+            'completado_candidato': completado_candidato,
         }
         # Candidatos (para la pantalla de revision) en los que hay que revisar o que
         # se auto-aplicaron (para poder editarlos). Se reusan si ya se computaron.
