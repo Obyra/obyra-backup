@@ -279,13 +279,27 @@ function _pintarCalculados(calculados){
   h+='<span class="float-end fw-bold text-success">'+_money(totalCalc)+' <i class="fas fa-chevron-down ms-2"></i></span></div>';
   h+='<div id="seccCalc" class="collapse show"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th></tr></thead><tbody>';
   calculados.forEach(it=>{
-    h+='<tr><td>'+_esc(it.descripcion)+(it.precio_estimado?' '+_DOT_EST:'')+'</td>';
+    const auto = it.auto_clasificado ? ' <span class="badge bg-info text-dark auto-badge" role="button" data-desc="'+_esc(it.descripcion)+'" data-regla="'+_esc(it.regla_id||'')+'" title="Clasificado automáticamente por la IA — click para confirmar (queda como revisado por vos)"><i class="fas fa-robot me-1"></i>Auto</span>' : '';
+    h+='<tr><td>'+_esc(it.descripcion)+auto+(it.precio_estimado?' '+_DOT_EST:'')+'</td>';
     h+='<td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td><td class="text-end">'+_unit(it)+'</td>';
     h+='<td class="text-end fw-bold">'+_money(_venta(it.costo_total))+'</td></tr>';   // precio de venta
   });
   h+='</tbody></table></div></div></div>';
-  if(est) h+='<div class="small text-muted mt-2">El puntito '+_DOT_EST+' marca precios estimados de mercado. No frenan nada: ajustalos cuando cargues listas de proveedor.</div>';
+  const nAuto=calculados.filter(x=>x.auto_clasificado).length;
+  if(nAuto) h+='<div class="small text-muted mt-2"><span class="badge bg-info text-dark"><i class="fas fa-robot me-1"></i>Auto</span> = '+nAuto+' ítem'+(nAuto!=1?'s':'')+' que la IA clasificó sola (unidad exacta + candidato claro). Click en el badge para confirmarlos.</div>';
+  if(est) h+='<div class="small text-muted mt-1">El puntito '+_DOT_EST+' marca precios estimados de mercado. No frenan nada: ajustalos cuando cargues listas de proveedor.</div>';
   cb.innerHTML=h;
+  // Editable: al tocar un "Auto", queda confirmado por el usuario -> auto_clasificado=false.
+  cb.querySelectorAll('.auto-badge').forEach(b=>b.addEventListener('click', _confirmarAuto));
+}
+
+async function _confirmarAuto(){
+  const desc=this.getAttribute('data-desc'), regla=this.getAttribute('data-regla');
+  this.style.pointerEvents='none';
+  try{ await _corregir(desc, regla, 'apu'); }catch(e){/* igual marcamos confirmado */}
+  _res.forEach(x=>{ if(x.descripcion===desc) x.auto_clasificado=false; });
+  _guardarCache();
+  this.className='badge bg-success'; this.innerHTML='<i class="fas fa-check me-1"></i>Confirmado';
 }
 
 // Al cambiar el margen: recalcula la venta EN EL FRONT (sobre el costo ya cargado),

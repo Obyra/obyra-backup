@@ -198,7 +198,8 @@ def candidatos_para(descripcion, unidad=None, n=3):
         'rubro': r.get('rubro', ''),
         'unidad': r.get('unidad_esperada', ''),
         'tiene_precio': bool(tiene_coeficientes(r['id'])),
-    } for _, r in scored[:n]]
+        'score_raw': sc,   # score keyword crudo (para la regla de auto-aplicacion)
+    } for sc, r in scored[:n]]
 
 
 def rescatar_candidato(descripcion, unidad):

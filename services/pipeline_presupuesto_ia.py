@@ -275,6 +275,41 @@ def _pliego_tiene_encofrado(items):
     return False
 
 
+# Regla de auto-aplicacion de candidatos (margen + unidad). Conservadora a proposito.
+_AUTO_SCORE_MIN = 0.75   # score normalizado del candidato #1
+_AUTO_GAP_MIN = 0.15     # ventaja minima del #1 sobre el #2
+
+
+def _score_norm(raw):
+    """Normaliza el score keyword crudo (fuerte=3, media=2, debil=1) a [0,1].
+    Calibrado para que un match FUERTE (3) = 0.75 (el umbral de auto-aplicacion)."""
+    return min(1.0, (raw or 0) / 4.0)
+
+
+def clasificar_con_margen(item, candidatos):
+    """Decide si auto-aplicar el candidato #1 a un item que iria a rojo. Regla:
+      a) unidad del pliego IDENTICA a la del candidato (sin conversion),
+      b) score(#1) >= 0.75,
+      c) gap(#1 - #2) > 0.15.
+    Devuelve (regla_id, score, auto_clasificado, motivo)."""
+    if not candidatos:
+        return None, 0.0, False, 'sin_candidatos'
+    c1 = candidatos[0]
+    s1 = _score_norm(c1.get('score_raw'))
+    s2 = _score_norm(candidatos[1].get('score_raw')) if len(candidatos) > 1 else 0.0
+    if not c1.get('tiene_precio'):
+        return None, s1, False, 'candidato_sin_apu'
+    u_item = _norm_unidad(item.get('unidad'))
+    u_cand = _norm_unidad(c1.get('unidad'))
+    if not u_item or u_item != u_cand:          # (a) IDENTICA, sin conversion
+        return None, s1, False, 'unidad_distinta'
+    if s1 < _AUTO_SCORE_MIN:                     # (b)
+        return None, s1, False, 'score_bajo'
+    if (s1 - s2) <= _AUTO_GAP_MIN:               # (c)
+        return None, s1, False, 'gap_chico'
+    return c1.get('regla_id'), s1, True, 'auto'
+
+
 def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
                    presupuesto=None, forzar_keyword=False, modelo_encofrado='bundle'):
     """Corre el pipeline completo sobre una lista de items {descripcion, unidad, cantidad}.
@@ -285,7 +320,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     un estado propio (no rojos, no pendientes).
     """
     from services.coeficientes_loader import get_recursos, unidad_item_esperada, contacto_encofrado
-    from services.clasificador_llm import candidatos_para, rescatar_candidato
+    from services.clasificador_llm import candidatos_para
 
     # 1. Filtrado automatico (sin preguntar): separar basura e "incluido en otro item".
     estados = []  # por item: ('item'|'descartado'|'incluido', motivo|None)
@@ -344,14 +379,19 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
         tiene_coef = cl['tiene_coeficientes']
         fuente = cl['fuente']
         tratamiento = cl.get('tratamiento', 'apu')
+        auto_clasificado = False
+        _cands = None   # candidatos keyword: se computan una vez y se reusan
 
-        # Rescate de rojos "obvios": si no clasifico con confianza pero hay un
-        # candidato CLARO cuya unidad coincide, lo auto-aplicamos -> baja los rojos
-        # sin que el usuario toque nada. (No pisa lo aprendido por la org.)
+        # Auto-aplicacion de candidatos OBVIOS: si el item iria a rojo pero el
+        # candidato #1 cumple la regla margen+unidad (unidad identica, score >= 0.75,
+        # gap > 0.15), lo aplicamos solo y lo marcamos auto_clasificado (editable en
+        # revision). No pisa lo aprendido por la org.
         if fuente != 'aprendido' and (not rid or not tiene_coef or conf < UMBRAL_ROJO):
-            r_rid, r_conf = rescatar_candidato(it.get('descripcion'), it.get('unidad'))
-            if r_rid:
-                rid, conf, tiene_coef, fuente = r_rid, r_conf, True, 'auto_candidato'
+            _cands = candidatos_para(it.get('descripcion'), it.get('unidad'), n=3)
+            a_rid, a_score, a_auto, _a_motivo = clasificar_con_margen(it, _cands)
+            if a_auto:
+                rid, conf, tiene_coef, fuente = a_rid, max(conf, a_score), True, 'auto_candidato'
+                auto_clasificado = True
                 resumen['auto_aplicados'] = resumen.get('auto_aplicados', 0) + 1
 
         if fuente == 'llm':
@@ -422,10 +462,13 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'requiere_tc': any(r['requiere_tc'] for r in detalle),
             'unidad_incompatible': unidad_incompatible,
             'unidad_regla': regla_unidad,
+            'auto_clasificado': auto_clasificado,
         }
-        # Candidatos (para la pantalla de revision) solo en los que hay que revisar.
+        # Candidatos (para la pantalla de revision) en los que hay que revisar o que
+        # se auto-aplicaron (para poder editarlos). Se reusan si ya se computaron.
         if color in ('rojo', 'amarillo'):
-            fila['candidatos'] = candidatos_para(it.get('descripcion'), it.get('unidad'), n=3)
+            fila['candidatos'] = _cands if _cands is not None else candidatos_para(
+                it.get('descripcion'), it.get('unidad'), n=3)
         # Agrupacion de rojos: los no-APU (honorarios/servicios) se cargan como
         # monto global en un solo paso; los constructivos se revisan uno a uno.
         if color == 'rojo':
