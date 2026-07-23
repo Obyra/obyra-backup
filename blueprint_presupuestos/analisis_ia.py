@@ -14,7 +14,7 @@ from datetime import datetime
 from flask import request, jsonify, current_app, render_template, abort
 from flask_login import login_required, current_user
 
-from extensions import db
+from extensions import db, csrf
 from services.memberships import get_current_org_id
 from blueprint_presupuestos import presupuestos_bp
 
@@ -275,6 +275,59 @@ def pipeline_ia_guardar_cache(id):
 
     return jsonify({'ok': True, 'fecha': pres.pipeline_ia_fecha.isoformat(),
                     'precios_confirmados': confirmados})
+
+
+@presupuestos_bp.route('/precio-scraping', methods=['POST'])
+@csrf.exempt
+def precio_scraping():
+    """Ingesta de precios scrapeados de listas de proveedores (FASE 2, N8N).
+
+    Acepta UN item o un LOTE (recomendado para catalogos grandes: Abelson son ~19.851
+    productos; de a uno serian 19.851 requests cada 48h):
+        {"material": "...", "precio_unitario": 180.5, "unidad": "un",
+         "proveedor": "Abelson", "zona": "Buenos Aires", "fuente": "scraping"}
+      o {"items": [ {...}, {...} ]}   o directamente  [ {...}, {...} ]
+
+    Auth: header `Authorization: Bearer <token>` (o `X-Scraping-Token`) contra la env
+    var SCRAPING_TOKEN. Es obligatorio: este endpoint escribe en la base de precios
+    que cotiza a TODOS los clientes, asi que abierto seria un vector de sabotaje
+    trivial. Si SCRAPING_TOKEN no esta seteada, el endpoint responde 503 (fail closed).
+
+    `fuente` del body se ignora: aca solo se puede escribir 'scraping'. No se pueden
+    falsificar confirmaciones de cliente por esta via.
+    """
+    import hmac
+    import os
+
+    esperado = os.getenv('SCRAPING_TOKEN') or ''
+    if not esperado:
+        return jsonify({'ok': False, 'error': 'SCRAPING_TOKEN no configurado en el server'}), 503
+    auth = request.headers.get('Authorization') or ''
+    recibido = (auth[7:].strip() if auth[:7].lower() == 'bearer ' else
+                (request.headers.get('X-Scraping-Token') or '').strip())
+    if not recibido or not hmac.compare_digest(recibido, esperado):
+        return jsonify({'ok': False, 'error': 'Token invalido'}), 401
+
+    data = request.get_json(silent=True)
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        items = data.get('items') if isinstance(data.get('items'), list) else [data]
+    else:
+        return jsonify({'ok': False, 'error': 'JSON invalido'}), 400
+    if not items:
+        return jsonify({'ok': False, 'error': 'Sin items'}), 400
+    if len(items) > 2000:
+        return jsonify({'ok': False, 'error': 'Maximo 2000 items por request'}), 413
+
+    from services.precio_recurso_service import registrar_precios_scraping
+    try:
+        res = registrar_precios_scraping(items)
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('Error registrando precios de scraping')
+        return jsonify({'ok': False, 'error': f'{type(e).__name__}'}), 500
+    return jsonify({'ok': True, **res})
 
 
 @presupuestos_bp.route('/<int:id>/margen', methods=['POST'])

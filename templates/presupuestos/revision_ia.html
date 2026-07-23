@@ -118,14 +118,32 @@ function _unit(it){ // precio de VENTA unitario (principal) + costo directo chic
 function _lapiz(it){
   return ' <a href="#" class="edit-precio text-muted" data-desc="'+_esc(it.descripcion)+'" title="Editar el costo unitario (queda confirmado por vos y mejora los precios futuros)"><i class="fas fa-pen" style="font-size:.68rem"></i></a>';
 }
-// FASE 1 (PASO 5) - badge chico con la fuente del precio: real confirmado / lista / estimado.
+// Antigüedad legible de un precio ("hace 2h", "hace 3 días").
+function _hace(iso){
+  if(!iso) return '';
+  const t=Date.parse(iso); if(isNaN(t)) return '';
+  const min=Math.max(0,Math.round((Date.now()-t)/60000));
+  if(min<60) return 'hace '+min+'min';
+  const h=Math.round(min/60);
+  if(h<24) return 'hace '+h+'h';
+  const d=Math.round(h/24);
+  return 'hace '+d+(d===1?' día':' días');
+}
+// Badge chico con la fuente del precio: confirmado por clientes > scraping de
+// proveedor > lista interna > estimado.
 function _fuenteBadge(it){
   const f = it.fuente_precio || (it.precio_estimado ? 'estimado' : 'lista');
+  const cuando = _hace(it.precio_confirmado_fecha);
+  const provs = it.precio_proveedores||[];
   let txt, cls;
   if(f==='confirmado'){
     const n = it.precio_confirmaciones||0;
     txt = 'Fuente: precios reales ('+n+' cliente'+(n!=1?'s':'')+', últimos 30 días)';
     cls = 'bg-success text-white';
+  } else if(f==='scraping'){
+    const quien = provs.length ? provs.join(', ') : 'proveedor';
+    txt = 'Fuente: lista de proveedor ('+quien+(cuando?', '+cuando:'')+')';
+    cls = 'bg-primary text-white';
   } else if(f==='lista'){
     txt = 'Fuente: lista de proveedor';
     cls = 'bg-secondary text-light';

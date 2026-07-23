@@ -341,7 +341,7 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     from services.coeficientes_loader import get_recursos, unidad_item_esperada, contacto_encofrado
     from services.clasificador_llm import candidatos_para
     from services.precio_recurso_service import (
-        obtener_precio_promedio, existe_precio_confirmado)  # FASE 1 crowdsourced
+        obtener_precio_cascada, existe_precio_aprendido)  # FASE 1 + 2 (crowd + scraping)
 
     # 1. Filtrado automatico (sin preguntar): separar basura e "incluido en otro item".
     estados = []  # por item: ('item'|'descartado'|'incluido', motivo|None)
@@ -362,8 +362,8 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
 
     precio_cache = {}  # (nombre, unidad, tipo) -> info (perf: dedup de recursos)
     precio_conf_cache = {}  # material_norm -> (prom, n, fecha) crowdsourced (FASE 1)
-    # Perf: 1 sola query por lote. Si no hay confirmaciones, no consultamos por item.
-    hay_confirmados = existe_precio_confirmado(_ZONA_CROWD)
+    # Perf: 1 sola query por lote. Si no hay precios aprendidos, no consultamos por item.
+    hay_confirmados = existe_precio_aprendido(_ZONA_CROWD)
     salida = []
     resumen = {'verde': 0, 'amarillo': 0, 'rojo': 0, 'total': len(items),
                'reales': len(items_reales), 'fuente_clasificacion': 'aprendido',
@@ -455,21 +455,22 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
         detalle, costo_unit = (_precios_recursos(recursos, organizacion_id, zona, None, presupuesto, precio_cache)
                                if recursos else ([], Decimal('0')))
 
-        # FASE 1 - Cascada de fuentes de precio (crowdsourced):
+        # FASE 1 + 2 - Cascada de fuentes de precio:
         #  1) precio REAL confirmado por clientes (promedio ultimos 30 dias) -> alta conf.
-        #  2) composicion APU (buscar_mejor_precio, ya calculado arriba en costo_unit).
-        #  3) seed estimado (marcado en 'precio_estimado').
-        # El precio confirmado es del ITEM (su $/unidad), asi que overridea el costo
-        # del APU: es el precio real que un cliente valido para ese mismo trabajo.
+        #  2) scraping: lista publicada por un proveedor (FASE 2).
+        #  3) composicion APU (buscar_mejor_precio, ya calculado arriba en costo_unit).
+        #  4) seed estimado (marcado en 'precio_estimado').
+        # El precio aprendido es del ITEM (su $/unidad), asi que overridea el costo del
+        # APU: es el precio real que un cliente valido para ese mismo trabajo.
         _mat = _norm_material(it.get('descripcion'))
         if not hay_confirmados:
-            _conf = (None, 0, None)
+            _conf = (None, 0, None, None, [])
         else:
             _conf = precio_conf_cache.get(_mat)
             if _conf is None:
-                _conf = obtener_precio_promedio(_mat, _ZONA_CROWD)
+                _conf = obtener_precio_cascada(_mat, _ZONA_CROWD)
                 precio_conf_cache[_mat] = _conf
-        _prom, _n_conf, _fecha_conf = _conf
+        _prom, _n_conf, _fecha_conf, _tier, _provs = _conf
         precio_confirmado = bool(_prom and _prom > 0)
         if precio_confirmado:
             costo_unit = Decimal(str(_prom))
@@ -497,10 +498,10 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
         estimado = (not precio_confirmado) and any(r['estimado'] for r in detalle)
         if estimado:
             resumen['items_estimados'] += 1
-        # Fuente del precio para la UI (PASO 5): confirmado > lista real > estimado.
+        # Fuente del precio para la UI: confirmado > scraping > lista real > estimado.
         if precio_confirmado:
-            fuente_precio = 'confirmado'
-            resumen['precio_confirmado'] = resumen.get('precio_confirmado', 0) + 1
+            fuente_precio = _tier or 'confirmado'   # 'confirmado' | 'scraping'
+            resumen['precio_' + fuente_precio] = resumen.get('precio_' + fuente_precio, 0) + 1
         elif estimado:
             fuente_precio = 'estimado'
         else:
@@ -526,8 +527,9 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'recursos_total': len(detalle),
             'recursos_sin_precio': sum(1 for r in detalle if r['precio'] <= 0 and not r['requiere_tc']),
             'precio_estimado': estimado,
-            'fuente_precio': fuente_precio,                     # FASE 1: confirmado|lista|estimado
+            'fuente_precio': fuente_precio,   # confirmado|scraping|lista|estimado
             'precio_confirmaciones': _n_conf if precio_confirmado else 0,
+            'precio_proveedores': (_provs or []) if precio_confirmado else [],
             'precio_confirmado_fecha': (_fecha_conf.isoformat() if (precio_confirmado and _fecha_conf) else None),
             'requiere_tc': any(r['requiere_tc'] for r in detalle),
             'unidad_incompatible': unidad_incompatible,

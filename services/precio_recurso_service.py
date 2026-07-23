@@ -878,12 +878,13 @@ def estimar_precios_presupuesto(presupuesto, *, user_id=None):
 ZONA_DEFAULT = 'Buenos Aires'
 
 
-def obtener_precio_promedio(material, zona=ZONA_DEFAULT, ultimos_dias=30):
-    """Promedio de precio CONFIRMADO por clientes para un material (FASE 1).
+def obtener_precio_promedio(material, zona=ZONA_DEFAULT, ultimos_dias=30,
+                            fuente='confirmado_cliente'):
+    """Promedio de precio aprendido para un material, por fuente (FASE 1 / FASE 2).
 
     Devuelve (precio_promedio: Decimal|None, cantidad_confirmaciones: int,
     fecha_mas_reciente: datetime|None). Filtra por material (ya normalizado) exacto,
-    zona, y confirmaciones de los ultimos `ultimos_dias` dias. None si no hay datos.
+    zona, `fuente` y los ultimos `ultimos_dias` dias. None si no hay datos.
     """
     from sqlalchemy import func
     from models.budgets import PresupuestoPrecioConfirmado
@@ -900,17 +901,51 @@ def obtener_precio_promedio(material, zona=ZONA_DEFAULT, ultimos_dias=30):
         PresupuestoPrecioConfirmado.material == mat,
         PresupuestoPrecioConfirmado.zona == zona,
         PresupuestoPrecioConfirmado.fecha >= desde,
-        PresupuestoPrecioConfirmado.fuente == 'confirmado_cliente',
+        PresupuestoPrecioConfirmado.fuente == fuente,
     ).one()
     if not n or prom is None:
         return (None, 0, None)
     return (Decimal(str(prom)), int(n), fecha)
 
 
-def existe_precio_confirmado(zona=ZONA_DEFAULT, ultimos_dias=30):
-    """True si hay AL MENOS una confirmacion vigente para la zona (perf: permite
-    saltear el lookup por item cuando la tabla esta vacia -> evita N+1 en pliegos
-    grandes recien migrados, sin confirmaciones todavia)."""
+def _proveedores_de(material, zona, ultimos_dias):
+    """Proveedores distintos que publicaron precio para un material (para el badge)."""
+    from models.budgets import PresupuestoPrecioConfirmado
+
+    desde = datetime.utcnow() - timedelta(days=ultimos_dias)
+    rows = db.session.query(PresupuestoPrecioConfirmado.proveedor).filter(
+        PresupuestoPrecioConfirmado.material == material,
+        PresupuestoPrecioConfirmado.zona == zona,
+        PresupuestoPrecioConfirmado.fecha >= desde,
+        PresupuestoPrecioConfirmado.fuente == 'scraping',
+        PresupuestoPrecioConfirmado.proveedor.isnot(None),
+    ).distinct().all()
+    return [r[0] for r in rows if r[0]]
+
+
+def obtener_precio_cascada(material, zona=ZONA_DEFAULT, ultimos_dias=30):
+    """Cascada de precios aprendidos: confirmado_cliente > scraping (FASE 1 + 2).
+
+    NO mezcla los tiers: una confirmacion real de un cliente vale mas que N listas
+    de proveedor, asi que si hay confirmaciones se usan esas y el scraping ni se
+    consulta. Dentro de cada tier promedia los ultimos `ultimos_dias` dias.
+
+    Devuelve (precio: Decimal|None, n: int, fecha: datetime|None,
+              fuente: 'confirmado'|'scraping'|None, proveedores: list[str])
+    """
+    prom, n, fecha = obtener_precio_promedio(material, zona, ultimos_dias, 'confirmado_cliente')
+    if prom is not None:
+        return (prom, n, fecha, 'confirmado', [])
+    prom, n, fecha = obtener_precio_promedio(material, zona, ultimos_dias, 'scraping')
+    if prom is not None:
+        return (prom, n, fecha, 'scraping', _proveedores_de(material, zona, ultimos_dias))
+    return (None, 0, None, None, [])
+
+
+def existe_precio_aprendido(zona=ZONA_DEFAULT, ultimos_dias=30):
+    """True si hay AL MENOS un precio aprendido vigente (cliente O scraping) para la
+    zona. Perf: permite saltear el lookup por item cuando no hay nada -> evita N+1 en
+    pliegos grandes."""
     from sqlalchemy import exists
     from models.budgets import PresupuestoPrecioConfirmado
 
@@ -918,7 +953,7 @@ def existe_precio_confirmado(zona=ZONA_DEFAULT, ultimos_dias=30):
     return bool(db.session.query(exists().where(
         (PresupuestoPrecioConfirmado.zona == zona) &
         (PresupuestoPrecioConfirmado.fecha >= desde) &
-        (PresupuestoPrecioConfirmado.fuente == 'confirmado_cliente')
+        (PresupuestoPrecioConfirmado.fuente.in_(('confirmado_cliente', 'scraping')))
     )).scalar())
 
 
@@ -976,3 +1011,163 @@ def registrar_precios_confirmados(presupuesto, items):
             organizacion_id=org_id, zona=zona, fuente='confirmado_cliente'))
     db.session.commit()
     return len(por_material)
+
+
+# ============================================================================
+# FASE 2 - Scraping de listas de proveedores (N8N -> POST /precio-scraping)
+# ============================================================================
+
+# Unidades aceptadas (canonicas) y sus alias. Todo lo que no mapee se rechaza:
+# una unidad mal detectada es la causa raiz del bug "precio de bolsa como $/kg".
+_UNIDAD_ALIAS = {
+    'u': 'u', 'un': 'u', 'uni': 'u', 'unid': 'u', 'unidad': 'u', 'unidades': 'u',
+    'pza': 'u', 'pieza': 'u', 'piezas': 'u', 'c/u': 'u', 'cu': 'u',
+    'kg': 'kg', 'kgs': 'kg', 'kilo': 'kg', 'kilos': 'kg', 'kilogramo': 'kg',
+    'g': 'g', 'gr': 'g', 'grs': 'g', 'gramo': 'g', 'gramos': 'g',
+    'tn': 'tn', 'ton': 'tn', 'tonelada': 'tn', 'toneladas': 'tn',
+    'm': 'ml', 'ml': 'ml', 'mt': 'ml', 'mts': 'ml', 'metro': 'ml', 'metros': 'ml',
+    'm2': 'm2', 'mt2': 'm2', 'm²': 'm2', 'metro2': 'm2',
+    'm3': 'm3', 'mt3': 'm3', 'm³': 'm3', 'metro3': 'm3',
+    'l': 'l', 'lt': 'l', 'lts': 'l', 'litro': 'l', 'litros': 'l',
+    'bolsa': 'bolsa', 'bolsas': 'bolsa', 'bls': 'bolsa',
+    'caja': 'caja', 'cajas': 'caja', 'rollo': 'rollo', 'rollos': 'rollo',
+    'balde': 'balde', 'baldes': 'balde', 'tambor': 'tambor', 'bidon': 'bidon',
+    'pallet': 'pallet', 'barra': 'barra', 'barras': 'barra', 'chapa': 'chapa',
+    'jgo': 'jgo', 'juego': 'jgo', 'par': 'par',
+    'paquete': 'paquete', 'paq': 'paquete', 'pack': 'paquete',
+}
+
+# Token de "tamano de envase" en la descripcion (ej "50 KG", "X 20LTS", "1000 GR").
+_RE_ENVASE = re.compile(r'(?:^|[\sx×])(\d+(?:[.,]\d+)?)\s*(kgs?|grs?|lts?|l)\b')
+_ENVASE_BASE = {'kg': 'kg', 'kgs': 'kg', 'g': 'g', 'gr': 'g', 'grs': 'g',
+                'l': 'l', 'lt': 'l', 'lts': 'l'}
+
+
+def _unidad_canonica(unidad):
+    """Mapea la unidad recibida a la canonica de OBYRA. None si no se reconoce."""
+    u = (unidad or '').strip().lower().replace('.', '')
+    return _UNIDAD_ALIAS.get(u)
+
+
+def _es_envase_sospechoso(descripcion_norm, unidad_canon):
+    """True si la descripcion declara un envase (ej '50 KG') y la unidad dice ser esa
+    MISMA unidad base. Entonces el precio es por ENVASE, no por unidad base: cargarlo
+    como $/kg lo infla N veces. Es exactamente el bug del adhesivo a $146.834/kg
+    (bolsa cargada como kilo) que reventaba porcelanato a $917.712/m2.
+    """
+    if unidad_canon not in ('kg', 'g', 'l'):
+        return False
+    for cant_txt, tok in _RE_ENVASE.findall(descripcion_norm or ''):
+        base = _ENVASE_BASE.get(tok)
+        if base != unidad_canon:
+            continue
+        try:
+            if float(cant_txt.replace(',', '.')) > 1:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def registrar_precios_scraping(items, zona_default=ZONA_DEFAULT):
+    """Registra precios scrapeados de listas de proveedores (FASE 2).
+
+    Escribe en DOS lugares, a proposito:
+      1. presupuesto_precio_confirmado (fuente='scraping'): alimenta la cascada a
+         nivel ITEM. Upsert por (proveedor, material, unidad, zona) -> una fila
+         vigente por producto y proveedor, no crece sin limite con cada corrida.
+      2. provider_price_list (global, organizacion_id NULL, fuente='scraping'): es
+         la tabla que buscar_mejor_precio ya usa con fuzzy matching para pricear los
+         RECURSOS de cada APU. Aca esta el valor real del scraping, porque las listas
+         de proveedor son de materiales, no de items de pliego.
+
+    Guards (no negociables, protegen la base de precios):
+      - Unidad debe mapear a una canonica conocida; si no, se ignora el item.
+      - Si la descripcion declara envase ('50 KG') y la unidad dice 'kg', el precio
+        es por bolsa -> NO se manda a provider_price_list (envenenaria los APU).
+      - NUNCA pisa una fila de provider_price_list curada (fuente != 'scraping'):
+        los seeds corregidos a mano tienen prioridad sobre el scraping.
+
+    Devuelve un dict con el detalle de lo procesado.
+    """
+    from decimal import InvalidOperation
+    from models.budgets import PresupuestoPrecioConfirmado
+    from models.provider_price_list import ProviderPriceList, normalizar_descripcion_precio
+    from services.pipeline_presupuesto_ia import _norm_material
+
+    res = {'recibidos': 0, 'guardados': 0, 'lista_proveedor': 0, 'ignorados': 0,
+           'envase_sospechoso': 0, 'curados_preservados': 0, 'errores': []}
+    hoy = date.today()
+    ahora = datetime.utcnow()
+
+    for raw in (items or []):
+        res['recibidos'] += 1
+        if not isinstance(raw, dict):
+            res['ignorados'] += 1
+            continue
+        desc = (raw.get('material') or raw.get('descripcion') or '').strip()
+        prov = (raw.get('proveedor') or '').strip()[:120] or None
+        zona = (raw.get('zona') or zona_default).strip()[:100]
+        unidad = _unidad_canonica(raw.get('unidad'))
+        try:
+            precio = Decimal(str(raw.get('precio_unitario') or raw.get('precio') or 0))
+        except (InvalidOperation, TypeError, ValueError):
+            precio = Decimal('0')
+
+        if not desc or precio <= 0 or unidad is None:
+            res['ignorados'] += 1
+            if len(res['errores']) < 20:
+                res['errores'].append({
+                    'material': desc[:80],
+                    'motivo': ('descripcion vacia' if not desc else
+                               'precio <= 0' if precio <= 0 else
+                               f"unidad no reconocida: {raw.get('unidad')!r}")})
+            continue
+
+        mat = _norm_material(desc)[:255]
+        if not mat:
+            res['ignorados'] += 1
+            continue
+
+        # 1. Cascada a nivel item: upsert por proveedor+material+unidad+zona.
+        row = PresupuestoPrecioConfirmado.query.filter_by(
+            fuente='scraping', proveedor=prov, material=mat,
+            unidad=unidad, zona=zona).first()
+        if row is None:
+            row = PresupuestoPrecioConfirmado(
+                presupuesto_id=None, organizacion_id=None, material=mat,
+                unidad=unidad, cantidad=Decimal('1'), zona=zona,
+                fuente='scraping', proveedor=prov)
+            db.session.add(row)
+        row.precio_unitario = precio
+        row.fecha = ahora
+        res['guardados'] += 1
+
+        # 2. Base de precios que usan los APU. Con guards.
+        if _es_envase_sospechoso(mat, unidad):
+            res['envase_sospechoso'] += 1
+            continue
+        dn = normalizar_descripcion_precio(desc)
+        ppl = ProviderPriceList.query.filter(
+            ProviderPriceList.organizacion_id.is_(None),
+            ProviderPriceList.proveedor_id.is_(None),
+            ProviderPriceList.descripcion_normalizada == dn,
+            ProviderPriceList.unidad == unidad,
+        ).first()
+        if ppl is not None and (ppl.fuente or '') != 'scraping':
+            res['curados_preservados'] += 1   # seed/lista real corregida a mano: no tocar
+            continue
+        if ppl is None:
+            ppl = ProviderPriceList(
+                organizacion_id=None, proveedor_id=None, descripcion=desc[:300],
+                descripcion_normalizada=dn, unidad=unidad)
+            db.session.add(ppl)
+        ppl.precio_unitario = precio
+        ppl.moneda = 'ARS'
+        ppl.fuente = 'scraping'
+        ppl.fecha_actualizacion = hoy
+        ppl.notas = f'Scraping {prov or "?"} {hoy.isoformat()}'
+        res['lista_proveedor'] += 1
+
+    db.session.commit()
+    return res

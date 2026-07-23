@@ -253,6 +253,23 @@ def run_runtime_migrations(db, app):
                 CREATE INDEX ix_ppc_material_zona_fecha
                     ON presupuesto_precio_confirmado(material, zona, fecha);
             END IF;
+
+            -- FASE 2 (scraping): las filas de proveedor no pertenecen a ningun
+            -- presupuesto -> presupuesto_id pasa a ser nullable.
+            IF EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='presupuesto_precio_confirmado'
+                        AND column_name='presupuesto_id' AND is_nullable='NO') THEN
+                ALTER TABLE presupuesto_precio_confirmado
+                    ALTER COLUMN presupuesto_id DROP NOT NULL;
+            END IF;
+            -- FASE 2: proveedor scrapeado ('Abelson', ...). NULL si es cliente.
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='presupuesto_precio_confirmado'
+                            AND column_name='proveedor') THEN
+                ALTER TABLE presupuesto_precio_confirmado ADD COLUMN proveedor VARCHAR(120);
+                CREATE INDEX ix_ppc_scraping ON presupuesto_precio_confirmado
+                    (fuente, proveedor, material, unidad, zona);
+            END IF;
         END $$;
         """
         db.session.execute(text(ppc_sql))

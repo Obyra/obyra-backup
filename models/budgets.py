@@ -440,17 +440,23 @@ class PresupuestoPrecioConfirmado(db.Model):
 
     `material` es la descripcion del item NORMALIZADA (minusculas, sin acentos,
     espacios colapsados) para que 'Ladrillo comun 12cm' == 'ladrillo comun 12 cm'.
-    `fuente`: 'confirmado_cliente' (FASE 1) | 'scraping' (FASE 2, aun sin usar).
+    `fuente`: 'confirmado_cliente' (FASE 1, un cliente confirmo el precio de un item)
+    | 'scraping' (FASE 2, lista publicada por un proveedor - `proveedor` dice cual).
+
+    Las filas de scraping NO tienen presupuesto ni organizacion (son globales), por
+    eso presupuesto_id es nullable.
     """
     __tablename__ = 'presupuesto_precio_confirmado'
     __table_args__ = (
         db.Index('ix_ppc_material_zona_fecha', 'material', 'zona', 'fecha'),
+        # FASE 2: upsert de scraping -> una fila vigente por proveedor+material+unidad.
+        db.Index('ix_ppc_scraping', 'fuente', 'proveedor', 'material', 'unidad', 'zona'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     presupuesto_id = db.Column(
         db.Integer, db.ForeignKey('presupuestos.id', ondelete='CASCADE'),
-        nullable=False, index=True)
+        nullable=True, index=True)   # NULL en filas de scraping (no son de un presupuesto)
     material = db.Column(db.String(255), nullable=False)
     precio_unitario = db.Column(db.Numeric(12, 2), nullable=False)
     unidad = db.Column(db.String(50))
@@ -459,6 +465,9 @@ class PresupuestoPrecioConfirmado(db.Model):
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), index=True)
     zona = db.Column(db.String(100))
     fuente = db.Column(db.String(30), nullable=False, default='confirmado_cliente')
+    # FASE 2: nombre del proveedor scrapeado ('Abelson', 'Leiten', ...). NULL si es
+    # confirmacion de cliente. Se muestra en el badge de fuente de la UI.
+    proveedor = db.Column(db.String(120), nullable=True)
 
 
 class VariacionCacPendiente(db.Model):
