@@ -279,6 +279,36 @@ def run_runtime_migrations(db, app):
         db.session.rollback()
         print(f"[WARN] presupuesto_precio_confirmado migration skipped: {e}")
 
+    # Fix seguridad - Cap de gasto LLM por usuario/dia: tabla user_daily_llm_spend.
+    # El pipeline IA checkea el tope antes de llamar a Anthropic (429 si se paso) y
+    # registra tokens/costo reales despues. Ver services/llm_budget.py.
+    try:
+        llm_spend_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='user_daily_llm_spend') THEN
+                CREATE TABLE user_daily_llm_spend (
+                    id SERIAL PRIMARY KEY,
+                    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                    fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+                    tokens_usados INTEGER NOT NULL DEFAULT 0,
+                    costo_usd NUMERIC(10,4) NOT NULL DEFAULT 0,
+                    llamadas INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_user_daily_spend UNIQUE (usuario_id, fecha)
+                );
+                CREATE INDEX ix_user_daily_spend_fecha ON user_daily_llm_spend(fecha);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(llm_spend_sql))
+        db.session.commit()
+        print("[OK] user_daily_llm_spend migration applied")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] user_daily_llm_spend migration skipped: {e}")
+
     # Fichadas table + radio_fichada_metros column
     try:
         fichadas_sql = """

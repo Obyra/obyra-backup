@@ -21,6 +21,7 @@ from extensions import db
 from models.core import (
     Organizacion,
     Usuario,
+    UserDailyLLMSpend,
     OrgMembership,
     PerfilUsuario,
     OnboardingStatus,
@@ -334,6 +335,7 @@ __all__ = [
     # Core
     'Organizacion',
     'Usuario',
+    'UserDailyLLMSpend',
     'OrgMembership',
     'PerfilUsuario',
     'OnboardingStatus',

@@ -577,6 +577,30 @@ def _sync_usuario_rol(mapper, connection, target):
         target.rol = Usuario._sync_rol_from_role(target.role)
 
 
+class UserDailyLLMSpend(db.Model):
+    """Gasto de LLM por usuario y dia (Fix seguridad: cap de gasto de IA).
+
+    Una fila por (usuario, fecha). El pipeline IA verifica el tope ANTES de llamar a
+    Anthropic (devuelve 429 si se paso) y registra tokens/costo REALES DESPUES. El
+    limite se resetea solo al cambiar de dia (las queries filtran por fecha=hoy).
+    Ver services/llm_budget.py.
+    """
+    __tablename__ = 'user_daily_llm_spend'
+    __table_args__ = (
+        db.UniqueConstraint('usuario_id', 'fecha', name='uq_user_daily_spend'),
+        db.Index('ix_user_daily_spend_fecha', 'fecha'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='CASCADE'),
+                           nullable=False)
+    fecha = db.Column(db.Date, nullable=False, server_default=func.current_date())
+    tokens_usados = db.Column(db.Integer, nullable=False, default=0)
+    costo_usd = db.Column(db.Numeric(10, 4), nullable=False, default=0)
+    llamadas = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, server_default=func.now())
+
+
 class OrgMembership(db.Model):
     __tablename__ = 'org_memberships'
 
