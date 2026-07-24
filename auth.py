@@ -421,6 +421,13 @@ def forgot_password():
     back_url = url_for(_portal_login_endpoint(portal))
 
     if request.method == 'POST':
+        from services.captcha_service import verify_turnstile
+        _ok_cap, _motivo_cap = verify_turnstile(
+            request.form.get('cf-turnstile-response'), remoteip=request.remote_addr)
+        if not _ok_cap:
+            flash(_motivo_cap, 'warning')
+            return render_template('auth/forgot.html', portal=portal, submit_url=submit_url, back_url=back_url)
+
         email = (request.form.get('email') or '').strip().lower()
 
         if not email:
@@ -535,6 +542,13 @@ def register():
         return redirect(url_for('reportes.dashboard'))
     
     if request.method == 'POST':
+        from services.captcha_service import verify_turnstile
+        _ok_cap, _motivo_cap = verify_turnstile(
+            request.form.get('cf-turnstile-response'), remoteip=request.remote_addr)
+        if not _ok_cap:
+            flash(_motivo_cap, 'danger')
+            return render_template('auth/register.html', google_available=bool(google))
+
         nombre = (request.form.get('nombre') or '').strip()
         apellido = (request.form.get('apellido') or '').strip()
         email = (request.form.get('email') or '').strip()

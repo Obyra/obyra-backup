@@ -232,6 +232,11 @@ app.config["SESSION_COOKIE_SECURE"] = _is_production or _env_flag("SESSION_COOKI
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # Prevenir acceso desde JavaScript
 app.config["SESSION_COOKIE_SAMESITE"] = "Strict" if _is_production else "Lax"  # Más estricto en producción
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=int(os.getenv("SESSION_LIFETIME_HOURS", "24")))
+
+# Cloudflare Turnstile (anti-bot en formularios publicos). Si no estan seteadas, el
+# captcha queda deshabilitado (los formularios funcionan igual). Ver services/captcha_service.py
+app.config["TURNSTILE_SITE_KEY"] = os.environ.get("TURNSTILE_SITE_KEY", "")
+app.config["TURNSTILE_SECRET_KEY"] = os.environ.get("TURNSTILE_SECRET_KEY", "")
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True  # Renovar sesión en cada request
 
 # File Upload Configuration

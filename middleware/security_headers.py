@@ -53,7 +53,8 @@ def setup_security_headers(app):
             "https://accounts.google.com "
             "https://apis.google.com "
             "https://maps.googleapis.com "
-            "https://maps.gstatic.com",
+            "https://maps.gstatic.com "
+            "https://challenges.cloudflare.com",
             # Estilos: self + CDNs + Google Maps/Fonts
             "style-src 'self' 'unsafe-inline' "
             "https://cdn.jsdelivr.net "
@@ -86,7 +87,8 @@ def setup_security_headers(app):
             "https://accounts.google.com "
             "https://www.google.com "
             "https://maps.google.com "
-            "https://maps.googleapis.com",
+            "https://maps.googleapis.com "
+            "https://challenges.cloudflare.com",
             # Formularios: self + Mercado Pago (para subscripciones via Preapproval)
             "form-action 'self' https://www.mercadopago.com.ar https://www.mercadopago.com https://api.mercadopago.com",
             # Base URI: solo self

@@ -76,6 +76,11 @@
                 </label>
             </div>
 
+            {% if config.TURNSTILE_SITE_KEY %}
+            <div class="cf-turnstile mb-3" data-sitekey="{{ config.TURNSTILE_SITE_KEY }}"></div>
+            <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+            {% endif %}
+
             <div class="d-grid gap-2 mb-3">
                 <button type="submit" class="btn btn-primary btn-lg">
                     <i class="fas fa-rocket me-2"></i>Comenzar prueba gratis
