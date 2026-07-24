@@ -8,6 +8,31 @@ Script para eliminar ABSOLUTAMENTE TODO excepto:
 import os
 os.environ['DATABASE_URL'] = 'postgresql+psycopg://obyra:obyra_dev_password@localhost:5436/obyra_dev'
 
+
+# --- Guardia anti-producción (defensa en profundidad) ---
+# Este script BORRA datos en masa. Se valida DESPUÉS del override de arriba para
+# chequear la URL efectiva que el script va a usar de verdad. Fail-closed: ante la
+# duda no borra. Override explícito con ALLOW_DB_WIPE=1.
+def _check_not_production():
+    import sys
+    db_url = os.getenv("DATABASE_URL", "").lower()
+    prod_markers = ("railway", "rlwy.net", "neon.tech", "amazonaws",
+                    "supabase", "render.com", "prod")
+    hit = next((m for m in prod_markers if m in db_url), None)
+    if hit:
+        print(f"❌ ABORT: DATABASE_URL parece producción (marcador '{hit}'). "
+              "Este script solo corre en local/staging.")
+        sys.exit(1)
+    local_markers = ("localhost", "127.0.0.1", "@postgres", "@db")
+    if not any(m in db_url for m in local_markers) and os.getenv("ALLOW_DB_WIPE") != "1":
+        print("❌ ABORT: DATABASE_URL no parece local y ALLOW_DB_WIPE!=1. "
+              "Seteá ALLOW_DB_WIPE=1 sólo si estás 100% seguro.")
+        sys.exit(1)
+
+
+_check_not_production()
+# --- fin guardia ---
+
 from app import app
 from models import Usuario, Organizacion
 from extensions import db
