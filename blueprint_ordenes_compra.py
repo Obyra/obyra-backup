@@ -735,7 +735,10 @@ def oc_pdf(id):
 
     from flask import send_file
     pdf_buffer = io.BytesIO()
-    HTML(string=html_string).write_pdf(pdf_buffer, presentational_hints=True)
+    from services.pdf_concurrency import render_pdf_into
+    _r = render_pdf_into(pdf_buffer, html_string, presentational_hints=True)
+    if _r is not None:
+        return _r
     pdf_buffer.seek(0)
 
     return send_file(

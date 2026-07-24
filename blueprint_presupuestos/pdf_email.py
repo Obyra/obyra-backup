@@ -165,10 +165,10 @@ def generar_pdf(id):
         try:
             # Generar PDF con WeasyPrint
             pdf_raw = io.BytesIO()
-            HTML(string=html_string).write_pdf(
-                pdf_raw,
-                presentational_hints=True
-            )
+            from services.pdf_concurrency import render_pdf_into
+            _r = render_pdf_into(pdf_raw, html_string, presentational_hints=True)
+            if _r is not None:
+                return _r
             pdf_raw.seek(0)
 
             # Post-procesar: limpiar metadatos para evitar falsos positivos de antivirus
@@ -294,7 +294,10 @@ def pdf_cliente(id):
             vig_dias=vig_dias, fecha_vig=fecha_vig, logo_base64=logo_base64, now=datetime.now(),
         )
         pdf_raw = io.BytesIO()
-        HTML(string=html_string).write_pdf(pdf_raw, presentational_hints=True)
+        from services.pdf_concurrency import render_pdf_into
+        _r = render_pdf_into(pdf_raw, html_string, presentational_hints=True)
+        if _r is not None:
+            return _r
         pdf_raw.seek(0)
         pdf_buffer = _limpiar_metadata_pdf(pdf_raw, presupuesto, organizacion)
     except Exception as e:
@@ -478,10 +481,10 @@ Saludos cordiales,
 
         # Generar PDF y limpiar metadatos para evitar falsos positivos de antivirus
         pdf_raw = io.BytesIO()
-        HTML(string=html_string).write_pdf(
-            pdf_raw,
-            presentational_hints=True
-        )
+        from services.pdf_concurrency import render_pdf_into
+        _r = render_pdf_into(pdf_raw, html_string, presentational_hints=True)
+        if _r is not None:
+            return _r
         pdf_raw.seek(0)
         pdf_clean = _limpiar_metadata_pdf(pdf_raw, presupuesto, organizacion)
         pdf_bytes = pdf_clean.read()

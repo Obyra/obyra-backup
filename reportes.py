@@ -2103,7 +2103,10 @@ def exportar_obras_pdf():
 
     # Convertir a PDF
     pdf_buffer = io.BytesIO()
-    HTML(string=html_content).write_pdf(pdf_buffer)
+    from services.pdf_concurrency import render_pdf_into
+    _r = render_pdf_into(pdf_buffer, html_content)
+    if _r is not None:
+        return _r
     pdf_buffer.seek(0)
 
     filename = f"reporte_obras_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
@@ -2346,7 +2349,10 @@ def exportar_costos_pdf():
                                    fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
 
     pdf_buffer = io.BytesIO()
-    HTML(string=html_content).write_pdf(pdf_buffer)
+    from services.pdf_concurrency import render_pdf_into
+    _r = render_pdf_into(pdf_buffer, html_content)
+    if _r is not None:
+        return _r
     pdf_buffer.seek(0)
 
     filename = f"reporte_costos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
@@ -2527,7 +2533,10 @@ def exportar_inventario_pdf():
                                        fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
 
         pdf_buffer = io.BytesIO()
-        HTML(string=html_content).write_pdf(pdf_buffer)
+        from services.pdf_concurrency import render_pdf_into
+        _r = render_pdf_into(pdf_buffer, html_content)
+        if _r is not None:
+            return _r
         pdf_buffer.seek(0)
 
         filename = f"reporte_inventario_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"

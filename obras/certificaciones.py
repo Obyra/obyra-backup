@@ -348,7 +348,10 @@ def recibo_liquidacion_pdf(item_id):
     import io
     from flask import send_file
     pdf_buffer = io.BytesIO()
-    HTML(string=html_content).write_pdf(pdf_buffer)
+    from services.pdf_concurrency import render_pdf_into
+    _r = render_pdf_into(pdf_buffer, html_content)
+    if _r is not None:
+        return _r
     pdf_buffer.seek(0)
 
     nombre_op = item.operario.nombre_completo if item.operario else 'operario'
@@ -391,7 +394,10 @@ def recibo_liquidacion_completa_pdf(liq_id):
     import io
     from flask import send_file
     pdf_buffer = io.BytesIO()
-    HTML(string=html_content).write_pdf(pdf_buffer)
+    from services.pdf_concurrency import render_pdf_into
+    _r = render_pdf_into(pdf_buffer, html_content)
+    if _r is not None:
+        return _r
     pdf_buffer.seek(0)
 
     filename = f"liquidacion_{liq.periodo_desde.strftime('%Y%m%d')}_{liq.periodo_hasta.strftime('%Y%m%d')}.pdf"

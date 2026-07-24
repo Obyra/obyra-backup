@@ -167,7 +167,11 @@ def generate_pdf_v2_report(organizacion, start_date, end_date, range_text, inclu
 
     # Convertir HTML a PDF con WeasyPrint
     try:
-        pdf_document = weasyprint.HTML(string=html_content).write_pdf()
+        from services.pdf_concurrency import pdf_render_lock
+        with pdf_render_lock() as _got:
+            if not _got:
+                raise RuntimeError('Servidor ocupado generando PDFs, reintenta en unos segundos')
+            pdf_document = weasyprint.HTML(string=html_content).write_pdf()
         pdf_buffer = BytesIO(pdf_document)
         pdf_buffer.seek(0)
         return pdf_buffer
