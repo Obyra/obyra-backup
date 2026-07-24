@@ -57,6 +57,8 @@ def pipeline_ia_analizar():
         return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
 
     from services.pipeline_presupuesto_ia import procesar_items
+    from services.llm_budget import check_llm_budget, register_llm_spend
+    from flask import g
 
     org_id = get_current_org_id()
     data = request.get_json(silent=True) or {}
@@ -66,6 +68,15 @@ def pipeline_ia_analizar():
     nivel = (data.get('nivel') or 'estandar').strip().lower()
     zona = (data.get('zona') or 'CABA').strip()
     forzar_keyword = bool(data.get('forzar_keyword'))
+
+    # Cap de gasto de IA por usuario/dia. No aplica al camino keyword (forzar_keyword),
+    # que no llama al LLM y por lo tanto no gasta. Estimacion previa por cantidad de
+    # items (system prompt ~grande + por item); el gasto REAL se registra despues.
+    uid = getattr(current_user, 'id', None)
+    if uid and not forzar_keyword:
+        ok_budget, motivo = check_llm_budget(uid, estimated_tokens=len(items) * 220 + 1500)
+        if not ok_budget:
+            return jsonify({'ok': False, 'error': motivo, 'limite_diario': True}), 429
     # Modelo de encofrado del pliego (bundle | separado). Se decide a nivel pliego
     # sobre TODOS los items (en la ruta revision_ia) y viaja en cada lote.
     modelo_encofrado = (data.get('modelo_encofrado') or 'bundle').strip().lower()
@@ -77,10 +88,17 @@ def pipeline_ia_analizar():
         from models.budgets import Presupuesto
         presupuesto = Presupuesto.query.filter_by(id=pres_id).first()
 
+    g._llm_input_tokens = 0
+    g._llm_output_tokens = 0
     try:
         r = procesar_items(items, organizacion_id=org_id, nivel=nivel, zona=zona,
                            presupuesto=presupuesto, forzar_keyword=forzar_keyword,
                            modelo_encofrado=modelo_encofrado)
+        # Registrar el gasto REAL de tokens que acumulo el clasificador en g (0 si el
+        # pipeline resolvio todo por keyword/aprendizaje y no llamo al LLM).
+        if uid:
+            register_llm_spend(uid, getattr(g, '_llm_input_tokens', 0),
+                               getattr(g, '_llm_output_tokens', 0))
         return jsonify({'ok': True, **r})
     except Exception as e:
         current_app.logger.exception('Error en pipeline IA de presupuesto')

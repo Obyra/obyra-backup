@@ -130,6 +130,17 @@ def _llamar_api(system, user):
         tool_choice={'type': 'tool', 'name': 'clasificar_items'},
         messages=[{'role': 'user', 'content': user}],
     )
+    # Acumula el uso REAL de tokens en el request actual (para el cap de gasto por
+    # usuario/dia; el endpoint lo lee y lo registra). Fuera de un request (scripts,
+    # tests) no hace nada. Ver services/llm_budget.py.
+    try:
+        from flask import g, has_request_context
+        usage = getattr(resp, 'usage', None)
+        if has_request_context() and usage is not None:
+            g._llm_input_tokens = getattr(g, '_llm_input_tokens', 0) + (getattr(usage, 'input_tokens', 0) or 0)
+            g._llm_output_tokens = getattr(g, '_llm_output_tokens', 0) + (getattr(usage, 'output_tokens', 0) or 0)
+    except Exception:
+        pass
     for block in resp.content:
         if getattr(block, 'type', None) == 'tool_use' and block.name == 'clasificar_items':
             return block.input.get('clasificaciones', [])
