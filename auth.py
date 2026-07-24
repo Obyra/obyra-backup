@@ -212,6 +212,20 @@ def _get_reset_serializer() -> URLSafeTimedSerializer:
         raise RuntimeError('SECRET_KEY no está configurado, no se puede generar tokens seguros.')
     return URLSafeTimedSerializer(secret_key)
 
+def _pwd_fingerprint(account) -> str:
+    """Huella corta del hash de password ACTUAL de la cuenta.
+
+    Cambia cada vez que se setea la contraseña (werkzeug re-saltea en cada
+    generate_password_hash), asi que atar el token de reset a esto lo vuelve de un
+    solo uso: tras un reset exitoso el hash cambia y el token viejo deja de validar.
+    NOTA: no se usa password_hash[:20] porque en werkzeug esos primeros chars son el
+    prefijo del algoritmo ('pbkdf2:sha256:600000'), identico entre usuarios -> no
+    invalidaria nada. Se usa un digest del hash COMPLETO."""
+    import hashlib
+    ph = getattr(account, 'password_hash', None) or ''
+    return hashlib.sha256(ph.encode('utf-8')).hexdigest()[:16]
+
+
 def _generate_reset_token(account: ResettableAccount, portal: str) -> str:
     serializer = _get_reset_serializer()
     payload = {
@@ -219,6 +233,7 @@ def _generate_reset_token(account: ResettableAccount, portal: str) -> str:
         'email': account.email,
         'account_type': _portal_label_for_account(account),
         'portal': _normalize_portal(portal),
+        'pwd': _pwd_fingerprint(account),   # ata el token al hash actual (single-use)
     }
     # legacy para compatibilidad
     payload['user_id'] = payload['account_id']
@@ -255,6 +270,13 @@ def _load_reset_token(token: str, max_age: int = 3600) -> Tuple[ResettableAccoun
 
     if not account or account.email.lower() != email.lower():
         raise BadSignature('El token no coincide con ninguna cuenta válida.')
+
+    # Single-use: si el token trae la huella del hash (tokens nuevos) y ya no coincide,
+    # es porque la contraseña se cambio desde que se emitio -> token consumido/obsoleto.
+    token_pwd = data.get('pwd')
+    if token_pwd is not None and token_pwd != _pwd_fingerprint(account):
+        raise BadSignature('Este enlace ya fue usado o la contraseña fue cambiada. '
+                           'Solicitá uno nuevo.')
 
     return account, portal
 
