@@ -713,6 +713,48 @@ def eliminar(id):
         current_app.logger.error(f'Error al eliminar presupuesto: {e}'); return jsonify({'error': 'Error al eliminar el presupuesto'}), 500
 
 
+@presupuestos_bp.route('/<int:id>/duplicar', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def duplicar(id):
+    """Duplica un presupuesto completo como borrador editable (feature de ventas)."""
+    if not current_user.puede_gestionar():
+        return jsonify({'ok': False, 'error': 'No tenés permisos para duplicar presupuestos'}), 403
+    try:
+        org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+        if not org_id:
+            return jsonify({'ok': False, 'error': 'Sin organización activa'}), 400
+
+        # Query atómica id + org (previene IDOR): solo duplica lo que la org puede ver.
+        presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first()
+        if not presupuesto:
+            return jsonify({'ok': False, 'error': 'Presupuesto no encontrado'}), 404
+
+        from services.presupuesto_duplicate_service import duplicar_presupuesto
+        nuevo = duplicar_presupuesto(id, org_id, usuario_id=getattr(current_user, 'id', None))
+
+        try:
+            from models.audit import registrar_audit
+            registrar_audit('duplicar', 'presupuesto', id,
+                            f'Presupuesto {presupuesto.numero} duplicado -> {nuevo.numero} (#{nuevo.id})')
+        except Exception:
+            pass
+
+        return jsonify({
+            'ok': True,
+            'id': nuevo.id,
+            'numero': nuevo.numero,
+            'redirect_url': url_for('presupuestos.detalle', id=nuevo.id),
+            'mensaje': f'Presupuesto duplicado como {nuevo.numero}',
+        })
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error al duplicar presupuesto {id}: {e}', exc_info=True)
+        return jsonify({'ok': False, 'error': 'No se pudo duplicar el presupuesto'}), 500
+
+
 @presupuestos_bp.route('/<int:id>/cambiar-estado', methods=['POST'])
 @login_required
 def cambiar_estado(id):

@@ -123,6 +123,15 @@
                         </div>
                         {% endif %}
 
+                        {% if current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+                        <div class="btn-group ms-2" role="group">
+                            <button type="button" class="btn btn-outline-primary" onclick="duplicarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')"
+                                    title="Crear una copia editable (borrador) de este presupuesto">
+                                <i class="fas fa-copy me-1"></i>Duplicar
+                            </button>
+                        </div>
+                        {% endif %}
+
                         <!-- Acciones administrativas (separadas visualmente) -->
                         {% set show_eliminar = current_user.role == 'admin' and presupuesto.estado == 'borrador' %}
                         {% if show_eliminar %}
@@ -2219,6 +2228,33 @@ function toggleEtapa(prefix, idx) {
 
 const initialObraId = {{ (obra.id if obra else None)|tojson }};
 let currentObraId = initialObraId;
+
+async function duplicarPresupuesto(id, numero) {
+    if (!confirm(`¿Duplicar el presupuesto ${numero}?\nSe creará una copia en estado "borrador" que vas a poder editar.`)) {
+        return;
+    }
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        const headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+        const response = await fetch(`/presupuestos/${id}/duplicar`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ csrf_token: csrfToken })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.ok) {
+            showAlert(result.error || 'No se pudo duplicar el presupuesto.', 'danger');
+            return;
+        }
+        showAlert(result.mensaje || 'Presupuesto duplicado.', 'success');
+        setTimeout(() => window.location.href = result.redirect_url || `/presupuestos/${result.id}/detalle`, 700);
+    } catch (error) {
+        console.error('Error al duplicar:', error);
+        showAlert('Error al duplicar el presupuesto.', 'danger');
+    }
+}
 
 async function eliminarPresupuesto(id, numero) {
     if (!confirm(`¿Eliminar el presupuesto ${numero}? Esta acción lo archivará y podrás verlo solo desde el filtro de eliminados.`)) {
