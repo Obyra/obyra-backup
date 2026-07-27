@@ -601,3 +601,31 @@ Saludos cordiales,
             return jsonify({'error': 'Error al procesar el envío del email'}), 500
         flash('Error al procesar el envío del email', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
+
+
+@presupuestos_bp.route('/<int:id>/exportar-excel', methods=['GET'])
+@login_required
+def exportar_excel(id):
+    """Descarga el presupuesto ARMADO como .xlsx (precios de venta, mismos números
+    que el PDF al cliente)."""
+    from flask import send_file
+    org_id = get_current_org_id()
+    if not org_id:
+        flash('No tenés una organización activa', 'warning')
+        return redirect(url_for('index'))
+    # Query atómica id + org (previene IDOR): solo exporta lo que la org puede ver.
+    presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    try:
+        from services.presupuesto_excel_export_service import export_presupuesto_excel
+        xlsx = export_presupuesto_excel(presupuesto)
+    except Exception as e:
+        current_app.logger.error(f'Error exportando Excel presupuesto {id}: {e}', exc_info=True)
+        flash('No se pudo generar el Excel del presupuesto.', 'danger')
+        return redirect(url_for('presupuestos.detalle', id=id))
+    numero_safe = str(presupuesto.numero or id).replace('/', '-').replace(' ', '_')
+    return send_file(
+        xlsx,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'Presupuesto_{numero_safe}.xlsx',
+    )
