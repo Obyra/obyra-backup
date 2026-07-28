@@ -10,6 +10,7 @@ from flask import (render_template, request, flash, redirect,
                    url_for, current_app)
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
+from sqlalchemy.orm import joinedload
 
 from extensions import db
 from models import Presupuesto, ItemPresupuesto, Obra, Cliente
@@ -37,7 +38,10 @@ def lista():
 
         # Query base - excluir presupuestos eliminados y presupuestos confirmados como obras
         from datetime import datetime
-        query = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
+        query = Presupuesto.query.filter_by(organizacion_id=org_id).options(
+            joinedload(Presupuesto.obra),
+            joinedload(Presupuesto.cliente),
+        ).filter(
             Presupuesto.deleted_at.is_(None),
             Presupuesto.estado != 'eliminado',
             or_(
