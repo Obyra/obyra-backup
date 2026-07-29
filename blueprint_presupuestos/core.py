@@ -35,6 +35,10 @@ def lista():
         estado = request.args.get('estado', '')
         vigencia = request.args.get('vigencia', '')
         obra_id = request.args.get('obra_id', type=int)
+        cliente_id = request.args.get('cliente_id', type=int)
+        fecha_desde = request.args.get('fecha_desde', '')
+        fecha_hasta = request.args.get('fecha_hasta', '')
+        buscar = request.args.get('buscar', '').strip()
 
         # Query base - excluir presupuestos eliminados y presupuestos confirmados como obras
         from datetime import datetime
@@ -71,6 +75,40 @@ def lista():
         if obra_id:
             query = query.filter_by(obra_id=obra_id)
 
+        # Filtro: Cliente
+        if cliente_id:
+            query = query.filter_by(cliente_id=cliente_id)
+
+        # Búsqueda libre por número, obra o cliente (el box ya existía en la UI
+        # pero el backend lo ignoraba). Resolvemos obra/cliente por id para no
+        # complicar la paginación con joins.
+        if buscar:
+            like = f"%{buscar}%"
+            obra_ids = [o.id for o in Obra.query.filter_by(organizacion_id=org_id)
+                        .filter(Obra.nombre.ilike(like)).all()]
+            cli_ids = [c.id for c in Cliente.query.filter_by(organizacion_id=org_id)
+                       .filter(or_(Cliente.nombre.ilike(like), Cliente.apellido.ilike(like))).all()]
+            condiciones = [Presupuesto.numero.ilike(like)]
+            if obra_ids:
+                condiciones.append(Presupuesto.obra_id.in_(obra_ids))
+            if cli_ids:
+                condiciones.append(Presupuesto.cliente_id.in_(cli_ids))
+            query = query.filter(or_(*condiciones))
+
+        # Filtro: Rango de fechas (sobre Presupuesto.fecha, la fecha que ve el usuario)
+        if fecha_desde:
+            try:
+                query = query.filter(
+                    Presupuesto.fecha >= datetime.strptime(fecha_desde, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+        if fecha_hasta:
+            try:
+                query = query.filter(
+                    Presupuesto.fecha <= datetime.strptime(fecha_hasta, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+
         # Ordenar por fecha de creación descendente
         query = query.order_by(desc(Presupuesto.fecha))
 
@@ -85,8 +123,9 @@ def lista():
             presupuesto.calcular_totales()
         db.session.commit()
 
-        # Obras disponibles para filtro
+        # Obras y clientes disponibles para los filtros
         obras = Obra.query.filter_by(organizacion_id=org_id).filter(Obra.deleted_at.is_(None)).order_by(Obra.nombre).all()
+        clientes = Cliente.query.filter_by(organizacion_id=org_id).order_by(Cliente.nombre, Cliente.apellido).all()
 
         return render_template('presupuestos/lista.html',
                              presupuestos=presupuestos.items,
@@ -94,7 +133,12 @@ def lista():
                              estado=estado,
                              vigencia=vigencia,
                              obra_id=obra_id,
-                             obras=obras)
+                             obras=obras,
+                             clientes=clientes,
+                             cliente_id=cliente_id,
+                             fecha_desde=fecha_desde,
+                             fecha_hasta=fecha_hasta,
+                             buscar=buscar)
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.lista: {e}")
         flash('Error al cargar la lista de presupuestos', 'danger')
