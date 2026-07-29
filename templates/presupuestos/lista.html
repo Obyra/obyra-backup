@@ -71,12 +71,33 @@
                         <option value="vencidos" {{ 'selected' if vigencia == 'vencidos' }}>Vencidos</option>
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <label for="cliente_id" class="form-label">Cliente</label>
+                    <select class="form-select" id="cliente_id" name="cliente_id">
+                        <option value="">Todos los clientes</option>
+                        {% for cliente in clientes %}
+                        <option value="{{ cliente.id }}" {{ 'selected' if cliente_id == cliente.id }}>
+                            {{ cliente.nombre_completo }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <label for="buscar" class="form-label">Buscar</label>
                     <input type="text" class="form-control" id="buscar" name="buscar"
                            value="{{ buscar }}" placeholder="Número, obra o cliente...">
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
+                <div class="col-md-3">
+                    <label for="fecha_desde" class="form-label">Desde</label>
+                    <input type="date" class="form-control" id="fecha_desde" name="fecha_desde"
+                           value="{{ fecha_desde }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="fecha_hasta" class="form-label">Hasta</label>
+                    <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta"
+                           value="{{ fecha_hasta }}">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-outline-primary me-2">
                         <i class="fas fa-search me-1"></i>Filtrar
                     </button>
