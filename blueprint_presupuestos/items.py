@@ -198,6 +198,17 @@ def detalle(id):
             costo_mo = Decimal('0')
             costo_eq = Decimal('0')
             for it in items:
+                # Opcion A mejorada: preferir el desglose REAL que baja el pipeline
+                # (costo_material/mano_obra/equipo por item). Si no existe (items
+                # manuales/legacy), caer a las composiciones como antes.
+                im = Decimal(str(it.costo_material or 0))
+                imo = Decimal(str(it.costo_mano_obra or 0))
+                ieq = Decimal(str(it.costo_equipo or 0))
+                if (im + imo + ieq) > 0:
+                    costo_mat += im
+                    costo_mo += imo
+                    costo_eq += ieq
+                    continue
                 comps = (it.composiciones.all() if hasattr(it.composiciones, 'all')
                          else list(it.composiciones))
                 for comp in comps:

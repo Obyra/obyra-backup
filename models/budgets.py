@@ -209,14 +209,40 @@ class Presupuesto(db.Model):
                  if not getattr(i, 'solo_interno', False)
                  and not getattr(i, 'excluido', False)]
 
-        # Usar calculadora centralizada
+        # Usar calculadora centralizada para el gran total + IVA (no se toca esa
+        # matematica: total_sin_iva = SUM(item.total), robusto para todo tipo de item).
         iva_rate = Decimal(self.iva_porcentaje) if self.iva_porcentaje else BudgetConstants.DEFAULT_IVA_RATE
         totales = BudgetCalculator.calcular_totales_presupuesto(items, iva_rate)
 
-        # Actualizar campos del modelo
-        self.subtotal_materiales = totales['subtotal_materiales']
-        self.subtotal_mano_obra = totales['subtotal_mano_obra']
-        self.subtotal_equipos = totales['subtotal_equipos']
+        # Subtotales por tipo (Opcion A mejorada): usar el desglose que baja el pipeline
+        # (costo_material/mano_obra/equipo) cuando existe; para items sin desglose
+        # (manuales/legacy) caer al total por `tipo`. La suma de los 3 == total_sin_iva
+        # en ambos casos, asi que el gran total no cambia.
+        def _d(v):
+            return Decimal(str(v)) if v is not None else Decimal('0')
+        sub_mat = sub_mo = sub_eq = Decimal('0')
+        for it in items:
+            cm, cmo, ceq = (_d(getattr(it, 'costo_material', 0)),
+                            _d(getattr(it, 'costo_mano_obra', 0)),
+                            _d(getattr(it, 'costo_equipo', 0)))
+            if (cm + cmo + ceq) > 0:
+                sub_mat += cm
+                sub_mo += cmo
+                sub_eq += ceq
+            else:
+                t_ars = _d(getattr(it, 'total_ars', None))
+                t = t_ars if t_ars > 0 else _d(getattr(it, 'total', None))
+                tp = getattr(it, 'tipo', None)
+                if tp == 'mano_obra':
+                    sub_mo += t
+                elif tp == 'equipo':
+                    sub_eq += t
+                else:
+                    sub_mat += t
+
+        self.subtotal_materiales = BudgetCalculator._round_currency(sub_mat)
+        self.subtotal_mano_obra = BudgetCalculator._round_currency(sub_mo)
+        self.subtotal_equipos = BudgetCalculator._round_currency(sub_eq)
         self.total_sin_iva = totales['total_sin_iva']
         self.total_con_iva = totales['total_con_iva']
 
@@ -322,6 +348,14 @@ class ItemPresupuesto(db.Model):
     total_currency = db.Column(db.Numeric(15, 2))
     price_unit_ars = db.Column(db.Numeric(15, 2))
     total_ars = db.Column(db.Numeric(15, 2))
+
+    # Desglose del costo por tipo (Opcion A mejorada). Lo baja el pipeline IA desde el
+    # cache (mat+mo+equipo == total). Permite que calcular_totales muestre subtotales
+    # reales de Mano de Obra y Equipos en vez de $0 (los items del pliego son 1 fila
+    # tipo='material' con el costo bundle adentro). 0 = sin desglose (items manuales).
+    costo_material = db.Column(db.Numeric(15, 2), default=0)
+    costo_mano_obra = db.Column(db.Numeric(15, 2), default=0)
+    costo_equipo = db.Column(db.Numeric(15, 2), default=0)
 
     # Vinculación directa con inventario (elimina match impreciso por nombre)
     # Si el material existe en inventario, se vincula directamente por ID

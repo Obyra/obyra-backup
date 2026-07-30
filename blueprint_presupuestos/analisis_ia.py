@@ -313,6 +313,16 @@ def _persistir_precios_en_items(pres, cache_items):
                 total_d = Decimal('0')
         fila.precio_unitario = pu_d
         fila.total = total_d
+        # Desglose por tipo (Opcion A mejorada): el cache ya lo trae como totales
+        # (mat+mo+equipo == costo_total). Lo bajamos para que los subtotales sean reales.
+        def _dec(v):
+            try:
+                return Decimal(str(v or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                return Decimal('0')
+        fila.costo_material = _dec(it.get('costo_material'))
+        fila.costo_mano_obra = _dec(it.get('costo_mano_obra'))
+        fila.costo_equipo = _dec(it.get('costo_equipo'))
         escritos += 1
     return escritos, desajustes
 

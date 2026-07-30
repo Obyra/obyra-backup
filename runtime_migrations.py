@@ -199,6 +199,20 @@ def run_runtime_migrations(db, app):
                           WHERE table_name='items_presupuesto' AND column_name='nivel_nombre') THEN
                 ALTER TABLE items_presupuesto ADD COLUMN nivel_nombre VARCHAR(100);
             END IF;
+            -- Desglose de costo por tipo (Opcion A mejorada): lo baja el pipeline IA
+            -- para que los subtotales de Mano de Obra / Equipos sean reales (no $0).
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto' AND column_name='costo_material') THEN
+                ALTER TABLE items_presupuesto ADD COLUMN costo_material NUMERIC(15,2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto' AND column_name='costo_mano_obra') THEN
+                ALTER TABLE items_presupuesto ADD COLUMN costo_mano_obra NUMERIC(15,2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto' AND column_name='costo_equipo') THEN
+                ALTER TABLE items_presupuesto ADD COLUMN costo_equipo NUMERIC(15,2) DEFAULT 0;
+            END IF;
             IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                           WHERE table_name='niveles_presupuesto' AND column_name='hormigon_m3') THEN
                 ALTER TABLE niveles_presupuesto ADD COLUMN hormigon_m3 NUMERIC(10,2) DEFAULT 0;

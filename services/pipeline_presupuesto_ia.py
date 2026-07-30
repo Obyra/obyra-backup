@@ -55,6 +55,11 @@ def _precios_recursos(recursos, organizacion_id, zona, fecha, presupuesto, cache
         costo += coef * precio
         detalle.append({
             'clave': r.get('clave'), 'nombre': r.get('nombre'), 'tipo': tipo,
+            # tipo_apu conserva el tipo REAL de la receta (material/mano_obra/equipo/
+            # herramienta) para desglosar el costo; 'tipo' de arriba esta colapsado a
+            # 2 valores solo para el lookup de precio.
+            'tipo_apu': r.get('tipo') or 'material',
+            'sub': float(coef * precio),   # aporte de este recurso al costo unitario
             'unidad': r.get('unidad'), 'coeficiente': float(coef),
             'precio': float(precio), 'fuente': info.get('fuente'),
             'requiere_tc': bool(info.get('requiere_tc')),
@@ -511,6 +516,25 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
         except Exception:
             cantidad = Decimal('0')
 
+        # Desglose del costo unitario por tipo (material / mano_obra / equipo) a partir
+        # del detalle de recursos del APU. En los casos donde el costo NO viene de la
+        # receta (precio confirmado = lump del item, unidad incompatible = 0), no hay
+        # desglose confiable: se imputa todo a material para que mat+mo+eq == costo_unit
+        # siempre. herramienta se agrupa con equipo.
+        cm_u = cmo_u = ceq_u = Decimal('0')
+        if detalle and not precio_confirmado and not unidad_incompatible:
+            for d in detalle:
+                sub = Decimal(str(d.get('sub') or 0))
+                ta = d.get('tipo_apu')
+                if ta == 'mano_obra':
+                    cmo_u += sub
+                elif ta in ('equipo', 'herramienta'):
+                    ceq_u += sub
+                else:
+                    cm_u += sub
+        else:
+            cm_u = costo_unit
+
         fila = {
             'descripcion': it.get('descripcion'),
             'unidad': it.get('unidad'),
@@ -524,6 +548,10 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
             'costo_unitario': float(costo_unit),
             'precio_unitario': float(costo_unit),  # alias explicito para la UI (PASO 3)
             'costo_total': float(costo_unit * cantidad),
+            # Desglose por tipo (totales = unitario x cantidad; suman a costo_total).
+            'costo_material': float(cm_u * cantidad),
+            'costo_mano_obra': float(cmo_u * cantidad),
+            'costo_equipo': float(ceq_u * cantidad),
             'recursos_total': len(detalle),
             'recursos_sin_precio': sum(1 for r in detalle if r['precio'] <= 0 and not r['requiere_tc']),
             'precio_estimado': estimado,
