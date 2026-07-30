@@ -38,6 +38,15 @@
     </div>
   </div>
 
+  <!-- Aviso: IA degradada (el LLM fallo y se uso el metodo basico por keyword). Se
+       muestra server-side si el cache lo trae, y el JS lo enciende en vivo tras el analisis. -->
+  <div id="iaDegradadaBox" class="alert alert-warning alert-dismissible fade show mb-3 {{ '' if (cache and cache.ia_degradada) else 'd-none' }}" role="alert">
+    <i class="fas fa-triangle-exclamation me-1"></i>
+    <strong>Clasificación degradada:</strong> la IA no pudo clasificar (sin crédito o error de conexión)
+    y se usó el método básico. Los precios pueden no ser precisos — revisá los ítems rojos antes de enviar.
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+  </div>
+
   <!-- Resumen rapido (oculto hasta terminar): 3 categorias. -->
   <div id="resumenBox" class="row g-2 mb-3 d-none">
     <div class="col-4"><div class="card border-success h-100"><div class="card-body text-center py-3">
@@ -55,8 +64,10 @@
   <div id="quickActions" class="text-center mb-4 d-none">
     <a href="{{ url_for('presupuestos.pdf_cliente', id=presupuesto.id) }}" class="btn btn-primary btn-lg me-2 mb-2" target="_blank" rel="noopener">
       <i class="fas fa-file-pdf me-2"></i>Descargar PDF</a>
-    <button type="button" class="btn btn-outline-secondary btn-lg mb-2" id="btnRevisar">
+    <button type="button" class="btn btn-outline-secondary btn-lg me-2 mb-2" id="btnRevisar">
       <i class="fas fa-pen me-2"></i>Revisar antes de enviar</button>
+    <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-success btn-lg mb-2">
+      <i class="fas fa-check me-2"></i>Ir al presupuesto</a>
   </div>
 
   <!-- Detalle (oculto hasta "Revisar antes de enviar") -->
@@ -66,8 +77,10 @@
   <div id="calculadosBox" class="mb-4"></div>
 
   <div id="pdfBox" class="text-center mb-4 d-none">
-    <a href="{{ url_for('presupuestos.pdf_cliente', id=presupuesto.id) }}" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+    <a href="{{ url_for('presupuestos.pdf_cliente', id=presupuesto.id) }}" class="btn btn-primary btn-lg me-2 mb-2" target="_blank" rel="noopener">
       <i class="fas fa-file-pdf me-2"></i>Descargar PDF para el cliente</a>
+    <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-success btn-lg mb-2">
+      <i class="fas fa-check me-2"></i>Ir al presupuesto</a>
   </div>
   </div><!-- /detalleBox -->
 </div>
@@ -155,6 +168,13 @@ function _fuenteBadge(it){
 }
 function _esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
 
+let IA_DEGRADADA = false;  // se enciende si algun lote cayo a keyword por fallo del LLM
+function _mostrarBannerDegradada(){
+  IA_DEGRADADA = true;
+  const box = document.getElementById('iaDegradadaBox');
+  if(box) box.classList.remove('d-none');
+}
+
 async function _analizarLote(slice){
   const r = await fetch('/presupuestos/pipeline-ia/analizar', {
     method:'POST',
@@ -164,6 +184,7 @@ async function _analizarLote(slice){
   if(!r.ok) throw new Error('HTTP '+r.status);
   const d = await r.json();
   if(!d.ok) throw new Error(d.error||'Error');
+  if(d.resumen && d.resumen.ia_degradada) _mostrarBannerDegradada();
   return d.items || [];
 }
 
@@ -196,7 +217,7 @@ async function _guardarCache(){
   try{
     await fetch('/presupuestos/'+PRES_ID+'/pipeline-ia/guardar-cache',{
       method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':_csrf()},
-      body:JSON.stringify({items:_res,nivel:NIVEL})});
+      body:JSON.stringify({items:_res,nivel:NIVEL,ia_degradada:IA_DEGRADADA})});
   }catch(e){/* no bloquea la UI si falla el guardado */}
 }
 
