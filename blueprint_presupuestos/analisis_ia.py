@@ -11,6 +11,7 @@ Reusa el servicio determinístico services/analisis_ia_presupuesto.py.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from flask import request, jsonify, current_app, render_template, abort
 from flask_login import login_required, current_user
 
@@ -253,6 +254,69 @@ def revision_ia(id):
                            modelo_encofrado=modelo_encofrado, margen=margen)
 
 
+def _persistir_precios_en_items(pres, cache_items):
+    """Opcion A: baja los COSTOS calculados por el pipeline (que viven en el cache)
+    a las filas ItemPresupuesto, para que el detalle / calcular_totales / reportes
+    dejen de ver $0. Guarda COSTO directo (precio_unitario + total); el margen se
+    aplica en presentacion (PDF/Excel), igual que antes.
+
+    Matching posicional: el front analiza los items en el MISMO orden en que la
+    pantalla de revision los carga (ItemPresupuesto por id, sin filtro solo_interno),
+    asi que cache_items[i] <-> items_por_id[i]. Se valida la descripcion por indice
+    para no corromper si algo se desalinea; si hay demasiados desajustes, se aborta
+    la escritura de precios (el cache ya quedo guardado igual).
+
+    Items en $0 (rojos / descartados / sin costo) se dejan en 0: el usuario los
+    completa a mano. Devuelve (escritos, desajustes).
+    """
+    from models.budgets import ItemPresupuesto
+
+    def _norm(s):
+        return ' '.join((s or '').strip().lower().split())
+
+    filas = (ItemPresupuesto.query
+             .filter_by(presupuesto_id=pres.id)
+             .order_by(ItemPresupuesto.id).all())
+    if not filas or not cache_items:
+        return 0, 0
+    n = min(len(filas), len(cache_items))
+    desajustes = sum(1 for i in range(n)
+                     if _norm(filas[i].descripcion) != _norm((cache_items[i] or {}).get('descripcion')))
+    # Si mas del 20% no alinea por descripcion, no arriesgamos corromper precios.
+    if n and desajustes > max(1, n // 5):
+        current_app.logger.warning(
+            'guardar-cache: %s/%s items no alinean por descripcion; se omite la '
+            'persistencia de precios (pres=%s)', desajustes, n, pres.id)
+        return 0, desajustes
+
+    escritos = 0
+    for i in range(n):
+        it = cache_items[i] or {}
+        fila = filas[i]
+        if _norm(fila.descripcion) != _norm(it.get('descripcion')):
+            continue  # este item puntual no alinea: no lo tocamos
+        pu = it.get('precio_unitario')
+        if pu is None:
+            pu = it.get('costo_unitario')
+        try:
+            pu_d = Decimal(str(pu or 0))
+        except (InvalidOperation, TypeError, ValueError):
+            pu_d = Decimal('0')
+        try:
+            total_d = Decimal(str(it.get('costo_total') or 0))
+        except (InvalidOperation, TypeError, ValueError):
+            total_d = Decimal('0')
+        if total_d <= 0 and pu_d > 0:
+            try:
+                total_d = pu_d * Decimal(str(fila.cantidad or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                total_d = Decimal('0')
+        fila.precio_unitario = pu_d
+        fila.total = total_d
+        escritos += 1
+    return escritos, desajustes
+
+
 @presupuestos_bp.route('/<int:id>/pipeline-ia/guardar-cache', methods=['POST'])
 @login_required
 def pipeline_ia_guardar_cache(id):
@@ -275,6 +339,17 @@ def pipeline_ia_guardar_cache(id):
 
     pres.pipeline_ia_cache = {'items': items, 'nivel': nivel, 'ia_degradada': ia_degradada}
     pres.pipeline_ia_fecha = datetime.utcnow()
+
+    # Opcion A: bajar los costos del cache a los ItemPresupuesto para que el detalle
+    # y los totales dejen de ver $0. Si falla, no bloquea el guardado del cache.
+    precios_persistidos = 0
+    try:
+        precios_persistidos, _desaj = _persistir_precios_en_items(pres, items)
+        if precios_persistidos:
+            pres.calcular_totales()   # recomputa subtotales/total desde los items ya priceados
+    except Exception:
+        current_app.logger.exception('No se pudieron persistir precios del cache a items')
+
     try:
         db.session.commit()
     except Exception as e:
@@ -293,7 +368,8 @@ def pipeline_ia_guardar_cache(id):
         current_app.logger.exception('No se pudieron registrar precios confirmados (no critico)')
 
     return jsonify({'ok': True, 'fecha': pres.pipeline_ia_fecha.isoformat(),
-                    'precios_confirmados': confirmados})
+                    'precios_confirmados': confirmados,
+                    'precios_persistidos': precios_persistidos})
 
 
 @presupuestos_bp.route('/precio-scraping', methods=['POST'])
