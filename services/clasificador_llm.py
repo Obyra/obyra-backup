@@ -9,9 +9,12 @@ precios, coeficientes ni reglas nuevas (output constrained via tool schema).
 Degradacion elegante: si no hay ANTHROPIC_API_KEY o el paquete anthropic no
 esta, cae a un clasificador por keywords (base_tecnica) y marca fuente='keyword'.
 """
+import logging
 import os
 import re
 import unicodedata
+
+logger = logging.getLogger(__name__)
 
 MODELO = 'claude-haiku-4-5-20251001'
 _BATCH = 40  # items por request
@@ -303,8 +306,19 @@ def clasificar_items(items, forzar_keyword: bool = False):
         try:
             base = _clasificar_llm(items, catalogo)
             fuente = 'llm'
-        except Exception:
+        except Exception as e:
             base = None  # cae a keyword si la API falla
+            # Señal de degradacion: el LLM estaba disponible (hay key) pero fallo
+            # (sin credito, rate limit, error de red...). El pipeline la propaga
+            # para que la pantalla avise que se uso el metodo basico (keyword).
+            logger.warning('Clasificador LLM fallo, cae a keyword: %s: %s',
+                           type(e).__name__, str(e)[:200])
+            try:
+                from flask import g, has_request_context
+                if has_request_context():
+                    g.ia_llm_fallo = True
+            except Exception:
+                pass
     if base is None:
         fuente = 'keyword'
         base = []

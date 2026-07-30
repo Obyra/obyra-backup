@@ -271,8 +271,9 @@ def pipeline_ia_guardar_cache(id):
     if not isinstance(items, list) or not items:
         return jsonify({'ok': False, 'error': 'items requerido'}), 400
     nivel = (data.get('nivel') or 'estandar').strip().lower()
+    ia_degradada = bool(data.get('ia_degradada'))
 
-    pres.pipeline_ia_cache = {'items': items, 'nivel': nivel}
+    pres.pipeline_ia_cache = {'items': items, 'nivel': nivel, 'ia_degradada': ia_degradada}
     pres.pipeline_ia_fecha = datetime.utcnow()
     try:
         db.session.commit()

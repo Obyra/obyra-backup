@@ -559,4 +559,16 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     resumen['pct_verde'] = round(100 * resumen['verde'] / tot, 1)
     resumen['pct_amarillo'] = round(100 * resumen['amarillo'] / tot, 1)
     resumen['pct_rojo'] = round(100 * resumen['rojo'] / tot, 1)
+
+    # Degradacion IA: el clasificador LLM estaba disponible pero fallo (sin credito,
+    # rate limit, error de red) y se cayo a keyword. La pantalla lo usa para avisar
+    # que la clasificacion (y por ende los precios) puede no ser precisa.
+    ia_degradada = False
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            ia_degradada = bool(getattr(g, 'ia_llm_fallo', False))
+    except Exception:
+        ia_degradada = False
+    resumen['ia_degradada'] = ia_degradada
     return {'items': salida, 'resumen': resumen}
