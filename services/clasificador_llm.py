@@ -128,7 +128,11 @@ def _llamar_api(system, user):
     resp = client.messages.create(
         model=MODELO,
         max_tokens=4096,
-        system=system,
+        # Prompt caching: el system prompt (catalogo de reglas ~3.6K tokens) es
+        # IDENTICO en cada lote y entre presupuestos. Marcarlo con cache_control
+        # cachea el prefijo (tools + system) por 5 min: el 1er lote lo crea a
+        # precio full y los siguientes lo leen al 10%. Reduce el costo ~3x.
+        system=[{'type': 'text', 'text': system, 'cache_control': {'type': 'ephemeral'}}],
         tools=[_TOOL],
         tool_choice={'type': 'tool', 'name': 'clasificar_items'},
         messages=[{'role': 'user', 'content': user}],
@@ -140,7 +144,14 @@ def _llamar_api(system, user):
         from flask import g, has_request_context
         usage = getattr(resp, 'usage', None)
         if has_request_context() and usage is not None:
-            g._llm_input_tokens = getattr(g, '_llm_input_tokens', 0) + (getattr(usage, 'input_tokens', 0) or 0)
+            # Con prompt caching, input_tokens NO incluye lo cacheado (va en
+            # cache_creation/cache_read). Los sumamos para que el cap diario no
+            # subcuente (conservador: los cache_read cuestan solo 10%, pero
+            # contarlos a full mantiene el cap del lado seguro).
+            _inp = ((getattr(usage, 'input_tokens', 0) or 0)
+                    + (getattr(usage, 'cache_creation_input_tokens', 0) or 0)
+                    + (getattr(usage, 'cache_read_input_tokens', 0) or 0))
+            g._llm_input_tokens = getattr(g, '_llm_input_tokens', 0) + _inp
             g._llm_output_tokens = getattr(g, '_llm_output_tokens', 0) + (getattr(usage, 'output_tokens', 0) or 0)
     except Exception:
         pass
