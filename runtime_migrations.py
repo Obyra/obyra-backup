@@ -240,6 +240,22 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         print(f"[WARN] Niveles presupuesto migration skipped: {e}")
 
+    # perfiles_usuario.cuit/direccion: eran NOT NULL (db.create_all las crea asi desde
+    # el modelo) pero account.update_profile_from_form los trata como OPCIONALES ->
+    # completar el onboarding sin CUIT tiraba 500. create_all NO altera columnas
+    # existentes, asi que aca soltamos el NOT NULL explicitamente. DROP NOT NULL es
+    # idempotente (no falla si la columna ya es nullable).
+    try:
+        db.session.execute(text(
+            "ALTER TABLE perfiles_usuario ALTER COLUMN cuit DROP NOT NULL;"
+            "ALTER TABLE perfiles_usuario ALTER COLUMN direccion DROP NOT NULL;"
+        ))
+        db.session.commit()
+        print("[OK] perfiles_usuario cuit/direccion -> nullable")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] perfiles_usuario nullable migration skipped: {e}")
+
     # FASE 1 - Precios crowdsourced: tabla presupuesto_precio_confirmado.
     # Guarda el precio de cada item CONFIRMADO por un cliente para que el pipeline
     # promedie por (material, zona) y use precios reales por encima del estimado.

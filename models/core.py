@@ -652,8 +652,11 @@ class PerfilUsuario(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
-    cuit = db.Column(db.String(20), nullable=False, unique=True)
-    direccion = db.Column(db.String(255), nullable=False)
+    # cuit/direccion son OPCIONALES: account.update_profile_from_form solo exige
+    # nombre/apellido/email. Antes eran NOT NULL -> completar el onboarding sin CUIT
+    # tiraba 500 (IntegrityError). unique en cuit se mantiene (Postgres permite N NULLs).
+    cuit = db.Column(db.String(20), nullable=True, unique=True)
+    direccion = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
