@@ -3,24 +3,29 @@
    Azul Marino + Verde Accent (Landing Page)
    ============================================ */
 
-/* Variables CSS - Paleta Landing Page */
+/* Variables CSS - Identidad Visual OBYRA (manual v1.0, mayo 2025)
+   Paleta autorizada: Azul OBYRA #0D1B2A + Verde OBYRA #16A34A + Blanco */
 :root {
-    /* Azul marino principal */
-    --primary: #1A374D;
-    --primary-light: #2D5A7B;
-    --primary-dark: #0f2940;
-    --primary-subtle: rgba(26, 55, 77, 0.1);
+    /* Tokens explicitos de marca */
+    --azul-brand: #0D1B2A;   /* Azul OBYRA institucional */
+    --verde-brand: #16A34A;  /* Verde OBYRA (accion / CTA) */
 
-    /* Verde accent */
-    --accent: #4CAF50;
-    --accent-hover: #45a049;
+    /* Azul OBYRA (institucional) */
+    --primary: #0D1B2A;
+    --primary-light: #1a3a5c;
+    --primary-dark: #060f16;
+    --primary-subtle: rgba(13, 27, 42, 0.1);
+
+    /* Verde OBYRA (accent) */
+    --accent: #16A34A;
+    --accent-hover: #15803d;
     --accent-light: #e8f5e9;
-    --accent-subtle: rgba(76, 175, 80, 0.12);
+    --accent-subtle: rgba(22, 163, 74, 0.12);
 
-    /* Grises neutros */
+    /* Grises neutros (los navy-tinted siguen la marca) */
     --carbon-900: #1a1a1a;
-    --carbon-800: #1A374D;
-    --carbon-700: #2D5A7B;
+    --carbon-800: #0D1B2A;
+    --carbon-700: #1a3a5c;
     --carbon-600: #4a4a4a;
     --carbon-500: #6b6b6b;
     --carbon-400: #8a8a8a;
@@ -29,16 +34,16 @@
     --carbon-100: #e8e8e8;
     --carbon-50: #f5f5f5;
 
-    /* Amarillo para compatibilidad (redirigido a accent) */
-    --yellow: #4CAF50;
-    --yellow-hover: #45a049;
+    /* Amarillo para compatibilidad (redirigido a accent/verde OBYRA) */
+    --yellow: #16A34A;
+    --yellow-hover: #15803d;
     --yellow-light: #e8f5e9;
-    --yellow-subtle: rgba(76, 175, 80, 0.12);
+    --yellow-subtle: rgba(22, 163, 74, 0.12);
 
     /* Colores de estado */
-    --success: #4CAF50;
+    --success: #16A34A;
     --success-light: #e8f5e9;
-    --success-subtle: rgba(76, 175, 80, 0.1);
+    --success-subtle: rgba(22, 163, 74, 0.1);
 
     --warning: #ff9800;
     --warning-light: #fff3e0;
@@ -48,9 +53,9 @@
     --danger-light: #ffebee;
     --danger-subtle: rgba(198, 40, 40, 0.1);
 
-    --info: #1A374D;
+    --info: #0D1B2A;
     --info-light: #e3f2fd;
-    --info-subtle: rgba(26, 55, 77, 0.1);
+    --info-subtle: rgba(13, 27, 42, 0.1);
 
     /* Texto */
     --text-primary: #1a1a1a;
@@ -61,7 +66,7 @@
     /* Fondos */
     --bg-body: #f5f7fa;
     --bg-card: #ffffff;
-    --bg-dark: #1A374D;
+    --bg-dark: #0D1B2A;
 
     /* Bordes */
     --border-color: #d4d4d4;
@@ -96,7 +101,8 @@ html {
 }
 
 body {
-    font-family: 'Roboto', 'Segoe UI', -apple-system, sans-serif;
+    font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+    font-weight: 400;
     font-size: 0.9375rem;
     line-height: 1.5;
     color: var(--text-primary);
@@ -1205,4 +1211,90 @@ hr {
 /* Override Bootstrap primary donde sea necesario */
 a.text-primary:hover {
     color: var(--accent-hover) !important;
+}
+
+/* ============================================
+   IDENTIDAD VISUAL OBYRA (manual v1.0)
+   Montserrat (títulos) + Inter (cuerpo)
+   Azul #0D1B2A + Verde #16A34A + Blanco
+   ============================================ */
+
+/* Tipografía de títulos: Montserrat */
+h1, h2, h3, .heading-primary, .navbar-brand {
+    font-family: 'Montserrat', 'Segoe UI', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+h4, h5, .heading-secondary {
+    font-family: 'Montserrat', 'Segoe UI', sans-serif;
+    font-weight: 600;
+}
+
+.heading-institucional {
+    color: var(--azul-brand);
+    font-family: 'Montserrat', 'Segoe UI', sans-serif;
+    font-weight: 800;
+}
+
+/* Logo / brand */
+.logo-brand, img.org-logo {
+    max-height: 40px;
+    width: auto;
+    object-fit: contain;
+}
+
+/* Botones primarios (CTA) = Verde OBYRA */
+.btn-primary {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    font-family: 'Montserrat', 'Segoe UI', sans-serif;
+    font-weight: 600;
+    transition: background-color 150ms ease;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active {
+    background-color: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: #ffffff;
+}
+
+/* Botones secundarios = contorno Verde OBYRA */
+.btn-secondary {
+    background-color: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    font-family: 'Montserrat', 'Segoe UI', sans-serif;
+    font-weight: 600;
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus {
+    background-color: var(--accent);
+    color: #ffffff;
+}
+
+/* Divisores / líneas con acento verde */
+.divider-brand {
+    border-top: 3px solid var(--accent);
+    opacity: 1;
+}
+
+.line-accent {
+    background-color: var(--accent);
+    height: 4px;
+}
+
+/* Cards con acento */
+.card-brand {
+    border-left: 5px solid var(--accent);
+    box-shadow: 0 2px 8px rgba(13, 27, 42, 0.1);
+}
+
+/* Íconos en verde de marca */
+.icon-brand {
+    color: var(--accent);
 }
