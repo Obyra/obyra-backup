@@ -49,15 +49,30 @@
             max-width: calc(100% - 60px);
             overflow: hidden;
         }
-        .navbar-brand img {
-            max-height: 38px;
-            object-fit: contain;
+        /* Logo OBYRA en badge blanco para que contraste sobre el navbar azul.
+           El logo es azul oscuro (casi el color del navbar) -> sobre blanco resalta. */
+        /* El badge blanco redondeado está horneado en el PNG; el drop-shadow sigue
+           la forma redondeada (a diferencia de box-shadow, que sería rectangular). */
+        .navbar-brand img.logo-brand {
+            height: 46px;
+            width: auto;
+            filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+            transition: filter 150ms ease, transform 150ms ease;
+        }
+        .navbar-brand:hover img.logo-brand {
+            filter: drop-shadow(0 3px 11px rgba(22, 163, 74, 0.6));  /* glow verde OBYRA al hover */
+            transform: translateY(-1px);
         }
         /* Logo de la org en mobile: más chico y permitir wrap */
         @media (max-width: 991.98px) {
             .navbar-brand img {
                 max-height: 32px !important;
                 max-width: 100px !important;
+            }
+            .navbar-brand img.logo-brand {
+                height: 38px !important;
+                width: auto !important;
+                max-width: 160px !important;
             }
             .navbar-brand .org-separator,
             .navbar-brand .org-name-text {
@@ -79,7 +94,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold d-flex align-items-center" href="{{ url_for('obras.mis_tareas') if current_user.is_authenticated and current_user.role=='operario' else url_for('index') }}">
-                <img src="{{ url_for('static', filename='img/logo-principal.png') }}" alt="OBYRA IA" height="38" style="max-width: 160px; object-fit: contain;">
+                <img src="{{ url_for('static', filename='img/logo-navbar.png') }}?v=2" alt="OBYRA" class="logo-brand" style="max-width: 200px;">
                 {% if current_user.is_authenticated %}
                 <span class="d-none d-lg-inline ms-3" style="color:rgba(255,255,255,0.35); font-size: 1.5rem; font-weight: 100;">|</span>
                 {% endif %}
@@ -547,7 +562,7 @@
         <div class="container">
             <div class="text-center">
                 <div class="mb-2">
-                    <img src="{{ url_for('static', filename='img/logo-principal.png') }}" alt="OBYRA IA" height="40" style="max-width: 170px; object-fit: contain;">
+                    <img src="{{ url_for('static', filename='img/logo-navbar.png') }}?v=2" alt="OBYRA IA" height="44" style="max-width: 210px; object-fit: contain;">
                 </div>
                 <p class="mb-1">
                     <small>Plataforma inteligente de planificación y compras para obras en LATAM</small>
