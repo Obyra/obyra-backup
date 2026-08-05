@@ -198,6 +198,44 @@ def test_evaluar_candidatos_es_consistente_con_vincular(indice):
     assert barrido == reales
 
 
+@pytest.mark.parametrize("descripcion,unidad", [
+    ("Honorarios de dirección técnica", "gl"),
+    ("Seguro de obra y póliza de caución", "mes"),
+    ("Gestión de permisos municipales", "un"),
+    ("Cartel de obra según pliego", "un"),
+    ("Gastos generales e imprevistos", "gl"),
+])
+def test_servicios_no_se_vinculan_a_stock(descripcion, unidad, indice):
+    """Los importadores marcan TODO como tipo='material', asi que honorarios y
+    tramites llegan al matcher. Nada de eso se reserva contra el deposito."""
+    inv_id, _score, motivo = vincular_item_inventario(descripcion, unidad, indice)
+    assert inv_id is None
+    assert motivo == 'no_es_material'
+
+
+def test_unidad_uni_es_compatible_con_un():
+    """REGRESION: 'UNI' es el 64% del inventario de produccion (7.210 de 11.265)
+    y no estaba en la tabla de sinonimos, asi que el guard de unidad descartaba
+    todos esos items."""
+    from services.precio_recurso_service import _unidades_compatibles
+    assert _unidades_compatibles('UNI', 'un')
+    assert _unidades_compatibles('uni', 'unidad')
+    assert _unidades_compatibles('LTS', 'litro')
+    assert _unidades_compatibles('JOR', 'jornal')
+    # y que no se haya aflojado de mas
+    assert not _unidades_compatibles('uni', 'm2')
+    assert not _unidades_compatibles('lts', 'kg')
+
+
+def test_material_en_uni_vincula(indice):
+    """Un item de inventario cargado en 'UNI' ahora si matchea un pliego en 'un'."""
+    idx = _indice([(90, "Ladrillo hueco 12x18x33", "UNI")])
+    inv_id, _score, motivo = vincular_item_inventario(
+        "Ladrillo hueco 12x18x33", "un", idx)
+    assert inv_id == 90
+    assert motivo == 'ok'
+
+
 def test_incluir_rechazados_expone_el_motivo(indice):
     """El dry-run necesita saber POR QUE se descarto cada candidato."""
     cands = evaluar_candidatos(

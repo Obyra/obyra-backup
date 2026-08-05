@@ -213,6 +213,19 @@ def _reportar(args):
     for m, k in sorted(motivos.items(), key=lambda x: -x[1]):
         print(f"      por {m:<18}: {k:>4}")
 
+    # Los importadores marcan TODO el pliego como tipo='material'. La tasa cruda
+    # de vinculacion queda deflactada por honorarios/servicios que nunca podrian
+    # estar en el inventario. Este desglose muestra la tasa sobre materiales de
+    # verdad, que es la unica que dice algo sobre la calidad del matcher.
+    servicios = sum(1 for f in filas if f['motivo'] == 'no_es_material')
+    reales = n - servicios
+    print()
+    print(f"  de esos {n}, son servicios/honorarios : {servicios:>4}  ({pct(servicios)})")
+    print(f"  materiales reales                     : {reales:>4}")
+    if reales:
+        print(f"  >> tasa sobre materiales reales       : {len(vinc):>4}  "
+              f"({100.0 * len(vinc) / reales:.1f}%)")
+
     # ---------- CALIBRACION ----------
     print("\n" + SEP)
     print("CALIBRACION")

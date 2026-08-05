@@ -285,15 +285,19 @@ def _tokens_significativos(texto: str) -> set:
     return out
 
 
+# 2026-08-05: se agregaron 'uni', 'lts' y 'jor' a partir de un censo de unidades
+# reales del inventario en produccion (40 variantes distintas en org 1). 'UNI' sola
+# cubria 7.210 de 11.265 items --el 64% del inventario-- y no matcheaba con nada,
+# asi que el guard de unidad los descartaba a todos. Ver el dry-run de vinculacion.
 _UNIDADES_SINONIMOS = {
     'm2': {'m2', 'm²', 'mts2', 'mt2', 'metros cuadrados', 'metro cuadrado'},
     'm3': {'m3', 'm³', 'mts3', 'mt3', 'metros cubicos', 'metro cubico'},
     'ml': {'ml', 'm', 'mts', 'mtrs', 'metro lineal', 'metros lineales'},
     'kg': {'kg', 'kilo', 'kilos', 'kgr'},
-    'un': {'un', 'u', 'ud', 'und', 'unidad', 'unidades', 'gl', 'global', 'gbl', 'glb'},
+    'un': {'un', 'uni', 'u', 'ud', 'und', 'unidad', 'unidades', 'gl', 'global', 'gbl', 'glb'},
     'hora': {'hora', 'hr', 'hs', 'h'},
-    'jornal': {'jornal', 'jrnl', 'dia', 'día', 'd'},
-    'l': {'l', 'lt', 'litro', 'litros'},
+    'jornal': {'jornal', 'jor', 'jrnl', 'dia', 'día', 'd'},
+    'l': {'l', 'lt', 'lts', 'litro', 'litros'},
     'tn': {'tn', 'tonelada', 'toneladas'},
     'bolsa': {'bolsa', 'bolsas'},
 }
