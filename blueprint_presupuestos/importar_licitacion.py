@@ -730,14 +730,6 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
     db.session.flush()
 
     from services.etapa_matcher import matchear_etapa_para_item
-    from services.inventory_matcher import (
-        construir_indice_inventario, vincular_item_inventario)
-
-    # Indice de inventario: 1 sola query para todo el pliego. Sin esto los items
-    # importados quedan con item_inventario_id NULL y caen en 'sin_vincular' al
-    # gestionar materiales en la obra (no se pueden reservar contra el deposito).
-    indice_inv = construir_indice_inventario(org_id)
-    vinculados = 0
 
     subtotal = Decimal('0')
     for it in items:
@@ -750,11 +742,6 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
         precio = Decimal('0') if modo_licitacion else it['precio_unitario']
         total_item = it['cantidad'] * precio
 
-        inv_id, _score, _motivo = vincular_item_inventario(
-            it['descripcion'], it['unidad'], indice_inv)
-        if inv_id:
-            vinculados += 1
-
         ip = ItemPresupuesto(
             presupuesto_id=presu.id,
             tipo='material',
@@ -766,14 +753,9 @@ def _crear_presupuesto_desde_items(org_id, cliente_id, numero, vigencia_dias, no
             origen='importado',
             currency='ARS',
             etapa_nombre=etapa_final,
-            item_inventario_id=inv_id,
         )
         db.session.add(ip)
         subtotal += total_item
-
-    current_app.logger.info(
-        f"Import pliego {numero}: {vinculados}/{len(items)} items vinculados al inventario"
-    )
 
     presu.subtotal_materiales = subtotal
     presu.total_sin_iva = subtotal
