@@ -59,19 +59,64 @@ def main():
                     help="Ruta opcional para volcar el detalle completo en CSV")
     args = ap.parse_args()
 
-    import app as _app
-    from extensions import db
-
-    with _app.app.app_context():
+    mini_app, db = _crear_contexto_minimo()
+    with mini_app.app_context():
+        # Marca la transaccion como READ ONLY en el propio Postgres: si algo
+        # intentara escribir, la DB lo rechaza. El script nunca commitea, asi
+        # que todo corre dentro de esta unica transaccion.
         try:
-            _reportar(db, args)
+            from sqlalchemy import text
+            db.session.execute(text('SET TRANSACTION READ ONLY'))
+        except Exception as e:
+            print(f"  (aviso: no se pudo marcar READ ONLY: {e})")
+            db.session.rollback()
+        try:
+            _reportar(args)
         finally:
-            # Paranoia: este script no escribe, pero si algo dejo la sesion
-            # sucia no queremos que se persista por un autoflush.
+            # Nunca se commitea: se descarta todo al salir.
             db.session.rollback()
 
 
-def _reportar(db, args):
+def _crear_contexto_minimo():
+    """App Flask minima, solo para tener contexto de SQLAlchemy.
+
+    Deliberadamente NO se importa `app.py`. Ese modulo, al importarse, levanta
+    todos los blueprints, el middleware, CORS, el rate limiter y --sobre todo--
+    ejecuta `runtime_migrations`, que aplica DDL (CREATE TABLE / ALTER / seeds).
+    Un script de solo lectura no tiene por que modificar el esquema de
+    produccion para poder hacer un SELECT.
+
+    Aca se arma un Flask pelado con la misma DATABASE_URL y se hace db.init_app
+    sobre la instancia compartida de extensions, que es todo lo que necesitan
+    los modelos para que `Model.query` funcione.
+    """
+    from flask import Flask
+    from extensions import db
+
+    url = os.environ.get('DATABASE_URL')
+    if not url:
+        print("ERROR: falta DATABASE_URL en el entorno.")
+        print("  Dentro de Railway ya viene seteada; en local, exportala primero.")
+        sys.exit(1)
+
+    # Normalizar al driver psycopg v3 que usa el proyecto.
+    if url.startswith('postgres://'):
+        url = 'postgresql+psycopg://' + url[len('postgres://'):]
+    elif url.startswith('postgresql://'):
+        url = 'postgresql+psycopg://' + url[len('postgresql://'):]
+
+    mini = Flask(__name__)
+    mini.config['SQLALCHEMY_DATABASE_URI'] = url
+    mini.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db.init_app(mini)
+
+    # Importar los modelos registra las clases en el metadata compartido.
+    import models  # noqa: F401
+
+    return mini, db
+
+
+def _reportar(args):
     from models.budgets import Presupuesto, ItemPresupuesto
     from services.inventory_matcher import (
         construir_indice_inventario, evaluar_candidatos, vincular_item_inventario,
