@@ -123,10 +123,18 @@ def _crear_items_con_origen(presupuesto, items_parseados, archivo_pa, modo_licit
     from models.budgets import ItemPresupuesto
     from models.presupuesto_etapa import PresupuestoEtapa
     from services.etapa_matcher import matchear_etapa_para_item
+    from services.inventory_matcher import (
+        construir_indice_inventario, vincular_item_inventario)
 
     creados = 0
     subtotal = Decimal('0')
     pares = []
+
+    # Indice de inventario: 1 sola query para todo el archivo. Sin vincular, los
+    # items importados caen en 'sin_vincular' al gestionar materiales en la obra
+    # y no se pueden reservar contra el deposito.
+    indice_inv = construir_indice_inventario(presupuesto.organizacion_id)
+    vinculados = 0
 
     # Cache de etapas por nombre normalizado para evitar queries N+1
     etapas_cache = {}  # nombre_norm -> PresupuestoEtapa
@@ -179,6 +187,11 @@ def _crear_items_con_origen(presupuesto, items_parseados, archivo_pa, modo_licit
         cantidad = it['cantidad']
         total_item = cantidad * precio
 
+        inv_id, _score, _motivo = vincular_item_inventario(
+            it['descripcion'], it['unidad'], indice_inv)
+        if inv_id:
+            vinculados += 1
+
         ip = ItemPresupuesto(
             presupuesto_id=presupuesto.id,
             tipo='material',
@@ -195,11 +208,17 @@ def _crear_items_con_origen(presupuesto, items_parseados, archivo_pa, modo_licit
             hoja_origen=it.get('hoja_origen'),
             fila_origen=it.get('fila_origen'),
             columna_descripcion_origen=it.get('columna_descripcion_origen'),
+            item_inventario_id=inv_id,
         )
         db.session.add(ip)
         creados += 1
         subtotal += total_item
         pares.append((ip, it))
+
+    current_app.logger.info(
+        f"Import pliego (pres={presupuesto.id}): {vinculados}/{creados} "
+        f"items vinculados al inventario"
+    )
     return creados, subtotal, pares
 
 

@@ -198,19 +198,17 @@ def test_evaluar_candidatos_es_consistente_con_vincular(indice):
     assert barrido == reales
 
 
-@pytest.mark.parametrize("descripcion,unidad", [
-    ("Honorarios de dirección técnica", "gl"),
-    ("Seguro de obra y póliza de caución", "mes"),
-    ("Gestión de permisos municipales", "un"),
-    ("Cartel de obra según pliego", "un"),
-    ("Gastos generales e imprevistos", "gl"),
-])
-def test_servicios_no_se_vinculan_a_stock(descripcion, unidad, indice):
-    """Los importadores marcan TODO como tipo='material', asi que honorarios y
-    tramites llegan al matcher. Nada de eso se reserva contra el deposito."""
-    inv_id, _score, motivo = vincular_item_inventario(descripcion, unidad, indice)
-    assert inv_id is None
-    assert motivo == 'no_es_material'
+def test_un_servicio_cargado_en_inventario_si_vincula():
+    """REGRESION (2026-08-05): se intento bloquear con _es_no_apu() los items que
+    "parecen servicio" y destruyo 66 vinculos correctos en un solo presupuesto.
+    Muchas organizaciones cargan servicios y gastos generales en su inventario;
+    si estan ahi, hay que vincularlos."""
+    idx = _indice([(80, "Ayuda de Gremios según Pliego", "gl"),
+                   (81, "Replanteos y verificación de medidas y niveles", "gl")])
+    inv_id, _score, motivo = vincular_item_inventario(
+        "Ayuda de Gremios según PLIEGO", "gl", idx)
+    assert inv_id == 80, "un servicio que ESTA en el inventario debe vincularse"
+    assert motivo == 'ok'
 
 
 def test_unidad_uni_es_compatible_con_un():

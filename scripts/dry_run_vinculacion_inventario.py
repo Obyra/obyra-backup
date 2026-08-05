@@ -213,18 +213,19 @@ def _reportar(args):
     for m, k in sorted(motivos.items(), key=lambda x: -x[1]):
         print(f"      por {m:<18}: {k:>4}")
 
-    # Los importadores marcan TODO el pliego como tipo='material'. La tasa cruda
-    # de vinculacion queda deflactada por honorarios/servicios que nunca podrian
-    # estar en el inventario. Este desglose muestra la tasa sobre materiales de
-    # verdad, que es la unica que dice algo sobre la calidad del matcher.
-    servicios = sum(1 for f in filas if f['motivo'] == 'no_es_material')
-    reales = n - servicios
+    # Cuantos ítems parecerian servicios segun _es_no_apu(). Es INFORMATIVO: no se
+    # usa para filtrar. Se probo filtrar con esto y fue una regresion grave (ver el
+    # comentario en services/inventory_matcher.py). Se reporta solo para dimensionar
+    # cuanto del pliego no es material fisico, que ayuda a leer la tasa cruda.
+    from services.pipeline_presupuesto_ia import _es_no_apu
+    parecen_serv = sum(1 for f in filas
+                       if _es_no_apu(f['item'].descripcion, f['item'].unidad))
+    vinc_serv = sum(1 for f in vinc
+                    if _es_no_apu(f['item'].descripcion, f['item'].unidad))
     print()
-    print(f"  de esos {n}, son servicios/honorarios : {servicios:>4}  ({pct(servicios)})")
-    print(f"  materiales reales                     : {reales:>4}")
-    if reales:
-        print(f"  >> tasa sobre materiales reales       : {len(vinc):>4}  "
-              f"({100.0 * len(vinc) / reales:.1f}%)")
+    print(f"  parecen servicios (_es_no_apu)        : {parecen_serv:>4}  ({pct(parecen_serv)})")
+    print(f"      ...de los cuales SI vinculan      : {vinc_serv:>4}  "
+          f"<- por eso no se filtran")
 
     # ---------- CALIBRACION ----------
     print("\n" + SEP)

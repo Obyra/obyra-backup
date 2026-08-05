@@ -190,22 +190,17 @@ def vincular_item_inventario(
         El score es la cobertura del nombre de inventario: 1.0 = todas las
         palabras del item de inventario aparecen en la descripcion del pliego.
     """
-    # Los importadores de pliego marcan TODAS las filas como tipo='material', asi
-    # que llegan aca honorarios, seguros, gastos generales y tramites. Nada de eso
-    # se reserva contra el deposito. _es_no_apu() ya sabe reconocerlos (lo usa el
-    # pipeline IA para agrupar los rojos "legitimos"), asi que se reusa en vez de
-    # duplicar la lista de keywords.
+    # NO filtrar por _es_no_apu() aca. Se probo (2026-08-05) y fue una regresion
+    # grave: destruyo 66 vinculos CORRECTOS solo en el presupuesto 68, entre ellos
+    # "Ayuda de Gremios segun Pliego", "Replanteos y verificacion de medidas y
+    # niveles" e "Instalacion de bano de Obrador" --todos con contrapartida EXACTA
+    # cargada en el inventario de la organizacion.
     #
-    # Se filtra ACA y no cambiando el `tipo` del item a proposito: solo existen
-    # tres tipos ('material', 'equipo', 'mano_obra') y 128 lugares del codigo
-    # dependen de 'material' --incluido el armado del PDF al cliente--. Un servicio
-    # es un renglon facturable que el cliente TIENE que ver; sacarlo de 'material'
-    # arriesga que desaparezca del presupuesto impreso. Lo que hay que evitar no es
-    # que sea 'material', es que se vincule a stock.
-    from services.pipeline_presupuesto_ia import _es_no_apu
-    if _es_no_apu(descripcion, unidad):
-        return None, 0.0, 'no_es_material'
-
+    # El error fue conceptual: _es_no_apu() responde "¿esto tiene una receta APU
+    # descomponible?", que es una pregunta distinta de "¿esto existe en el catalogo
+    # de inventario de esta org?". Hay organizaciones que cargan servicios y gastos
+    # generales como items de inventario, y hacen bien. Un clasificador orientado a
+    # APU no sirve como guarda de inventario.
     if not _tokens_utiles(descripcion):
         return None, 0.0, 'descripcion_sin_tokens'
 
