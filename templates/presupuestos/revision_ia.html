@@ -47,17 +47,32 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
   </div>
 
-  <!-- Resumen rapido (oculto hasta terminar): 3 categorias. -->
+  <!-- Resumen rapido (oculto hasta terminar): una tarjeta por estado REAL del
+       semaforo, nombradas por lo que hay que hacer y no por el color.
+
+       Antes eran 3 y mentian: "Calculados" contaba todo lo no-rojo, o sea que
+       metia los amarillos (precio con recursos estimados) adentro del verde bajo
+       el cartel "no requieren accion". Y la tarjeta del medio no media el color
+       amarillo sino auto_clasificado/completado_candidato, que es un eje distinto
+       --un item puede ser verde Y rescatado a la vez--, por eso daba 0 mientras
+       habia 52 amarillos escondidos en verde. Ese dato ahora vive en el badge
+       "Auto"/"Candidato" de cada fila de la tabla, que es donde se puede accionar.
+
+       Los dos rojos se separan por grupo_ayuda, que el backend ya calcula
+       (pipeline_presupuesto_ia.py:577): tienen acciones distintas. -->
   <div id="resumenBox" class="row g-2 mb-3 d-none">
-    <div class="col-4"><div class="card border-success h-100"><div class="card-body text-center py-3">
-      <div class="h3 mb-0 text-success" id="cntCalc">0</div>
-      <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Calculados</div></div></div></div>
-    <div class="col-4"><div class="card border-warning h-100"><div class="card-body text-center py-3">
-      <div class="h3 mb-0 text-warning" id="cntCand">0</div>
-      <div class="small text-muted"><i class="fas fa-wand-magic-sparkles text-warning me-1"></i>Completados con candidatos</div></div></div></div>
-    <div class="col-4"><div class="card border-danger h-100"><div class="card-body text-center py-3">
-      <div class="h3 mb-0 text-danger" id="cntRojo">0</div>
-      <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Necesitan tu ayuda</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card border-success h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-success" id="cntListos">0</div>
+      <div class="small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Listos</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card border-warning h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-warning" id="cntRevisar">0</div>
+      <div class="small text-muted"><i class="fas fa-magnifying-glass-dollar text-warning me-1"></i>Revisá el precio</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card border-primary h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-primary" id="cntMonto">0</div>
+      <div class="small text-muted"><i class="fas fa-layer-group text-primary me-1"></i>Cargá el monto a mano</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card border-danger h-100"><div class="card-body text-center py-3">
+      <div class="h3 mb-0 text-danger" id="cntTrabajo">0</div>
+      <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Elegí el tipo de trabajo</div></div></div></div>
   </div>
 
   <!-- Fork: descargar directo o revisar antes de enviar -->
@@ -284,20 +299,34 @@ function _render(){
   const descartados=_res.filter(x=>x.estado==='descartado');
   const incluidos=_res.filter(x=>x.estado==='incluido');
   const rojos=items.filter(x=>x.color==='rojo');
-  // 3 categorias: calculados (confiable) / completados con candidatos (rescatados,
-  // menor confianza) / necesitan ayuda (rojos). Todos los con precio van a la tabla.
-  const _esRescatado=x=>x.auto_clasificado||x.completado_candidato||x.fuente_clasificacion==='auto_candidato'||x.fuente_clasificacion==='candidato';
-  const calculados=items.filter(x=>x.color!=='rojo');   // detalle: todos los con precio
-  const rescatados=calculados.filter(_esRescatado);
-  const nConf=calculados.length-rescatados.length;
-  document.getElementById('cntCalc').textContent=nConf;
-  document.getElementById('cntCand').textContent=rescatados.length;
-  document.getElementById('cntRojo').textContent=rojos.length;
+  // Los 4 baldes del semaforo, cada uno con SU accion:
+  //   verde              -> Listos, no hay que hacer nada
+  //   amarillo           -> Revisa el precio (tiene precio, pero parte de los
+  //                         recursos se estimaron: ver _color() en el pipeline)
+  //   rojo + no_apu      -> Carga el monto a mano (honorarios/servicios)
+  //   rojo + constructivo-> Elegi el tipo de trabajo (hay candidatos sugeridos)
+  const listos=items.filter(x=>x.color==='verde');
+  const revisar=items.filter(x=>x.color==='amarillo');
+  const rojosNoApu=rojos.filter(x=>x.grupo_ayuda==='no_apu');
+  const rojosConstr=rojos.filter(x=>x.grupo_ayuda!=='no_apu');
+  // La tabla de abajo sigue listando TODO lo que tiene precio (verde + amarillo):
+  // es la lista de precios del presupuesto, no un balde del semaforo.
+  const calculados=items.filter(x=>x.color!=='rojo');
+  document.getElementById('cntListos').textContent=listos.length;
+  document.getElementById('cntRevisar').textContent=revisar.length;
+  document.getElementById('cntMonto').textContent=rojosNoApu.length;
+  document.getElementById('cntTrabajo').textContent=rojosConstr.length;
   const _vc=document.getElementById('validacionCopy');
   if(_vc){
-    let p='El presupuesto está listo. <strong>'+nConf+'</strong> ítems calculados';
-    if(rescatados.length) p+=', <strong>'+rescatados.length+'</strong> completados con candidatos';
-    if(rojos.length) p+=', <strong>'+rojos.length+'</strong> requieren tu input';
+    const pend=revisar.length+rojos.length;
+    let p;
+    if(!pend){ p='El presupuesto está listo: <strong>'+listos.length+'</strong> ítems calculados y sin nada pendiente'; }
+    else{
+      p='<strong>'+listos.length+'</strong> ítems listos';
+      if(revisar.length) p+=', <strong>'+revisar.length+'</strong> con precio a revisar';
+      if(rojosNoApu.length) p+=', <strong>'+rojosNoApu.length+'</strong> esperando que cargues el monto';
+      if(rojosConstr.length) p+=', <strong>'+rojosConstr.length+'</strong> esperando que elijas el tipo de trabajo';
+    }
     _vc.innerHTML=p+'.';
   }
   document.getElementById('quickActions').classList.remove('d-none');
@@ -305,11 +334,11 @@ function _render(){
   document.getElementById('totalPrecio').textContent=_money(total);
   _renderDescartes(descartados,incluidos);
 
-  // Rojos — separo no-APU (honorarios/servicios -> monto global en 1 paso)
-  // de los constructivos (se revisan uno a uno).
+  // Rojos — no-APU (honorarios/servicios -> monto global en 1 paso) y
+  // constructivos (se revisan uno a uno). Ambos ya se calcularon arriba, junto
+  // con los contadores de las tarjetas, para que el detalle y el resumen no
+  // puedan decir cosas distintas.
   const rb=document.getElementById('rojosBox');
-  const rojosNoApu=rojos.filter(x=>x.grupo_ayuda==='no_apu');
-  const rojosConstr=rojos.filter(x=>x.grupo_ayuda!=='no_apu');
   if(rojos.length){
     let h='<h5 class="mb-3"><i class="fas fa-hand-paper text-danger me-2"></i>Necesitan tu ayuda ('+rojos.length+')</h5>';
 
@@ -317,7 +346,8 @@ function _render(){
     if(rojosNoApu.length){
       h+='<div class="card border-primary mb-3" id="grupoNoApu"><div class="card-body">';
       h+='<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">';
-      h+='<div><div class="fw-bold"><i class="fas fa-layer-group text-primary me-2"></i>'+rojosNoApu.length+' ítems parecen honorarios / servicios / gastos generales</div>';
+      h+='<div><div class="fw-bold"><i class="fas fa-layer-group text-primary me-2"></i>Cargá el monto a mano · '+rojosNoApu.length+' ítems</div>';
+      h+='<div class="small">Parecen honorarios, servicios o gastos generales.</div>';
       h+='<div class="small text-muted">No son trabajo constructivo. Los podés cargar a todos como <strong>monto global</strong> en un solo paso.</div></div>';
       h+='<button class="btn btn-primary" id="btnCargarNoApu"><i class="fas fa-check-double me-1"></i>Cargar los '+rojosNoApu.length+' como monto global</button>';
       h+='</div>';
@@ -331,8 +361,8 @@ function _render(){
 
     // Bloque 2: constructivos individuales (con candidatos).
     if(rojosConstr.length){
-      if(rojosNoApu.length) h+='<p class="text-muted small mb-2"><strong>'+rojosConstr.length+'</strong> ítems constructivos: elegí el tipo de trabajo o cargá el precio a mano. <strong>La próxima vez lo reconocemos solo.</strong></p>';
-      else h+='<p class="text-muted small">No pudimos calcular el precio de estos ítems. Elegí el tipo de trabajo o cargá el precio a mano. <strong>La próxima vez lo reconocemos solo.</strong></p>';
+      h+='<h6 class="mb-1"><i class="fas fa-hand-paper text-danger me-2"></i>Elegí el tipo de trabajo · '+rojosConstr.length+' ítems</h6>';
+      h+='<p class="text-muted small mb-2">No pudimos calcular el precio de estos ítems. Elegí el tipo de trabajo de la lista, o cargá el precio a mano. <strong>La próxima vez lo reconocemos solo.</strong></p>';
       h+='<div class="d-flex flex-column gap-3">';
       rojosConstr.forEach(it=>{
         h+='<div class="card border-danger-subtle" data-desc="'+_esc(it.descripcion)+'"><div class="card-body">';
@@ -366,15 +396,26 @@ function _pintarCalculados(calculados){
   if(!cb) return;
   if(!calculados.length){ cb.innerHTML=''; return; }
   const est=calculados.filter(x=>x.precio_estimado).length;
+  const nRevisar=calculados.filter(x=>x.color==='amarillo').length;
   const totalCalc=calculados.reduce((a,x)=>a+_venta(x.costo_total),0);   // precio de venta
   let h='<div class="card"><div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#seccCalc">';
-  h+='<i class="fas fa-check-circle text-success me-2"></i>Ítems calculados ('+calculados.length+') <small class="text-muted ms-1">— tienen precio, no requieren acción</small>';
+  // OJO con la copy: esta tabla lista verde + amarillo. Decia "no requieren
+  // accion" para todos, y los amarillos SI la requieren (parte de sus recursos
+  // se estimaron). Por eso se nombra por lo que la tabla es --los que ya tienen
+  // precio-- y se aclara cuantos conviene mirar.
+  h+='<i class="fas fa-check-circle text-success me-2"></i>Ítems con precio ('+calculados.length+')';
+  h+= nRevisar
+      ? ' <small class="text-muted ms-1">— '+nRevisar+' conviene que los revises</small>'
+      : ' <small class="text-muted ms-1">— no requieren acción</small>';
   h+='<span class="float-end fw-bold text-success">'+_money(totalCalc)+' <i class="fas fa-chevron-down ms-2"></i></span></div>';
   h+='<div id="seccCalc" class="collapse show"><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead class="table-light"><tr><th>Ítem</th><th class="text-end">Cant.</th><th class="text-end">Precio unit.</th><th class="text-end">Total</th></tr></thead><tbody>';
   calculados.forEach(it=>{
     const auto = it.auto_clasificado ? ' <span class="badge bg-info text-dark auto-badge" role="button" data-desc="'+_esc(it.descripcion)+'" data-regla="'+_esc(it.regla_id||'')+'" title="Clasificado automáticamente por la IA — click para confirmar (queda como revisado por vos)"><i class="fas fa-robot me-1"></i>Auto</span>' : '';
     const cand = (it.completado_candidato && !it.auto_clasificado) ? ' <span class="badge bg-warning text-dark auto-badge" role="button" data-desc="'+_esc(it.descripcion)+'" data-regla="'+_esc(it.regla_id||'')+'" title="Completado con el candidato más parecido — revisá y confirmá si está bien"><i class="fas fa-wand-magic-sparkles me-1"></i>Candidato</span>' : '';
-    h+='<tr><td>'+_esc(it.descripcion)+auto+cand+(it.precio_estimado?' '+_DOT_EST:'')+'</td>';
+    // Marca del balde "Revisá el precio": el item tiene precio pero parte de sus
+    // recursos se estimaron. Sin esto quedaba indistinguible de un verde.
+    const rev = it.color==='amarillo' ? ' <span class="badge bg-warning text-dark" title="Tiene precio, pero algunos de sus recursos no tenían precio real y se estimaron. Conviene revisarlo."><i class="fas fa-magnifying-glass-dollar me-1"></i>Revisar</span>' : '';
+    h+='<tr'+(it.color==='amarillo'?' class="table-warning"':'')+'><td>'+_esc(it.descripcion)+auto+cand+rev+(it.precio_estimado?' '+_DOT_EST:'')+'</td>';
     h+='<td class="text-end">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</td><td class="text-end">'+_unit(it)+'</td>';
     h+='<td class="text-end fw-bold">'+_money(_venta(it.costo_total))+'</td></tr>';   // precio de venta
   });
