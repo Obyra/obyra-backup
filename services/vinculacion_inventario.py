@@ -92,9 +92,14 @@ def preparar_pantalla(presupuesto, org_id: int) -> Dict[str, Any]:
     No escribe nada. Costo: 2 queries (indice de inventario + stocks) mas la
     carga de los items del presupuesto, sin importar cuantos renglones tenga.
     """
+    from sqlalchemy.orm import selectinload
     from models.budgets import ItemPresupuesto
 
+    # selectinload explicito: el backref es lazy='select' para no cobrarle una
+    # query a todo el resto de la app (ver models/budgets.py). Sin esto, el
+    # `item.vinculos_inventario` del loop de abajo seria N+1 sobre 300 renglones.
     items = (ItemPresupuesto.query
+             .options(selectinload(ItemPresupuesto.vinculos_inventario))
              .filter(ItemPresupuesto.presupuesto_id == presupuesto.id,
                      ItemPresupuesto.tipo == 'material')
              .order_by(ItemPresupuesto.id)

@@ -1341,10 +1341,23 @@ class ItemPresupuestoInventario(db.Model):
         db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # lazy='select' (el default) A PROPOSITO, no 'selectin'.
+    #
+    # Con 'selectin' esta relacion se cargaba en TODA query que trajera
+    # ItemPresupuesto, la use o no: el detalle de un presupuesto de 192 renglones
+    # pagaba una query extra para nada, igual que el PDF y el pipeline IA.
+    # Los DOS unicos lugares que leen los vinculos iteran sobre muchos items, asi
+    # que piden selectinload() explicito y no hay N+1:
+    #     services/vinculacion_inventario.py:preparar_pantalla
+    #     obras/materiales.py:api_analizar_materiales
+    #
+    # Tampoco 'raise', que seria el guard mas estricto: `cascade='delete-orphan'`
+    # obliga a SQLAlchemy a CARGAR la coleccion para borrar los hijos, y
+    # blueprint_presupuestos/items.py:763 hace db.session.delete(item). Con
+    # 'raise' eliminar un item de presupuesto tiraria InvalidRequestError.
     item_presupuesto = db.relationship(
         'ItemPresupuesto',
-        backref=db.backref('vinculos_inventario',
-                           cascade='all, delete-orphan', lazy='selectin'),
+        backref=db.backref('vinculos_inventario', cascade='all, delete-orphan'),
     )
     item_inventario = db.relationship('ItemInventario', foreign_keys=[item_inventario_id])
     confirmado_por = db.relationship('Usuario', foreign_keys=[confirmado_por_id])

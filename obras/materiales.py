@@ -190,7 +190,14 @@ def api_analizar_materiales(obra_id):
         if not presupuesto:
             return jsonify({'ok': False, 'error': 'Esta obra no tiene presupuesto confirmado'}), 400
 
-        materiales_raw = [item for item in presupuesto.items if item.tipo == 'material']
+        # selectinload explícito: el backref vinculos_inventario es lazy='select'
+        # para no cobrarle una query a toda la app (ver models/budgets.py). Sin
+        # esto el loop de abajo sería N+1 sobre todos los renglones del pliego.
+        from sqlalchemy.orm import selectinload
+        materiales_raw = (presupuesto.items
+                          .options(selectinload(ItemPresupuesto.vinculos_inventario))
+                          .filter(ItemPresupuesto.tipo == 'material')
+                          .all())
         if not materiales_raw:
             return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
 
