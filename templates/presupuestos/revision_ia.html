@@ -67,9 +67,15 @@
     <div class="col-6 col-lg-3"><div class="card border-warning h-100"><div class="card-body text-center py-3">
       <div class="h3 mb-0 text-warning" id="cntRevisar">0</div>
       <div class="small text-muted"><i class="fas fa-magnifying-glass-dollar text-warning me-1"></i>Revisá el precio</div></div></div></div>
+    {# Azul explicito, NO text-primary: style.css:1207 pisa .text-primary con
+       var(--accent) = #16A34A, que es EXACTAMENTE el mismo verde que --success.
+       Con la clase, esta tarjeta salia del mismo color que "Listos" --dos estados
+       opuestos indistinguibles-- mientras el borde si quedaba azul, porque
+       border-primary no esta pisado. El azul es la convencion que ya usa el
+       bloque no_apu del detalle (card border-primary, mas abajo). #}
     <div class="col-6 col-lg-3"><div class="card border-primary h-100"><div class="card-body text-center py-3">
-      <div class="h3 mb-0 text-primary" id="cntMonto">0</div>
-      <div class="small text-muted"><i class="fas fa-layer-group text-primary me-1"></i>Cargá el monto a mano</div></div></div></div>
+      <div class="h3 mb-0" style="color:#0d6efd" id="cntMonto">0</div>
+      <div class="small text-muted"><i class="fas fa-layer-group me-1" style="color:#0d6efd"></i>Cargá el monto a mano</div></div></div></div>
     <div class="col-6 col-lg-3"><div class="card border-danger h-100"><div class="card-body text-center py-3">
       <div class="h3 mb-0 text-danger" id="cntTrabajo">0</div>
       <div class="small text-muted"><i class="fas fa-hand-paper text-danger me-1"></i>Elegí el tipo de trabajo</div></div></div></div>
