@@ -199,9 +199,25 @@ def confirmar_como_obra(id):
                     f"items internos (se ignoran rubros del pliego)."
                 )
             else:
+                # No deberia pasar: ejecutivo_aprobar() ahora bloquea aprobar sin
+                # etapas internas. Queda como red de seguridad para presupuestos
+                # que hayan quedado aprobados antes de ese gate.
+                #
+                # El flash es lo importante: esta vista devuelve redirect_url a la
+                # obra, asi que el mensaje aparece justo en la obra recien creada
+                # --que es donde el usuario esta mirando el cronograma vacio y no
+                # entiende por que. Antes solo habia un logger.warning que nadie leia.
                 current_app.logger.warning(
                     f"Presupuesto {presupuesto.numero} con ejecutivo aprobado pero "
-                    f"sin etapas internas. Cronograma quedará vacío — agregalas manualmente en la obra."
+                    f"sin etapas internas. Cronograma quedará vacío."
+                )
+                flash(
+                    'La obra se creó sin cronograma. El ejecutivo de este presupuesto '
+                    'estaba aprobado pero no tenía etapas internas cargadas, y son esas '
+                    'las que arman el plan de trabajo. Podés cargar las etapas a mano '
+                    'acá en la obra, o revertir la aprobación del ejecutivo, agregarlas '
+                    'y confirmar de nuevo.',
+                    'warning'
                 )
                 items = []
 

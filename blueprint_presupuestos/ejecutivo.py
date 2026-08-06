@@ -1102,6 +1102,45 @@ def ejecutivo_aprobar(id):
             error='No hay recursos cargados en el ejecutivo. Agregá al menos una composición antes de aprobar.',
         ), 400
 
+    # Validar que haya al menos una etapa interna cargada.
+    #
+    # Va DESPUES del check de composiciones a proposito: el orden del flujo es
+    # APU -> etapas internas -> aprobar, y la pantalla ya muestra "Falta generar
+    # la composicion ejecutiva (APU)" como primer bloqueante. El backend respeta
+    # esa misma secuencia.
+    #
+    # Se cuenta solo_interno porque es EXACTAMENTE la condicion que
+    # blueprint_presupuestos/estados.py:193 consulta despues para armar el
+    # cronograma: si el ejecutivo esta aprobado, la obra se arma SOLO con estos
+    # items. Sin ellos la obra nace con el plan de trabajo vacio. Antes eso solo
+    # dejaba un logger.warning que el usuario no veia nunca.
+    #
+    # El check de composiciones NO cubre esto: son cosas distintas y en la
+    # practica van separadas (hay presupuestos con 571 composiciones y cero
+    # etapas internas).
+    total_internos = db.session.query(ItemPresupuesto).filter(
+        ItemPresupuesto.presupuesto_id == presupuesto.id,
+        ItemPresupuesto.solo_interno.is_(True),
+    ).count()
+    if total_internos == 0:
+        return jsonify(
+            ok=False,
+            # El boton se llama distinto segun el estado de la pantalla. Cuando NO
+            # hay ninguna etapa interna --que es exactamente cuando cae este
+            # error-- el que se ve es el del empty state (ejecutivo.html:654),
+            # "Agregar etapa interna al ejecutivo". El otro ("Agregar etapa
+            # interna", linea 442) vive dentro de {% if etapas_internas %} y en
+            # este estado no esta en pantalla.
+            error=(
+                'Falta cargar las etapas internas del ejecutivo. '
+                'Son las que arman el cronograma de la obra: sin ellas, al confirmar '
+                'como obra el plan de trabajo queda vacío. '
+                'Próximo paso: en esta misma pantalla, tocá '
+                '"Agregar etapa interna al ejecutivo", sumá al menos una '
+                '(ej: Mampostería, Pisos, Pintura) y después aprobá.'
+            ),
+        ), 400
+
     presupuesto.ejecutivo_aprobado = True
     presupuesto.ejecutivo_aprobado_at = datetime.utcnow()
     db.session.commit()
