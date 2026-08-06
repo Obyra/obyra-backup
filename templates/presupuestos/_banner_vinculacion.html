@@ -1,0 +1,40 @@
+{#
+  Banner NO bloqueante de vinculación con inventario.
+
+  Se incluye en detalle.html y calcular_ia.html (la pantalla de aterrizaje del
+  import). No bloquea nada: el import ya terminó. Sirve para que la obra sepa qué
+  materiales ya están en el depósito en vez de proponer comprarlos todos.
+
+  Espera del contexto:
+    vinc_total        renglones de material del pliego (0 = no mostrar)
+    vinc_confirmados  renglones con vínculo confirmado por una persona
+
+  Ambos los calcula la vista con un COUNT. El matcher NO corre acá: tokenizar el
+  catálogo entero contra 200 renglones en cada carga de página sería carísimo.
+#}
+{% if vinc_total and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="alert {{ 'alert-success' if vinc_confirmados else 'alert-info' }}
+                    mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2"
+             role="status">
+            <div>
+                <i class="fas fa-link me-1"></i>
+                {% if vinc_confirmados %}
+                    <strong>{{ vinc_confirmados }}</strong> de {{ vinc_total }}
+                    materiales vinculados a tu inventario.
+                {% else %}
+                    Todavía no vinculaste los materiales con tu inventario.
+                    <span class="text-muted small d-block d-md-inline">
+                        Sin esto, la obra los va a listar todos como material a comprar.
+                    </span>
+                {% endif %}
+            </div>
+            <a href="{{ url_for('presupuestos.vincular_inventario', id=presupuesto.id) }}"
+               class="btn btn-sm {{ 'btn-outline-success' if vinc_confirmados else 'btn-primary' }}">
+                {{ 'Revisar vinculaciones' if vinc_confirmados else 'Vincular con inventario' }}
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}

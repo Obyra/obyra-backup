@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+{% block title %}Vincular materiales con el inventario - OBYRA{% endblock %}
+
+{#
+  Pantalla de confirmación de vínculos pliego <-> inventario.
+
+  El import NO escribe vínculos. Acá se muestran las propuestas calculadas al
+  vuelo y solo se guarda lo que el usuario confirma. Ver
+  services/vinculacion_inventario.py para los baldes.
+
+  Los del balde "revisar" (cobertura < umbral_alta) van DESMARCADOS a propósito:
+  un vínculo equivocado reserva stock real contra el depósito.
+#}
+
+{#
+  Un checkbox por candidato (no radio) incluso en el balde 1-a-N: marcar uno es
+  el caso simple, marcar dos ES el caso 1-a-N. Un solo control expresa ambos.
+#}
+{% macro fila_candidato(cand, marcado) %}
+  <label class="d-flex align-items-center gap-2 py-1 cand-row">
+    <input type="checkbox"
+           class="form-check-input mt-0 flex-shrink-0 chk-inv"
+           data-inv="{{ cand.id }}"
+           data-score="{{ cand.cobertura }}"
+           {% if marcado %}checked{% endif %}>
+    <span class="flex-grow-1">
+      <span class="fw-medium">{{ cand.nombre }}</span>
+      <span class="text-muted small">
+        · {{ cand.unidad }}
+        {% if cand.codigo %} · {{ cand.codigo }}{% endif %}
+        · stock {{ cand.stock|round(2) }}
+      </span>
+    </span>
+    <span class="badge bg-light text-dark border flex-shrink-0"
+          title="Cobertura del nombre de inventario dentro de la descripción del pliego">
+      {{ (cand.cobertura * 100)|round(0)|int }}%
+    </span>
+    <input type="number" step="0.001" min="0"
+           class="form-control form-control-sm inp-cant flex-shrink-0"
+           style="width:110px"
+           value="{{ cand.cantidad_sugerida }}"
+           aria-label="Cantidad a reservar de {{ cand.nombre }}">
+  </label>
+{% endmacro %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 1000px;">
+
+  <div class="d-flex justify-content-between align-items-start mb-2">
+    <div>
+      <h2 class="mb-1">
+        <i class="fas fa-link me-2"></i>Vincular materiales con tu inventario
+      </h2>
+      <p class="text-muted mb-0">
+        {{ presupuesto.numero }}{% if presupuesto.obra %} · {{ presupuesto.obra.nombre }}{% endif %}
+      </p>
+    </div>
+    <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}"
+       class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Volver
+    </a>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex justify-content-between align-items-baseline">
+        <h5 class="mb-1">
+          Encontramos <strong>{{ encontrados }}</strong> de {{ total }} materiales
+          en tu inventario
+        </h5>
+        <span class="text-muted small">{{ pct }}%</span>
+      </div>
+      <div class="progress mb-2" style="height:6px">
+        <div class="progress-bar bg-success" style="width: {{ pct }}%"></div>
+      </div>
+      <p class="text-muted small mb-0">
+        Solo se guarda lo que confirmes. Podés volver a esta pantalla cuando quieras.
+      </p>
+    </div>
+  </div>
+
+  {% if not puede_gestionar %}
+    <div class="alert alert-warning small">
+      <i class="fas fa-lock me-1"></i>
+      Podés revisar las propuestas pero no confirmarlas. Pedile a un administrador
+      o jefe de proyecto que las confirme.
+    </div>
+  {% endif %}
+
+  {# ---------- YA CONFIRMADOS ---------- #}
+  {% if baldes.confirmados %}
+  <div class="card mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center
+                collapse-toggle" role="button"
+         data-bs-toggle="collapse" data-bs-target="#bConfirmados">
+      <span><i class="fas fa-check-circle text-success me-2"></i>
+        Ya confirmados <span class="badge bg-success">{{ baldes.confirmados|length }}</span>
+      </span>
+      <i class="fas fa-chevron-down small text-muted"></i>
+    </div>
+    <div class="collapse" id="bConfirmados">
+      <div class="card-body pt-2">
+        {% for fila in baldes.confirmados %}
+          <div class="border-bottom py-2 fila" data-item="{{ fila.item_id }}"
+               data-balde="confirmados">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="small text-muted text-truncate" title="{{ fila.descripcion }}">
+                {{ fila.descripcion }}
+              </div>
+              <div class="small text-nowrap text-muted flex-shrink-0">
+                {{ fila.cantidad|round(2) }} {{ fila.unidad }}
+              </div>
+            </div>
+            <div class="ps-3 mt-1 candidatos">
+              {% for v in fila.vinculos %}
+                <label class="d-flex align-items-center gap-2 py-1">
+                  <input type="checkbox" class="form-check-input mt-0 chk-inv"
+                         data-inv="{{ v.inv_id }}" checked>
+                  <span class="flex-grow-1 fw-medium">{{ v.nombre }}</span>
+                  <input type="number" step="0.001" min="0"
+                         class="form-control form-control-sm inp-cant"
+                         style="width:110px" value="{{ v.cantidad }}"
+                         aria-label="Cantidad de {{ v.nombre }}">
+                </label>
+              {% endfor %}
+              <div class="small text-muted">
+                Desmarcá para deshacer el vínculo.
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ---------- PROPUESTAS ---------- #}
+  {% if baldes.altos or baldes.revisar %}
+  <div class="card mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-wand-magic-sparkles text-primary me-2"></i>
+        Propuestas
+        <span class="badge bg-primary">{{ baldes.altos|length + baldes.revisar|length }}</span>
+      </span>
+      <span>
+        <button type="button" class="btn btn-sm btn-link p-0 me-2" data-bulk="1">
+          marcar todas</button>
+        <button type="button" class="btn btn-sm btn-link p-0 text-muted" data-bulk="0">
+          ninguna</button>
+      </span>
+    </div>
+    <div class="card-body pt-2">
+
+      {% if baldes.altos %}
+        <div class="text-uppercase small text-muted fw-bold mb-1 mt-1">
+          Alta confianza ({{ baldes.altos|length }}) · pre-marcadas
+        </div>
+        {% for fila in baldes.altos %}
+          <div class="border-bottom py-2 fila" data-item="{{ fila.item_id }}"
+               data-balde="altos">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="small text-muted text-truncate" title="{{ fila.descripcion }}">
+                {{ fila.descripcion }}
+              </div>
+              <div class="small text-nowrap text-muted flex-shrink-0">
+                {{ fila.cantidad|round(2) }} {{ fila.unidad }}
+              </div>
+            </div>
+            <div class="ps-3 mt-1">
+              {% for cand in fila.candidatos %}
+                {{ fila_candidato(cand, true) }}
+              {% endfor %}
+              {% if fila.alternativas %}
+                <details class="small">
+                  <summary class="text-muted">cambiar</summary>
+                  {% for cand in fila.alternativas %}
+                    {{ fila_candidato(cand, false) }}
+                  {% endfor %}
+                </details>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% if baldes.revisar %}
+        <div class="text-uppercase small text-muted fw-bold mb-1 mt-3">
+          Revisar ({{ baldes.revisar|length }}) · desmarcadas a propósito
+        </div>
+        <p class="small text-muted mb-1">
+          Coinciden poco. Confirmar un vínculo equivocado hace que la obra reserve
+          stock que no corresponde.
+        </p>
+        {% for fila in baldes.revisar %}
+          <div class="border-bottom py-2 fila" data-item="{{ fila.item_id }}"
+               data-balde="revisar">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="small text-muted text-truncate" title="{{ fila.descripcion }}">
+                {{ fila.descripcion }}
+              </div>
+              <div class="small text-nowrap text-muted flex-shrink-0">
+                {{ fila.cantidad|round(2) }} {{ fila.unidad }}
+              </div>
+            </div>
+            <div class="ps-3 mt-1">
+              {% for cand in fila.candidatos %}
+                {{ fila_candidato(cand, false) }}
+                {% if cand.comunes %}
+                  <div class="small text-muted ps-4">
+                    coincide en: {{ cand.comunes|join(', ') }}
+                  </div>
+                {% endif %}
+              {% endfor %}
+              {% if fila.alternativas %}
+                <details class="small">
+                  <summary class="text-muted">otras opciones</summary>
+                  {% for cand in fila.alternativas %}
+                    {{ fila_candidato(cand, false) }}
+                  {% endfor %}
+                </details>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+    </div>
+  </div>
+  {% endif %}
+
+  {# ---------- CUBREN VARIOS ÍTEMS (1-a-N) ---------- #}
+  {% if baldes.multiples %}
+  <div class="card mb-3 border-warning">
+    <div class="card-header bg-white">
+      <i class="fas fa-code-branch text-warning me-2"></i>
+      Cubren varios ítems
+      <span class="badge bg-warning text-dark">{{ baldes.multiples|length }}</span>
+    </div>
+    <div class="card-body pt-2">
+      <p class="small text-muted">
+        El matcher no pudo elegir entre estos. Puede ser que sea <em>uno</em> de
+        ellos, o que el renglón cubra <em>varios</em> a la vez (una puerta que
+        incluye el marco). Marcá todos los que correspondan y ajustá la cantidad
+        de cada uno.
+      </p>
+      {% for fila in baldes.multiples %}
+        <div class="border-bottom py-2 fila" data-item="{{ fila.item_id }}"
+             data-balde="multiples">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="small fw-medium text-truncate" title="{{ fila.descripcion }}">
+              {{ fila.descripcion }}
+            </div>
+            <div class="small text-nowrap text-muted flex-shrink-0">
+              {{ fila.cantidad|round(2) }} {{ fila.unidad }}
+            </div>
+          </div>
+          <div class="ps-3 mt-1">
+            {% for cand in fila.candidatos %}
+              {{ fila_candidato(cand, false) }}
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ---------- SIN VINCULAR ---------- #}
+  {% if baldes.sin_vincular %}
+  <div class="card mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center
+                collapse-toggle" role="button"
+         data-bs-toggle="collapse" data-bs-target="#bSinVincular">
+      <span><i class="fas fa-question-circle text-muted me-2"></i>
+        Sin vincular
+        <span class="badge bg-secondary">{{ baldes.sin_vincular|length }}</span>
+      </span>
+      <i class="fas fa-chevron-down small text-muted"></i>
+    </div>
+    <div class="collapse" id="bSinVincular">
+      <div class="card-body pt-2">
+        <p class="small text-muted">
+          No encontramos nada parecido en tu inventario. Buscalos a mano si
+          querés, o dejalos así: la obra los va a listar como material a comprar.
+        </p>
+        {% for fila in baldes.sin_vincular %}
+          <div class="border-bottom py-2 fila" data-item="{{ fila.item_id }}"
+               data-balde="sin_vincular">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="small text-muted text-truncate" title="{{ fila.descripcion }}">
+                {{ fila.descripcion }}
+              </div>
+              <div class="small text-nowrap text-muted flex-shrink-0">
+                {{ fila.cantidad|round(2) }} {{ fila.unidad }}
+              </div>
+            </div>
+            <div class="ps-3 mt-1 d-flex gap-2 align-items-start">
+              <input type="text" class="form-control form-control-sm inp-buscar"
+                     placeholder="buscar en el inventario…"
+                     data-cantidad="{{ fila.cantidad }}"
+                     style="max-width:340px">
+              <div class="resultados small flex-grow-1"></div>
+            </div>
+            <div class="ps-3 candidatos"></div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if total == 0 %}
+    <div class="alert alert-info">
+      Este presupuesto no tiene materiales para vincular.
+    </div>
+  {% endif %}
+
+</div>
+
+{% if puede_gestionar and total > 0 %}
+<div class="border-top bg-white sticky-bottom py-2 px-3">
+  <div class="container-fluid d-flex justify-content-between align-items-center"
+       style="max-width:1000px">
+    <span class="small text-muted">
+      <strong id="contSel">0</strong> vinculaciones seleccionadas
+    </span>
+    <span>
+      <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}"
+         class="btn btn-outline-secondary btn-sm">Omitir por ahora</a>
+      <button type="button" class="btn btn-success btn-sm" id="btnConfirmar">
+        Confirmar
+      </button>
+    </span>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const URL_GUARDAR = "{{ url_for('presupuestos.vincular_inventario_guardar', id=presupuesto.id) }}";
+  const URL_BUSCAR  = "{{ url_for('presupuestos.vincular_inventario_buscar', id=presupuesto.id) }}";
+
+  function csrf() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') : '';
+  }
+
+  // --- contador ---------------------------------------------------------
+  function contar() {
+    const n = document.querySelectorAll('.chk-inv:checked').length;
+    const el = document.getElementById('contSel');
+    if (el) el.textContent = n;
+    const btn = document.getElementById('btnConfirmar');
+    if (btn) btn.textContent = n ? ('Confirmar ' + n) : 'Confirmar';
+  }
+
+  // Una fila se marca "tocada" al cambiar cualquier control suyo. Solo se envían
+  // las tocadas del balde confirmados: reenviar las intactas borraría y volvería
+  // a insertar los mismos vínculos, perdiendo quién y cuándo los confirmó.
+  document.addEventListener('change', function (e) {
+    const fila = e.target.closest && e.target.closest('.fila');
+    if (fila) fila.dataset.tocada = '1';
+    if (e.target.classList && e.target.classList.contains('chk-inv')) contar();
+  });
+
+  document.querySelectorAll('[data-bulk]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const on = btn.dataset.bulk === '1';
+      // Solo las propuestas: los baldes de confirmados y 1-a-N no se tocan en masa.
+      document.querySelectorAll(
+        '.fila[data-balde="altos"] .chk-inv, .fila[data-balde="revisar"] .chk-inv'
+      ).forEach(function (c) {
+        // Las alternativas del desplegable "cambiar" quedan afuera: marcarlas
+        // todas vincularía el mismo renglón a 3 ítems distintos de una.
+        if (c.closest('details')) return;
+        c.checked = on;
+        c.closest('.fila').dataset.tocada = '1';
+      });
+      contar();
+    });
+  });
+
+  // --- buscador manual --------------------------------------------------
+  let timer = null;
+  document.querySelectorAll('.inp-buscar').forEach(function (inp) {
+    const fila = inp.closest('.fila');
+    const cajaRes = fila.querySelector('.resultados');
+    inp.addEventListener('input', function () {
+      clearTimeout(timer);
+      const q = inp.value.trim();
+      if (q.length < 2) { cajaRes.innerHTML = ''; return; }
+      timer = setTimeout(function () {
+        fetch(URL_BUSCAR + '?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok || !d.items.length) {
+              cajaRes.innerHTML = '<span class="text-muted">sin resultados</span>';
+              return;
+            }
+            cajaRes.innerHTML = '';
+            d.items.forEach(function (it) {
+              const a = document.createElement('a');
+              a.href = '#';
+              a.className = 'd-block text-decoration-none py-1';
+              a.textContent = it.nombre + ' · ' + it.unidad + ' · stock ' + it.stock;
+              a.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                agregarManual(fila, it, inp.dataset.cantidad);
+                cajaRes.innerHTML = '';
+                inp.value = '';
+              });
+              cajaRes.appendChild(a);
+            });
+          })
+          .catch(function () {
+            cajaRes.innerHTML = '<span class="text-danger">error al buscar</span>';
+          });
+      }, 250);
+    });
+  });
+
+  function agregarManual(fila, it, cantidad) {
+    const cont = fila.querySelector('.candidatos');
+    if (cont.querySelector('[data-inv="' + it.id + '"]')) return;
+    const lbl = document.createElement('label');
+    lbl.className = 'd-flex align-items-center gap-2 py-1';
+    // Sin data-score: lo eligió una persona, no el matcher. Esa distinción es lo
+    // que después permite recalibrar los umbrales contra decisiones humanas.
+    lbl.innerHTML =
+      '<input type="checkbox" class="form-check-input mt-0 chk-inv" data-inv="' +
+      it.id + '" checked>' +
+      '<span class="flex-grow-1 fw-medium"></span>' +
+      '<input type="number" step="0.001" min="0" class="form-control form-control-sm inp-cant" ' +
+      'style="width:110px" value="' + (cantidad || 0) + '">';
+    lbl.querySelector('span').textContent = it.nombre + ' · ' + it.unidad;
+    cont.appendChild(lbl);
+    fila.dataset.tocada = '1';
+    contar();
+  }
+
+  // --- guardar ----------------------------------------------------------
+  function recolectar() {
+    const out = [];
+    document.querySelectorAll('.fila').forEach(function (fila) {
+      const balde = fila.dataset.balde;
+      const tocada = fila.dataset.tocada === '1';
+      const checks = fila.querySelectorAll('.chk-inv:checked');
+
+      // altos/revisar/multiples se envían siempre: su estado queda totalmente
+      // determinado por los checkboxes, y mandar los desmarcados es un no-op.
+      // confirmados y sin_vincular solo si el usuario los tocó.
+      const siempre = (balde === 'altos' || balde === 'revisar' || balde === 'multiples');
+      if (!siempre && !tocada) return;
+      if (balde === 'sin_vincular' && !tocada && !checks.length) return;
+
+      const invs = [];
+      checks.forEach(function (c) {
+        const cant = c.closest('label').querySelector('.inp-cant');
+        invs.push({
+          inv_id: parseInt(c.dataset.inv, 10),
+          cantidad: cant ? parseFloat(cant.value || '0') : 0,
+          score: c.dataset.score ? parseFloat(c.dataset.score) : null
+        });
+      });
+      out.push({ item_id: parseInt(fila.dataset.item, 10), invs: invs });
+    });
+    return out;
+  }
+
+  const btn = document.getElementById('btnConfirmar');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      const seleccion = recolectar();
+      if (!seleccion.length) {
+        alert('No hay cambios para guardar.');
+        return;
+      }
+      btn.disabled = true;
+      const txt = btn.textContent;
+      btn.textContent = 'Guardando…';
+      fetch(URL_GUARDAR, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+        body: JSON.stringify({ seleccion: seleccion })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) throw new Error(d.error || 'error');
+          window.location.reload();
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          btn.textContent = txt;
+          alert('No se pudo guardar: ' + err.message);
+        });
+    });
+  }
+
+  contar();
+})();
+</script>
+{% endblock %}

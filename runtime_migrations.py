@@ -3525,3 +3525,42 @@ def run_runtime_migrations(db, app):
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Runtime Fase 2.5 aprendizaje: {e}")
+
+
+    # =====================================================
+    # Vinculacion pliego <-> inventario confirmada por humano
+    # Una linea de pliego puede cubrir N items de inventario (puerta + marco),
+    # y ItemPresupuesto.item_inventario_id es un FK unico. El vinculo vive
+    # afuera para no partir el renglon y romper la trazabilidad con el Excel.
+    # =====================================================
+    try:
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS item_presupuesto_inventario (
+                id SERIAL PRIMARY KEY,
+                item_presupuesto_id INTEGER NOT NULL
+                    REFERENCES items_presupuesto(id) ON DELETE CASCADE,
+                item_inventario_id INTEGER NOT NULL
+                    REFERENCES items_inventario(id) ON DELETE CASCADE,
+                cantidad NUMERIC(15, 3) NOT NULL DEFAULT 0,
+                score_propuesto NUMERIC(4, 3),
+                confirmado_por_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        db.session.execute(db.text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_ipi_item_inv
+                ON item_presupuesto_inventario(item_presupuesto_id, item_inventario_id);
+        """))
+        db.session.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_ipi_item_presupuesto "
+            "ON item_presupuesto_inventario(item_presupuesto_id);"
+        ))
+        db.session.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_ipi_item_inventario "
+            "ON item_presupuesto_inventario(item_inventario_id);"
+        ))
+        db.session.commit()
+        print("[OK] Runtime vinculacion inventario aplicado (item_presupuesto_inventario)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Runtime vinculacion inventario: {e}")

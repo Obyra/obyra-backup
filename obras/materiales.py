@@ -17,7 +17,13 @@ from obras import (
 @obras_bp.route('/api/obras/<int:obra_id>/reservar-materiales', methods=['POST'])
 @login_required
 def api_reservar_materiales(obra_id):
-    """Genera reservas de stock en inventario para los materiales del presupuesto de la obra."""
+    """Genera reservas de stock en inventario para los materiales del presupuesto de la obra.
+
+    OJO: solo lee el FK legacy ItemPresupuesto.item_inventario_id, NO los vínculos
+    confirmados en item_presupuesto_inventario (ver api_analizar_materiales, que sí
+    los expande). Hoy ningún template llama a este endpoint; si se vuelve a cablear,
+    replicar acá la expansión de vínculos o va a reportar todo como sin vincular.
+    """
     try:
         from models.inventory import ItemInventario, ReservaStock
 
@@ -188,26 +194,41 @@ def api_analizar_materiales(obra_id):
         if not materiales_raw:
             return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
 
-        # Consolidar materiales duplicados
-        _mat_consolidados = {}
+        # Expandir cada renglón del presupuesto en sus demandas contra el depósito.
+        # Un renglón puede cubrir N ítems de inventario ("puerta placa c/ marco"),
+        # cada uno con su cantidad propia -> ItemPresupuestoInventario, que escribe
+        # la pantalla /presupuestos/<id>/vincular-inventario.
+        # Fallback al FK item_inventario_id para los presupuestos que no pasaron por
+        # esa pantalla (los de la Calculadora IA sí lo escriben).
+        demandas = []   # (key, inv_id|None, cantidad, item_representativo)
         for item in materiales_raw:
-            if item.item_inventario_id:
-                key = ('inv', item.item_inventario_id)
+            vinculos = list(item.vinculos_inventario)
+            if vinculos:
+                for v in vinculos:
+                    demandas.append((('inv', v.item_inventario_id),
+                                     v.item_inventario_id,
+                                     float(v.cantidad or 0), item))
+            elif item.item_inventario_id:
+                demandas.append((('inv', item.item_inventario_id),
+                                 item.item_inventario_id,
+                                 float(item.cantidad or 0), item))
             else:
-                key = ('desc', (item.descripcion or '').strip().lower())
+                demandas.append((('desc', (item.descripcion or '').strip().lower()),
+                                 None, float(item.cantidad or 0), item))
+
+        # Consolidar: el mismo ítem de inventario pedido por varios renglones se
+        # reserva una sola vez, sumando cantidades.
+        _mat_consolidados = {}
+        for key, inv_id, cant, item in demandas:
             if key in _mat_consolidados:
-                existing = _mat_consolidados[key]
-                existing['_cantidad_total'] += float(item.cantidad or 0)
+                _mat_consolidados[key]['_cantidad_total'] += cant
             else:
                 _mat_consolidados[key] = {
                     'item': item,
-                    '_cantidad_total': float(item.cantidad or 0),
+                    'inv_id': inv_id,
+                    '_cantidad_total': cant,
                 }
-        materiales = []
-        for data in _mat_consolidados.values():
-            item = data['item']
-            item._cantidad_consolidada_api = data['_cantidad_total']
-            materiales.append(item)
+        materiales = list(_mat_consolidados.values())
 
         # Obtener cantidades ya pedidas en requerimientos de compra activos
         ya_pedido_por_item = {}
@@ -234,12 +255,14 @@ def api_analizar_materiales(obra_id):
         sin_stock = []
         sin_vincular = []
 
-        for material in materiales:
-            cantidad_necesaria = float(getattr(material, '_cantidad_consolidada_api', material.cantidad) or 0)
+        for _dato in materiales:
+            material = _dato['item']          # renglón representativo (para mostrar)
+            inv_id = _dato['inv_id']
+            cantidad_necesaria = _dato['_cantidad_total']
             if cantidad_necesaria <= 0:
                 continue
 
-            if not material.item_inventario_id:
+            if not inv_id:
                 sin_vincular.append({
                     'descripcion': material.descripcion,
                     'cantidad': cantidad_necesaria,
@@ -248,7 +271,7 @@ def api_analizar_materiales(obra_id):
                 })
                 continue
 
-            item_inv = ItemInventario.query.get(material.item_inventario_id)
+            item_inv = ItemInventario.query.get(inv_id)
             if not item_inv:
                 sin_vincular.append({
                     'descripcion': material.descripcion,

@@ -206,9 +206,13 @@ def calcular_ia(id):
     muestra = (ItemPresupuesto.query.filter_by(presupuesto_id=id)
                .order_by(ItemPresupuesto.id).limit(6).all())
     ya_calculado = bool(pres.pipeline_ia_cache and (pres.pipeline_ia_cache or {}).get('items'))
+    # Banner de vinculacion con inventario: esta es la pantalla de aterrizaje del
+    # import, el primer lugar donde ofrecerla sin bloquear el flujo.
+    from services.vinculacion_inventario import contar_para_banner
     return render_template('presupuestos/calcular_ia.html',
                            presupuesto=pres, n_items=n_items, muestra=muestra,
-                           ya_calculado=ya_calculado, fecha_calculo=pres.pipeline_ia_fecha)
+                           ya_calculado=ya_calculado, fecha_calculo=pres.pipeline_ia_fecha,
+                           **contar_para_banner(pres))
 
 
 @presupuestos_bp.route('/<int:id>/revision-ia')

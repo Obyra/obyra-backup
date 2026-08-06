@@ -1290,3 +1290,69 @@ class SolicitudCotizacionMaterialItem(db.Model):
         db.Index('ix_solicitud_cot_mat_items_solicitud', 'solicitud_id'),
         db.Index('ix_solicitud_cot_mat_items_material', 'material_cotizable_id'),
     )
+
+
+class ItemPresupuestoInventario(db.Model):
+    """Vínculo confirmado por una persona entre un renglón de pliego y el inventario.
+
+    POR QUÉ NO ALCANZA CON ItemPresupuesto.item_inventario_id
+    ---------------------------------------------------------
+    Aquel FK es único, y una línea de pliego puede cubrir DOS ítems de inventario:
+
+        "Provisión y colocación de puerta placa 0,80 c/ marco"  ->  Puerta placa
+                                                               ->  Marco chapa BWG18
+
+    Partir el renglón en dos ItemPresupuesto era la alternativa, pero rompe la
+    trazabilidad contra el Excel (`fila_origen`) y mete en el PDF que ve el cliente
+    renglones que el pliego no tiene. Por eso el vínculo vive afuera: la línea del
+    presupuesto queda intacta y espeja el pliego 1:1.
+
+    CANTIDAD PROPIA POR VÍNCULO
+    ---------------------------
+    `obras/materiales.py:api_analizar_materiales` reserva contra el depósito SIN
+    factor de conversión. Si una línea de 12 puertas cubre puertas y marcos, cada
+    vínculo necesita su cantidad: duplicar el FK no serviría. `cantidad` es en la
+    unidad del ItemInventario, no en la del pliego.
+
+    QUIÉN ESCRIBE ACÁ
+    -----------------
+    Solo la pantalla de confirmación (`/presupuestos/<id>/vincular-inventario`).
+    El import NO escribe vínculos: una fila acá significa que un humano la confirmó.
+    """
+    __tablename__ = 'item_presupuesto_inventario'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_presupuesto_id = db.Column(
+        db.Integer,
+        db.ForeignKey('items_presupuesto.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    item_inventario_id = db.Column(
+        db.Integer,
+        db.ForeignKey('items_inventario.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    # En la unidad del ItemInventario. Para el caso 1-a-1 es la cantidad del pliego.
+    cantidad = db.Column(db.Numeric(15, 3), nullable=False, default=0)
+    # Cobertura que reportó el matcher al proponerlo (0..1). NULL = lo buscó a mano.
+    # Es diagnóstico: sirve para recalibrar umbrales contra decisiones humanas reales.
+    score_propuesto = db.Column(db.Numeric(4, 3), nullable=True)
+    confirmado_por_id = db.Column(
+        db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    item_presupuesto = db.relationship(
+        'ItemPresupuesto',
+        backref=db.backref('vinculos_inventario',
+                           cascade='all, delete-orphan', lazy='selectin'),
+    )
+    item_inventario = db.relationship('ItemInventario', foreign_keys=[item_inventario_id])
+    confirmado_por = db.relationship('Usuario', foreign_keys=[confirmado_por_id])
+
+    __table_args__ = (
+        # Un renglón no puede vincularse dos veces al mismo ítem de inventario.
+        db.UniqueConstraint('item_presupuesto_id', 'item_inventario_id',
+                            name='uq_ipi_item_inv'),
+        db.Index('ix_ipi_item_presupuesto', 'item_presupuesto_id'),
+        db.Index('ix_ipi_item_inventario', 'item_inventario_id'),
+    )

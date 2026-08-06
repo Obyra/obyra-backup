@@ -1050,6 +1050,24 @@ def importar_licitacion():
             'niveles generados.'
         )
     flash(' '.join(msg_partes), 'success' if n_err == 0 else 'warning')
+
+    # Aviso NO bloqueante de vinculacion con inventario. El import no escribe
+    # vinculos (vincular sin preguntar mete vinculos equivocados, y un vinculo
+    # equivocado reserva stock real): la pantalla los propone y el usuario confirma.
+    # Solo un COUNT: correr el matcher aca duplicaria el costo del import.
+    try:
+        from models.inventory import ItemInventario
+        hay_inventario = db.session.query(ItemInventario.id).filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo.is_(True)).first() is not None
+        if hay_inventario:
+            # Texto plano: base.html renderiza los flash con {{ message }} y los
+            # autoescapa. El link va en el banner de la pantalla de aterrizaje.
+            flash('Revisá qué materiales de este pliego ya tenés en tu inventario '
+                  'antes de comprarlos: usá "Vincular con inventario".', 'info')
+    except Exception:
+        current_app.logger.exception("No se pudo evaluar el aviso de vinculacion")
+
     # Fase 2.6: al importar, aterrizar en la pantalla limpia de CALCULAR (un boton
     # "Calcular presupuesto con IA"), no en el Ejecutivo ni directo en la revision.
     return redirect(url_for('presupuestos.calcular_ia', id=presu.id))

@@ -171,6 +171,18 @@ def evaluar_candidatos(
     return out
 
 
+def hay_empate(mejor: Dict[str, Any], segundo: Dict[str, Any]) -> bool:
+    """True si los dos mejores candidatos estan empatados y no se puede elegir.
+
+    Extraido para que la pantalla de confirmacion arme su balde "cubren varios
+    items" con EXACTAMENTE el mismo criterio con el que produccion decide no
+    vincular. Si divergieran, la UI mostraria un balde que no se corresponde con
+    ninguna decision real del matcher.
+    """
+    return ((mejor['cobertura'] - segundo['cobertura']) <= _GAP_MIN
+            and mejor['n_comunes'] == segundo['n_comunes'])
+
+
 def vincular_item_inventario(
     descripcion: str,
     unidad: Optional[str],
@@ -213,10 +225,7 @@ def vincular_item_inventario(
     # Empate real entre dos items distintos -> no adivinamos. Tipico con variantes
     # que el pliego no desambigua ("hierro aletado" sin diametro): que lo resuelva
     # una persona, no el orden de la tabla.
-    if len(aceptados) > 1:
-        segundo = aceptados[1]
-        if ((mejor['cobertura'] - segundo['cobertura']) <= _GAP_MIN
-                and mejor['n_comunes'] == segundo['n_comunes']):
-            return None, round(mejor['cobertura'], 2), 'ambiguo'
+    if len(aceptados) > 1 and hay_empate(mejor, aceptados[1]):
+        return None, round(mejor['cobertura'], 2), 'ambiguo'
 
     return mejor['id'], round(mejor['cobertura'], 2), 'ok'

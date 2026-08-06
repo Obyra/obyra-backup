@@ -231,3 +231,4 @@ from blueprint_presupuestos import perfil_tecnico  # noqa: E402, F401
 from blueprint_presupuestos import generador_preliminar  # noqa: E402, F401
 from blueprint_presupuestos import precios  # noqa: E402, F401
 from blueprint_presupuestos import etapas   # noqa: E402, F401  # Etapa 1 modulo flexible
+from blueprint_presupuestos import vincular_inventario  # noqa: E402, F401

@@ -358,8 +358,13 @@ def detalle(id):
         puede_cotizar_ia = tiene_composicion and presupuesto.estado in ('borrador', 'enviado')
         puede_pedir_proveedores = tiene_composicion and presupuesto.estado in ('borrador', 'enviado', 'aprobado')
 
+        # Banner de vinculación con inventario (solo pliegos importados).
+        from services.vinculacion_inventario import contar_para_banner
+        vinc = contar_para_banner(presupuesto)
+
         # Pasar subtotales como variables separadas al template
         return render_template('presupuestos/detalle.html',
+                             **vinc,
                              presupuesto=presupuesto,
                              materiales=items_materiales,
                              mano_obra=items_mano_obra,
