@@ -198,6 +198,11 @@
                         <div class="d-grid gap-2" data-confirm-container="{{ presupuesto.id }}">
                             {% set es_admin = tiene_rol('admin') or (current_user.is_authenticated and current_user.es_admin()) %}
                             {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and es_admin and presupuesto.estado in ['borrador', 'enviado', 'aprobado'] %}
+                            {# Sin ítems no se puede confirmar: el backend ya lo rechaza
+                               (estados.py:100), así que ofrecer el botón habilitado sólo
+                               lleva a un error. Misma condición que ya oculta PDF/Correo
+                               más abajo (línea ~245). #}
+                            {% if presupuesto.items.count() > 0 %}
                             {% set cliente_obj = presupuesto.cliente %}
                             {% set cliente_completo = cliente_obj and cliente_obj.nombre and (cliente_obj.email or cliente_obj.telefono) and cliente_obj.numero_documento %}
                             <button type="button" class="btn btn-success btn-sm btn-confirmar-presupuesto"
@@ -232,6 +237,21 @@
                                     aria-label="Confirmar presupuesto {{ presupuesto.numero }} y crear obra">
                                 <i class="fas fa-check-circle me-1"></i>Confirmar
                             </button>
+                            {% else %}
+                            {# Deshabilitado en vez de oculto: así el usuario ve que la
+                               acción existe y qué le falta para llegar. El `title` no es
+                               confiable en botones disabled, por eso el texto visible. #}
+                            <button type="button" class="btn btn-secondary btn-sm" disabled
+                                    title="No se puede confirmar un presupuesto sin ítems."
+                                    aria-label="Confirmar deshabilitado: el presupuesto no tiene ítems">
+                                <i class="fas fa-check-circle me-1"></i>Confirmar
+                            </button>
+                            <small class="text-muted d-block mt-1">
+                                <i class="fas fa-circle-info me-1"></i>Este presupuesto no tiene
+                                ítems todavía. Agregá al menos uno o usá la calculadora IA para
+                                poder confirmarlo como obra.
+                            </small>
+                            {% endif %}
                             {% endif %}
                             {% if presupuesto.estado == 'eliminado' %}
                             <button class="btn btn-outline-secondary" disabled>
@@ -467,6 +487,19 @@
                             <span class="fw-semibold" id="confirmTotalAlternativo"></span>
                         </div>
                     </div>
+                    {# Aviso de total $0. NO bloquea: un pliego de licitación importado entra
+                       con precios en 0 a propósito y se puede querer llevar a obra igual para
+                       seguir la ejecución. Pero crear la obra sin monto contratado tiene que
+                       ser una decisión consciente, no un descuido. #}
+                    <div class="alert alert-warning d-flex align-items-start mb-3 d-none"
+                         id="confirmAvisoTotalCero" role="status">
+                        <i class="fas fa-triangle-exclamation fa-lg me-2 mt-1"></i>
+                        <div class="small">
+                            <strong>Este presupuesto está en $0.</strong>
+                            Vas a crear la obra sin monto contratado. Si es un pliego que todavía
+                            no pricaste, podés cerrar acá, cargar los precios y confirmar después.
+                        </div>
+                    </div>
                     <div class="border rounded p-3">
                         <input type="hidden" id="confirmPresupuestoId" value="">
                         <div class="form-check mb-2">
@@ -619,6 +652,12 @@ function abrirModalConfirmacion(button) {
     const total = parseFloat(button.dataset.total) || 0;
     const currencySymbol = moneda === 'ARS' ? '$' : 'US$';
     campoTotalGeneral.textContent = `${currencySymbol}${total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+    // Aviso de total $0: no bloquea, pero la obra se crearía sin monto contratado.
+    // Se recalcula en cada apertura del modal porque el mismo modal sirve a todas
+    // las tarjetas del listado.
+    const avisoCero = document.getElementById('confirmAvisoTotalCero');
+    if (avisoCero) avisoCero.classList.toggle('d-none', total > 0);
 
     // Total alternativo (conversión)
     if (tasa > 0 && campoTotalAlternativoRow) {

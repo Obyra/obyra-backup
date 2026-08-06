@@ -768,10 +768,27 @@
                             </a>
                             {% endif %}
                             {% if presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
-                            <a href="{{ url_for('presupuestos.confirmar_como_obra', id=presupuesto.id) }}"
-                               class="btn btn-success">
+                            {# Sin items no se puede confirmar (el backend lo rechaza en
+                               estados.py:100). Misma guarda que oculta PDF/Correo arriba.
+                               Antes era un <a href> a confirmar_como_obra, que es POST-only:
+                               tocarlo daba 405. Ahora usa el mismo confirmarComoObra() que
+                               el boton del header. #}
+                            {% if presupuesto.items.count() > 0 %}
+                            <button type="button" class="btn btn-success"
+                                    onclick="confirmarComoObra({{ presupuesto.id }})">
                                 <i class="fas fa-hard-hat me-1"></i>Confirmar como obra
-                            </a>
+                            </button>
+                            {% else %}
+                            <button type="button" class="btn btn-secondary" disabled
+                                    title="No se puede confirmar un presupuesto sin items."
+                                    aria-label="Confirmar deshabilitado: el presupuesto no tiene items">
+                                <i class="fas fa-hard-hat me-1"></i>Confirmar como obra
+                            </button>
+                            <small class="text-muted d-block mt-1">
+                                Este presupuesto no tiene items todavia. Agrega al menos uno
+                                o usa la calculadora IA para poder confirmarlo como obra.
+                            </small>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </div>
@@ -817,10 +834,27 @@
                             </a>
                             {% endif %}
                             {% if presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
-                            <a href="{{ url_for('presupuestos.confirmar_como_obra', id=presupuesto.id) }}"
-                               class="btn btn-success">
+                            {# Sin items no se puede confirmar (el backend lo rechaza en
+                               estados.py:100). Misma guarda que oculta PDF/Correo arriba.
+                               Antes era un <a href> a confirmar_como_obra, que es POST-only:
+                               tocarlo daba 405. Ahora usa el mismo confirmarComoObra() que
+                               el boton del header. #}
+                            {% if presupuesto.items.count() > 0 %}
+                            <button type="button" class="btn btn-success"
+                                    onclick="confirmarComoObra({{ presupuesto.id }})">
                                 <i class="fas fa-hard-hat me-1"></i>Confirmar como obra
-                            </a>
+                            </button>
+                            {% else %}
+                            <button type="button" class="btn btn-secondary" disabled
+                                    title="No se puede confirmar un presupuesto sin items."
+                                    aria-label="Confirmar deshabilitado: el presupuesto no tiene items">
+                                <i class="fas fa-hard-hat me-1"></i>Confirmar como obra
+                            </button>
+                            <small class="text-muted d-block mt-1">
+                                Este presupuesto no tiene items todavia. Agrega al menos uno
+                                o usa la calculadora IA para poder confirmarlo como obra.
+                            </small>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </div>
