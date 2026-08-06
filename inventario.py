@@ -3062,14 +3062,20 @@ def deposito():
                          valor_total=valor_total)
 
 
-@inventario_bp.route('/api/buscar-items')
+@inventario_bp.route('/api/autocomplete-items')
 @login_required
-def api_buscar_items():
+def api_autocomplete_items():
     """Autocomplete para prevenir duplicados en requerimientos/OC/remitos.
 
     Devuelve items que contengan el término en nombre o código. El frontend
     lo usa como dropdown mientras el usuario escribe la descripción, para
     que elija uno existente antes de crear uno nuevo.
+
+    NO confundir con `api_buscar_items` (arriba): aquella sirve a Select2
+    (params term/page, respuesta {results, pagination}) y la usan uso_obra.html
+    y requerimientos/crear.html. Esta devuelve {ok, items} con precio y stock.
+    Se llamaban IGUAL hasta 2026-08-06, y como Flask rechaza dos endpoints con
+    el mismo nombre, el blueprint entero de inventario no se registraba.
 
     Query params:
       q: término de búsqueda (>= 2 caracteres)
