@@ -39,6 +39,16 @@ def generar_pdf(id):
             organizacion_id=org_id
         ).first_or_404()
 
+        # Verificar que el presupuesto tenga ítems. La misma guarda que enviar_email
+        # (más abajo) y que la que oculta el botón en lista.html/detalle.html. Sin
+        # esto, entrar por URL directa devolvía un PDF vacío.
+        if presupuesto.items.count() == 0:
+            if request.is_json:
+                return jsonify({'error': 'No se puede generar el PDF de un presupuesto sin ítems'}), 400
+            flash('No se puede generar el PDF de un presupuesto sin ítems. '
+                  'Agregá al menos uno o usá la calculadora IA primero.', 'warning')
+            return redirect(url_for('presupuestos.detalle', id=id))
+
         # Obtener organización
         organizacion = Organizacion.query.get(org_id)
 
@@ -615,6 +625,12 @@ def exportar_excel(id):
         return redirect(url_for('index'))
     # Query atómica id + org (previene IDOR): solo exporta lo que la org puede ver.
     presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    # Misma guarda que generar_pdf y enviar_email: sin ítems no hay nada que exportar
+    # y el .xlsx salía vacío al entrar por URL directa.
+    if presupuesto.items.count() == 0:
+        flash('No se puede exportar un presupuesto sin ítems. '
+              'Agregá al menos uno o usá la calculadora IA primero.', 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
     try:
         from services.presupuesto_excel_export_service import export_presupuesto_excel
         xlsx = export_presupuesto_excel(presupuesto)
