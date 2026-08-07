@@ -104,4 +104,35 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # Default command (can be overridden in docker-compose)
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--threads", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+#
+# POR QUE 2 WORKERS Y NO 4 (2026-08-07)
+# -------------------------------------
+# Railway factura memoria reservada, y el 2026-08-07 el entorno se cayo por
+# limite de compute. Medido en el contenedor de produccion: 1,09 GB de uso real
+# (cgroup memory.current) contra 0,008 vCPU promedio -- o sea casi todo el gasto
+# era RAM ociosa, no computo.
+#
+# Cada worker pesa ~309 MB porque blueprint_presupuestos/__init__.py importa
+# WeasyPrint a nivel de modulo (arrastra cairo/pango/fontconfig) y, sin
+# --preload, cada worker carga su copia entera. 4 x 309 MB era el gasto.
+#
+# --threads 4 compensa la concurrencia perdida casi gratis: gthread no duplica
+# el interprete, asi que 2x4 = 8 requests concurrentes, igual que antes.
+#
+# --max-requests recicla workers periodicamente para acotar el crecimiento
+# gradual de memoria; el jitter evita que los 2 se reciclen a la vez.
+#
+# El valor 2000 (y no 500) es a proposito: sin --preload, cada worker reciclado
+# re-importa app.py y por lo tanto vuelve a correr runtime_migrations, que son
+# 144 execute() de DDL/seeds idempotentes. Con el trafico actual (bots de uptime
+# ~1-2/min + healthcheck) 500 se alcanzaba en 5-8 h, o sea ~4 recorridas de DDL
+# por dia sin ningun leak que lo justifique. Con 2000 recicla ~1 vez por dia por
+# worker: se conserva la red de seguridad y el churn pasa a ser despreciable.
+#
+# --timeout queda en 120: los PDF tardan 2-5s y el pipeline IA corre por lotes.
+# Bajarlo mata requests legitimos.
+#
+# NO agregar --preload sin antes resolver el fork: app.py crea el engine de
+# SQLAlchemy y corre runtime_migrations en el import, y los hijos heredarian las
+# conexiones. Requiere gunicorn.conf.py con post_fork -> db.engine.dispose().
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "--timeout", "120", "--max-requests", "2000", "--max-requests-jitter", "50", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
