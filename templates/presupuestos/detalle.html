@@ -670,7 +670,12 @@
                             <div class="border rounded p-3 h-100 d-flex flex-column bg-light">
                                 <div class="d-flex align-items-center mb-2">
                                     <i class="fas fa-magic fa-lg text-primary me-2"></i>
-                                    <strong>{% if _ya_calculado %}Recalcular presupuesto{% else %}Calcular presupuesto con IA{% endif %}</strong>
+                                    {# El nombre dice lo que hace: este camino es el determinístico
+                                       (keywords + APU + estimación de precios) y escribe las filas de
+                                       ItemPresupuestoComposicion que consume el presupuesto ejecutivo.
+                                       "con IA" queda reservado para el pipeline del LLM, que entra por
+                                       "Validación de presupuesto" (revision_ia). #}
+                                    <strong>{% if _ya_calculado %}Recalcular desglose y precios{% else %}Calcular desglose y precios{% endif %}</strong>
                                 </div>
                                 <p class="small text-muted flex-grow-1 mb-3">
                                     {% if _ya_calculado %}
@@ -688,7 +693,7 @@
                                         {% else %}
                                         disabled title="Necesitás haber importado un pliego primero"
                                         {% endif %}>
-                                    <i class="fas fa-bolt me-2"></i>{% if _ya_calculado %}Recalcular presupuesto con IA{% else %}Calcular presupuesto con IA{% endif %}
+                                    <i class="fas fa-bolt me-2"></i>{% if _ya_calculado %}Recalcular desglose y precios{% else %}Calcular desglose y precios{% endif %}
                                 </button>
                                 <div class="text-center mt-2">
                                     <button type="button" class="btn btn-link btn-sm text-muted p-0"
@@ -739,7 +744,7 @@
 
     {# 2026-05-08: bloque alternativo para presupuestos creados desde
        "Nuevo Presupuesto -> Con Calculadora IA". El calculo ya esta hecho,
-       no tiene sentido ofrecer "Calcular presupuesto con IA" de nuevo. #}
+       no tiene sentido ofrecer "Calcular desglose y precios" de nuevo. #}
     {% if _es_desde_calc_ia_demo
           and presupuesto.estado in ['borrador', 'enviado']
           and current_user.role in ['admin', 'administrador', 'pm', 'project_manager'] %}
@@ -3494,15 +3499,28 @@ window.camGenerarComposicionRapido = async function(btnEl) {
             }
         } else {
             bloquePrecios = '\n⚠ La estimación de precios no se pudo correr automáticamente.\n' +
-                            '   Probá recargar y volver a "Calcular presupuesto con IA".\n';
+                            '   Probá recargar y volver a "Calcular desglose y precios".\n';
         }
+
+        // El titular (resueltos) suma 7 baldes, no 4: además de los que se resolvieron
+        // en ESTA corrida, incluye los que ya venían resueltos de antes (ya_generado),
+        // los cargados a mano (respetado_manual) y los excluidos. Imprimir solo los 4
+        // primeros hacía que el desglose no cerrara nunca con el número de arriba
+        // (pres 70: decía 136 y abajo sumaba 23).
+        const yaGenerados = c.items_ya_generado || 0;
+        const manuales = c.items_respetado_manual || 0;
+        const excluidos = c.items_excluidos || 0;
 
         let msg = '✓ Tu presupuesto está listo\n\n';
         msg += 'Composición: ' + resueltos + ' de ' + total + ' ítems (' + cobertura + '%)\n';
-        msg += '  · ' + descompuestos + ' con desglose técnico\n';
+        msg += '  · ' + descompuestos + ' con desglose técnico' +
+               (descompuestos === 0 ? ' (nuevos en esta pasada)' : '') + '\n';
         if (globales > 0) msg += '  · ' + globales + ' como gasto global\n';
         if (servicios > 0) msg += '  · ' + servicios + ' como servicios\n';
         if (clasificados_sin_coef > 0) msg += '  · ' + clasificados_sin_coef + ' como ítem completo\n';
+        if (yaGenerados > 0) msg += '  · ' + yaGenerados + ' ya estaban calculados de antes\n';
+        if (manuales > 0) msg += '  · ' + manuales + ' los cargaste a mano (no se tocaron)\n';
+        if (excluidos > 0) msg += '  · ' + excluidos + ' excluidos del presupuesto\n';
         msg += bloquePrecios;
         if (pendientes > 0) {
             msg += '\n⚠ Quedan ' + pendientes + ' ítems sin clasificar para revisar (opcional).\n';

@@ -166,7 +166,8 @@ def calcular_avance(
 
     # ---- 4. Precios encontrados ----
     # 2026-05-08 FIX: contar composiciones con precio>0 e items con precio_unitario>0
-    # para reflejar que el usuario YA corrio "Calcular presupuesto con IA".
+    # para reflejar que el usuario YA corrio "Calcular desglose y precios"
+    # (el boton del detalle; renombrado 2026-08-07, antes decia "...con IA").
     precios_pts = 0
     precios_desc = 'Sin precios cargados'
     items_con_precio_count = 0

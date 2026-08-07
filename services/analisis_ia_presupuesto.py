@@ -188,7 +188,8 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]],
           'original': {descripcion, unidad, cantidad, etapa_nombre, tipo},
           'sugerencias': {
               'descripcion_normalizada': str | None,
-              'rubro_sugerido': str | None,
+              'rubro_sugerido': str | None,   # CAMBIO a proponer (None = ya esta bien)
+              'rubro_detectado': str | None,  # rubro en que QUEDO clasificado (None = sin regla)
               'etapa_sugerida': str | None,
               'tarea_sugerida': str | None,
               'unidad_sugerida': str | None,
@@ -208,6 +209,8 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]],
       ],
       'total_items', 'items_con_cambios',
       'breakdown_confianza': {alta, media, baja, sin},
+      'breakdown_rubro': {rubro: count}  # por rubro_detectado; "(Sin clasificar)"
+                                         # = sin regla de verdad, no "sin cambios".
       'fuente': 'base_tecnica_computos_v2',
       'contexto_recibido': dict | None  # solo si se paso contexto.
     """
@@ -232,6 +235,12 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]],
             sugerencias = {
                 'descripcion_normalizada': desc_norm,
                 'rubro_sugerido': regla.get('rubro'),
+                # rubro REAL de la regla que matcheo. A diferencia de rubro_sugerido
+                # (que se anula abajo cuando no hay cambio que proponer), este campo
+                # sobrevive siempre: es "en que rubro quedo clasificado", no "que
+                # cambio te propongo". Lo usa breakdown_rubro para no contar como
+                # "(Sin clasificar)" justo a los items que mejor clasificaron.
+                'rubro_detectado': regla.get('rubro'),
                 'etapa_sugerida': regla.get('etapa'),
                 'tarea_sugerida': regla.get('tarea'),
                 'unidad_sugerida': regla.get('unidad_esperada'),
@@ -258,6 +267,7 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]],
             sugerencias = {
                 'descripcion_normalizada': desc_norm,
                 'rubro_sugerido': None,
+                'rubro_detectado': None,   # sin regla: este SI es un no-clasificado real
                 'etapa_sugerida': etapa_fallback if etapa_fallback and _normalizar(etapa_fallback) != _normalizar(etapa_actual or '') else None,
                 'tarea_sugerida': None,
                 'unidad_sugerida': None,
@@ -315,7 +325,11 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]],
 
     for r in resultados:
         sug = r['sugerencias']
-        rubro = sug.get('rubro_sugerido') or '(Sin clasificar)'
+        # OJO: va por rubro_detectado, NO por rubro_sugerido. rubro_sugerido se anula
+        # a proposito cuando el item YA esta en la etapa correcta (no hay nada que
+        # sugerir), asi que usarlo aca contaba como "(Sin clasificar)" a los items
+        # mejor clasificados. En el pres 70 eso inflaba el balde de 56 reales a 110.
+        rubro = sug.get('rubro_detectado') or '(Sin clasificar)'
         breakdown_rubro[rubro] = breakdown_rubro.get(rubro, 0) + 1
 
         # Candidatos a falso positivo: caen en Preliminares con confianza < alta
@@ -336,6 +350,7 @@ def analizar_items_con_ia(items_payload: List[Dict[str, Any]],
             'descripcion': r['original']['descripcion'],
             'unidad': r['original']['unidad'],
             'rubro_sugerido': sug.get('rubro_sugerido'),
+            'rubro_detectado': sug.get('rubro_detectado'),
             'tarea_sugerida': sug.get('tarea_sugerida'),
             'confianza': sug['confianza'],
             'confianza_label': sug['confianza_label'],
