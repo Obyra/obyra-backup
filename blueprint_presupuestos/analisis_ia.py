@@ -91,6 +91,8 @@ def pipeline_ia_analizar():
 
     g._llm_input_tokens = 0
     g._llm_output_tokens = 0
+    g._llm_cache_creacion = 0
+    g._llm_cache_lectura = 0
     try:
         r = procesar_items(items, organizacion_id=org_id, nivel=nivel, zona=zona,
                            presupuesto=presupuesto, forzar_keyword=forzar_keyword,
@@ -100,7 +102,20 @@ def pipeline_ia_analizar():
         if uid:
             register_llm_spend(uid, getattr(g, '_llm_input_tokens', 0),
                                getattr(g, '_llm_output_tokens', 0))
-        return jsonify({'ok': True, **r})
+
+        # Diagnostico de prompt caching del clasificador. Los dos en 0 con
+        # tokens_ia > 0 significa que el prefijo no llega al minimo cacheable
+        # de Haiku 4.5 (4096) y se esta pagando todo full. Solo va al log y al
+        # JSON: la pantalla no lo muestra.
+        _crea = getattr(g, '_llm_cache_creacion', 0)
+        _lee = getattr(g, '_llm_cache_lectura', 0)
+        current_app.logger.info(
+            'pipeline-ia lote: items=%s cache_creation_input_tokens=%s '
+            'cache_read_input_tokens=%s', len(items), _crea, _lee)
+        return jsonify({'ok': True, **r, '_diag_cache': {
+            'cache_creation_input_tokens': _crea,
+            'cache_read_input_tokens': _lee,
+        }})
     except Exception as e:
         current_app.logger.exception('Error en pipeline IA de presupuesto')
         return jsonify({'ok': False, 'error': str(e)}), 500

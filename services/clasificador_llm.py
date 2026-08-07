@@ -44,6 +44,13 @@ def catalogo_reglas(solo_con_coeficientes: bool = False):
             'rubro': r.get('rubro', ''),
             'tarea': r.get('tarea', ''),
             'unidad': r.get('unidad_esperada', ''),
+            # Se mandan al LLM: las unidades alternativas evitan descartar un match
+            # bueno por como escribio la unidad el cliente (m2 vs m² vs metro cuadrado),
+            # y las excluyentes son senal NEGATIVA (el fallback keyword ya las usaba,
+            # el LLM no las veia). Ademas engordan el system prompt lo suficiente para
+            # superar el minimo cacheable de Haiku 4.5 -> ver _llamar_api.
+            'unidades_validas': list(r.get('unidades_validas') or []),
+            'excluyentes': list(r.get('palabras_excluyentes') or []),
             'tiene_coef': bool(tiene_coeficientes(rid)),
         })
     return out
@@ -97,7 +104,19 @@ _TOOL = {
 
 
 def _system_prompt(catalogo):
-    lineas = [f"- {c['id']} | {c['rubro']} | {c['tarea']} | unidad {c['unidad']}" for c in catalogo]
+    """Prompt del clasificador. ESTABLE entre lotes y entre presupuestos: es el
+    prefijo que se cachea (ver _llamar_api). No meter fechas, ids de presupuesto
+    ni nada variable aca adentro o el cache no pega nunca."""
+    lineas = []
+    for c in catalogo:
+        linea = f"- {c['id']} | {c['rubro']} | {c['tarea']} | unidad {c['unidad']}"
+        uv = c.get('unidades_validas') or []
+        if uv:
+            linea += f" (acepta: {'/'.join(uv)})"
+        exc = c.get('excluyentes') or []
+        if exc:
+            linea += f" | NO aplica si dice: {', '.join(exc)}"
+        lineas.append(linea)
     reglas_txt = "\n".join(lineas)
     return (
         "Sos un asistente experto en computo y presupuesto de obra en Argentina. "
@@ -107,7 +126,12 @@ def _system_prompt(catalogo):
         "2. Si ningun regla_id describe bien el item, devolve regla_id=null.\n"
         "3. NO inventes ids, precios ni coeficientes. Solo clasificas.\n"
         "4. `confianza`: 0.85-1.0 match claro; 0.5-0.85 probable; <0.5 dudoso.\n"
-        "5. Usa la unidad del item como pista (m2/m3/ml/u).\n\n"
+        "5. Usa la unidad del item como pista (m2/m3/ml/u). El campo `acepta` "
+        "lista las formas equivalentes de escribir esa unidad: si la unidad del "
+        "item esta ahi, la unidad coincide.\n"
+        "6. `NO aplica si dice` son terminos que DESCARTAN esa regla: si la "
+        "descripcion del item los contiene, no la elijas aunque el resto suene "
+        "parecido.\n\n"
         f"REGLAS VALIDAS (id | rubro | tarea | unidad):\n{reglas_txt}"
     )
 
@@ -128,10 +152,17 @@ def _llamar_api(system, user):
     resp = client.messages.create(
         model=MODELO,
         max_tokens=4096,
-        # Prompt caching: el system prompt (catalogo de reglas ~3.6K tokens) es
-        # IDENTICO en cada lote y entre presupuestos. Marcarlo con cache_control
-        # cachea el prefijo (tools + system) por 5 min: el 1er lote lo crea a
-        # precio full y los siguientes lo leen al 10%. Reduce el costo ~3x.
+        # Prompt caching: el system prompt (catalogo de reglas) es IDENTICO en cada
+        # lote y entre presupuestos. Marcarlo con cache_control cachea el prefijo
+        # (tools + system) por 5 min: el 1er lote lo crea a precio full y los
+        # siguientes lo leen al 10%.
+        # OJO: Haiku 4.5 tiene el minimo cacheable MAS ALTO de todos los modelos,
+        # 4096 tokens. Con el catalogo pelado (id|rubro|tarea|unidad) el prefijo
+        # medía 3.644 y NO cacheaba: la API no da error, simplemente devuelve
+        # cache_creation_input_tokens=0 y se paga todo full. Sumando unidades_validas
+        # y palabras_excluyentes al catalogo el prefijo quedo en ~5.2K y si cachea.
+        # Si algun dia se recorta el catalogo, medir de nuevo con count_tokens:
+        # bajar de 4096 apaga el cache en silencio.
         system=[{'type': 'text', 'text': system, 'cache_control': {'type': 'ephemeral'}}],
         tools=[_TOOL],
         tool_choice={'type': 'tool', 'name': 'clasificar_items'},
@@ -140,19 +171,33 @@ def _llamar_api(system, user):
     # Acumula el uso REAL de tokens en el request actual (para el cap de gasto por
     # usuario/dia; el endpoint lo lee y lo registra). Fuera de un request (scripts,
     # tests) no hace nada. Ver services/llm_budget.py.
+    usage = getattr(resp, 'usage', None)
+    _crea = (getattr(usage, 'cache_creation_input_tokens', 0) or 0) if usage else 0
+    _lee = (getattr(usage, 'cache_read_input_tokens', 0) or 0) if usage else 0
+
+    # Log de cache por llamada. Si `cache_creacion` y `cache_lectura` vienen los dos
+    # en 0 el prefijo quedo por debajo del minimo cacheable y se esta pagando todo
+    # full sin aviso de la API.
+    logger.info('clasificador LLM: lote=%s items | tokens sin_cachear=%s '
+                'cache_creacion=%s cache_lectura=%s salida=%s',
+                user.count('\n') + 1 if user else 0,
+                (getattr(usage, 'input_tokens', 0) or 0) if usage else 0,
+                _crea, _lee,
+                (getattr(usage, 'output_tokens', 0) or 0) if usage else 0)
+
     try:
         from flask import g, has_request_context
-        usage = getattr(resp, 'usage', None)
         if has_request_context() and usage is not None:
             # Con prompt caching, input_tokens NO incluye lo cacheado (va en
             # cache_creation/cache_read). Los sumamos para que el cap diario no
             # subcuente (conservador: los cache_read cuestan solo 10%, pero
             # contarlos a full mantiene el cap del lado seguro).
-            _inp = ((getattr(usage, 'input_tokens', 0) or 0)
-                    + (getattr(usage, 'cache_creation_input_tokens', 0) or 0)
-                    + (getattr(usage, 'cache_read_input_tokens', 0) or 0))
+            _inp = (getattr(usage, 'input_tokens', 0) or 0) + _crea + _lee
             g._llm_input_tokens = getattr(g, '_llm_input_tokens', 0) + _inp
             g._llm_output_tokens = getattr(g, '_llm_output_tokens', 0) + (getattr(usage, 'output_tokens', 0) or 0)
+            # Contadores aparte, SOLO para observabilidad del cache (no tocan el cap).
+            g._llm_cache_creacion = getattr(g, '_llm_cache_creacion', 0) + _crea
+            g._llm_cache_lectura = getattr(g, '_llm_cache_lectura', 0) + _lee
     except Exception:
         pass
     for block in resp.content:

@@ -25,6 +25,40 @@ def test_catalogo_incluye_reglas_nuevas(app):
 
 
 @pytest.mark.unit
+def test_prompt_no_baja_del_minimo_cacheable(app):
+    """Guarda del prompt caching: Haiku 4.5 tiene el minimo cacheable mas alto de
+    todos los modelos (4096 tokens). Si el system prompt baja de ahi la API deja de
+    cachear SIN dar error (cache_creation_input_tokens vuelve 0) y se paga todo full.
+
+    Medido contra claude-haiku-4-5 con count_tokens: 12.255 chars = 5.215 tokens
+    (~2,35 chars/token). El piso de 9.625 chars es el equivalente a 4096 tokens.
+    Se usan chars y no tokens para no pegarle a la API desde CI.
+    """
+    import json
+
+    with app.app_context():
+        prefijo = len(CLL._system_prompt(CLL.catalogo_reglas())) + len(json.dumps(CLL._TOOL))
+        assert prefijo >= 9625, (
+            f'El prefijo cacheable bajo a {prefijo} chars (~{round(prefijo / 2.35)} '
+            f'tokens), por debajo del minimo de 4096 de Haiku 4.5. El cache se apaga '
+            f'en silencio. Volve a medir con count_tokens antes de recortar el catalogo.'
+        )
+
+
+@pytest.mark.unit
+def test_prompt_incluye_unidades_y_excluyentes(app):
+    """Los dos campos que se sumaron al catalogo tienen que llegar al modelo:
+    unidades alternativas (senal positiva) y excluyentes (senal negativa)."""
+    with app.app_context():
+        sp = CLL._system_prompt(CLL.catalogo_reglas())
+        assert 'acepta:' in sp
+        assert 'NO aplica si dice:' in sp
+        # revoque_grueso excluye 'yeso'; tiene que verse en su linea
+        linea = next(x for x in sp.split('\n') if x.startswith('- revoque_grueso '))
+        assert 'NO aplica si dice:' in linea
+
+
+@pytest.mark.unit
 def test_solo_con_coeficientes_filtra(app):
     with app.app_context():
         con = CLL.catalogo_reglas(solo_con_coeficientes=True)

@@ -129,7 +129,7 @@ const CACHE = {{ cache | tojson }};   // resultado guardado (o null -> recalcula
 const MODELO_ENC = {{ modelo_encofrado | tojson }};   // bundle | separado (autodetectado)
 const PRES_ID = {{ presupuesto.id | tojson }};
 const FECHA_CALC = {{ (fecha_calculo.strftime('%d/%m/%Y %H:%M') if fecha_calculo else '') | tojson }};
-const BATCH = 25;
+const BATCH = 40;   // alineado con _BATCH de services/clasificador_llm.py: 1 lote front = 1 request al LLM
 // Margen = markup SOBRE EL COSTO: precio_venta = costo x (1 + MARGEN/100). El cache
 // guarda costo directo; el margen se aplica SOLO en presentacion (front + PDF), asi
 // cambiarlo no obliga a recalcular la IA.
