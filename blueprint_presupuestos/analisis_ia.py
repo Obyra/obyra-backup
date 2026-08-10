@@ -258,6 +258,13 @@ def revision_ia(id):
     nivel = (request.args.get('nivel')
              or (cache or {}).get('nivel') or 'estandar').strip().lower()
 
+    if recalcular:
+        # Recalcular es un pedido explicito de volver a preguntar: se tira el memo
+        # de clasificacion del presupuesto para no reusar las respuestas de la
+        # corrida anterior. Sin esto, "Recalcular" devolveria lo mismo por 1 hora.
+        from services.clasificador_llm import memo_borrar, memo_scope_presupuesto
+        memo_borrar(memo_scope_presupuesto(pres.id, nivel))
+
     # Modelo de encofrado del pliego (autodetectado sobre TODOS los items).
     from services.pipeline_presupuesto_ia import _pliego_tiene_encofrado
     modelo_encofrado = 'separado' if _pliego_tiene_encofrado(items) else 'bundle'

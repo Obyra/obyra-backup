@@ -9,6 +9,7 @@ precios, coeficientes ni reglas nuevas (output constrained via tool schema).
 Degradacion elegante: si no hay ANTHROPIC_API_KEY o el paquete anthropic no
 esta, cae a un clasificador por keywords (base_tecnica) y marca fuente='keyword'.
 """
+import json
 import logging
 import os
 import re
@@ -351,23 +352,135 @@ def _clasificar_keyword_item(desc, unidad):
 
 
 # ---------------------------------------------------------------------------
+# Memo de clasificacion (por presupuesto)
+# ---------------------------------------------------------------------------
+# El front manda el pliego en lotes de 40, o sea varios POST distintos. Dos filas
+# con el mismo texto pueden caer en lotes distintos y clasificarse por separado,
+# con vecinos distintos en el prompt -> respuestas distintas. temperature=0 no
+# alcanza para eso: fija el sampleo, no el contexto.
+#
+# El scope es el PRESUPUESTO, no la organizacion, a proposito: una clasificacion
+# mala no queda pegada para todos los pliegos de la empresa, y `?recalcular=1`
+# la borra (ver _memo_borrar). TTL corto por la misma razon.
+_MEMO_TTL = 3600  # 1 hora: cubre de sobra el analisis de un pliego
+
+
+def memo_scope_presupuesto(presupuesto_id, nivel):
+    if not presupuesto_id:
+        return None
+    return 'clasif:pres:%s:%s' % (presupuesto_id, (nivel or 'estandar').strip().lower())
+
+
+def _memo_cliente():
+    """Cliente Redis o None. Nunca levanta: sin Redis el memo simplemente no existe."""
+    try:
+        from config.cache_config import get_cache
+        return get_cache().get_client()
+    except Exception:
+        return None
+
+
+def _memo_leer(scope, claves):
+    if not scope or not claves:
+        return {}
+    r = _memo_cliente()
+    if r is None:
+        return {}
+    try:
+        crudos = r.hmget(scope, claves)
+    except Exception as e:
+        logger.warning('memo de clasificacion no disponible (lectura): %s', e)
+        return {}
+    out = {}
+    for k, raw in zip(claves, crudos or []):
+        if not raw:
+            continue
+        try:
+            d = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(d, dict) and 'regla_id' in d:
+            out[k] = d
+    return out
+
+
+def _memo_guardar(scope, por_clave):
+    if not scope or not por_clave:
+        return
+    r = _memo_cliente()
+    if r is None:
+        return
+    try:
+        r.hset(scope, mapping={k: json.dumps(v) for k, v in por_clave.items()})
+        r.expire(scope, _MEMO_TTL)
+    except Exception as e:
+        logger.warning('memo de clasificacion no disponible (escritura): %s', e)
+
+
+def memo_borrar(scope):
+    """La usa `?recalcular=1`: un recalculo explicito tiene que preguntar de nuevo."""
+    if not scope:
+        return
+    r = _memo_cliente()
+    if r is None:
+        return
+    try:
+        r.delete(scope)
+    except Exception as e:
+        logger.warning('no se pudo limpiar el memo de clasificacion: %s', e)
+
+
+# ---------------------------------------------------------------------------
 # API publica
 # ---------------------------------------------------------------------------
 
-def clasificar_items(items, forzar_keyword: bool = False):
+def clave_item(descripcion, unidad):
+    """Identidad de un item a los fines de clasificar: dos filas con el mismo
+    texto y la misma unidad son el MISMO trabajo y tienen que dar la misma regla."""
+    return '%s|%s' % (' '.join(_norm(descripcion).split()),
+                      (unidad or '').strip().lower())
+
+
+def clasificar_items(items, forzar_keyword: bool = False, memo_scope: str = None):
     """Clasifica una lista de items {descripcion, unidad, ...}.
 
     Devuelve lista alineada: {descripcion, unidad, regla_id, confianza, fuente,
     tiene_coeficientes}. fuente = 'llm' | 'keyword'.
+
+    Las filas repetidas se resuelven UNA VEZ y se propagan (ver clave_item). Un
+    pliego real repite mucho: en el presupuesto 70 hay 8 filas "Losas", 8
+    "Tabiques" y 6 "Escaleras". Clasificar cada una por separado no solo gasta
+    tokens de mas, sino que las hace divergir: siete "Losas" fueron a
+    losa_hormigon y la octava --la mas grande, 282 m3-- salio regla_id=null y
+    quedo en $0.
+
+    `memo_scope` (opcional) extiende esa propiedad ENTRE llamadas: el front
+    manda el pliego en lotes de 40, asi que dos filas identicas pueden caer en
+    requests distintos y ahi el dedup por-llamada no alcanza. Es un hash de
+    Redis con TTL; si Redis no esta, se degrada a dedup por-llamada nomas.
     """
     catalogo = catalogo_reglas()
     coef_por_id = {c['id']: c['tiene_coef'] for c in catalogo}
 
+    # --- Dedup: una entrada por (descripcion, unidad) ---
+    claves = [clave_item(it.get('descripcion'), it.get('unidad')) for it in items]
+    unicos = {}          # clave -> indice del representante en `items`
+    for i, k in enumerate(claves):
+        unicos.setdefault(k, i)
+
+    memo = _memo_leer(memo_scope, list(unicos)) if memo_scope else {}
+    pendientes = [k for k in unicos if k not in memo]
+    items_pend = [items[unicos[k]] for k in pendientes]
+
     usar_llm = (not forzar_keyword) and llm_disponible()
     base = None
-    if usar_llm:
+    if not items_pend:
+        # Todo resuelto por el memo: no hay nada que preguntar.
+        fuente = 'llm'
+        base = []
+    elif usar_llm:
         try:
-            base = _clasificar_llm(items, catalogo)
+            base = _clasificar_llm(items_pend, catalogo)
             fuente = 'llm'
         except Exception as e:
             base = None  # cae a keyword si la API falla
@@ -385,13 +498,25 @@ def clasificar_items(items, forzar_keyword: bool = False):
     if base is None:
         fuente = 'keyword'
         base = []
-        for it in items:
+        for it in items_pend:
             rid, conf = _clasificar_keyword_item(it.get('descripcion'), it.get('unidad'))
             base.append({'regla_id': rid, 'confianza': conf})
 
-    salida = []
-    for it, cl in zip(items, base or [None] * len(items)):
+    # Resultado por clave: lo que trajo el memo + lo que se acaba de clasificar.
+    por_clave = dict(memo)
+    nuevos = {}
+    for k, cl in zip(pendientes, (base or []) + [None] * len(pendientes)):
         cl = cl or {'regla_id': None, 'confianza': 0.0}
+        por_clave[k] = cl
+        nuevos[k] = cl
+    # Solo se memoiza lo que salio del LLM. El keyword es el modo degradado: no
+    # queremos congelar una clasificacion peor que la que daria el proximo intento.
+    if memo_scope and nuevos and fuente == 'llm':
+        _memo_guardar(memo_scope, nuevos)
+
+    salida = []
+    for it, k in zip(items, claves):
+        cl = por_clave.get(k) or {'regla_id': None, 'confianza': 0.0}
         rid = cl.get('regla_id')
         salida.append({
             'descripcion': it.get('descripcion'),

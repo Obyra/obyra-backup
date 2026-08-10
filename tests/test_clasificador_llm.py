@@ -126,6 +126,95 @@ def test_llm_parse_y_constrain(app, monkeypatch):
 
 
 @pytest.mark.unit
+def test_filas_repetidas_se_clasifican_una_sola_vez(app, monkeypatch):
+    """El caso "Losas" del presupuesto 70: 8 filas identicas, 7 a losa_hormigon y
+    la mas grande (282 m3, mas que las otras 7 juntas) a regla_id=null -> $0.
+
+    Con el dedup, el LLM ve UNA sola "Losas" y las 8 filas comparten la respuesta.
+    """
+    vistos = []
+
+    def _fake_api(system, user):
+        vistos.append(user)
+        # El fake responde por indice: si le llegaran las 8, contestaria 8.
+        n = user.count('Losas') + user.count('Tabiques')
+        return [{'indice': i, 'regla_id': 'losa_hormigon', 'confianza': 0.9}
+                for i in range(n)]
+
+    monkeypatch.setattr(CLL, '_llamar_api', _fake_api)
+    monkeypatch.setattr(CLL, 'llm_disponible', lambda: True)
+
+    with app.app_context():
+        items = [{'descripcion': 'Losas', 'unidad': 'm3'} for _ in range(8)]
+        res = CLL.clasificar_items(items)
+
+    assert len(res) == 8
+    assert {r['regla_id'] for r in res} == {'losa_hormigon'}, (
+        'las 8 filas identicas tienen que compartir la clasificacion'
+    )
+    assert vistos[0].count('Losas') == 1, (
+        'al LLM le tiene que llegar UNA sola "Losas", no 8'
+    )
+
+
+@pytest.mark.unit
+def test_dedup_respeta_la_unidad(app, monkeypatch):
+    """Mismo texto con distinta unidad NO es el mismo trabajo: 'Tabiques' en m3
+    (hormigon) vs en m2 (mamposteria) son items distintos y se preguntan aparte."""
+    monkeypatch.setattr(CLL, 'llm_disponible', lambda: True)
+    monkeypatch.setattr(CLL, '_llamar_api', lambda s, u: [
+        {'indice': 0, 'regla_id': 'hormigon_h21', 'confianza': 0.9},
+        {'indice': 1, 'regla_id': 'mamposteria_ladrillo_hueco_12', 'confianza': 0.8},
+    ])
+    with app.app_context():
+        res = CLL.clasificar_items([
+            {'descripcion': 'Tabiques', 'unidad': 'm3'},
+            {'descripcion': 'Tabiques', 'unidad': 'm2'},
+        ])
+    assert res[0]['regla_id'] != res[1]['regla_id']
+
+
+@pytest.mark.unit
+def test_clave_item_normaliza_texto_y_unidad():
+    assert CLL.clave_item('  LOSAS  ', 'M3') == CLL.clave_item('losas', 'm3')
+    assert CLL.clave_item('Cañería', 'ml') == CLL.clave_item('CANERIA', 'ML')
+    assert CLL.clave_item('Losas', 'm3') != CLL.clave_item('Losas', 'm2')
+
+
+@pytest.mark.unit
+def test_memo_se_degrada_sin_redis(app, monkeypatch):
+    """Sin Redis el memo no existe y clasificar sigue funcionando igual."""
+    monkeypatch.setattr(CLL, '_memo_cliente', lambda: None)
+    monkeypatch.setattr(CLL, 'llm_disponible', lambda: True)
+    monkeypatch.setattr(CLL, '_llamar_api', lambda s, u: [
+        {'indice': 0, 'regla_id': 'losa_hormigon', 'confianza': 0.9}])
+    with app.app_context():
+        res = CLL.clasificar_items([{'descripcion': 'Losas', 'unidad': 'm3'}],
+                                   memo_scope='clasif:pres:999:estandar')
+    assert res[0]['regla_id'] == 'losa_hormigon'
+
+
+@pytest.mark.unit
+def test_memo_no_congela_el_modo_keyword(app, monkeypatch):
+    """El keyword es el modo degradado. Si el LLM se cayo, no queremos dejar esa
+    clasificacion peor pegada por una hora: solo se memoiza lo que salio del LLM."""
+    guardado = {}
+    monkeypatch.setattr(CLL, '_memo_leer', lambda scope, claves: {})
+    monkeypatch.setattr(CLL, '_memo_guardar', lambda scope, d: guardado.update(d))
+    monkeypatch.setattr(CLL, 'llm_disponible', lambda: True)
+
+    def _explota(system, user):
+        raise RuntimeError('sin credito')
+
+    monkeypatch.setattr(CLL, '_llamar_api', _explota)
+    with app.app_context():
+        res = CLL.clasificar_items([{'descripcion': 'Dinteles sobre carpinterias', 'unidad': 'ml'}],
+                                   memo_scope='clasif:pres:999:estandar')
+    assert res[0]['fuente'] == 'keyword'
+    assert guardado == {}, 'no se memoiza el fallback por keyword'
+
+
+@pytest.mark.unit
 def test_confianza_clamp(app, monkeypatch):
     with app.app_context():
         monkeypatch.setattr(CLL, '_llamar_api',

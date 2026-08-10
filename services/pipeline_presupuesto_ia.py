@@ -124,10 +124,13 @@ def _color(confianza, tiene_coef, recursos_detalle):
     return 'amarillo'
 
 
-def _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword):
+def _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword, memo_scope=None):
     """Resuelve primero los items ya aprendidos por la org (sin LLM); clasifica
     el resto. Devuelve lista de dicts alineada con `regla_id, confianza, fuente,
-    tiene_coeficientes, tratamiento`."""
+    tiene_coeficientes, tratamiento`.
+
+    El aprendizaje va ANTES del memo, asi que una correccion del usuario siempre
+    le gana a lo que haya quedado memoizado."""
     from services.clasificador_llm import clasificar_items
     from services.coeficientes_loader import tiene_coeficientes
     from services.aprendizaje_ia import buscar_mapeos
@@ -138,7 +141,8 @@ def _clasificar_con_aprendizaje(items, organizacion_id, forzar_keyword):
     idx_pend = [i for i, it in enumerate(items)
                 if normalizar_texto_item(it.get('descripcion')) not in aprendidos]
     pend = [items[i] for i in idx_pend]
-    clasif_pend = clasificar_items(pend, forzar_keyword=forzar_keyword) if pend else []
+    clasif_pend = (clasificar_items(pend, forzar_keyword=forzar_keyword,
+                                    memo_scope=memo_scope) if pend else [])
     por_idx = {i: clasif_pend[k] for k, i in enumerate(idx_pend)}
 
     out = []
@@ -344,9 +348,15 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     un estado propio (no rojos, no pendientes).
     """
     from services.coeficientes_loader import get_recursos, unidad_item_esperada, contacto_encofrado
-    from services.clasificador_llm import candidatos_para
+    from services.clasificador_llm import candidatos_para, memo_scope_presupuesto
     from services.precio_recurso_service import (
         obtener_precio_cascada, existe_precio_aprendido)  # FASE 1 + 2 (crowd + scraping)
+
+    # Memo de clasificacion por presupuesto: el front manda el pliego en lotes, y
+    # sin esto dos filas identicas que caen en lotes distintos se clasifican por
+    # separado (y divergen). Sin presupuesto no hay scope y el dedup queda
+    # por-llamada nomas.
+    memo_scope = memo_scope_presupuesto(getattr(presupuesto, 'id', None), nivel)
 
     # 1. Filtrado automatico (sin preguntar): separar basura e "incluido en otro item".
     estados = []  # por item: ('item'|'descartado'|'incluido', motivo|None)
@@ -361,7 +371,8 @@ def procesar_items(items, *, organizacion_id, nivel='estandar', zona='CABA',
     # 2. Clasificar SOLO los items reales (no gastar LLM en la basura).
     idx_reales = [i for i, e in enumerate(estados) if e[0] == 'item']
     items_reales = [items[i] for i in idx_reales]
-    clasifs_reales = (_clasificar_con_aprendizaje(items_reales, organizacion_id, forzar_keyword)
+    clasifs_reales = (_clasificar_con_aprendizaje(items_reales, organizacion_id, forzar_keyword,
+                                                  memo_scope=memo_scope)
                       if items_reales else [])
     clasif_idx = {i: clasifs_reales[k] for k, i in enumerate(idx_reales)}
 
