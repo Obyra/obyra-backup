@@ -82,12 +82,17 @@ def pipeline_ia_analizar():
     # sobre TODOS los items (en la ruta revision_ia) y viaja en cada lote.
     modelo_encofrado = (data.get('modelo_encofrado') or 'bundle').strip().lower()
 
-    # Opcional: convertir con el TC de un presupuesto (para materiales en USD)
+    # Opcional: convertir con el TC de un presupuesto (para materiales en USD).
+    # El id viene del BODY, asi que se filtra por org: sin eso cualquier usuario
+    # logueado podia pedir el TC de un presupuesto de otra empresa (y, desde que
+    # el memo de clasificacion se scopea por presupuesto_id, escribirle el memo).
     presupuesto = None
     pres_id = data.get('presupuesto_id')
     if pres_id:
         from models.budgets import Presupuesto
         presupuesto = Presupuesto.query.filter_by(id=pres_id).first()
+        if presupuesto is not None and not _verificar_acceso_presupuesto(presupuesto):
+            return jsonify({'ok': False, 'error': 'Presupuesto no encontrado'}), 404
 
     g._llm_input_tokens = 0
     g._llm_output_tokens = 0
@@ -216,7 +221,8 @@ def calcular_ia(id):
     from models.budgets import Presupuesto, ItemPresupuesto
 
     pres = Presupuesto.query.get_or_404(id)
-    _verificar_acceso_presupuesto(pres)
+    if not _verificar_acceso_presupuesto(pres):
+        abort(404)
     n_items = ItemPresupuesto.query.filter_by(presupuesto_id=id).count()
     muestra = (ItemPresupuesto.query.filter_by(presupuesto_id=id)
                .order_by(ItemPresupuesto.id).limit(6).all())
@@ -244,7 +250,8 @@ def revision_ia(id):
     from models.budgets import Presupuesto, ItemPresupuesto
 
     pres = Presupuesto.query.get_or_404(id)
-    _verificar_acceso_presupuesto(pres)
+    if not _verificar_acceso_presupuesto(pres):
+        abort(404)
 
     filas = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(ItemPresupuesto.id).all()
     items = [{'descripcion': f.descripcion, 'unidad': f.unidad,
