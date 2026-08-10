@@ -152,6 +152,13 @@ def _llamar_api(system, user):
     resp = client.messages.create(
         model=MODELO,
         max_tokens=4096,
+        # Sin esto la API usa temperature=1.0 y dos corridas del MISMO pliego dan
+        # numeros distintos. Medido en el presupuesto 70: 8 filas identicas "Losas",
+        # 7 fueron a losa_hormigon y la mas grande (282 m3, mas que las otras 7
+        # juntas) salio regla_id=null -> $0. Un renglon, una tirada de dados, el 9%
+        # del presupuesto. Clasificar no es una tarea creativa: queremos que el
+        # mismo item de siempre la misma regla.
+        temperature=0,
         # Prompt caching: el system prompt (catalogo de reglas) es IDENTICO en cada
         # lote y entre presupuestos. Marcarlo con cache_control cachea el prefijo
         # (tools + system) por 5 min: el 1er lote lo crea a precio full y los

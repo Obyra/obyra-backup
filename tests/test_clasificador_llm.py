@@ -69,6 +69,39 @@ def test_solo_con_coeficientes_filtra(app):
 
 
 @pytest.mark.unit
+def test_llamada_va_con_temperature_cero(app, monkeypatch):
+    """Clasificar no es creativo: el mismo item tiene que dar siempre la misma
+    regla. Sin `temperature` explicito la API usa 1.0 y dos corridas del mismo
+    pliego dan totales distintos. Medido en el presupuesto 70: 8 filas identicas
+    'Losas', 7 a losa_hormigon y la mas grande (282 m3) a regla_id=null -> $0,
+    el 9% del presupuesto por una tirada de dados.
+    """
+    capturado = {}
+
+    class _FakeMessages:
+        def create(self, **kw):
+            capturado.update(kw)
+            raise RuntimeError('corta aca: solo queremos inspeccionar los kwargs')
+
+    class _FakeClient:
+        def __init__(self, **_kw):
+            self.messages = _FakeMessages()
+
+    import anthropic
+    monkeypatch.setattr(anthropic, 'Anthropic', _FakeClient)
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'test-key')
+
+    with app.app_context():
+        with pytest.raises(RuntimeError):
+            CLL._llamar_api('system', 'user')
+
+    assert capturado.get('temperature') == 0, (
+        'el clasificador tiene que pedir temperature=0; sin eso la API asume 1.0 '
+        'y el mismo pliego da presupuestos distintos en cada corrida'
+    )
+
+
+@pytest.mark.unit
 def test_llm_parse_y_constrain(app, monkeypatch):
     """El LLM parsea bien y descarta ids inventados (constrained)."""
     with app.app_context():
