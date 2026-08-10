@@ -256,6 +256,31 @@ _STOPWORDS_MATCHING = {
 }
 
 
+# Palabras que miden pero no IDENTIFICAN: dos materiales distintos pueden
+# compartirlas enteras. No alcanzan para sostener un match por si solas.
+_TOKENS_NO_IDENTITARIOS = {
+    'mts', 'mtr', 'mtrs', 'cms', 'mms', 'kgs', 'grs', 'lts', 'uni', 'und',
+    'pulg', 'pulgada', 'pulgadas', 'espesor', 'medida', 'medidas', 'diametro',
+    'largo', 'ancho', 'alto', 'altura',
+}
+
+
+def _tokens_lexicos(tokens: set) -> set:
+    """Subconjunto de tokens que IDENTIFICAN el material: el sustantivo y sus
+    calificativos ('azulejo', 'malla', 'sima', 'cemento'). Deja afuera numeros,
+    dimensiones ('15x15', '15', '8mm') y palabras de medida ('espesor', 'mts').
+
+    Existe por el bug del 35x: 'Azulejo 15x15' tokeniza a {azulejo, 15x15, 15},
+    o sea DOS DE TRES tokens son la dimension. Un candidato que solo comparta la
+    dimension llegaba a cobertura 0.67 y pasaba el umbral de 0.65 sin haber
+    matcheado el sustantivo. En produccion eso hizo que 'Azulejo 15x15' (u)
+    matcheara 'Malla Sima 15x15 cm - Panel 3x2 m' a $20.700 el panel; por el
+    coeficiente de 35 piezas/m2 el m2 de revestimiento quedo en $724.500.
+    """
+    return {t for t in tokens
+            if len(t) >= 3 and t.isalpha() and t not in _TOKENS_NO_IDENTITARIOS}
+
+
 def _tokens_significativos(texto: str) -> set:
     """Extrae tokens útiles para matching fuzzy: lowercase, sin acentos,
     sin stopwords. Mantiene tokens largos Y splittea números pegados a
@@ -325,8 +350,9 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
       1. Match exacto por (descripcion_normalizada, unidad).
       2. Match exacto por descripcion_normalizada con UNIDAD COMPATIBLE
          (sinónimos: m2/m²/mts2; un/u/ud/gl; hora/hr/hs).
-      3. Match FUZZY por tokens significativos (Jaccard >=0.5) con unidad
-         compatible. Ranking por overlap de tokens.
+      3. Match FUZZY por tokens significativos. Exige compartir al menos una
+         palabra IDENTITARIA (ver _tokens_lexicos): la dimension sola no habilita.
+         La unidad NO filtra en este paso, solo suma bonus al ranking.
 
     El paso 3 es el que sube fuerte la cobertura: items del JMG con
     descripciones largas matchean precios de la lista propia aunque la
@@ -397,6 +423,11 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
              .limit(2000)
              .all())
 
+    # Las dimensiones RANKEAN pero no HABILITAN: entre dos azulejos, el 15x15 le
+    # gana al 20x20, pero la dimension sola nunca alcanza para entrar. Por eso el
+    # gate y la cobertura van sobre los tokens lexicos y el resto del score sigue
+    # sobre todos los tokens.
+    lex_item = _tokens_lexicos(tokens_item)
     scored = []
     for c in todos:
         tokens_c = _tokens_significativos(c.descripcion_normalizada or c.descripcion or '')
@@ -405,12 +436,21 @@ def _buscar_provider_price_list(organizacion_id, descripcion_norm, unidad, item_
         inter = tokens_item & tokens_c
         if not inter:
             continue
+        if lex_item:
+            # Gate: hay que compartir al menos UNA palabra que identifique el
+            # material. Sin esto, compartir '15x15' bastaba (ver _tokens_lexicos).
+            inter_lex = lex_item & _tokens_lexicos(tokens_c)
+            if not inter_lex:
+                continue
+            cov_item = len(inter_lex) / len(lex_item)
+        else:
+            # Query sin sustantivo propio (ej. un codigo): se cae al criterio viejo.
+            cov_item = len(inter) / len(tokens_item)
         union = tokens_item | tokens_c
         jaccard = len(inter) / len(union)
         # Cobertura de la QUERY: cuanto del concepto buscado esta en el candidato.
         # Fixea "cemento" (1 token) vs "Bolsa de Cemento Loma Negra 50 kg" (Jaccard
         # 0.17 pero cov_item 1.0). Fase 2.1: sube fuerte la cobertura de recursos.
-        cov_item = len(inter) / len(tokens_item)
         cov_cand = len(inter) / len(tokens_c)  # especificidad (desempata hacia el menos verboso)
         # Aceptar si la query esta mayormente cubierta O el Jaccard clasico es alto.
         if cov_item < 0.65 and jaccard < 0.4:

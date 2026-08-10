@@ -71,6 +71,48 @@ def test_techo_matching_marca_distinta_no_matchea(app):
         _limpiar(db)
 
 
+def test_tokens_lexicos_deja_afuera_dimensiones():
+    """La dimension no identifica: 'azulejo 15x15' aporta UN solo token lexico."""
+    from services.precio_recurso_service import _tokens_lexicos, _tokens_significativos
+
+    assert _tokens_lexicos(_tokens_significativos('Azulejo 15x15')) == {'azulejo'}
+    assert _tokens_lexicos(_tokens_significativos('Hierro 8mm')) == {'hierro'}
+    assert _tokens_lexicos(_tokens_significativos('Malla Sima 15x15 cm (4.2 mm de espesor)')) == {'malla', 'sima'}
+
+
+@pytest.mark.integration
+def test_dimension_compartida_no_alcanza_para_matchear(app):
+    """El bug del 35x. 'Azulejo 15x15' (u) matcheaba 'Malla Sima 15x15 cm - Panel
+    3x2 m' (un, $20.700) porque compartian '15x15' y '15': dos de los tres tokens
+    de la query eran la dimension -> cobertura 0.67 > umbral 0.65, sin haber
+    matcheado NUNCA el sustantivo. Con el coeficiente de 35 piezas/m2 del APU
+    revestimiento_azulejo, el m2 salia $724.500 (real: ~$46.000).
+
+    Caso medido en el presupuesto 70: 3 items de porcelanato = $1.044M de $2.612M
+    de costo total, el 40% del presupuesto, sostenido por este match.
+    """
+    from extensions import db
+    with app.app_context():
+        _limpiar(db)
+        _ppl(db, 'Malla Sima 15x15 cm (4.2 mm de espesor) - Panel 3x2 m', 'un', 20700, org=999)
+        db.session.commit()
+
+        mejor, _alts = _buscar_provider_price_list(999, 'azulejo 15x15', 'u')
+        assert mejor is None, (
+            'la malla sima no puede ganarle a "azulejo": no comparten sustantivo, '
+            'solo la dimension 15x15'
+        )
+
+        # Y el match legitimo por sustantivo sigue funcionando.
+        _ppl(db, 'Azulejo blanco 15x15 (caja)', 'u', 950, org=999)
+        db.session.commit()
+        mejor, _alts = _buscar_provider_price_list(999, 'azulejo 15x15', 'u')
+        assert mejor is not None
+        assert 'azulejo' in (mejor.descripcion_normalizada or '')
+
+        _limpiar(db)
+
+
 @pytest.mark.integration
 def test_resolver_mo_v2_usa_costo_empresa(app):
     """buscar_mejor_precio(tipo='mano_obra', 'oficial especializado') resuelve el
