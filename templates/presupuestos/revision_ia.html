@@ -189,6 +189,25 @@ function _fuenteBadge(it){
 }
 function _esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
 
+// El pipeline APAGA el precio a proposito cuando el item viene en una unidad que
+// no es la de la receta (ej: item en m3 contra una receta que se mide en m2):
+// multiplicar ahi da totales absurdos. Antes eso quedaba en $0 sin explicacion y
+// era indistinguible de "la IA no supo que era". Ver unidad_incompatible en
+// services/pipeline_presupuesto_ia.py.
+function _esUnidadIncompatible(it){ return !!(it && it.unidad_incompatible); }
+function _avisoUnidad(it){
+  if(!_esUnidadIncompatible(it)) return '';
+  return '<div class="alert alert-warning py-2 px-3 small mb-2 mt-2">'
+       + '<i class="fas fa-ruler-combined me-1"></i>'
+       + '<strong>Apagamos el precio por unidad incompatible.</strong> '
+       + 'Lo reconocimos como <strong>'+_esc(it.regla_id||'—')+'</strong>, que se mide en '
+       + '<strong>'+_esc(it.unidad_regla||'?')+'</strong>, pero el ítem viene en '
+       + '<strong>'+_esc(it.unidad||'?')+'</strong>. Calcularlo así daría un total sin sentido, '
+       + 'así que preferimos no darte un número. Corregí la unidad en el pliego, '
+       + 'elegí otro tipo de trabajo, o cargá el precio a mano.'
+       + '</div>';
+}
+
 let IA_DEGRADADA = false;  // se enciende si algun lote cayo a keyword por fallo del LLM
 function _mostrarBannerDegradada(){
   IA_DEGRADADA = true;
@@ -359,7 +378,11 @@ function _render(){
       h+='</div>';
       h+='<div class="mt-2"><a class="small" data-bs-toggle="collapse" href="#listaNoApu" role="button">Ver cuáles</a>';
       h+='<div id="listaNoApu" class="collapse mt-2"><ul class="small text-muted mb-0">';
-      rojosNoApu.forEach(it=>{ h+='<li>'+_esc(it.descripcion)+' <span class="text-muted">('+(it.cantidad||0)+' '+_esc(it.unidad||'')+')</span></li>'; });
+      rojosNoApu.forEach(it=>{
+        h+='<li>'+_esc(it.descripcion)+' <span class="text-muted">('+(it.cantidad||0)+' '+_esc(it.unidad||'')+')</span>';
+        if(_esUnidadIncompatible(it)) h+=' <span class="badge bg-warning-subtle text-warning-emphasis border border-warning" title="Lo reconocimos como '+_esc(it.regla_id||'')+', que se mide en '+_esc(it.unidad_regla||'?')+', pero el ítem viene en '+_esc(it.unidad||'?')+'. Apagamos el precio para no darte un total sin sentido.">unidad incompatible</span>';
+        h+='</li>';
+      });
       h+='</ul></div></div>';
       h+='<div class="resultado-grupo small mt-2"></div>';
       h+='</div></div>';
@@ -367,14 +390,25 @@ function _render(){
 
     // Bloque 2: constructivos individuales (con candidatos).
     if(rojosConstr.length){
+      const nUnid=rojosConstr.filter(_esUnidadIncompatible).length;
       h+='<h6 class="mb-1"><i class="fas fa-hand-paper text-danger me-2"></i>Elegí el tipo de trabajo · '+rojosConstr.length+' ítems</h6>';
       h+='<p class="text-muted small mb-2">No pudimos calcular el precio de estos ítems. Elegí el tipo de trabajo de la lista, o cargá el precio a mano. <strong>La próxima vez lo reconocemos solo.</strong></p>';
+      if(nUnid){
+        h+='<p class="small mb-2"><i class="fas fa-ruler-combined text-warning me-1"></i>'
+         + '<strong>'+nUnid+'</strong> de estos sí los reconocimos, pero les apagamos el precio '
+         + 'porque la unidad del ítem no coincide con la de la receta. Están marcados abajo.</p>';
+      }
       h+='<div class="d-flex flex-column gap-3">';
       rojosConstr.forEach(it=>{
         h+='<div class="card border-danger-subtle" data-desc="'+_esc(it.descripcion)+'"><div class="card-body">';
         h+='<div class="d-flex justify-content-between align-items-start"><div><div class="fw-bold">'+_esc(it.descripcion)+'</div>';
         h+='<div class="small text-muted">'+(it.cantidad||0)+' '+_esc(it.unidad||'')+'</div></div>';
-        h+='<span class="badge bg-danger-subtle text-danger border border-danger">Sin precio</span></div><div class="mt-3">';
+        h+= _esUnidadIncompatible(it)
+            ? '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning">Unidad incompatible</span>'
+            : '<span class="badge bg-danger-subtle text-danger border border-danger">Sin precio</span>';
+        h+='</div>';
+        h+= _avisoUnidad(it);
+        h+='<div class="mt-3">';
         const cands=it.candidatos||[];
         if(cands.length){
           h+='<div class="small text-muted mb-2">¿Es alguno de estos?</div><div class="d-flex flex-wrap gap-2">';
