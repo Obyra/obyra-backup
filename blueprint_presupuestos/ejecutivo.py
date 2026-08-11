@@ -1287,36 +1287,6 @@ def ejecutivo_materiales_vista(id):
     )
 
 
-@presupuestos_bp.route('/<int:id>/ejecutivo/materiales/json')
-@login_required
-def ejecutivo_materiales_json(id):
-    """Misma info que la vista pero como JSON (para refrescar sin reload)."""
-    org_id = get_current_org_id()
-    if not org_id:
-        return jsonify(ok=False, error='Sin organización activa'), 400
-
-    presupuesto = Presupuesto.query.filter_by(
-        id=id, organizacion_id=org_id,
-    ).first_or_404()
-
-    materiales = sincronizar_materiales_cotizables(presupuesto)
-    data = []
-    for mat in materiales:
-        data.append({
-            'id': mat.id,
-            'descripcion': mat.descripcion,
-            'unidad': mat.unidad,
-            'cantidad_total': float(mat.cantidad_total or 0),
-            'estado': mat.estado,
-            'grupo_hash': mat.grupo_hash,
-            'item_inventario_id': mat.item_inventario_id,
-            'proveedor_elegido_id': mat.proveedor_elegido_id,
-            'precio_elegido': float(mat.precio_elegido or 0) if mat.precio_elegido else None,
-            'num_composiciones': mat.composiciones.count(),
-        })
-    return jsonify(ok=True, materiales=data)
-
-
 # ============================================================================
 # FASE B - Asignar proveedores y generar solicitudes WhatsApp
 # ============================================================================
