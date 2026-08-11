@@ -219,7 +219,13 @@ async function _analizarLote(slice){
   const r = await fetch('/presupuestos/pipeline-ia/analizar', {
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':_csrf()},
-    body: JSON.stringify({ items: slice, nivel: NIVEL, modelo_encofrado: MODELO_ENC }),
+    // presupuesto_id: lo necesita el memo de clasificacion para scopearse a ESTE
+    // pliego (sin el, cada lote es un universo aparte y dos filas identicas en
+    // lotes distintos se clasifican por separado). Tambien habilita el tipo de
+    // cambio del presupuesto para materiales en USD. El backend valida que el
+    // presupuesto sea de la org del usuario.
+    body: JSON.stringify({ items: slice, nivel: NIVEL, modelo_encofrado: MODELO_ENC,
+                           presupuesto_id: PRES_ID }),
   });
   if(!r.ok) throw new Error('HTTP '+r.status);
   const d = await r.json();
@@ -249,7 +255,16 @@ async function _correr(){
     det.textContent=pct+'%';
   }
   _render();
-  _guardarCache();   // persistir para no re-analizar en cada carga
+  _pintarRecalcBar('recién');
+  await _guardarCache();   // persistir para no re-analizar en cada carga
+  // Sacar ?recalcular=1 de la URL una vez guardado. Sin esto un F5 vuelve a
+  // correr TODO el pliego contra el LLM (y ademas limpia el memo, asi que se
+  // paga entero de nuevo) sin que el usuario haya pedido recalcular.
+  try{
+    if(new URLSearchParams(location.search).has('recalcular')){
+      history.replaceState(null,'',location.pathname);
+    }
+  }catch(e){/* si el browser no deja, no pasa nada */}
 }
 
 // Guarda el resultado calculado en el presupuesto (Fase 2.6: calcula 1 vez).
@@ -261,18 +276,27 @@ async function _guardarCache(){
   }catch(e){/* no bloquea la UI si falla el guardado */}
 }
 
+// "Calculado el ... · Recalcular". Va en LOS DOS caminos (cache y calculo en
+// vivo): antes se pintaba solo al venir del cache, asi que despues de correr un
+// ?recalcular=1 la linea entera desaparecia y el usuario se quedaba sin forma de
+// volver a calcular salvo escribiendo el parametro en la URL a mano.
+function _pintarRecalcBar(fechaTxt){
+  const bar=document.getElementById('recalcBar');
+  if(!bar) return;
+  bar.innerHTML='<span class="text-muted"><i class="fas fa-clock me-1"></i>Calculado'+
+    (fechaTxt?(' '+fechaTxt):'')+'</span> · '+
+    '<a href="?recalcular=1" onclick="return confirm(\'Recalcular vuelve a calcular todo el presupuesto (~1 min). ¿Seguir?\')">'+
+    '<i class="fas fa-rotate me-1"></i>Recalcular</a>';
+}
+
 // Render desde cache: sin progreso, sin costo LLM. Muestra "calculado el ..."
 function _desdeCache(){
   document.getElementById('progresoBox').classList.add('d-none');
   CACHE.items.forEach(x=>_res.push(x));
+  // Primero la barra y despues el render: si _render() llegara a explotar, el
+  // usuario igual conserva la salida de emergencia para recalcular.
+  _pintarRecalcBar(FECHA_CALC?('el '+FECHA_CALC):'');
   _render();
-  const bar=document.getElementById('recalcBar');
-  if(bar){
-    bar.innerHTML='<span class="text-muted"><i class="fas fa-clock me-1"></i>Calculado'+
-      (FECHA_CALC?(' el '+FECHA_CALC):'')+'</span> · '+
-      '<a href="?recalcular=1" onclick="return confirm(\'Recalcular vuelve a calcular todo el presupuesto (~1 min). ¿Seguir?\')">'+
-      '<i class="fas fa-rotate me-1"></i>Recalcular</a>';
-  }
 }
 
 function _init(){
