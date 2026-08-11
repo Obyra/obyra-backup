@@ -1,6 +1,6 @@
 """
 State management + conversion routes: confirmar_como_obra, editar_obra, eliminar,
-cambiar_estado, revertir_borrador, restaurar, asignar_cliente, crear_asignar_cliente,
+cambiar_estado, revertir_borrador, asignar_cliente, crear_asignar_cliente,
 revertir_confirmacion_obra, guardar_presupuesto
 """
 import json
