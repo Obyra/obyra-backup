@@ -287,11 +287,62 @@ def revision_ia(id):
                            modelo_encofrado=modelo_encofrado, margen=margen)
 
 
+def _bridge_regla_id(fila, cache_item):
+    """Puente Validacion -> Ejecutivo (paso 3, 2026-08-12).
+
+    generar_preliminar() / composicion_auto_service.py solo puede armar la
+    composicion (ItemPresupuestoComposicion) de un item si
+    ItemPresupuesto.analisis_ia.sugerencias.regla_id ya esta cargado. Hoy eso
+    lo escribe unicamente el modal "Analizar con IA" del Detalle. El pipeline
+    de Validacion (este archivo) YA calcula regla_id por item -- viaja en
+    cache_item['regla_id'] -- pero nunca lo persistia en analisis_ia. Este
+    puente cierra esa brecha, sin tocar nada mas del comportamiento actual.
+
+    Politica de respeto (dry-run verificado contra el presupuesto 70 en prod,
+    2026-08-12: items_sin_regla bajo de 56 a 29 exacto, los 27 que el pipeline
+    si pudo clasificar y el modal nunca toco):
+      - Si analisis_ia ya tiene un regla_id puesto por OTRA fuente (el modal,
+        u origen distinto de 'pipeline_ia') -> se respeta, no se toca. Ejemplo
+        real detectado en pres 70: el modal clasifico un item como
+        'personal_administracion_obra' (ya con composicion generada) mientras
+        el pipeline, para el MISMO item, no encontro regla -- pisarlo hubiera
+        borrado una clasificacion correcta.
+      - Si esta vacio, o lo escribio el propio puente en una corrida anterior
+        (origen == 'pipeline_ia') -> se sobreescribe con el regla_id mas
+        reciente. Necesario porque Validacion es iterativa (el usuario corrige
+        el tipo de trabajo y eso cambia regla_id en la corrida siguiente); si
+        solo llenara huecos vacios, una correccion posterior quedaria con el
+        regla_id viejo grabado y generar_preliminar armaria la receta
+        equivocada.
+
+    No hace falta escribir tipo_tratamiento: composicion_auto_service lo
+    deriva solo desde regla_id (mismo catalogo REGLAS_TECNICAS que usa el
+    pipeline, el modal y el ejecutivo -- sin traduccion).
+    """
+    regla_id = (cache_item or {}).get('regla_id')
+    if not regla_id:
+        return False
+    existing = fila.analisis_ia
+    if isinstance(existing, dict) and existing.get('origen') != 'pipeline_ia':
+        sug = existing.get('sugerencias') if 'sugerencias' in existing else existing
+        if isinstance(sug, dict) and sug.get('regla_id'):
+            return False  # respetado: lo puso el modal u otra fuente
+    fila.analisis_ia = {
+        'sugerencias': {'regla_id': regla_id},
+        'origen': 'pipeline_ia',
+        'actualizado_at': datetime.utcnow().isoformat(),
+    }
+    return True
+
+
 def _persistir_precios_en_items(pres, cache_items):
     """Opcion A: baja los COSTOS calculados por el pipeline (que viven en el cache)
     a las filas ItemPresupuesto, para que el detalle / calcular_totales / reportes
     dejen de ver $0. Guarda COSTO directo (precio_unitario + total); el margen se
     aplica en presentacion (PDF/Excel), igual que antes.
+
+    Ademas (paso 3, puente): en el mismo loop, persiste regla_id en
+    analisis_ia -- ver _bridge_regla_id().
 
     Matching posicional: el front analiza los items en el MISMO orden en que la
     pantalla de revision los carga (ItemPresupuesto por id, sin filtro solo_interno),
@@ -300,7 +351,7 @@ def _persistir_precios_en_items(pres, cache_items):
     la escritura de precios (el cache ya quedo guardado igual).
 
     Items en $0 (rojos / descartados / sin costo) se dejan en 0: el usuario los
-    completa a mano. Devuelve (escritos, desajustes).
+    completa a mano. Devuelve (escritos, desajustes, regla_id_bridged).
     """
     from models.budgets import ItemPresupuesto
 
@@ -311,18 +362,20 @@ def _persistir_precios_en_items(pres, cache_items):
              .filter_by(presupuesto_id=pres.id)
              .order_by(ItemPresupuesto.id).all())
     if not filas or not cache_items:
-        return 0, 0
+        return 0, 0, 0
     n = min(len(filas), len(cache_items))
     desajustes = sum(1 for i in range(n)
                      if _norm(filas[i].descripcion) != _norm((cache_items[i] or {}).get('descripcion')))
-    # Si mas del 20% no alinea por descripcion, no arriesgamos corromper precios.
+    # Si mas del 20% no alinea por descripcion, no arriesgamos corromper precios
+    # (ni tocamos analisis_ia: el puente hereda esta misma guarda de seguridad).
     if n and desajustes > max(1, n // 5):
         current_app.logger.warning(
             'guardar-cache: %s/%s items no alinean por descripcion; se omite la '
             'persistencia de precios (pres=%s)', desajustes, n, pres.id)
-        return 0, desajustes
+        return 0, desajustes, 0
 
     escritos = 0
+    regla_id_bridged = 0
     for i in range(n):
         it = cache_items[i] or {}
         fila = filas[i]
@@ -357,7 +410,9 @@ def _persistir_precios_en_items(pres, cache_items):
         fila.costo_mano_obra = _dec(it.get('costo_mano_obra'))
         fila.costo_equipo = _dec(it.get('costo_equipo'))
         escritos += 1
-    return escritos, desajustes
+        if _bridge_regla_id(fila, it):
+            regla_id_bridged += 1
+    return escritos, desajustes, regla_id_bridged
 
 
 @presupuestos_bp.route('/<int:id>/pipeline-ia/guardar-cache', methods=['POST'])
@@ -384,10 +439,13 @@ def pipeline_ia_guardar_cache(id):
     pres.pipeline_ia_fecha = datetime.utcnow()
 
     # Opcion A: bajar los costos del cache a los ItemPresupuesto para que el detalle
-    # y los totales dejen de ver $0. Si falla, no bloquea el guardado del cache.
+    # y los totales dejen de ver $0. De paso (paso 3, puente): persiste regla_id en
+    # analisis_ia para que generar_preliminar() pueda armar composicion despues.
+    # Si falla, no bloquea el guardado del cache.
     precios_persistidos = 0
+    regla_id_bridged = 0
     try:
-        precios_persistidos, _desaj = _persistir_precios_en_items(pres, items)
+        precios_persistidos, _desaj, regla_id_bridged = _persistir_precios_en_items(pres, items)
         if precios_persistidos:
             pres.calcular_totales()   # recomputa subtotales/total desde los items ya priceados
     except Exception:
@@ -412,7 +470,8 @@ def pipeline_ia_guardar_cache(id):
 
     return jsonify({'ok': True, 'fecha': pres.pipeline_ia_fecha.isoformat(),
                     'precios_confirmados': confirmados,
-                    'precios_persistidos': precios_persistidos})
+                    'precios_persistidos': precios_persistidos,
+                    'regla_id_bridged': regla_id_bridged})
 
 
 @presupuestos_bp.route('/precio-scraping', methods=['POST'])

@@ -54,11 +54,12 @@
 
       {# === Pedir precios a proveedores: idem, requiere APU === #}
       {% if ux_tiene_composicion %}
-      <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
+      <button type="button"
          class="btn btn-outline-success"
+         onclick="pedirPreciosAProveedores(this)"
          title="Asignar proveedores reales a cada material y enviar solicitudes de cotización por WhatsApp.">
         <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
-      </a>
+      </button>
       {% else %}
       <button type="button" class="btn btn-outline-success" disabled
               title="Primero generá la composición ejecutiva (APU). Sin recursos descompuestos no hay materiales sobre los que pedir cotización.">
@@ -971,6 +972,37 @@ const MODAL_COMP = new bootstrap.Modal(document.getElementById('modalComposicion
 
 function _formatMoney(v) {
   return '$' + Math.round(v || 0).toLocaleString('es-AR');
+}
+
+// ============================================================================
+// Paso 3 (puente, 2026-08-12) — "Pedir precios a proveedores" genera la
+// composicion (si hace falta) antes de ir a Materiales a cotizar. Idempotente
+// (generar-preliminar no duplica composiciones existentes), asi que no importa
+// si ya se genero antes: siempre se puede volver a tocar este boton.
+// Best-effort: si el POST falla igual navega, para no trabar al usuario con
+// un link que antes funcionaba solo con href.
+// ============================================================================
+async function pedirPreciosAProveedores(btn) {
+  if (btn) {
+    btn.disabled = true;
+    var htmlOrig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparando...';
+  }
+  try {
+    const r = await fetch('/presupuestos/{{ presupuesto.id }}/generar-preliminar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf() },
+      credentials: 'same-origin',
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) {
+      console.warn('No se pudo generar la composicion antes de pedir precios:', data && data.error);
+    }
+  } catch (e) {
+    console.warn('Error de red generando composicion antes de pedir precios:', e);
+  } finally {
+    window.location.href = '/presupuestos/{{ presupuesto.id }}/ejecutivo/materiales';
+  }
 }
 
 // ============================================================================
