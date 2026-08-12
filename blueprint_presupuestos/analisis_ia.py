@@ -335,6 +335,81 @@ def _bridge_regla_id(fila, cache_item):
     return True
 
 
+def _norm_desc(s):
+    return ' '.join((s or '').strip().lower().split())
+
+
+def aplicar_puente_desde_cache_almacenado(pres):
+    """Aplica _bridge_regla_id() usando el pipeline_ia_cache YA GUARDADO en el
+    presupuesto -- no uno fresco de un POST de Validacion. Para cuando
+    "Pedir precios a proveedores" dispara la composicion sin que el usuario
+    haya pasado por Validacion en esta sesion (2026-08-12: encontramos que
+    sin esto, generar-preliminar corria sobre analisis_ia sin actualizar y
+    no generaba nada nuevo -- el puente nunca se habia disparado para ese
+    presupuesto).
+
+    A diferencia de _persistir_precios_en_items(), esta funcion SOLO toca
+    analisis_ia -- nunca precio_unitario/costo_material/etc. El cache
+    guardado puede ser viejo (de una corrida de Validacion de hace dias);
+    volver a pisar precios con esos valores viejos podria revertir una
+    edicion manual hecha despues en otra pantalla. La escritura de
+    regla_id no tiene ese riesgo: _bridge_regla_id ya respeta cualquier
+    valor que no haya puesto el propio puente.
+
+    Devuelve dict:
+      ok:               False solo si HAY cache guardado pero esta demasiado
+                         desalineado con los items actuales (>20%, mismo
+                         umbral que _persistir_precios_en_items) -- ahi no se
+                         aplica nada, para no arriesgar clasificar mal.
+      error:             mensaje legible si ok=False, sino None.
+      items_totales:     items comparados.
+      regla_id_bridged:  cuantos items recibieron regla_id nuevo.
+      desajustes:        cuantos no alinearon por descripcion.
+
+    Si el presupuesto NUNCA paso por Validacion (sin pipeline_ia_cache) no
+    es un error: no hay nada que puentear, se devuelve ok=True con
+    regla_id_bridged=0 y generar_preliminar sigue con lo que ya haya en
+    analisis_ia (por ejemplo, lo que dejo el modal viejo).
+    """
+    from models.budgets import ItemPresupuesto
+
+    cache_items = (pres.pipeline_ia_cache or {}).get('items') or []
+    if not cache_items:
+        return {'ok': True, 'error': None, 'items_totales': 0,
+                'regla_id_bridged': 0, 'desajustes': 0}
+
+    filas = (ItemPresupuesto.query
+             .filter_by(presupuesto_id=pres.id)
+             .order_by(ItemPresupuesto.id).all())
+    if not filas:
+        return {'ok': True, 'error': None, 'items_totales': 0,
+                'regla_id_bridged': 0, 'desajustes': 0}
+
+    n = min(len(filas), len(cache_items))
+    desajustes = sum(1 for i in range(n)
+                     if _norm_desc(filas[i].descripcion) != _norm_desc((cache_items[i] or {}).get('descripcion')))
+    if n and desajustes > max(1, n // 5):
+        return {
+            'ok': False,
+            'error': (f'El último cálculo de IA guardado no coincide con los ítems actuales '
+                      f'del presupuesto ({desajustes} de {n} no alinean). Volvé a "Calcular con IA" '
+                      f'para actualizarlo antes de pedir precios.'),
+            'items_totales': n, 'regla_id_bridged': 0, 'desajustes': desajustes,
+        }
+
+    bridged = 0
+    for i in range(n):
+        fila = filas[i]
+        it = cache_items[i] or {}
+        if _norm_desc(fila.descripcion) != _norm_desc(it.get('descripcion')):
+            continue
+        if _bridge_regla_id(fila, it):
+            bridged += 1
+
+    return {'ok': True, 'error': None, 'items_totales': n,
+            'regla_id_bridged': bridged, 'desajustes': desajustes}
+
+
 def _persistir_precios_en_items(pres, cache_items):
     """Opcion A: baja los COSTOS calculados por el pipeline (que viven en el cache)
     a las filas ItemPresupuesto, para que el detalle / calcular_totales / reportes

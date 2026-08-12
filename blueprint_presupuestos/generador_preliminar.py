@@ -67,6 +67,18 @@ def generar_preliminar(id):
             error='El Presupuesto Ejecutivo ya esta aprobado. Reverti la aprobacion antes de regenerar.',
         ), 400
 
+    # Paso 3 -- puente: antes de generar composicion, completar regla_id en
+    # analisis_ia desde el ultimo calculo de Validacion GUARDADO (no hace
+    # falta que el usuario haya pasado por Validacion en esta sesion).
+    # Nunca pisa lo que ya clasifico el modal u otra fuente (ver
+    # _bridge_regla_id). Si no hay cache guardado, no es error: sigue de
+    # largo con lo que ya haya en analisis_ia.
+    from blueprint_presupuestos.analisis_ia import aplicar_puente_desde_cache_almacenado
+    puente = aplicar_puente_desde_cache_almacenado(presupuesto)
+    if not puente['ok']:
+        db.session.rollback()
+        return jsonify(ok=False, error=puente['error'], fase='puente'), 409
+
     # Generacion (servicio puro, no commitea)
     try:
         from services.composicion_auto_service import generar_preliminar as svc_generar
@@ -85,6 +97,7 @@ def generar_preliminar(id):
             error=msg_admin if (_es_super_admin() or _puede_gestionar()) else
                   'No se pudo generar el preliminar. Avisale al equipo de OBYRA.',
             modulo_faltante=getattr(e, 'name', None),
+            fase='generacion',
         ), 500
     except Exception as e:
         db.session.rollback()
@@ -95,17 +108,23 @@ def generar_preliminar(id):
             detalle = f'{type(e).__name__}: {str(e)[:300]}'
         else:
             detalle = 'No se pudo generar el preliminar. Avisale al equipo de OBYRA.'
-        return jsonify(ok=False, error=detalle), 500
+        return jsonify(ok=False, error=detalle, fase='generacion'), 500
 
-    # Sincronizar MaterialCotizable para consolidar recursos para cotizacion
+    # Sincronizar MaterialCotizable para consolidar recursos para cotizacion.
+    # No abortamos si falla: las composiciones ya quedaron creadas, y el GET
+    # de /ejecutivo/materiales vuelve a sincronizar solo en cuanto se
+    # renderiza (ejecutivo.py:1211) -- se autocorrige en la pantalla
+    # siguiente. Igual lo reportamos en la respuesta (sync_ok) para no
+    # esconderlo del todo.
+    sync_ok = True
     try:
         from blueprint_presupuestos.ejecutivo import sincronizar_materiales_cotizables
         sincronizar_materiales_cotizables(presupuesto)
     except Exception:
+        sync_ok = False
         current_app.logger.exception(
             'Error sincronizando materiales_cotizables despues de generar preliminar'
         )
-        # No abortar: las composiciones ya estan; sincronizar es opcional
 
     # Audit log
     try:
@@ -133,6 +152,12 @@ def generar_preliminar(id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error commiteando generar_preliminar')
-        return jsonify(ok=False, error=f'Error al guardar: {type(e).__name__}'), 500
+        return jsonify(ok=False, error=f'Error al guardar: {type(e).__name__}', fase='commit'), 500
 
-    return jsonify(ok=True, **resumen)
+    return jsonify(
+        ok=True,
+        puente={'items_totales': puente['items_totales'],
+                'regla_id_bridged': puente['regla_id_bridged']},
+        sync_ok=sync_ok,
+        **resumen,
+    )
