@@ -975,12 +975,15 @@ function _formatMoney(v) {
 }
 
 // ============================================================================
-// Paso 3 (puente, 2026-08-12) — "Pedir precios a proveedores" genera la
-// composicion (si hace falta) antes de ir a Materiales a cotizar. Idempotente
-// (generar-preliminar no duplica composiciones existentes), asi que no importa
-// si ya se genero antes: siempre se puede volver a tocar este boton.
-// Best-effort: si el POST falla igual navega, para no trabar al usuario con
-// un link que antes funcionaba solo con href.
+// Paso 3 (puente, 2026-08-12) — "Pedir precios a proveedores" corre el
+// puente (regla_id desde el último cálculo de Validación guardado) y genera
+// la composición antes de ir a Materiales a cotizar. Idempotente
+// (generar-preliminar no duplica composiciones existentes).
+//
+// 2026-08-12 (fix): dejó de ser best-effort silencioso — ver detalle.html
+// (misma función, mismo motivo: el pres 70 se quedó con el número sin
+// cambios y sin ninguna explicación). Ahora si falla no navega, y si no
+// generó nada nuevo avisa por qué antes de navegar.
 // ============================================================================
 async function pedirPreciosAProveedores(btn) {
   if (btn) {
@@ -988,21 +991,37 @@ async function pedirPreciosAProveedores(btn) {
     var htmlOrig = btn.innerHTML;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparando...';
   }
+  const restaurarBoton = () => { if (btn) { btn.disabled = false; btn.innerHTML = htmlOrig; } };
+
+  let r, data;
   try {
-    const r = await fetch('/presupuestos/{{ presupuesto.id }}/generar-preliminar', {
+    r = await fetch('/presupuestos/{{ presupuesto.id }}/generar-preliminar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf() },
       credentials: 'same-origin',
     });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok || !data.ok) {
-      console.warn('No se pudo generar la composicion antes de pedir precios:', data && data.error);
-    }
+    data = await r.json().catch(() => null);
   } catch (e) {
-    console.warn('Error de red generando composicion antes de pedir precios:', e);
-  } finally {
-    window.location.href = '/presupuestos/{{ presupuesto.id }}/ejecutivo/materiales';
+    alert('⚠️ Error de red generando la composición. No se pudo continuar — intentá de nuevo.');
+    restaurarBoton();
+    return;
   }
+
+  if (!r.ok || !data || !data.ok) {
+    alert('⚠️ ' + ((data && data.error) || 'No se pudo generar la composición.'));
+    restaurarBoton();
+    return;
+  }
+
+  const c = data.contadores || {};
+  if ((c.composiciones_creadas || 0) === 0) {
+    const sinRegla = c.items_sin_regla || 0;
+    const msg = sinRegla > 0
+      ? `No se generó composición nueva: ${sinRegla} ítem(s) todavía no se pueden clasificar automáticamente. Pasá por "Calcular con IA" para resolverlos.`
+      : 'No se generó composición nueva — ya estaba todo generado antes.';
+    alert('ℹ️ ' + msg);
+  }
+  window.location.href = '/presupuestos/{{ presupuesto.id }}/ejecutivo/materiales';
 }
 
 // ============================================================================
