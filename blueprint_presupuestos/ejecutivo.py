@@ -15,7 +15,7 @@ from collections import OrderedDict
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from flask import render_template, redirect, url_for, flash, abort, request, jsonify
+from flask import render_template, redirect, url_for, flash, abort, request, jsonify, current_app
 from flask_login import login_required, current_user
 
 from blueprint_presupuestos import presupuestos_bp
