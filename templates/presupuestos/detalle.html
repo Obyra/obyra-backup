@@ -720,11 +720,12 @@
                                     Precios reales, comparables.
                                 </p>
                                 {% if ux_puede_pedir_proveedores %}
-                                <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
+                                <button type="button"
                                    class="btn btn-outline-success"
+                                   onclick="pedirPreciosAProveedores({{ presupuesto.id }}, this)"
                                    title="Ir a la vista de materiales para asignar proveedores y pedir cotizaciones.">
                                     <i class="fas fa-paper-plane me-1"></i>Pedir precios a proveedores
-                                </a>
+                                </button>
                                 {% else %}
                                 {# Sin APU todavia: abrir modal explicando que primero hay que calcular. #}
                                 <button type="button" class="btn btn-outline-success"
@@ -766,11 +767,12 @@
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             {% if ux_puede_pedir_proveedores %}
-                            <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
+                            <button type="button"
                                class="btn btn-outline-success"
+                               onclick="pedirPreciosAProveedores({{ presupuesto.id }}, this)"
                                title="Ver materiales del presupuesto y, opcionalmente, pedir cotizaciones a proveedores reales.">
                                 <i class="fas fa-handshake me-1"></i>Pedir precios a proveedores
-                            </a>
+                            </button>
                             {% endif %}
                             {% if presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
                             {# Sin items no se puede confirmar (el backend lo rechaza en
@@ -832,11 +834,12 @@
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             {% if presupuesto.items.count() > 0 and ux_puede_pedir_proveedores %}
-                            <a href="{{ url_for('presupuestos.ejecutivo_materiales_vista', id=presupuesto.id) }}"
+                            <button type="button"
                                class="btn btn-outline-success"
+                               onclick="pedirPreciosAProveedores({{ presupuesto.id }}, this)"
                                title="Asignar proveedores y pedir cotizaciones reales por WhatsApp.">
                                 <i class="fas fa-handshake me-1"></i>Pedir precios a proveedores
-                            </a>
+                            </button>
                             {% endif %}
                             {% if presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
                             {# Sin items no se puede confirmar (el backend lo rechaza en
@@ -2332,6 +2335,37 @@ async function confirmarComoObra(id) {
     } catch (error) {
         console.error('Error al confirmar:', error);
         showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+// ============================================================================
+// Paso 3 (puente, 2026-08-12) — "Pedir precios a proveedores" genera la
+// composicion (si hace falta) antes de ir a Materiales a cotizar. Idempotente
+// (generar-preliminar no duplica composiciones existentes). Best-effort: si
+// el POST falla igual navega, para no trabar al usuario con un link que antes
+// funcionaba solo con href.
+// ============================================================================
+async function pedirPreciosAProveedores(id, btn) {
+    if (btn) {
+        btn.disabled = true;
+        var htmlOrig = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparando...';
+    }
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const r = await fetch(`/presupuestos/${id}/generar-preliminar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            credentials: 'same-origin',
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.ok) {
+            console.warn('No se pudo generar la composición antes de pedir precios:', data && data.error);
+        }
+    } catch (e) {
+        console.warn('Error de red generando composición antes de pedir precios:', e);
+    } finally {
+        window.location.href = `/presupuestos/${id}/ejecutivo/materiales`;
     }
 }
 
