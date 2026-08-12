@@ -1,5 +1,5 @@
 """
-Core CRUD routes: lista, crear, crear_manual, importar_excel
+Core CRUD routes: lista, crear, crear_manual
 """
 import os
 import json
@@ -708,14 +708,3 @@ def crear_manual():
         return redirect(url_for('presupuestos.lista'))
 
 
-# ==========================================
-# IMPORTAR DESDE EXCEL (deshabilitado - ahora se carga desde inventario)
-# ==========================================
-
-
-@presupuestos_bp.route('/importar-excel', methods=['GET'])
-@login_required
-def importar_excel():
-    """Funcionalidad eliminada — redirige a presupuestos."""
-    flash('Esta función ya no está disponible.', 'info')
-    return redirect(url_for('presupuestos.lista'))
