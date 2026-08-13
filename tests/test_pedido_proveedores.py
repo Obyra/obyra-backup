@@ -336,6 +336,192 @@ def test_huerfano_que_reaparece_se_desmarca(app, test_org):
         assert revivido.precio_elegido == Decimal('1350')
 
 
+# ---------------------------------------------------------------------------
+# Vista + endpoints (ejercitan el template y el camino HTTP completo)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_la_vista_renderiza_con_todas_las_secciones(app, authenticated_client, test_user):
+    """Render real de ejecutivo_materiales.html con activo + excluido + huerfano."""
+    with app.app_context():
+        pres, _item, comp = _armar_presupuesto(test_user.organizacion_id)
+        # Un segundo recurso, que va a quedar excluido.
+        db.session.add(ItemPresupuestoComposicion(
+            item_presupuesto_id=comp.item_presupuesto_id, tipo='material',
+            descripcion='Pastina blanca', unidad='kg', cantidad=Decimal('20'),
+            precio_unitario=Decimal('900'), total=Decimal('18000'),
+        ))
+        db.session.commit()
+        mats = sincronizar_materiales_cotizables(pres)
+
+        por_desc = {m.descripcion: m for m in mats}
+        por_desc['Pastina blanca'].excluido_pedido = True
+        activo = por_desc[DESC_GENERICA]
+        activo.cantidad_pedido = Decimal('800')
+        activo.cantidad_calculada_al_editar = activo.cantidad_total
+        db.session.add(RecursoAliasOrg(
+            organizacion_id=test_user.organizacion_id,
+            grupo_hash=activo.grupo_hash, alias=ALIAS,
+        ))
+        db.session.commit()
+        pres_id = pres.id
+
+    resp = authenticated_client.get(f'/presupuestos/{pres_id}/ejecutivo/materiales')
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    # El alias se muestra, y el generico tambien (son dos cosas distintas).
+    assert ALIAS in html
+    assert DESC_GENERICA in html
+    # La cantidad del pedido es la corregida, no la calculada.
+    assert '800' in html
+    # Secciones nuevas.
+    assert 'Fuera del pedido' in html
+    assert 'Pastina blanca' in html
+    assert 'barraTanda' in html
+
+
+@pytest.mark.unit
+def test_endpoint_alias_no_toca_la_descripcion(app, authenticated_client, test_user):
+    """El PATCH guarda en recurso_alias_org, nunca en materiales_cotizables."""
+    with app.app_context():
+        pres, _item, _comp = _armar_presupuesto(test_user.organizacion_id)
+        mat = sincronizar_materiales_cotizables(pres)[0]
+        mat_id = mat.id
+
+    resp = authenticated_client.patch(
+        f'/presupuestos/ejecutivo/material/{mat_id}/pedido',
+        json={'alias': ALIAS},
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['ok'] is True
+    assert body['nombre_pedido'] == ALIAS
+    assert body['descripcion_generica'] == DESC_GENERICA
+
+    with app.app_context():
+        assert db.session.get(MaterialCotizable, mat_id).descripcion == DESC_GENERICA
+
+    # Alias vacio => se borra y vuelve el generico.
+    resp = authenticated_client.patch(
+        f'/presupuestos/ejecutivo/material/{mat_id}/pedido', json={'alias': ''},
+    )
+    assert resp.get_json()['nombre_pedido'] == DESC_GENERICA
+
+
+@pytest.mark.unit
+def test_endpoint_cantidad_rechaza_cero_y_negativos(app, authenticated_client, test_user):
+    """Pedir 0 no es una cantidad: para eso esta 'sacar del pedido'."""
+    with app.app_context():
+        pres, _item, _comp = _armar_presupuesto(test_user.organizacion_id)
+        mat_id = sincronizar_materiales_cotizables(pres)[0].id
+
+    for valor in (0, -5):
+        resp = authenticated_client.patch(
+            f'/presupuestos/ejecutivo/material/{mat_id}/pedido',
+            json={'cantidad_pedido': valor},
+        )
+        assert resp.status_code == 400
+        assert 'sacalo del pedido' in resp.get_json()['error']
+
+    resp = authenticated_client.patch(
+        f'/presupuestos/ejecutivo/material/{mat_id}/pedido',
+        json={'cantidad_pedido': 'no soy un numero'},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.unit
+def test_excluido_no_entra_a_generar_solicitudes(app, authenticated_client, test_user):
+    """Lo sacado del pedido no se le manda a nadie, aunque tuviera asignacion."""
+    from models import ProveedorAsignadoMaterial
+    from models.proveedores_oc import ProveedorOC
+
+    with app.app_context():
+        org_id = test_user.organizacion_id
+        pres, _item, _comp = _armar_presupuesto(org_id)
+        mat = sincronizar_materiales_cotizables(pres)[0]
+
+        prov = ProveedorOC(organizacion_id=org_id, razon_social='Corralon Test')
+        db.session.add(prov)
+        db.session.flush()
+        db.session.add(ProveedorAsignadoMaterial(
+            material_cotizable_id=mat.id, proveedor_id=prov.id,
+        ))
+        db.session.commit()
+        pres_id, mat_id = pres.id, mat.id
+
+    # Con la asignacion viva, generar-solicitudes tiene trabajo que hacer.
+    resp = authenticated_client.post(f'/presupuestos/ejecutivo/material/{mat_id}/excluir')
+    assert resp.status_code == 200
+
+    resp = authenticated_client.post(
+        f'/presupuestos/{pres_id}/ejecutivo/generar-solicitudes'
+    )
+    assert resp.status_code == 400
+    assert 'No hay asignaciones pendientes' in resp.get_json()['error']
+
+    # Y no se puede asignar proveedor a algo que esta fuera del pedido.
+    resp = authenticated_client.post(
+        f'/presupuestos/ejecutivo/material/{mat_id}/asignar-proveedor',
+        json={'proveedor_id': 1},
+    )
+    assert resp.status_code == 400
+    assert 'fuera del pedido' in resp.get_json()['error']
+
+
+@pytest.mark.unit
+def test_endpoints_del_pedido_respetan_multitenant(app, client, test_user_org_b, test_org):
+    """Un usuario de la org B no puede editar el pedido de un presupuesto de la A."""
+    org_victima = test_org.id
+    org_atacante = test_user_org_b.organizacion_id
+    with app.app_context():
+        pres, _item, _comp = _armar_presupuesto(org_victima)
+        mat_id = sincronizar_materiales_cotizables(pres)[0].id
+
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(test_user_org_b.id)
+        sess['_fresh'] = True
+
+    assert client.patch(
+        f'/presupuestos/ejecutivo/material/{mat_id}/pedido', json={'alias': 'Robado'},
+    ).status_code == 403
+    assert client.post(
+        f'/presupuestos/ejecutivo/material/{mat_id}/excluir'
+    ).status_code == 403
+    assert client.delete(
+        f'/presupuestos/ejecutivo/material/{mat_id}/huerfano'
+    ).status_code == 403
+
+    with app.app_context():
+        # Nada se movio. El conteo va filtrado por organizacion: el mismo recurso
+        # generico tiene el mismo grupo_hash en TODAS las orgs, asi que un count
+        # global mediria alias ajenos.
+        mat = db.session.get(MaterialCotizable, mat_id)
+        assert mat.excluido_pedido is False
+        for org_id in (org_atacante, org_victima):
+            assert RecursoAliasOrg.query.filter_by(
+                organizacion_id=org_id, grupo_hash=mat.grupo_hash,
+            ).count() == 0
+
+
+@pytest.mark.unit
+def test_descartar_huerfano_solo_aplica_a_huerfanos(app, authenticated_client, test_user):
+    """Un recurso vivo no se borra por esta via: para eso esta 'sacar del pedido'."""
+    with app.app_context():
+        pres, _item, _comp = _armar_presupuesto(test_user.organizacion_id)
+        mat_id = sincronizar_materiales_cotizables(pres)[0].id
+
+    resp = authenticated_client.delete(
+        f'/presupuestos/ejecutivo/material/{mat_id}/huerfano'
+    )
+    assert resp.status_code == 400
+    assert 'sigue en el APU' in resp.get_json()['error']
+
+    with app.app_context():
+        assert db.session.get(MaterialCotizable, mat_id) is not None
+
+
 @pytest.mark.unit
 def test_grupo_hash_estable_para_el_mismo_recurso(app):
     """El alias se apoya en el hash: si no fuera determinista, no serviria de clave."""
