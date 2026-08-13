@@ -1112,6 +1112,38 @@ class MaterialCotizable(db.Model):
     #   con_respuestas -> al menos un proveedor respondió
     #   elegido        -> se eligió proveedor ganador
     estado = db.Column(db.String(20), nullable=False, default='nuevo', server_default='nuevo')
+
+    # --- Capa "pedido a proveedores" (NO toca el presupuesto) --------------
+    # Estas tres columnas son ediciones del usuario sobre el PEDIDO. El sync
+    # (sincronizar_materiales_cotizables) reescribe descripcion/unidad/
+    # cantidad_total en cada corrida, así que las ediciones NO pueden vivir
+    # ahí. Se leen únicamente vía cantidad_para_pedido() / nombre_para_pedido()
+    # en blueprint_presupuestos/ejecutivo.py. El costo del ejecutivo y la
+    # propagación del precio ganador siguen usando cantidad_total.
+
+    # El recurso queda fuera del pedido a proveedores (pero sigue en el APU y
+    # sigue costando). Ortogonal a `estado`: no lo pisa ni lo contamina.
+    excluido_pedido = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='false',
+    )
+    # Cantidad a pedir. NULL = "usá cantidad_total". Nullable a propósito:
+    # copiar el valor por default haría imposible distinguir "no editado" de
+    # "editado y casualmente igual", y sin eso no hay detección de drift.
+    cantidad_pedido = db.Column(db.Numeric(15, 3), nullable=True)
+    # Foto de cantidad_total al momento de editar cantidad_pedido. Si después
+    # el APU cambia, comparar contra esto detecta el drift y se le pregunta al
+    # usuario en vez de resolver solos.
+    cantidad_calculada_al_editar = db.Column(db.Numeric(15, 3), nullable=True)
+
+    # --- Huérfanos ---------------------------------------------------------
+    # El grupo_hash de este recurso ya no aparece en las composiciones (cambió
+    # la descripción, se vinculó inventario, se reclasificó el ítem). Antes se
+    # borraba la fila y se perdían en silencio precio_elegido/estado; ahora, si
+    # tiene algo que perder, se marca y se muestra aparte.
+    huerfano = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='false',
+    )
+    huerfano_at = db.Column(db.DateTime, nullable=True)
     # Proveedor ganador (si hay) y su precio elegido
     proveedor_elegido_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id'), nullable=True)
     precio_elegido = db.Column(db.Numeric(15, 2), nullable=True)
@@ -1174,6 +1206,56 @@ class EtapaInternaVinculo(db.Model):
 
     def __repr__(self):
         return f'<EtapaInternaVinculo {self.etapa_interna_nombre} → {self.etapa_pliego_nombre}>'
+
+
+class RecursoAliasOrg(db.Model):
+    """Cómo llama ESTA organización a un recurso genérico. Capa de traducción.
+
+    "Para Constructora X, 'Adhesivo cementicio para porcelanato' se llama
+    'Klaukol'". El alias se usa SOLO para mostrar en pantalla y para el texto
+    que se le manda al proveedor.
+
+    IMPORTANTE — el alias NO entra al matching de precios. El matcher
+    (services/precio_recurso_service.buscar_mejor_precio) trabaja sobre las
+    composiciones del APU, nunca sobre MaterialCotizable.descripcion, así que
+    mientras el alias viva acá y no se escriba de vuelta en `descripcion`, las
+    marcas comerciales no pueden filtrarse al fuzzy match.
+
+    La clave es (organizacion_id, grupo_hash), no el id del MaterialCotizable:
+      - el alias vale para toda la org, no hay que re-tipearlo por presupuesto;
+      - sobrevive al borrado/renacimiento de la fila en materiales_cotizables
+        (el grupo_hash cambia cuando se vincula inventario, pero si la org ya
+        aliaseó ese hash en otro presupuesto, se re-engancha solo).
+    """
+    __tablename__ = 'recurso_alias_org'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(
+        db.Integer,
+        db.ForeignKey('organizaciones.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    # Mismo hash que MaterialCotizable.grupo_hash (ver _grupo_hash_material).
+    grupo_hash = db.Column(db.String(64), nullable=False)
+    # Nombre comercial que usa la org. Se muestra y se manda al proveedor.
+    alias = db.Column(db.String(300), nullable=False)
+    # Descripción genérica vigente cuando se creó el alias. Solo informativa
+    # (para mostrar "Klaukol = Adhesivo cementicio" y poder auditar).
+    descripcion_generica = db.Column(db.String(300), nullable=True)
+    creado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organizacion = db.relationship('Organizacion')
+    creado_por = db.relationship('Usuario', foreign_keys=[creado_por_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('organizacion_id', 'grupo_hash', name='uq_recurso_alias_org_hash'),
+        db.Index('ix_recurso_alias_org', 'organizacion_id'),
+    )
+
+    def __repr__(self):
+        return f'<RecursoAliasOrg org={self.organizacion_id} {self.alias[:40]}>'
 
 
 class ProveedorAsignadoMaterial(db.Model):
