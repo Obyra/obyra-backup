@@ -21,6 +21,35 @@ os.environ['ADMIN_DEFAULT_PASSWORD'] = 'TestAdmin123'
 test_db_fd, test_db_path = tempfile.mkstemp(suffix='.db')
 os.environ['DATABASE_URL'] = f'sqlite:///{test_db_path}'
 
+# === WeasyPrint sin GTK (solo entornos de desarrollo) ===
+# blueprint_presupuestos/__init__.py hace `from weasyprint import HTML` a nivel
+# módulo, y weasyprint hace dlopen de libgobject/pango AL IMPORTARSE. En una
+# máquina sin GTK (Windows sin el runtime, por ejemplo) eso tira OSError y
+# _import_blueprint() de app.py se lo come en silencio: el blueprint de
+# presupuestos no se registra y cualquier test que lo importe explota.
+#
+# Si la librería real carga, no se toca nada (CI y Docker tienen las libs y los
+# tests corren contra el WeasyPrint de verdad). Si no carga, se pone un stub que
+# solo sirve para que el import no rompa. Ningún test genera PDFs; si alguno lo
+# hiciera, tiene que correr en Docker.
+try:
+    import weasyprint  # noqa: F401
+except (OSError, ImportError):  # pragma: no cover - depende del entorno local
+    import types
+
+    _wp_stub = types.ModuleType('weasyprint')
+
+    class _WeasyPrintNoDisponible:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                'WeasyPrint no está instalado con sus librerías nativas en este '
+                'entorno. Para testear generación de PDFs, correr en Docker.'
+            )
+
+    _wp_stub.HTML = _WeasyPrintNoDisponible
+    _wp_stub.CSS = _WeasyPrintNoDisponible
+    sys.modules['weasyprint'] = _wp_stub
+
 # IMPORTANTE: parchear app.py para que NO use connect_args de PostgreSQL
 # cuando la URL es sqlite. Hacemos un monkeypatch al módulo de modelos
 # antes de cargar la app.

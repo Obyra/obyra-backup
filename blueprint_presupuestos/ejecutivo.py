@@ -22,6 +22,7 @@ from blueprint_presupuestos import presupuestos_bp
 from extensions import db
 from models import (
     Presupuesto, ItemPresupuesto, ItemPresupuestoComposicion, MaterialCotizable,
+    RecursoAliasOrg,
     ProveedorAsignadoMaterial, SolicitudCotizacionMaterial, SolicitudCotizacionMaterialItem,
     EtapaInternaVinculo,
 )
@@ -53,6 +54,86 @@ def _grupo_hash_material(descripcion, unidad, item_inventario_id=None, tipo='mat
         inner = f'txt:{_normalizar_texto(descripcion)}|{_normalizar_texto(unidad)}'
     key = f'{tipo}|{inner}'
     return hashlib.sha1(key.encode()).hexdigest()[:32]
+
+
+# ============================================================================
+# Capa "pedido a proveedores"
+#
+# REGLA DURA: nada de esto toca el presupuesto. Corregir el nombre o la
+# cantidad de un recurso cambia lo que se le pide al proveedor, NO el costo del
+# ejecutivo ni el precio vendido. Las cantidades y precios del presupuesto se
+# editan en Validación.
+#
+# En la práctica eso se sostiene con una restricción simple: las dos funciones
+# de abajo se usan SOLO en el camino del pedido (la vista de recursos a
+# cotizar, generar-solicitudes y el mensaje de WhatsApp). Todo el resto del
+# sistema — el costo del ejecutivo, la propagación del precio ganador a las
+# composiciones — sigue leyendo `descripcion` y `cantidad_total` directo.
+# ============================================================================
+
+def cargar_alias_org(org_id):
+    """{grupo_hash: alias} de la organización. Una sola query (evita N+1)."""
+    if not org_id:
+        return {}
+    filas = RecursoAliasOrg.query.filter_by(organizacion_id=org_id).all()
+    return {f.grupo_hash: f.alias for f in filas}
+
+
+def nombre_para_pedido(mat, alias_map):
+    """Nombre a mostrar/enviar al proveedor: el alias de la org, si existe.
+
+    `alias_map` viene de cargar_alias_org(). Se pasa explícito en vez de
+    resolverlo adentro para que el llamador tenga que prefetchear, y para que
+    quede visible que esto es una capa de presentación.
+
+    El alias NUNCA se escribe en mat.descripcion: esa sigue siendo la
+    descripción genérica que usa el matcher de precios.
+    """
+    return (alias_map or {}).get(mat.grupo_hash) or mat.descripcion
+
+
+def cantidad_para_pedido(mat):
+    """Cantidad a pedirle al proveedor: la corregida por el usuario, si la hay.
+
+    `cantidad_pedido` es NULL mientras nadie la haya editado — ahí manda
+    `cantidad_total`, que es la verdad del APU y la que usa el costo.
+    """
+    if mat.cantidad_pedido is not None:
+        return mat.cantidad_pedido
+    return mat.cantidad_total or Decimal('0')
+
+
+def hay_drift_cantidad(mat):
+    """True si el APU se movió después de que el usuario editó la cantidad.
+
+    Caso típico: corregiste 12.384 kg a 800 porque el APU estaba mal, y
+    después arreglaste el APU de verdad. No se resuelve solo: la pantalla se
+    lo pregunta al usuario (usar el nuevo / mantener el mío).
+    """
+    if mat.cantidad_pedido is None or mat.cantidad_calculada_al_editar is None:
+        return False
+    return (mat.cantidad_total or Decimal('0')) != mat.cantidad_calculada_al_editar
+
+
+def _material_tiene_algo_que_perder(mat):
+    """True si borrar esta fila destruiría trabajo del usuario.
+
+    Se usa para no hacer hard delete de un huérfano. Ojo con las respuestas:
+    solicitud_cotizacion_material_items tiene ON DELETE CASCADE contra
+    materiales_cotizables, así que borrar el material se lleva puestos los
+    precios que ya cotizaron los proveedores.
+    """
+    if mat.excluido_pedido or mat.cantidad_pedido is not None:
+        return True
+    if mat.precio_elegido is not None or mat.proveedor_elegido_id is not None:
+        return True
+    if (mat.estado or 'nuevo') != 'nuevo':
+        return True
+    if mat.asignaciones.count() > 0:
+        return True
+    if mat.respuestas.count() > 0:
+        return True
+    return False
 
 
 def sincronizar_materiales_cotizables(presupuesto):
@@ -133,15 +214,40 @@ def sincronizar_materiales_cotizables(presupuesto):
             mat.unidad = unidad_rep[:20]
             mat.cantidad_total = info['cantidad_total']
             mat.item_inventario_id = info['item_inventario_id']
+            # Volvió a aparecer en las composiciones: deja de ser huérfano.
+            if mat.huerfano:
+                mat.huerfano = False
+                mat.huerfano_at = None
+
+        # OJO: acá se reescriben descripcion / unidad / cantidad_total en CADA
+        # corrida (y el sync corre en cada GET de la pantalla de recursos). Las
+        # ediciones del usuario sobre el pedido viven en excluido_pedido /
+        # cantidad_pedido / recurso_alias_org justamente para no caer acá.
 
         # Linkear composiciones
         for comp in info['composiciones']:
             if comp.material_cotizable_id != mat.id:
                 comp.material_cotizable_id = mat.id
 
-    # 5. Borrar MaterialCotizable huérfanos (ya no tienen composiciones)
+    # 5. Huérfanos: el grupo_hash ya no está entre las composiciones.
+    #
+    #    Pasa más seguido de lo que parece — el hash cambia si se vincula
+    #    inventario (pasa de 'txt:...' a 'inv:<id>'), si se edita la
+    #    descripción de una composición o si el ítem se reclasifica.
+    #
+    #    Antes se borraba siempre, y con el borrado se iban en silencio el
+    #    precio elegido, las asignaciones y las respuestas de los proveedores
+    #    (FK con ON DELETE CASCADE). Ahora solo se borran las filas que no
+    #    tienen nada que perder; el resto se marca y la pantalla las muestra
+    #    aparte para que el usuario decida.
     for h, mat in existentes.items():
-        if h not in grupos:
+        if h in grupos:
+            continue
+        if _material_tiene_algo_que_perder(mat):
+            if not mat.huerfano:
+                mat.huerfano = True
+                mat.huerfano_at = datetime.utcnow()
+        else:
             db.session.delete(mat)
 
     db.session.commit()
@@ -1208,7 +1314,16 @@ def ejecutivo_materiales_vista(id):
         abort(403)
 
     # Sincronizar: crea/actualiza MaterialCotizable a partir de las composiciones
-    materiales = sincronizar_materiales_cotizables(presupuesto)
+    todos = sincronizar_materiales_cotizables(presupuesto)
+
+    # Alias de la org (una query) para resolver los nombres del pedido.
+    alias_map = cargar_alias_org(org_id)
+
+    # Separar en tres listas: las que van al pedido, las sacadas a mano, y las
+    # huérfanas (ya no están en el APU pero tenían trabajo encima).
+    materiales = [m for m in todos if not m.excluido_pedido and not m.huerfano]
+    excluidos = [m for m in todos if m.excluido_pedido and not m.huerfano]
+    huerfanos = [m for m in todos if m.huerfano]
 
     # Proveedores disponibles en la org (para los chips / modal)
     proveedores_disponibles = ProveedorOC.query.filter_by(
@@ -1221,6 +1336,8 @@ def ejecutivo_materiales_vista(id):
     ).filter(
         MaterialCotizable.presupuesto_id == presupuesto.id,
         ProveedorAsignadoMaterial.solicitud_item_id.is_(None),
+        MaterialCotizable.excluido_pedido.is_(False),
+        MaterialCotizable.huerfano.is_(False),
     ).count() > 0
 
     # Solicitudes ya generadas (para la sección "Solicitudes enviadas")
@@ -1228,8 +1345,8 @@ def ejecutivo_materiales_vista(id):
         presupuesto_id=presupuesto.id,
     ).order_by(SolicitudCotizacionMaterial.fecha_creacion.desc()).all()
 
-    # Adjuntar info de "origen" + asignaciones
-    for mat in materiales:
+    # Adjuntar info de "origen" + asignaciones + capa de pedido
+    for mat in todos:
         origenes = []
         for comp in mat.composiciones:
             item = comp.item_presupuesto
@@ -1244,6 +1361,13 @@ def ejecutivo_materiales_vista(id):
         mat.origenes = origenes
         # Asignaciones actuales (pendientes + enviadas, para mostrar chips completos)
         mat.asignaciones_list = list(mat.asignaciones)
+        # Capa de pedido: qué nombre y qué cantidad se le manda al proveedor.
+        # Se resuelven acá (y no en el template) para que quede en un solo lugar.
+        mat.nombre_pedido = nombre_para_pedido(mat, alias_map)
+        mat.tiene_alias = mat.nombre_pedido != mat.descripcion
+        mat.cantidad_pedido_efectiva = cantidad_para_pedido(mat)
+        mat.cantidad_editada = mat.cantidad_pedido is not None
+        mat.drift_cantidad = hay_drift_cantidad(mat)
 
     # URLs de envío (WhatsApp + email) calculadas dinámicamente al render.
     # Esto hace que si el usuario carga/edita el teléfono o email del proveedor
@@ -1281,6 +1405,8 @@ def ejecutivo_materiales_vista(id):
         'presupuestos/ejecutivo_materiales.html',
         presupuesto=presupuesto,
         materiales=materiales,
+        excluidos=excluidos,
+        huerfanos=huerfanos,
         proveedores_disponibles=proveedores_disponibles,
         hay_pendientes_enviar=hay_pendientes_enviar,
         solicitudes=solicitudes,
@@ -1294,6 +1420,175 @@ def ejecutivo_materiales_vista(id):
 def _verificar_permiso_ejecutivo():
     rol = getattr(current_user, 'role', '') or ''
     return rol in ('admin', 'administrador', 'pm', 'project_manager')
+
+
+# ----------------------------------------------------------------------------
+# Editar el pedido (alias, cantidad, sacar/reponer)
+#
+# Ninguno de estos endpoints escribe en descripcion / unidad / cantidad_total,
+# ni toca composiciones ni totales del presupuesto. Se permiten incluso con el
+# ejecutivo aprobado, justamente porque no mueven plata: cambian qué se le pide
+# al proveedor, no cuánto cuesta la obra.
+# ----------------------------------------------------------------------------
+
+_CANTIDAD_PEDIDO_MAX = Decimal('999999999.999')
+
+
+def _material_de_mi_org(material_id):
+    """(mat, org_id, None) si el material es de la org actual; si no, (None, org_id, resp)."""
+    org_id = get_current_org_id()
+    mat = MaterialCotizable.query.get_or_404(material_id)
+    if mat.presupuesto.organizacion_id != org_id:
+        return None, org_id, (jsonify(ok=False, error='No pertenece a tu organización'), 403)
+    return mat, org_id, None
+
+
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/pedido', methods=['PATCH'])
+@login_required
+def material_editar_pedido(material_id):
+    """Edita la capa de pedido de un recurso: alias y/o cantidad a pedir.
+
+    Body JSON (ambas claves opcionales, se aplica solo lo que venga):
+      {"alias": "Klaukol"}         -> guarda el alias para TODA la org
+      {"alias": null}              -> borra el alias (vuelve al nombre genérico)
+      {"cantidad_pedido": 800}     -> pide 800 en vez de lo calculado
+      {"cantidad_pedido": null}    -> vuelve a la cantidad calculada del APU
+
+    El alias se guarda en recurso_alias_org por (organizacion_id, grupo_hash);
+    nunca se escribe en mat.descripcion, que es lo que usa el matcher de precios.
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    mat, org_id, err = _material_de_mi_org(material_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    cambios = []
+
+    # --- Alias --------------------------------------------------------------
+    if 'alias' in data:
+        alias_raw = data.get('alias')
+        alias = (str(alias_raw).strip() if alias_raw is not None else '')[:300]
+        existente = RecursoAliasOrg.query.filter_by(
+            organizacion_id=org_id, grupo_hash=mat.grupo_hash,
+        ).first()
+
+        if not alias:
+            if existente:
+                db.session.delete(existente)
+                cambios.append('alias_borrado')
+        elif existente:
+            existente.alias = alias
+            existente.descripcion_generica = (mat.descripcion or '')[:300]
+            cambios.append('alias_actualizado')
+        else:
+            db.session.add(RecursoAliasOrg(
+                organizacion_id=org_id,
+                grupo_hash=mat.grupo_hash,
+                alias=alias,
+                descripcion_generica=(mat.descripcion or '')[:300],
+                creado_por_id=current_user.id if current_user.is_authenticated else None,
+            ))
+            cambios.append('alias_creado')
+
+    # --- Cantidad -----------------------------------------------------------
+    if 'cantidad_pedido' in data:
+        cant_raw = data.get('cantidad_pedido')
+        if cant_raw is None or cant_raw == '':
+            # Volver a la calculada: limpiar el override Y la foto de drift.
+            mat.cantidad_pedido = None
+            mat.cantidad_calculada_al_editar = None
+            cambios.append('cantidad_reseteada')
+        else:
+            try:
+                cant = Decimal(str(cant_raw))
+            except (InvalidOperation, TypeError, ValueError):
+                return jsonify(ok=False, error='Cantidad inválida'), 400
+            if cant <= 0:
+                return jsonify(
+                    ok=False,
+                    error='La cantidad tiene que ser mayor a 0. Si no querés pedirlo, '
+                          'sacalo del pedido.',
+                ), 400
+            if cant > _CANTIDAD_PEDIDO_MAX:
+                return jsonify(ok=False, error='Cantidad demasiado grande'), 400
+            mat.cantidad_pedido = cant
+            # Foto del calculado en este momento: si el APU se mueve después,
+            # hay_drift_cantidad() lo detecta y la pantalla pregunta.
+            mat.cantidad_calculada_al_editar = mat.cantidad_total or Decimal('0')
+            cambios.append('cantidad_editada')
+
+    if not cambios:
+        return jsonify(ok=False, error='Nada para actualizar'), 400
+
+    db.session.commit()
+
+    alias_map = cargar_alias_org(org_id)
+    return jsonify(
+        ok=True,
+        cambios=cambios,
+        nombre_pedido=nombre_para_pedido(mat, alias_map),
+        descripcion_generica=mat.descripcion,
+        tiene_alias=nombre_para_pedido(mat, alias_map) != mat.descripcion,
+        cantidad_pedido=float(cantidad_para_pedido(mat)),
+        cantidad_calculada=float(mat.cantidad_total or 0),
+        cantidad_editada=mat.cantidad_pedido is not None,
+        drift=hay_drift_cantidad(mat),
+    )
+
+
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/excluir', methods=['POST'])
+@login_required
+def material_excluir_del_pedido(material_id):
+    """Saca un recurso del pedido a proveedores.
+
+    Sigue estando en el APU y sigue costando lo mismo: lo único que cambia es
+    que no se le pide a nadie. Distinto del checkbox de la pantalla, que solo
+    elige a quién le pedís en esta tanda y no se guarda.
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    mat, _org_id, err = _material_de_mi_org(material_id)
+    if err:
+        return err
+
+    if mat.estado == 'elegido':
+        return jsonify(
+            ok=False,
+            error='Este recurso ya tiene proveedor ganador. Desmarcá el ganador antes '
+                  'de sacarlo del pedido.',
+        ), 400
+
+    mat.excluido_pedido = True
+    # Las asignaciones que todavía no se enviaron dejan de tener sentido.
+    # Las ya enviadas (con solicitud_item_id) se conservan como historia.
+    ProveedorAsignadoMaterial.query.filter(
+        ProveedorAsignadoMaterial.material_cotizable_id == mat.id,
+        ProveedorAsignadoMaterial.solicitud_item_id.is_(None),
+    ).delete(synchronize_session=False)
+    db.session.commit()
+
+    return jsonify(ok=True, excluido=True)
+
+
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/incluir', methods=['POST'])
+@login_required
+def material_incluir_en_pedido(material_id):
+    """Devuelve al pedido un recurso que se había sacado (deshacer)."""
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    mat, _org_id, err = _material_de_mi_org(material_id)
+    if err:
+        return err
+
+    mat.excluido_pedido = False
+    db.session.commit()
+
+    return jsonify(ok=True, excluido=False)
 
 
 @presupuestos_bp.route('/ejecutivo/material/<int:material_id>/asignar-proveedor', methods=['POST'])
@@ -1310,6 +1605,13 @@ def material_asignar_proveedor(material_id):
     mat = MaterialCotizable.query.get_or_404(material_id)
     if mat.presupuesto.organizacion_id != org_id:
         return jsonify(ok=False, error='Material no pertenece a tu organización'), 403
+
+    if mat.excluido_pedido:
+        return jsonify(
+            ok=False,
+            error='Este recurso está fuera del pedido. Volvé a incluirlo antes de '
+                  'asignarle un proveedor.',
+        ), 400
 
     data = request.get_json(silent=True) or {}
     prov_id = data.get('proveedor_id')
@@ -1414,6 +1716,11 @@ def ejecutivo_generar_solicitudes(id):
     ).filter(
         MaterialCotizable.presupuesto_id == presupuesto.id,
         ProveedorAsignadoMaterial.solicitud_item_id.is_(None),
+        # Lo que el usuario sacó del pedido no se le manda a nadie, aunque haya
+        # quedado una asignación vieja colgada. Los huérfanos tampoco: ya no
+        # están en el APU.
+        MaterialCotizable.excluido_pedido.is_(False),
+        MaterialCotizable.huerfano.is_(False),
     ).all()
 
     if not asignaciones:
@@ -1421,6 +1728,10 @@ def ejecutivo_generar_solicitudes(id):
             ok=False,
             error='No hay asignaciones pendientes. Asigná proveedores a los recursos primero.',
         ), 400
+
+    # Alias de la org: el proveedor recibe el nombre que usa la empresa
+    # ("Klaukol"), no el genérico del catálogo.
+    alias_map = cargar_alias_org(org_id)
 
     # Agrupar por proveedor_id
     por_proveedor = {}  # prov_id -> [asignaciones]
@@ -1453,8 +1764,8 @@ def ejecutivo_generar_solicitudes(id):
         for a in asigns:
             mat = a.material_cotizable
             items_info.append({
-                'descripcion': mat.descripcion,
-                'cantidad': float(mat.cantidad_total or 0),
+                'descripcion': nombre_para_pedido(mat, alias_map),
+                'cantidad': float(cantidad_para_pedido(mat)),
                 'unidad': mat.unidad,
             })
 
@@ -1475,12 +1786,15 @@ def ejecutivo_generar_solicitudes(id):
 
         for a in asigns:
             mat = a.material_cotizable
+            # El snapshot congela lo que se le pidió al proveedor: nombre con
+            # alias y cantidad corregida. Si después cambia el APU o el alias,
+            # la solicitud enviada sigue diciendo lo que decía.
             item_solicitud = SolicitudCotizacionMaterialItem(
                 solicitud_id=solicitud.id,
                 material_cotizable_id=mat.id,
-                descripcion_snapshot=mat.descripcion,
+                descripcion_snapshot=nombre_para_pedido(mat, alias_map)[:300],
                 unidad_snapshot=mat.unidad,
-                cantidad_snapshot=mat.cantidad_total,
+                cantidad_snapshot=cantidad_para_pedido(mat),
             )
             db.session.add(item_solicitud)
             db.session.flush()

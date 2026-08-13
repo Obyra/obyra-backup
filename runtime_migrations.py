@@ -1452,12 +1452,71 @@ def run_runtime_migrations(db, app):
                 ALTER TABLE materiales_cotizables
                     ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'material';
             END IF;
+            -- Capa "pedido a proveedores": ediciones del usuario que el sync
+            -- NO debe pisar (excluir del pedido, cantidad corregida).
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='materiales_cotizables' AND column_name='excluido_pedido') THEN
+                ALTER TABLE materiales_cotizables
+                    ADD COLUMN excluido_pedido BOOLEAN NOT NULL DEFAULT FALSE;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='materiales_cotizables' AND column_name='cantidad_pedido') THEN
+                ALTER TABLE materiales_cotizables
+                    ADD COLUMN cantidad_pedido NUMERIC(15, 3);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='materiales_cotizables'
+                            AND column_name='cantidad_calculada_al_editar') THEN
+                ALTER TABLE materiales_cotizables
+                    ADD COLUMN cantidad_calculada_al_editar NUMERIC(15, 3);
+            END IF;
+            -- Huerfanos: el grupo_hash ya no esta en las composiciones pero la
+            -- fila tiene algo que perder (precio elegido, asignaciones, ediciones).
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='materiales_cotizables' AND column_name='huerfano') THEN
+                ALTER TABLE materiales_cotizables
+                    ADD COLUMN huerfano BOOLEAN NOT NULL DEFAULT FALSE;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='materiales_cotizables' AND column_name='huerfano_at') THEN
+                ALTER TABLE materiales_cotizables
+                    ADD COLUMN huerfano_at TIMESTAMP;
+            END IF;
         END $$;
         """))
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         print(f"[WARN] Migracion materiales_cotizables: {e}")
+
+    # Alias de recursos por organizacion (capa de traduccion para el pedido a
+    # proveedores). Clave (organizacion_id, grupo_hash): vale para toda la org
+    # y sobrevive al borrado/renacimiento de la fila en materiales_cotizables.
+    # NO participa del matching de precios.
+    try:
+        db.session.execute(db.text("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='recurso_alias_org') THEN
+                CREATE TABLE recurso_alias_org (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id) ON DELETE CASCADE,
+                    grupo_hash VARCHAR(64) NOT NULL,
+                    alias VARCHAR(300) NOT NULL,
+                    descripcion_generica VARCHAR(300),
+                    creado_por_id INTEGER REFERENCES usuarios(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_recurso_alias_org_hash UNIQUE (organizacion_id, grupo_hash)
+                );
+                CREATE INDEX ix_recurso_alias_org ON recurso_alias_org(organizacion_id);
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Migracion recurso_alias_org: {e}")
 
     # Presupuesto Ejecutivo - Fase B: cotización de materiales a proveedores
     try:
