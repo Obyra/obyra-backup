@@ -50,7 +50,7 @@
     </div>
   </div>
 
-  {% if not materiales %}
+  {% if not materiales and not excluidos and not huerfanos %}
   <div class="alert alert-warning text-center py-5">
     <i class="fas fa-exclamation-triangle fa-2x mb-3 d-block"></i>
     <h5>Todavía no hay materiales para cotizar</h5>
@@ -60,23 +60,55 @@
   </div>
   {% else %}
 
+  {# Barra de tanda: aparece al tildar recursos. La selección es SOLO de esta
+     vuelta, no se guarda — sirve para pedirle a un proveedor un subconjunto y
+     después a otro proveedor otro subconjunto, sin destildar nada permanente.
+     Sacar del pedido (la X de cada fila) sí es persistente. #}
+  <div class="card border-primary shadow-sm mb-3 d-none" id="barraTanda">
+    <div class="card-body py-2 d-flex flex-wrap align-items-center gap-3">
+      <strong class="text-primary">
+        <i class="fas fa-check-square me-1"></i>
+        <span id="tandaCount">0</span> seleccionados
+      </strong>
+      <button class="btn btn-sm btn-primary" onclick="abrirModalAsignarTanda()">
+        <i class="fas fa-user-tag me-1"></i>Asignar proveedor a la tanda
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="limpiarTanda()">
+        Limpiar selección
+      </button>
+      <span class="text-muted small ms-auto">
+        La selección no se guarda: es solo para esta tanda.
+      </span>
+    </div>
+  </div>
+
+  {% if materiales %}
   <div class="card shadow-sm">
     <div class="table-responsive">
       <table class="table table-hover mb-0 align-middle">
         <thead class="table-dark">
           <tr>
+            <th class="text-center" style="width:40px;">
+              <input type="checkbox" class="form-check-input" id="chkTodos"
+                     onchange="toggleTodos(this)" title="Seleccionar todos">
+            </th>
             <th style="width:80px;">Tipo</th>
-            <th style="width:30%;">Recurso</th>
-            <th class="text-center" style="width:90px;">Cantidad</th>
+            <th style="width:28%;">Recurso</th>
+            <th class="text-center" style="width:190px;">Cantidad</th>
             <th class="text-center" style="width:70px;">Unidad</th>
-            <th class="text-center" style="width:90px;">Usos</th>
+            <th class="text-center" style="width:80px;">Usos</th>
             <th class="text-center" style="width:110px;">Estado</th>
             <th>Proveedores asignados</th>
+            <th class="text-center" style="width:50px;"></th>
           </tr>
         </thead>
         <tbody>
           {% for mat in materiales %}
           <tr data-material-id="{{ mat.id }}">
+            <td class="text-center">
+              <input type="checkbox" class="form-check-input chk-tanda"
+                     value="{{ mat.id }}" onchange="actualizarTanda()">
+            </td>
             <td>
               {% if mat.tipo == 'material' %}
                 <span class="badge bg-info">Material</span>
@@ -85,7 +117,20 @@
               {% endif %}
             </td>
             <td>
-              <strong>{{ mat.descripcion }}</strong>
+              <strong data-nombre-pedido="{{ mat.id }}">{{ mat.nombre_pedido }}</strong>
+              {# Comillas simples + |e: tojson emite comillas DOBLES y corta el
+                 atributo onclick. |e escapa ' como &#39;, asi que es seguro. #}
+              <button class="btn btn-sm btn-link p-0 ms-1 text-muted"
+                      onclick="abrirModalAlias({{ mat.id }}, '{{ mat.descripcion|e }}', '{{ (mat.nombre_pedido if mat.tiene_alias else '')|e }}')"
+                      title="Cambiar cómo lo llamás vos">
+                <i class="fas fa-pen fa-xs"></i>
+              </button>
+              {# Con alias mostramos también el genérico: es el nombre con el que
+                 el sistema busca precios, y conviene que se vea que son dos cosas. #}
+              <small class="d-block text-muted {{ '' if mat.tiene_alias else 'd-none' }}"
+                     data-generico-de="{{ mat.id }}">
+                <i class="fas fa-tag me-1"></i>{{ mat.descripcion }}
+              </small>
               {% if mat.item_inventario_id %}
               <small class="d-block text-muted">
                 <i class="fas fa-warehouse me-1"></i>Inventario
@@ -98,7 +143,58 @@
               </small>
               {% endif %}
             </td>
-            <td class="text-center fw-bold">{{ mat.cantidad_total|float|round(3) }}</td>
+            <td class="text-center">
+              <div data-cantidad-vista="{{ mat.id }}">
+                <span class="fw-bold">{{ mat.cantidad_pedido_efectiva|float|round(3) }}</span>
+                <button class="btn btn-sm btn-link p-0 ms-1 text-muted"
+                        onclick="editarCantidad({{ mat.id }})"
+                        title="Corregir la cantidad a pedir">
+                  <i class="fas fa-pen fa-xs"></i>
+                </button>
+                {% if mat.cantidad_editada %}
+                <small class="d-block text-primary" title="Cantidad corregida a mano — el APU y el costo no cambiaron">
+                  <i class="fas fa-pen-fancy me-1"></i>editada
+                  <span class="text-muted text-decoration-line-through">
+                    {{ mat.cantidad_total|float|round(3) }}
+                  </span>
+                </small>
+                {% endif %}
+              </div>
+              {# Editor inline, oculto hasta que se toca el lápiz #}
+              <div class="d-none" data-cantidad-editor="{{ mat.id }}">
+                <input type="number" step="any" min="0"
+                       class="form-control form-control-sm text-center"
+                       value="{{ mat.cantidad_pedido_efectiva|float }}"
+                       onkeydown="if(event.key==='Enter'){guardarCantidad({{ mat.id }})};if(event.key==='Escape'){cancelarCantidad({{ mat.id }})}">
+                <div class="btn-group btn-group-sm mt-1">
+                  <button class="btn btn-success" onclick="guardarCantidad({{ mat.id }})" title="Guardar">
+                    <i class="fas fa-check"></i>
+                  </button>
+                  <button class="btn btn-outline-secondary" onclick="cancelarCantidad({{ mat.id }})" title="Cancelar">
+                    <i class="fas fa-times"></i>
+                  </button>
+                  {% if mat.cantidad_editada %}
+                  <button class="btn btn-outline-warning" onclick="resetearCantidad({{ mat.id }})"
+                          title="Volver a la cantidad calculada del APU">
+                    <i class="fas fa-undo"></i>
+                  </button>
+                  {% endif %}
+                </div>
+              </div>
+              {% if mat.drift_cantidad %}
+              {# El APU se movió DESPUÉS de la corrección a mano. No se resuelve
+                 solo: puede ser que se haya arreglado el APU (y entonces vale el
+                 nuevo) o que siga mal (y entonces vale el corregido). #}
+              <div class="alert alert-warning p-1 mt-1 mb-0 small text-start">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                El APU cambió a <strong>{{ mat.cantidad_total|float|round(3) }}</strong>.
+                <div class="btn-group btn-group-sm mt-1 w-100">
+                  <button class="btn btn-outline-dark" onclick="resetearCantidad({{ mat.id }})">Usar el nuevo</button>
+                  <button class="btn btn-outline-dark" onclick="guardarCantidad({{ mat.id }}, {{ mat.cantidad_pedido_efectiva|float }})">Mantener el mío</button>
+                </div>
+              </div>
+              {% endif %}
+            </td>
             <td class="text-center"><small>{{ mat.unidad }}</small></td>
             <td class="text-center">
               <button class="btn btn-sm btn-outline-secondary"
@@ -140,15 +236,22 @@
                 {% endfor %}
                 <button class="btn btn-sm btn-outline-primary"
                         type="button"
-                        onclick="abrirModalAsignarProveedor({{ mat.id }}, '{{ mat.descripcion|e }}')"
+                        onclick="abrirModalAsignarProveedor({{ mat.id }}, '{{ mat.nombre_pedido|e }}')"
                         title="Agregar proveedor para cotizar">
                   <i class="fas fa-plus"></i> Proveedor
                 </button>
               </div>
             </td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="excluirDelPedido({{ mat.id }}, '{{ mat.nombre_pedido|e }}')"
+                      title="Sacar del pedido (sigue en el APU y sigue costando lo mismo)">
+                <i class="fas fa-times"></i>
+              </button>
+            </td>
           </tr>
           <tr class="collapse" id="origenes-{{ mat.id }}">
-            <td colspan="7" class="bg-light p-3">
+            <td colspan="9" class="bg-light p-3">
               <strong class="d-block mb-2"><i class="fas fa-link me-1"></i>Aparece en:</strong>
               <ul class="list-unstyled mb-0 small">
                 {% for o in mat.origenes %}
@@ -169,6 +272,8 @@
     </div>
   </div>
 
+  {% endif %}{# /if materiales #}
+
   {% if hay_pendientes_enviar %}
   <div class="text-end mt-3">
     <button class="btn btn-success btn-lg" onclick="generarSolicitudes()" id="btnGenerarSolicitudes">
@@ -177,6 +282,102 @@
     <div class="text-muted small mt-1">
       Agrupa las asignaciones por proveedor → 1 mensaje por proveedor.
     </div>
+  </div>
+  {% endif %}
+
+  {% if excluidos %}
+  {# Recursos que el usuario sacó del pedido a mano. Siguen en el APU y siguen
+     costando: lo único que cambia es que no se le piden a ningún proveedor. #}
+  <div class="card mt-4 shadow-sm">
+    <div class="card-header bg-light d-flex align-items-center" role="button"
+         data-bs-toggle="collapse" data-bs-target="#seccionExcluidos">
+      <i class="fas fa-ban text-muted me-2"></i>
+      <strong>Fuera del pedido</strong>
+      <span class="badge bg-secondary ms-2">{{ excluidos|length }}</span>
+      <small class="text-muted ms-3">
+        Siguen en el APU y siguen costando — solo no se le piden a nadie.
+      </small>
+      <i class="fas fa-chevron-down ms-auto text-muted"></i>
+    </div>
+    <div class="collapse" id="seccionExcluidos">
+      <table class="table table-sm mb-0 align-middle">
+        <tbody>
+          {% for mat in excluidos %}
+          <tr>
+            <td>
+              <span class="text-muted">{{ mat.nombre_pedido }}</span>
+              {% if mat.tiene_alias %}
+              <small class="d-block text-muted"><i class="fas fa-tag me-1"></i>{{ mat.descripcion }}</small>
+              {% endif %}
+            </td>
+            <td class="text-center text-muted" style="width:160px;">
+              {{ mat.cantidad_pedido_efectiva|float|round(3) }} {{ mat.unidad }}
+            </td>
+            <td class="text-end" style="width:180px;">
+              <button class="btn btn-sm btn-outline-primary" onclick="incluirEnPedido({{ mat.id }})">
+                <i class="fas fa-undo me-1"></i>Volver a incluir
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if huerfanos %}
+  {# Recursos que ya no aparecen en las composiciones del APU pero tenían
+     trabajo encima (precio elegido, asignaciones, respuestas de proveedores o
+     ediciones). Antes se borraban solos y esa información se perdía en
+     silencio. Pasa, por ejemplo, al vincular un recurso al inventario o al
+     editar la descripción de una composición. #}
+  <div class="card mt-4 shadow-sm border-warning">
+    <div class="card-header bg-warning-subtle">
+      <i class="fas fa-unlink text-warning me-2"></i>
+      <strong>Ya no están en el APU</strong>
+      <span class="badge bg-warning text-dark ms-2">{{ huerfanos|length }}</span>
+    </div>
+    <div class="card-body py-2 small text-muted">
+      Estos recursos desaparecieron de la composición ejecutiva — se los renombró,
+      se los vinculó al inventario o se reclasificó el ítem — pero tenían trabajo
+      encima, así que no se borraron solos. Si el recurso vuelve al APU, la fila
+      se reactiva con todo lo que tenía. Descartarlo borra también las respuestas
+      que hayan cargado los proveedores.
+    </div>
+    <table class="table table-sm mb-0 align-middle">
+      <tbody>
+        {% for mat in huerfanos %}
+        <tr>
+          <td>
+            <span class="text-muted">{{ mat.nombre_pedido }}</span>
+            <small class="d-block text-muted">
+              {{ mat.cantidad_pedido_efectiva|float|round(3) }} {{ mat.unidad }}
+              {% if mat.huerfano_at %}
+              &middot; desde {{ mat.huerfano_at.strftime('%d/%m/%Y') }}
+              {% endif %}
+            </small>
+          </td>
+          <td style="width:280px;">
+            {% if mat.proveedor_elegido %}
+            <small class="text-success">
+              <i class="fas fa-trophy me-1"></i>{{ mat.proveedor_elegido.razon_social }}
+              — ${{ '{:,.2f}'.format(mat.precio_elegido|float) }}
+            </small>
+            {% elif mat.asignaciones_list %}
+            <small class="text-muted">{{ mat.asignaciones_list|length }} proveedor(es) asignado(s)</small>
+            {% endif %}
+          </td>
+          <td class="text-end" style="width:140px;">
+            <button class="btn btn-sm btn-outline-danger"
+                    onclick="descartarHuerfano({{ mat.id }}, '{{ mat.nombre_pedido|e }}')">
+              <i class="fas fa-trash me-1"></i>Descartar
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
   {% endif %}
 
@@ -275,6 +476,47 @@
 
   {% endif %}
 
+</div>
+
+<!-- Modal: alias del recurso (cómo lo llama esta organización) -->
+<div class="modal fade" id="modalAlias" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-tag me-2"></i>¿Cómo lo llamás vos?</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-light small border mb-3">
+          <strong>Nombre genérico:</strong>
+          <span id="aliasGenerico" class="text-muted"></span>
+        </div>
+
+        <label class="form-label">Nombre que usás en tu empresa</label>
+        <input type="text" class="form-control" id="aliasInput" maxlength="300"
+               placeholder="Ej: Klaukol">
+        <div class="form-text">
+          Dejalo vacío para volver al nombre genérico.
+        </div>
+
+        <div class="alert alert-info small mt-3 mb-0">
+          <i class="fas fa-info-circle me-1"></i>
+          Se guarda <strong>para toda tu organización</strong>, así no lo tenés que
+          volver a escribir en cada presupuesto. Es solo el nombre que ves acá y
+          el que le llega al proveedor: <strong>la búsqueda de precios sigue
+          usando el nombre genérico</strong>, y el costo del presupuesto no cambia.
+        </div>
+
+        <div class="alert alert-warning d-none small mt-3 mb-0" id="aliasError"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="guardarAlias()" id="btnGuardarAlias">
+          <i class="fas fa-save me-1"></i>Guardar
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Asignar proveedor a un material -->
@@ -428,9 +670,12 @@
 <script>
 const PRESUPUESTO_ID = {{ presupuesto.id }};
 const MODAL_ASIGNAR = new bootstrap.Modal(document.getElementById('modalAsignarProveedor'));
+const MODAL_ALIAS = new bootstrap.Modal(document.getElementById('modalAlias'));
 const MODAL_VER_MSG = new bootstrap.Modal(document.getElementById('modalVerMensaje'));
 const MODAL_RESULTADO = new bootstrap.Modal(document.getElementById('modalGenerarResultado'));
 let MATERIAL_EN_ASIGNACION = null;
+let TANDA_EN_ASIGNACION = null;
+let MATERIAL_EN_ALIAS = null;
 const SOLICITUDES_POR_ID = {
   {% for s in solicitudes %}
   {{ s.id }}: {{ {'mensaje': s.mensaje_texto}|tojson }},
@@ -448,8 +693,60 @@ function _escape(s) {
   return d.innerHTML;
 }
 
+// ---------------------------------------------------------------------------
+// Selección de tanda (EFÍMERA — no se guarda en ningún lado)
+//
+// Con muchos recursos el pedido se arma en tandas: tildás 10, se los asignás a
+// un proveedor, limpiás y tildás otros 10 para otro. Por eso la selección vive
+// solo en el DOM. Lo que SÍ es persistente es "sacar del pedido" (la X roja),
+// que significa "esto no se compra".
+// ---------------------------------------------------------------------------
+
+function _chksTanda() {
+  return Array.from(document.querySelectorAll('.chk-tanda'));
+}
+
+function _seleccionados() {
+  return _chksTanda().filter(c => c.checked).map(c => parseInt(c.value));
+}
+
+function actualizarTanda() {
+  const n = _seleccionados().length;
+  document.getElementById('tandaCount').textContent = n;
+  document.getElementById('barraTanda').classList.toggle('d-none', n === 0);
+  const todos = document.getElementById('chkTodos');
+  const total = _chksTanda().length;
+  if (todos) {
+    todos.checked = n > 0 && n === total;
+    todos.indeterminate = n > 0 && n < total;
+  }
+}
+
+function toggleTodos(el) {
+  _chksTanda().forEach(c => { c.checked = el.checked; });
+  actualizarTanda();
+}
+
+function limpiarTanda() {
+  _chksTanda().forEach(c => { c.checked = false; });
+  actualizarTanda();
+}
+
+function abrirModalAsignarTanda() {
+  const ids = _seleccionados();
+  if (!ids.length) return;
+  MATERIAL_EN_ASIGNACION = null;
+  TANDA_EN_ASIGNACION = ids;
+  document.getElementById('asignarRecursoNombre').textContent =
+    `${ids.length} recursos seleccionados`;
+  document.getElementById('asignarProveedorSelect').value = '';
+  document.getElementById('asignarError').classList.add('d-none');
+  MODAL_ASIGNAR.show();
+}
+
 function abrirModalAsignarProveedor(materialId, descripcion) {
   MATERIAL_EN_ASIGNACION = materialId;
+  TANDA_EN_ASIGNACION = null;
   document.getElementById('asignarRecursoNombre').textContent = descripcion;
   document.getElementById('asignarProveedorSelect').value = '';
   document.getElementById('asignarError').classList.add('d-none');
@@ -464,21 +761,33 @@ async function confirmarAsignarProveedor() {
     errEl.classList.remove('d-none');
     return;
   }
+  const ids = TANDA_EN_ASIGNACION || [MATERIAL_EN_ASIGNACION];
   const btn = document.getElementById('btnAsignarProv');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Asignando...';
 
   try {
-    const res = await fetch(`/presupuestos/ejecutivo/material/${MATERIAL_EN_ASIGNACION}/asignar-proveedor`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
-      body: JSON.stringify({proveedor_id: parseInt(proveedorId)}),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      errEl.textContent = data.error || `Error ${res.status}`;
+    // Uno por uno: no hay endpoint bulk. "Ya asignado" no es un error real acá
+    // (pasa si el recurso ya tenía ese proveedor), así que no corta la tanda.
+    const fallas = [];
+    for (const id of ids) {
+      const res = await fetch(`/presupuestos/ejecutivo/material/${id}/asignar-proveedor`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+        body: JSON.stringify({proveedor_id: parseInt(proveedorId)}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if ((!res.ok || !data.ok) && !(data.error || '').includes('ya asignado')) {
+        fallas.push(data.error || `Error ${res.status}`);
+      }
+    }
+    if (fallas.length === ids.length) {
+      errEl.textContent = fallas[0];
       errEl.classList.remove('d-none');
       return;
+    }
+    if (fallas.length) {
+      alert(`${fallas.length} de ${ids.length} no se pudieron asignar:\n` + fallas[0]);
     }
     MODAL_ASIGNAR.hide();
     location.reload();
@@ -488,6 +797,143 @@ async function confirmarAsignarProveedor() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-plus me-1"></i>Asignar';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Editar el pedido: alias, cantidad, sacar/reponer
+//
+// Nada de esto toca el presupuesto. Cambia lo que se le pide al proveedor; el
+// costo del ejecutivo y los totales quedan igual. Las cantidades y precios del
+// presupuesto se editan en Validación.
+// ---------------------------------------------------------------------------
+
+async function _patchPedido(materialId, body) {
+  const res = await fetch(`/presupuestos/ejecutivo/material/${materialId}/pedido`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf()},
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `Error ${res.status}`);
+  return data;
+}
+
+function abrirModalAlias(materialId, generico, aliasActual) {
+  MATERIAL_EN_ALIAS = materialId;
+  document.getElementById('aliasGenerico').textContent = generico;
+  document.getElementById('aliasInput').value = aliasActual || '';
+  document.getElementById('aliasError').classList.add('d-none');
+  MODAL_ALIAS.show();
+  setTimeout(() => document.getElementById('aliasInput').focus(), 300);
+}
+
+async function guardarAlias() {
+  const errEl = document.getElementById('aliasError');
+  const btn = document.getElementById('btnGuardarAlias');
+  btn.disabled = true;
+  try {
+    // Vacío = borrar el alias (el backend lo interpreta así).
+    await _patchPedido(MATERIAL_EN_ALIAS, {alias: document.getElementById('aliasInput').value.trim()});
+    MODAL_ALIAS.hide();
+    location.reload();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function editarCantidad(materialId) {
+  document.querySelector(`[data-cantidad-vista="${materialId}"]`).classList.add('d-none');
+  const editor = document.querySelector(`[data-cantidad-editor="${materialId}"]`);
+  editor.classList.remove('d-none');
+  editor.querySelector('input').focus();
+  editor.querySelector('input').select();
+}
+
+function cancelarCantidad(materialId) {
+  document.querySelector(`[data-cantidad-editor="${materialId}"]`).classList.add('d-none');
+  document.querySelector(`[data-cantidad-vista="${materialId}"]`).classList.remove('d-none');
+}
+
+async function guardarCantidad(materialId, valorExplicito) {
+  let valor = valorExplicito;
+  if (valor === undefined) {
+    const input = document.querySelector(`[data-cantidad-editor="${materialId}"] input`);
+    valor = parseFloat(input.value);
+  }
+  if (!(valor > 0)) {
+    alert('La cantidad tiene que ser mayor a 0. Si no querés pedirlo, sacalo del pedido con la X.');
+    return;
+  }
+  try {
+    await _patchPedido(materialId, {cantidad_pedido: valor});
+    location.reload();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function resetearCantidad(materialId) {
+  try {
+    await _patchPedido(materialId, {cantidad_pedido: null});
+    location.reload();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function excluirDelPedido(materialId, nombre) {
+  if (!confirm(
+    `¿Sacar "${nombre}" del pedido?\n\n` +
+    'Sigue en el APU y sigue costando lo mismo: solo deja de pedírsele a los ' +
+    'proveedores. Lo podés volver a incluir cuando quieras.'
+  )) return;
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/material/${materialId}/excluir`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { alert(data.error || `Error ${res.status}`); return; }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+
+async function incluirEnPedido(materialId) {
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/material/${materialId}/incluir`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { alert(data.error || `Error ${res.status}`); return; }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+
+async function descartarHuerfano(materialId, nombre) {
+  if (!confirm(
+    `¿Descartar "${nombre}" definitivamente?\n\n` +
+    'Se borran también las respuestas que hayan cargado los proveedores para ' +
+    'este recurso. No se puede deshacer.'
+  )) return;
+  try {
+    const res = await fetch(`/presupuestos/ejecutivo/material/${materialId}/huerfano`, {
+      method: 'DELETE',
+      headers: {'X-CSRFToken': _getCsrf()},
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { alert(data.error || `Error ${res.status}`); return; }
+    location.reload();
+  } catch (e) {
+    alert('Error de red: ' + e.message);
   }
 }
 

@@ -1591,6 +1591,34 @@ def material_incluir_en_pedido(material_id):
     return jsonify(ok=True, excluido=False)
 
 
+@presupuestos_bp.route('/ejecutivo/material/<int:material_id>/huerfano', methods=['DELETE'])
+@login_required
+def material_descartar_huerfano(material_id):
+    """Borra definitivamente un recurso huérfano.
+
+    El sync ya NO borra estas filas solo (antes se llevaba puestos el precio
+    elegido y las respuestas de los proveedores sin avisar). Descartarlo es una
+    decisión explícita del usuario: el ON DELETE CASCADE se lleva las
+    respuestas cotizadas, así que la pantalla avisa antes.
+    """
+    if not _verificar_permiso_ejecutivo():
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    mat, _org_id, err = _material_de_mi_org(material_id)
+    if err:
+        return err
+
+    if not mat.huerfano:
+        return jsonify(
+            ok=False,
+            error='Este recurso sigue en el APU. Si no querés pedirlo, sacalo del pedido.',
+        ), 400
+
+    db.session.delete(mat)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
 @presupuestos_bp.route('/ejecutivo/material/<int:material_id>/asignar-proveedor', methods=['POST'])
 @login_required
 def material_asignar_proveedor(material_id):
